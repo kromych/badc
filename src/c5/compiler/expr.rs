@@ -5519,7 +5519,9 @@ impl Compiler {
         } else {
             signed
         });
-        self.sanitize_shift(result_ty, amount_ty);
+        if let Some(id) = self.ast_acc {
+            self.sanitize_shift(id, result_ty, amount_ty);
+        }
         if op.tok == Token::ShlOp && self.size_of_type(result_ty) == 4 {
             self.renormalize_to_width(result_ty);
             self.ty = result_ty;
@@ -5867,11 +5869,15 @@ impl Compiler {
         };
         if is_unsigned_ty(common) {
             self.emit_unsigned_division(lhs_ty, rhs_ty, unsigned, common);
-            self.sanitize_divide(common);
+            if let Some(id) = self.ast_acc {
+                self.sanitize_divide(id, common);
+            }
         } else {
             self.ty = common;
             self.ast_binop(signed);
-            let checked = self.sanitize_divide(common);
+            let checked = self
+                .ast_acc
+                .is_some_and(|id| self.sanitize_divide(id, common));
             // INT_MIN / -1 overflows the width, as `+ - *` can.
             self.renormalize(common, self.overflow_undefined(signed, common) && !checked);
         }

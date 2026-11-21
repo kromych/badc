@@ -39,6 +39,12 @@ static int __ubsan_claim(struct __ubsan_source_location *loc, uint32_t *column) 
     return *column != 0xffffffffu;
 }
 
+// The line that closes a report, as clang's runtime writes it.
+static void __ubsan_summary(const struct __ubsan_source_location *loc, uint32_t column) {
+    fprintf(stderr, "SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior %s:%u:%u \n",
+            loc->file, loc->line, column);
+}
+
 static unsigned __ubsan_bits(const struct __ubsan_type_descriptor *t) {
     return 1u << (t->info >> 1);
 }
@@ -87,6 +93,7 @@ static void __ubsan_shift(struct __ubsan_shift_data *d, uintptr_t lhs, uintptr_t
         __ubsan_print_int(d->rhs_type, rhs);
         fprintf(stderr, " places cannot be represented in type %s\n", d->lhs_type->name);
     }
+    __ubsan_summary(&d->loc, column);
 }
 
 void __ubsan_handle_shift_out_of_bounds(struct __ubsan_shift_data *d, uintptr_t l, uintptr_t r) {
@@ -111,6 +118,7 @@ static void __ubsan_divrem(struct __ubsan_overflow_data *d, uintptr_t lhs, uintp
     } else {
         fprintf(stderr, "division by zero\n");
     }
+    __ubsan_summary(&d->loc, column);
 }
 
 void __ubsan_handle_divrem_overflow(struct __ubsan_overflow_data *d, uintptr_t l, uintptr_t r) {
@@ -134,6 +142,7 @@ static void __ubsan_overflow(struct __ubsan_overflow_data *d, uintptr_t lhs, uin
     fprintf(stderr, " %s ", op);
     __ubsan_print_int(d->type, rhs);
     fprintf(stderr, " cannot be represented in type %s\n", d->type->name);
+    __ubsan_summary(&d->loc, column);
 }
 
 static void __ubsan_negate(struct __ubsan_overflow_data *d, uintptr_t v) {
@@ -146,6 +155,7 @@ static void __ubsan_negate(struct __ubsan_overflow_data *d, uintptr_t v) {
             " cannot be represented in type %s; cast to an unsigned type to negate this value to "
             "itself\n",
             d->type->name);
+    __ubsan_summary(&d->loc, column);
 }
 
 void __ubsan_handle_negate_overflow(struct __ubsan_overflow_data *d, uintptr_t v) {

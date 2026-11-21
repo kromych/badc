@@ -202,7 +202,7 @@ impl<'a> Walker<'a> {
     /// (`shift-exponent`), or for a signed left shift, a negative value or
     /// one whose bits at or above the result's sign bit, after the shift,
     /// are not all zero (`shift-base`, C11 6.5.7p4).
-    fn shift_flag(
+    pub(super) fn shift_flag(
         &mut self,
         b: &mut SsaBuilder,
         check: crate::c5::ast::SanitizeCheck,
@@ -240,7 +240,7 @@ impl<'a> Walker<'a> {
     /// Whether the `/` or `%` of `va` by `vb` in `ty` fails `check`: a zero
     /// divisor (`integer-divide-by-zero`), or for a signed type the
     /// type's minimum by -1 (`signed-integer-overflow`).
-    fn divide_flag(
+    pub(super) fn divide_flag(
         &mut self,
         b: &mut SsaBuilder,
         check: crate::c5::ast::SanitizeCheck,

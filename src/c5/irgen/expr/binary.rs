@@ -284,6 +284,38 @@ impl<'a> Walker<'a> {
         Ok(Some(b.extend(v, kind)))
     }
 
+    /// The checked `lv op rv` of a compound assignment in `op_ty`, `rv`
+    /// walked in `rhs_ty`: the failed check reported, then the operation
+    /// as its unchecked form computes it.
+    fn checked_compound_operation(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        op: BinOp,
+        (lv, rv): (ValueId, ValueId),
+        (rhs_ty, op_ty): (i64, i64),
+    ) -> ValueId {
+        if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru) {
+            let flag = self.shift_flag(b, check, op, (lv, rv), op_ty);
+            self.report_failed_check(b, check, flag, &[lv, rv]);
+            return Self::int_binop_values(b, op, lv, rv, None, 0);
+        }
+        let rv = self.convert_scalar_value(b, rv, rhs_ty, op_ty);
+        if matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
+            let flag = self.divide_flag(b, check, (lv, rv), op_ty);
+            self.report_failed_check(b, check, flag, &[lv, rv]);
+            let narrow = super::super::types::type_size_bytes(op_ty, self.target) <= 4;
+            let width = Some(if narrow { 32 } else { 64 });
+            let unsigned = matches!(op, BinOp::Divu | BinOp::Modu);
+            let mask = if unsigned && narrow { 0xffff_ffff } else { 0 };
+            return Self::int_binop_values(b, op, lv, rv, width, mask);
+        }
+        let raw = b.binop(op, lv, rv);
+        let flag = self.overflow_flag(b, op, (lv, rv), raw, op_ty);
+        self.report_failed_check(b, check, flag, &[lv, rv]);
+        raw
+    }
+
     /// Integer `lv op rhs` over a walked left operand; `walk_binary` and
     /// `walk_compound_assign` both end here. `lhs` is read for its type
     /// and `ty` is the node's: the common type of a binary operator, the
@@ -567,16 +599,13 @@ impl<'a> Walker<'a> {
             let res = self.walk_fp_operation(b, op, lv, rhs, op_ty)?;
             self.convert_scalar_value(b, res, op_ty, store_ty)
         } else if let Some(check) = check {
-            // The checked operation runs in `op_ty`, both operands
-            // converted to it; the store narrows the result to `ty`.
+            // The checked operation runs in `op_ty`, the left operand and,
+            // but for a shift's amount, the right converted to it; the store
+            // narrows the result to `ty`.
             let lv = self.convert_scalar_value(b, old, ty, op_ty);
             let rhs_ty = expr_ty(self.ast.expr(rhs)).unwrap_or(op_ty);
             let rv = self.walk_expr_rvalue(b, rhs)?;
-            let rv = self.convert_scalar_value(b, rv, rhs_ty, op_ty);
-            let raw = b.binop(op, lv, rv);
-            let flag = self.overflow_flag(b, op, (lv, rv), raw, op_ty);
-            self.report_failed_check(b, check, flag, &[lv, rv]);
-            raw
+            self.checked_compound_operation(b, check, op, (lv, rv), (rhs_ty, op_ty))
         } else {
             self.walk_int_binop(b, op, old, lhs, rhs, ty)?
         };

@@ -54,11 +54,29 @@ fn run(exe: &Path, args: &[&str]) -> Output {
         .expect("run the program")
 }
 
-/// The report lines, with the source path before `:<line>:` dropped.
+/// The report lines, with the source path before `:<line>:` dropped. Each
+/// is followed by the summary line clang's runtime closes a report with,
+/// naming the same position.
 fn reports(o: &Output) -> Vec<String> {
-    (String::from_utf8_lossy(&o.stderr).lines())
-        .filter_map(|l| l.split_once("overflow.c:").map(|(_, r)| r.to_string()))
-        .collect()
+    let text = String::from_utf8_lossy(&o.stderr);
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        let Some((_, report)) = line.split_once("overflow.c:") else {
+            continue;
+        };
+        let Some((at, _)) = report.split_once(": runtime error: ") else {
+            continue;
+        };
+        let summary = lines.get(i + 1).copied().unwrap_or_default();
+        assert!(
+            summary.starts_with("SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior ")
+                && summary.ends_with(&format!("overflow.c:{at} ")),
+            "{text}"
+        );
+        out.push(report.to_string());
+    }
+    out
 }
 
 #[test]
@@ -302,6 +320,107 @@ fn shifts_and_divisions_are_checked() {
             (
                 "u",
                 "11:75: runtime error: division by zero",
+                zero_faults,
+                zero_faults,
+            ),
+        ] {
+            let o = run(&exe, &[site]);
+            assert_eq!(reports(&o), [report], "{opt} {site}: {o:?}");
+            let faulted = division_faulted(&o);
+            assert!(
+                (o.status.success() && !must_fault) || (faulted && may_fault),
+                "{opt} {site}: {o:?}"
+            );
+        }
+    }
+}
+
+const COMPOUND: &str = "#include <limits.h>
+#include <stdio.h>
+int main(int argc, char **argv) {
+    int k = argc - (argc > 1);
+    char site = argc > 1 ? argv[1][0] : 's';
+    int a = 1, b = -1, c = 3;
+    long long w = 1;
+    unsigned u = 1;
+    if (site == 's') {
+        a <<= 31 + k;
+        b <<= k;
+        c <<= 30 + k;
+        w <<= 63 + k;
+        u <<= 31 + k;
+        a >>= -k;
+        printf(\"%d %d %d %lld %u\\n\", a, b, c, w, u);
+    }
+    int d = INT_MIN;
+    long long m = 5;
+    unsigned q = 9;
+    if (site == 'd')
+        d /= -k;
+    if (site == 'm')
+        m %= k - 1;
+    if (site == 'u')
+        q /= k - 1u;
+    printf(\"%d %lld %u\\n\", d, m, q);
+    return 0;
+}
+";
+
+/// The compound assignments `<<=`, `>>=`, `/=` and `%=` are checked as
+/// the binary operators are, in the type the operation is performed in,
+/// each at its operator; each division site ends a run of its own.
+#[test]
+fn compound_shifts_and_divisions_are_checked() {
+    let dir = TempDir::new("badc-sanitize-compound");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, COMPOUND).unwrap();
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("compound{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", opt, "-fsanitize=undefined", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        assert_eq!(
+            reports(&o),
+            [
+                "10:11: runtime error: shift exponent 32 is too large for 32-bit type 'int'",
+                "11:11: runtime error: left shift of negative value -1",
+                "12:11: runtime error: left shift of 3 by 31 places cannot be represented in \
+                 type 'int'",
+                "13:11: runtime error: shift exponent 64 is too large for 64-bit type 'long long'",
+                "14:11: runtime error: shift exponent 32 is too large for 32-bit type \
+                 'unsigned int'",
+                "15:11: runtime error: shift exponent -1 is negative",
+            ],
+            "{opt}"
+        );
+        let zero_faults = cfg!(target_arch = "x86_64") || cfg!(windows);
+        for (site, report, may_fault, must_fault) in [
+            (
+                "d",
+                "22:11: runtime error: division of -2147483648 by -1 cannot be represented in \
+                 type 'int'",
+                cfg!(target_arch = "x86_64"),
+                false,
+            ),
+            (
+                "m",
+                "24:11: runtime error: division by zero",
+                zero_faults,
+                zero_faults,
+            ),
+            (
+                "u",
+                "26:11: runtime error: division by zero",
                 zero_faults,
                 zero_faults,
             ),

@@ -1580,9 +1580,19 @@ impl Compiler {
             },
             pos,
         );
-        if self.sanitize_arith(id, Some(op), op_ty)
-            && let Expr::CompoundAssign { nsw, .. } = self.ast.expr_mut(id)
-        {
+        use super::super::ir::BinOp;
+        let checked = match op {
+            // Named by the promoted type the shift is performed in, as gcc
+            // names it; clang names the lvalue's, though it checks the same.
+            BinOp::Shl | BinOp::Shr | BinOp::Shru => {
+                let amount =
+                    expr_ty(self.ast.expr(rhs)).map_or(op_ty, super::types::integer_promote);
+                self.sanitize_shift(id, op_ty, amount)
+            }
+            BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu => self.sanitize_divide(id, op_ty),
+            _ => self.sanitize_arith(id, Some(op), op_ty),
+        };
+        if checked && let Expr::CompoundAssign { nsw, .. } = self.ast.expr_mut(id) {
             *nsw = false;
         }
         self.ast_acc = Some(id);

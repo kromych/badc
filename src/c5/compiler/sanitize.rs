@@ -138,18 +138,21 @@ impl Compiler {
         true
     }
 
-    /// Check the shift whose node the accumulator holds, of a left operand
-    /// promoted to `ty` by an amount of type `amount_ty`, under
-    /// `-fsanitize=shift-exponent` and, for a signed left shift,
-    /// `-fsanitize=shift-base`.
-    pub(super) fn sanitize_shift(&mut self, ty: i64, amount_ty: i64) {
-        let Some(id) = self.ast_acc else {
-            return;
-        };
-        let left = matches!(
-            self.ast.expr(id),
-            crate::c5::ast::Expr::Binary { op: BinOp::Shl, .. }
-        );
+    /// The operator of the binary or compound-assignment node `id`.
+    fn node_op(&self, id: ExprId) -> Option<BinOp> {
+        use crate::c5::ast::Expr;
+        match self.ast.expr(id) {
+            Expr::Binary { op, .. } | Expr::CompoundAssign { op, .. } => Some(*op),
+            _ => None,
+        }
+    }
+
+    /// Check the shift at node `id`, a binary operator or a compound
+    /// assignment, of a left operand promoted to `ty` by an amount of type
+    /// `amount_ty`, under `-fsanitize=shift-exponent` and, for a signed
+    /// left shift, `-fsanitize=shift-base`; whether a check was attached.
+    pub(super) fn sanitize_shift(&mut self, id: ExprId, ty: i64, amount_ty: i64) -> bool {
+        let left = self.node_op(id) == Some(BinOp::Shl);
         let base = if left && !is_unsigned_ty(ty) {
             Check::ShiftBase.bit()
         } else {
@@ -157,20 +160,18 @@ impl Compiler {
         };
         let checks = (Check::ShiftExponent.bit() | base) & self.sanitize.enabled;
         if checks == 0 || !is_integer_scalar_ty(ty) || !matches!(self.size_of_type(ty), 4 | 8) {
-            return;
+            return false;
         }
         let handler = "__ubsan_handle_shift_out_of_bounds";
         self.attach_check(id, checks, handler, &[ty, amount_ty], 2);
+        true
     }
 
-    /// Check the `/` or `%` whose node the accumulator holds, computed in
-    /// `ty`, under `-fsanitize=integer-divide-by-zero` and, for a signed
-    /// type, `-fsanitize=signed-integer-overflow` (the type's minimum by
-    /// -1); whether a check was attached.
-    pub(super) fn sanitize_divide(&mut self, ty: i64) -> bool {
-        let Some(id) = self.ast_acc else {
-            return false;
-        };
+    /// Check the `/` or `%` at node `id`, a binary operator or a compound
+    /// assignment, computed in `ty`, under `-fsanitize=integer-divide-by-zero`
+    /// and, for a signed type, `-fsanitize=signed-integer-overflow` (the
+    /// type's minimum by -1); whether a check was attached.
+    pub(super) fn sanitize_divide(&mut self, id: ExprId, ty: i64) -> bool {
         let overflow = if is_unsigned_ty(ty) {
             0
         } else {
@@ -306,12 +307,10 @@ impl Compiler {
         }
         let bits = 8 * self.size_of_type(ty) as u16;
         let info = (bits.trailing_zeros() as u16) << 1 | u16::from(!is_unsigned_ty(ty));
-        let name = match super::types::without_enum(ty) {
-            t if t == crate::c5::token::Ty::Long as i64 => "'long'",
-            t if t == crate::c5::token::Ty::LongLong as i64 => "'long long'",
-            _ if bits == 64 => "'long long'",
-            _ => "'int'",
-        };
+        // The type as C spells it, unqualified and an enumeration's by its
+        // compatible integer type.
+        let bare = super::types::unqualified_version_ty(super::types::without_enum(ty));
+        let name = alloc::format!("'{}'", super::types::format_type(bare, &self.structs));
         self.align_data_to(2);
         let at = self.data.len() as i64;
         self.data.extend_from_slice(&TK_INTEGER.to_le_bytes());

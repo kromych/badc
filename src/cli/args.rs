@@ -2563,16 +2563,6 @@ impl Parser {
                 }
             )));
         }
-        // The map reads the output's ELF section table. TODO(#2002)
-        if (self.link.map_path.is_some() || self.link.print_map)
-            && target.binary_format() != badc::BinaryFormat::Elf
-        {
-            return Err(ParseError::plain(format!(
-                "badc: -Map / --print-map: the link map is produced for ELF output only, \
-                 and the {} output is not ELF",
-                target.id_str()
-            )));
-        }
         // A `-c` object under `-m16` / `-m32` is ELFCLASS32; the flag's
         // remaining restrictions need the classified inputs and are
         // checked once those are known.
@@ -4753,17 +4743,6 @@ mod tests {
             reject(&["-c", "-Map=x.map", "a.c"]).0,
             "badc: -Map / --print-map require a link (current mode is -c)"
         );
-    }
-
-    /// The map is refused for a non-ELF output before anything is linked,
-    /// so a failed request leaves no image behind.
-    #[test]
-    fn link_map_for_a_non_elf_output_is_refused_before_the_link() {
-        for target in ["windows-x64", "macos-aarch64"] {
-            let (text, code) = reject(&[&format!("--target={target}"), "-Map=x.map", "a.c"]);
-            assert!(text.contains("ELF output only"), "{target}: {text}");
-            assert_eq!(code, 1);
-        }
     }
 
     #[test]

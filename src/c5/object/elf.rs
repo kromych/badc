@@ -1629,7 +1629,7 @@ pub(super) fn write(
     program: &Program,
     build: &Build,
     machine: Machine,
-) -> Result<Vec<u8>, C5Error> {
+) -> Result<super::NativeImage, C5Error> {
     let mut w = ElfImageWriter::new(program, build, machine)?;
     w.collect_exports()?;
     w.build_dynamic_tables();
@@ -1651,7 +1651,12 @@ pub(super) fn write(
     w.emit_tail_headers();
     w.patch_fixups()?;
     w.fill_build_id();
-    Ok(w.out)
+    let placement = w.placement();
+    Ok(super::NativeImage {
+        image: w.out,
+        pdb: None,
+        placement,
+    })
 }
 
 impl<'a> ElfImageWriter<'a> {
@@ -2431,6 +2436,24 @@ impl<'a> ElfImageWriter<'a> {
 
     fn data_off_to_vaddr(&self, off: u64) -> u64 {
         data_region_addr(&self.data_regions(), off)
+    }
+
+    /// Where the streams landed, for the link map.
+    fn placement(&self) -> super::StreamPlacement {
+        let seg = &self.seg;
+        let code = self.va(seg.code_off);
+        super::StreamPlacement {
+            format: match (self.machine, self.build.elf_class) {
+                (Machine::X86_64, crate::c5::object::elf_class::ElfClass::Elf32) => "elf32-i386",
+                (Machine::X86_64, _) => "elf64-x86-64",
+                (Machine::Aarch64, _) => "elf64-littleaarch64",
+            },
+            text: self.text_vmaddr(),
+            stub: (self.stub_len > 0).then_some((code, code + self.stub_len)),
+            data: self.data_regions().to_vec(),
+            bss: Some(seg.bss_vmaddr),
+            tls: seg.has_tls.then(|| self.va(seg.tdata_off)),
+        }
     }
 
     /// The section a data-stream byte falls in.
@@ -4608,20 +4631,26 @@ mod tests {
 
     #[test]
     fn writes_elf_magic() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         assert_eq!(&bytes[0..4], &ELFMAG);
     }
 
     #[test]
     fn class_is_64_bit_le() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         assert_eq!(bytes[4], ELFCLASS64);
         assert_eq!(bytes[5], ELFDATA2LSB);
     }
 
     #[test]
     fn machine_is_aarch64() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let e_machine = u16::from_le_bytes(bytes[18..20].try_into().unwrap());
         assert_eq!(e_machine, EM_AARCH64);
     }
@@ -4646,7 +4675,9 @@ mod tests {
 
     #[test]
     fn program_header_table_self_describes() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let phoff = read_u64(&bytes, 32);
         let phentsize = u16::from_le_bytes(bytes[54..56].try_into().unwrap()) as u64;
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -4669,7 +4700,9 @@ mod tests {
 
     #[test]
     fn pt_load_covers_entry_point() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let e_entry = read_u64(&bytes, 24);
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -4697,7 +4730,9 @@ mod tests {
 
     #[test]
     fn interp_string_is_correct() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         for i in 0..phnum {
@@ -4716,7 +4751,9 @@ mod tests {
 
     #[test]
     fn dynamic_section_present_and_terminated() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         let mut dyn_off = 0u64;
@@ -4783,7 +4820,7 @@ mod tests {
                 };
                 let mut build = super::super::lower_for(&program, target, opts).expect("lower");
                 build.exec_form = form;
-                let bytes = write(&tiny_program(), &build, machine).unwrap();
+                let bytes = write(&tiny_program(), &build, machine).unwrap().image;
                 let tags = dynamic_entries(&bytes);
                 assert!(
                     tags.contains(&(DT_NULL, 0)),
@@ -4811,7 +4848,9 @@ mod tests {
             fini: Some((8, 8)),
             ..Default::default()
         };
-        let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64)
+            .unwrap()
+            .image;
         let dyn_ = dynamic_entries(&bytes);
         let val = |tag| dyn_.iter().find(|(t, _)| *t == tag).map(|(_, v)| *v);
         assert_eq!(val(DT_INIT_ARRAYSZ), Some(8), "DT_INIT_ARRAYSZ");
@@ -4819,7 +4858,9 @@ mod tests {
         assert!(val(DT_INIT_ARRAY).is_some(), "DT_INIT_ARRAY present");
         assert!(val(DT_FINI_ARRAY).is_some(), "DT_FINI_ARRAY present");
 
-        let plain = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let plain = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let pd = dynamic_entries(&plain);
         assert!(!pd.iter().any(|(t, _)| *t == DT_INIT_ARRAY));
         assert!(!pd.iter().any(|(t, _)| *t == DT_FINI_ARRAY));
@@ -4873,7 +4914,9 @@ mod tests {
     #[test]
     fn rela_dyn_targets_got_slots() {
         // Each .rela.dyn entry must target a valid GOT slot.
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
 
@@ -4958,7 +5001,7 @@ mod tests {
                 };
                 let mut build = super::super::lower_for(program, target, opts).expect("lower");
                 build.exec_form = form;
-                let bytes = write(&tiny_program(), &build, machine).unwrap();
+                let bytes = write(&tiny_program(), &build, machine).unwrap().image;
                 let what = format!("{machine:?} {form:?} shared={shared}");
                 let load = find_phdr(&bytes, PT_LOAD).expect("PT_LOAD");
                 assert_eq!(read_u64(&bytes, load + 16), base, "{what}: first load");
@@ -5009,7 +5052,7 @@ mod tests {
         ] {
             let mut b = tiny_build();
             b.abi = target.abi();
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             assert!(
                 find_phdr(&bytes, PT_TLS).is_none(),
                 "{machine:?}: unexpected PT_TLS phdr in TLS-free image"
@@ -5032,7 +5075,7 @@ mod tests {
             b.imports.imports.clear();
             b.imports.dylibs.clear();
             b.entry_offset = 4;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let eh: Elf64Ehdr = read_struct(&bytes, 0);
             assert_eq!(eh.e_type, ET_EXEC, "{machine:?}");
             for p_type in [PT_PHDR, PT_INTERP, PT_DYNAMIC, PT_GNU_RELRO] {
@@ -5073,7 +5116,7 @@ mod tests {
             // `.text` covers the prologue and the code blob, so what the
             // section adds to the input is the prologue's length.
             let image = |b: &Build| -> (u64, u64, u64) {
-                let bytes = write(&program, b, machine).unwrap();
+                let bytes = write(&program, b, machine).unwrap().image;
                 let eh: Elf64Ehdr = read_struct(&bytes, 0);
                 let (_, _, addr, size, _) = find_section(&bytes, ".text").expect(".text");
                 (eh.e_entry, addr, size - b.text.len() as u64)
@@ -5135,7 +5178,7 @@ mod tests {
             target_anchor: 8,
             target_sym: None,
         });
-        let bytes = write(&tiny_program(), &b, Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &b, Machine::Aarch64).unwrap().image;
         let eh: Elf64Ehdr = read_struct(&bytes, 0);
         assert_eq!(eh.e_type, ET_EXEC);
         assert!(find_phdr(&bytes, PT_INTERP).is_some(), "PT_INTERP");
@@ -5179,7 +5222,7 @@ mod tests {
             tv.real_symbol = "tv".into();
             tv.kind = ImportKind::ThreadLocal;
             b.imports.imports.push(tv);
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let dynsym = section_file_off(&bytes, ".dynsym").expect(".dynsym") as usize;
             let st_info = |i: usize| bytes[dynsym + i * ELF64_SYM_SIZE as usize + 4];
             assert_eq!(
@@ -5247,7 +5290,7 @@ mod tests {
             })
             .to_vec();
             b.static_tls = true;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let (_, _, got, _, _) = find_section(&bytes, ".got").expect(".got");
             let n_imports = b.imports.imports.len() as u64;
             let base = got + n_imports * 8;
@@ -5326,7 +5369,7 @@ mod tests {
             });
             let w = ElfImageWriter::new(&program, &b, machine).unwrap();
             assert!(matches!(w.entry, Entry::Adapter(0)), "{machine:?}: adapter");
-            let bytes = write(&program, &b, machine).unwrap();
+            let bytes = write(&program, &b, machine).unwrap().image;
             let eh: Elf64Ehdr = read_struct(&bytes, 0);
             assert_eq!(eh.e_type, ET_EXEC, "{machine:?}");
             assert!(
@@ -5398,7 +5441,7 @@ mod tests {
                     target_anchor: 0,
                     target_sym: None,
                 });
-                let bytes = write(&tiny_program(), &b, machine).unwrap();
+                let bytes = write(&tiny_program(), &b, machine).unwrap().image;
                 let (_, flags, addr, _, _) =
                     find_section(&bytes, ".data.rel.ro").expect(".data.rel.ro");
                 let (_, _, ro_addr, _, _) = find_section(&bytes, ".rodata").expect(".rodata");
@@ -5468,7 +5511,7 @@ mod tests {
             for (style, len, digest) in [(BuildId::Sha1, 20, sha1), (BuildId::Fast, 8, fast)] {
                 let mut b = pie_with_pointers(machine, 2);
                 b.elf.build_id = style;
-                let bytes = write(&tiny_program(), &b, machine).unwrap();
+                let bytes = write(&tiny_program(), &b, machine).unwrap().image;
                 let (sh_type, flags, addr, size, _) =
                     find_section(&bytes, ".note.gnu.build-id").expect("the note");
                 assert_eq!(
@@ -5484,7 +5527,7 @@ mod tests {
                 let mut zeroed = bytes.clone();
                 zeroed[off + 16..off + 16 + len].fill(0);
                 assert_eq!(bytes[off + 16..off + 16 + len], digest(&zeroed));
-                let again = write(&tiny_program(), &b, machine).unwrap();
+                let again = write(&tiny_program(), &b, machine).unwrap().image;
                 assert_eq!(
                     again, bytes,
                     "{machine:?} {style:?}: the same image, the same id"
@@ -5501,11 +5544,13 @@ mod tests {
     #[test]
     fn relative_relocations_pack_into_relr() {
         for machine in [Machine::Aarch64, Machine::X86_64] {
-            let plain = write(&tiny_program(), &pie_with_pointers(machine, 5), machine).unwrap();
+            let plain = write(&tiny_program(), &pie_with_pointers(machine, 5), machine)
+                .unwrap()
+                .image;
             let mut b = pie_with_pointers(machine, 5);
             b.elf.pack_relative_relocs = true;
             b.elf.no_apply_dynamic_relocs = true;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let rela = |img: &[u8]| find_section(img, ".rela.dyn").unwrap().3;
             assert_eq!(
                 rela(&plain) - rela(&bytes),
@@ -5540,7 +5585,7 @@ mod tests {
             assert_eq!(read_u64(&bytes, slot), data_addr, "{machine:?}");
             let mut b = pie_with_pointers(machine, 1);
             b.elf.no_apply_dynamic_relocs = true;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let slot = section_file_off(&bytes, ".data").unwrap() as usize;
             assert_eq!(read_u64(&bytes, slot), 0, "{machine:?}: RELA fills it");
         }
@@ -5553,7 +5598,7 @@ mod tests {
         let mut b = pie_with_pointers(Machine::X86_64, 1);
         b.elf.max_page_size = Some(0x1_0000);
         b.elf.exec_stack = true;
-        let bytes = write(&tiny_program(), &b, Machine::X86_64).unwrap();
+        let bytes = write(&tiny_program(), &b, Machine::X86_64).unwrap().image;
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         let loads: Vec<usize> = (0..phnum)
@@ -5594,7 +5639,9 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&tiny_program(), &build, Machine::Aarch64).expect("write ELF");
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64)
+            .expect("write ELF")
+            .image;
 
         let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
         let p_flags = read_u32(&bytes, phdr_off + 4);
@@ -5657,7 +5704,9 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&tiny_program(), &build, Machine::X86_64).expect("write ELF");
+        let bytes = write(&tiny_program(), &build, Machine::X86_64)
+            .expect("write ELF")
+            .image;
 
         let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
         let p_filesz = read_u64(&bytes, phdr_off + 32);
@@ -5697,7 +5746,9 @@ mod tests {
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
             assert_eq!((build.tls_data.len(), build.tls_align), (65, 32));
-            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
+            let bytes = write(&tiny_program(), &build, machine)
+                .expect("write ELF")
+                .image;
             let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
             let p_vaddr = read_u64(&bytes, phdr_off + 16);
             let p_memsz = read_u64(&bytes, phdr_off + 40);
@@ -5759,7 +5810,9 @@ mod tests {
             let build =
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
-            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
+            let bytes = write(&tiny_program(), &build, machine)
+                .expect("write ELF")
+                .image;
             assert!(
                 bytes.len() < max_bytes,
                 "{machine:?} executable is {} bytes; a single page at the R+E/RW boundary plus a compact \
@@ -5802,7 +5855,9 @@ mod tests {
             for form in [ExecForm::Pie, ExecForm::Placed] {
                 let placed = form.placed();
                 build.exec_form = form;
-                let b = write(&tiny_program(), &build, machine).expect("write ELF");
+                let b = write(&tiny_program(), &build, machine)
+                    .expect("write ELF")
+                    .image;
                 let (phoff, phentsize, phnum) = (
                     le64(&b, 0x20) as usize,
                     le16(&b, 0x36) as usize,
@@ -5871,7 +5926,9 @@ mod tests {
             build.tls_init_size = 12;
             for form in [ExecForm::Pie, ExecForm::Placed] {
                 build.exec_form = form;
-                let b = write(&tiny_program(), &build, machine).expect("write ELF");
+                let b = write(&tiny_program(), &build, machine)
+                    .expect("write ELF")
+                    .image;
                 let phoff = read_u64(&b, 32);
                 let phnum = u16::from_le_bytes(b[56..58].try_into().unwrap()) as u64;
                 let loads: Vec<(u64, u64, u64, u64)> = (0..phnum)
@@ -5912,7 +5969,9 @@ mod tests {
     /// loader can write, a shared object carries none, as under GNU ld.
     #[test]
     fn an_executable_gives_the_loader_its_debug_slot() {
-        let exe = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let exe = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let entries = dynamic_entries(&exe);
         assert!(entries.contains(&(DT_DEBUG, 0)), "{entries:x?}");
         let at = find_phdr(&exe, PT_DYNAMIC).expect("PT_DYNAMIC");
@@ -5930,7 +5989,9 @@ mod tests {
         assert!(writable, "DT_DEBUG at {slot:#x} lies in a writable load");
         let mut lib = tiny_build();
         lib.output_kind = super::super::OutputKind::SharedLibrary;
-        let lib = write(&tiny_program(), &lib, Machine::Aarch64).unwrap();
+        let lib = write(&tiny_program(), &lib, Machine::Aarch64)
+            .unwrap()
+            .image;
         let entries = dynamic_entries(&lib);
         assert!(!entries.iter().any(|e| e.0 == DT_DEBUG), "{entries:x?}");
     }
@@ -5960,7 +6021,9 @@ mod tests {
                 super::super::NativeOptions::new().with_shared_library(),
             )
             .expect("lower");
-            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
+            let bytes = write(&tiny_program(), &build, machine)
+                .expect("write ELF")
+                .image;
 
             let e_type = u16::from_le_bytes(bytes[16..18].try_into().unwrap());
             assert_eq!(e_type, ET_DYN, "{machine:?}: expected ET_DYN");
@@ -6079,7 +6142,9 @@ mod tests {
         let mut build = tiny_build();
         build.data = vec![1u8, 2, 3, 4, 5, 6, 7, 8];
         build.bss_size = 4096;
-        let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64)
+            .unwrap()
+            .image;
         let (sh_type, sh_flags, sh_addr, sh_size, sh_align) =
             find_section(&bytes, ".bss").expect("`.bss` section header");
         assert_eq!(sh_type, SHT_NOBITS, ".bss must be SHT_NOBITS");
@@ -6161,7 +6226,7 @@ mod tests {
                 info: 0,
                 other: 0,
             });
-            let bytes = write(&tiny_program(), &build, machine).unwrap();
+            let bytes = write(&tiny_program(), &build, machine).unwrap().image;
             assert!(find_section(&bytes, ".bss").is_none(), "{machine:?}: .bss");
             let data = section_index(&bytes, ".data").expect(".data");
             assert_eq!(symtab_shndx(&bytes, "data_end"), data, "{machine:?}");
@@ -6226,7 +6291,7 @@ mod tests {
                     import: 0,
                     addend: 8,
                 });
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let slot = find_section(&bytes, ".data").expect(".data").2 + 16;
             let rela = rela_dyn(&bytes);
             let at_slot: Vec<_> = rela.iter().filter(|r| r.0 == slot).collect();
@@ -6269,7 +6334,7 @@ mod tests {
                 is_data_load: false,
             });
             b.canonical_imports = vec![0];
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let stub = symtab_value(&bytes, "exit");
             let dynsym = section_file_off(&bytes, ".dynsym").expect(".dynsym") as usize;
             assert_eq!(read_u64(&bytes, dynsym + 24 + 8), stub, "{machine:?}");
@@ -6304,7 +6369,9 @@ mod tests {
 
     #[test]
     fn no_bss_section_header_when_bss_empty() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         assert!(
             find_section(&bytes, ".bss").is_none(),
             "no .bss section header when bss_size == 0"

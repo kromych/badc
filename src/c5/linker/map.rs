@@ -1,9 +1,9 @@
 //! GNU-ld-style link map (`-Map=FILE` / `--print-map`).
 //!
-//! Renders the map from two sources of truth: the linker's per-input-
-//! section records ([`MergedNative::section_map`]) and the section
-//! headers of the emitted ELF image, so every printed address is the
-//! image's own. Layout and column conventions follow GNU ld's map
+//! Renders the map from the linker's per-input-section records
+//! ([`MergedNative::section_map`]), the image writer's placement of each
+//! stream, and the section table of the emitted ELF, PE or Mach-O image,
+//! so every printed address is the image's own. Layout and column conventions follow GNU ld's map
 //! ("Options -M/--print-map"): the archive-member table, discarded
 //! input sections, the default memory configuration, and per output
 //! section the input contributions with `*fill*` rows and global
@@ -64,11 +64,13 @@ struct Row {
 /// `OUTPUT(...)` line.
 pub fn render_link_map(
     merged: &MergedNative,
-    image: &[u8],
+    image: &crate::c5::object::NativeImage,
     archive_inclusions: &[ArchiveInclusion],
     output_name: &str,
 ) -> Result<String, C5Error> {
-    let (sections, bfd_format) = parse_image_sections(image)?;
+    use crate::c5::object::data_region_addr;
+    let sections = image_sections(&image.image)?;
+    let p = &image.placement;
     let sm = &merged.section_map;
     // Empty labels come from callers that never set NativeObject::source.
     let labels: Vec<String> = sm
@@ -93,65 +95,49 @@ pub fn render_link_map(
         }
     };
 
-    // Stream base addresses. The `.text` section is the writer-emitted
-    // entry stub followed by the merged text verbatim, so the stub's
-    // length is the section size minus the stream length. The unified
-    // data stream splits at `data_ro_len` / `data_relro_len`: the
-    // read-only prefix backs `.rodata`, the relro region
-    // `.data.rel.ro`, the remainder `.data`.
-    let find = |name: &str| sections.iter().find(|s| s.name == name);
-    let text_sec = find(".text").ok_or_else(|| map_err("image has no .text section"))?;
-    let stream_len = merged.text.len() as u64;
-    if text_sec.size < stream_len {
-        return Err(map_err(&format!(
-            ".text section (0x{:x} bytes) is smaller than the merged text (0x{stream_len:x} bytes)",
-            text_sec.size,
-        )));
+    // Each input's contribution at the address the writer placed its
+    // stream's bytes; a section lists those that fall in it.
+    let row = |c: &SectionContribution, addr: u64| Row {
+        addr,
+        size: c.size,
+        name: c.name.clone(),
+        source: label_of(&c.input),
+    };
+    let mut rows: Vec<Row> = Vec::new();
+    if let Some((start, end)) = p.stub {
+        rows.push(Row {
+            addr: start,
+            size: end - start,
+            name: ".stub".to_string(),
+            source: "<internal>".to_string(),
+        });
     }
-    let stub_len = text_sec.size - stream_len;
-    let text_base = text_sec.addr + stub_len;
-    let ro_len = merged.data_ro_len as u64;
-    let relro_len = merged.data_relro_len as u64;
-    let rodata_base = find(".rodata").map(|s| s.addr);
-    // Each region's section holds the matching stream slice, so a
-    // stream offset maps to `base + offset` with the preceding
-    // regions' lengths folded in.
-    let relro_base = find(".data.rel.ro").map(|s| s.addr.wrapping_sub(ro_len));
-    let data_base = find(".data").map(|s| s.addr.wrapping_sub(relro_len));
-    let bss_base = find(".bss").map(|s| s.addr);
-    let tls_base = find(".tdata")
-        .map(|s| s.addr)
-        .or_else(|| find(".tbss").map(|s| s.addr));
+    rows.extend(sm.text.iter().map(|c| row(c, p.text + c.offset)));
+    rows.extend((sm.data.iter()).map(|c| row(c, data_region_addr(&p.data, c.offset))));
+    if let Some(bss) = p.bss {
+        rows.extend(sm.bss.iter().map(|c| row(c, bss + c.offset)));
+    }
+    if let Some(tls) = p.tls {
+        rows.extend(sm.tls.iter().map(|c| row(c, tls + c.offset)));
+    }
+    rows.sort_by_key(|r| r.addr);
 
-    // Global symbol definitions per stream, sorted by address (ties
-    // keep the defined table's name order). ld lists globals only.
-    let mut text_syms: Vec<(u64, &str)> = Vec::new();
-    let mut ro_syms: Vec<(u64, &str)> = Vec::new();
-    let mut relro_syms: Vec<(u64, &str)> = Vec::new();
-    let mut data_syms: Vec<(u64, &str)> = Vec::new();
-    let mut bss_syms: Vec<(u64, &str)> = Vec::new();
+    // Global symbol definitions by address (ties keep the defined table's
+    // name order). ld lists globals only.
+    let mut syms: Vec<(u64, &str)> = Vec::new();
     for (name, sym) in &merged.defined {
-        let (list, base) = match sym.section {
-            NativeSymSection::Text => (&mut text_syms, Some(text_base)),
-            NativeSymSection::Data if sym.value < ro_len => (&mut ro_syms, rodata_base),
-            NativeSymSection::Data if sym.value < relro_len => (&mut relro_syms, relro_base),
-            NativeSymSection::Data => (&mut data_syms, data_base),
-            NativeSymSection::Bss => (&mut bss_syms, bss_base),
+        let addr = match sym.section {
+            NativeSymSection::Text => p.text + sym.value,
+            NativeSymSection::Data => data_region_addr(&p.data, sym.value),
+            NativeSymSection::Bss => match p.bss {
+                Some(bss) => bss + sym.value,
+                None => continue,
+            },
             _ => continue,
         };
-        if let Some(base) = base {
-            list.push((base + sym.value, name.as_str()));
-        }
+        syms.push((addr, name.as_str()));
     }
-    for l in [
-        &mut text_syms,
-        &mut ro_syms,
-        &mut relro_syms,
-        &mut data_syms,
-        &mut bss_syms,
-    ] {
-        l.sort_by_key(|&(addr, _)| addr);
-    }
+    syms.sort_by_key(|&(addr, _)| addr);
 
     let mut out = String::new();
 
@@ -199,96 +185,23 @@ pub fn render_link_map(
         if matches!(sec.name.as_str(), ".symtab" | ".strtab" | ".shstrtab") {
             continue;
         }
-        let (rows, syms): (Vec<Row>, &[(u64, &str)]) = match sec.name.as_str() {
-            ".text" => {
-                let mut rows: Vec<Row> = Vec::new();
-                if stub_len > 0 {
-                    rows.push(Row {
-                        addr: text_sec.addr,
-                        size: stub_len,
-                        name: ".stub".to_string(),
-                        source: "<internal>".to_string(),
-                    });
-                }
-                rows.extend(stream_rows(sm.text.iter(), text_base, &label_of));
-                (rows, &text_syms)
-            }
-            ".rodata" => (
-                stream_rows(
-                    sm.data.iter().filter(|c| c.offset < ro_len),
-                    sec.addr,
-                    &label_of,
-                ),
-                ro_syms.as_slice(),
-            ),
-            ".data.rel.ro" => (
-                stream_rows(
-                    sm.data
-                        .iter()
-                        .filter(|c| c.offset >= ro_len && c.offset < relro_len),
-                    sec.addr.wrapping_sub(ro_len),
-                    &label_of,
-                ),
-                relro_syms.as_slice(),
-            ),
-            ".data" => (
-                stream_rows(
-                    sm.data.iter().filter(|c| c.offset >= relro_len),
-                    sec.addr.wrapping_sub(relro_len),
-                    &label_of,
-                ),
-                data_syms.as_slice(),
-            ),
-            ".bss" => (
-                stream_rows(sm.bss.iter(), sec.addr, &label_of),
-                bss_syms.as_slice(),
-            ),
-            ".tdata" | ".tbss" => {
-                // The merged TLS block is one stream; the image splits
-                // it at `tls_init_size`. Route each contribution to the
-                // section its offset lands in.
-                let init = merged.tls_init_size as u64;
-                let rows = match tls_base {
-                    Some(base) => stream_rows(
-                        sm.tls.iter().filter(|c| {
-                            if sec.name == ".tdata" {
-                                c.offset < init
-                            } else {
-                                c.offset >= init
-                            }
-                        }),
-                        base,
-                        &label_of,
-                    ),
-                    None => Vec::new(),
-                };
-                (rows, &[])
-            }
-            _ => (Vec::new(), &[]),
-        };
-        render_section(&mut out, sec, rows, syms);
+        let within = |addr: u64| addr >= sec.addr && addr < sec.addr + sec.size;
+        let in_rows: Vec<Row> = (rows.iter())
+            .filter(|r| within(r.addr))
+            .map(|r| Row {
+                addr: r.addr,
+                size: r.size,
+                name: r.name.clone(),
+                source: r.source.clone(),
+            })
+            .collect();
+        let in_syms: Vec<(u64, &str)> = syms.iter().copied().filter(|&(a, _)| within(a)).collect();
+        render_section(&mut out, sec, in_rows, &in_syms);
         out.push('\n');
     }
 
-    out.push_str(&format!("OUTPUT({output_name} {bfd_format})\n"));
+    out.push_str(&format!("OUTPUT({output_name} {})\n", p.format));
     Ok(out)
-}
-
-fn stream_rows<'a>(
-    contribs: impl Iterator<Item = &'a SectionContribution>,
-    base: u64,
-    label_of: &dyn Fn(&Option<usize>) -> String,
-) -> Vec<Row> {
-    let mut rows: Vec<Row> = contribs
-        .map(|c| Row {
-            addr: base + c.offset,
-            size: c.size,
-            name: c.name.clone(),
-            source: label_of(&c.input),
-        })
-        .collect();
-    rows.sort_by_key(|r| r.addr);
-    rows
 }
 
 /// Print one output section: the header row, then each contribution
@@ -457,6 +370,77 @@ fn parse_image_sections(image: &[u8]) -> Result<(Vec<OutSec>, &'static str), C5E
         });
     }
     Ok((sections, bfd_format))
+}
+
+/// The output image's sections in file order, whichever its format: the
+/// ELF section headers, the PE section table at the image base, the
+/// sections of each Mach-O `LC_SEGMENT_64` named `segment,section`.
+fn image_sections(image: &[u8]) -> Result<Vec<OutSec>, C5Error> {
+    let u16_at = |o: usize| {
+        image
+            .get(o..o + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+    };
+    let u32_at =
+        |o: usize| (image.get(o..o + 4)).map(|b| u32::from_le_bytes(b.try_into().unwrap()));
+    let u64_at =
+        |o: usize| (image.get(o..o + 8)).map(|b| u64::from_le_bytes(b.try_into().unwrap()));
+    let name_at = |o: usize, n: usize| {
+        image.get(o..o + n).map(|b| {
+            let end = b.iter().position(|&c| c == 0).unwrap_or(n);
+            String::from_utf8_lossy(&b[..end]).into_owned()
+        })
+    };
+    let truncated = || map_err("the image's section table is truncated");
+    if image.starts_with(b"MZ") {
+        let pe = u32_at(0x3c).ok_or_else(truncated)? as usize;
+        let count = u16_at(pe + 6).ok_or_else(truncated)? as usize;
+        let optional = pe + 24;
+        let table = optional + u16_at(pe + 20).ok_or_else(truncated)? as usize;
+        let image_base = u64_at(optional + 24).ok_or_else(truncated)?;
+        return (0..count)
+            .map(|k| {
+                let h = table + 40 * k;
+                Some(OutSec {
+                    name: name_at(h, 8)?,
+                    addr: image_base + u64::from(u32_at(h + 12)?),
+                    size: u64::from(u32_at(h + 8)?),
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(truncated);
+    }
+    if u32_at(0) == Some(0xfeed_facf) {
+        let ncmds = u32_at(16).ok_or_else(truncated)?;
+        let mut at = 32;
+        let mut sections = Vec::new();
+        for _ in 0..ncmds {
+            let (cmd, size) = (
+                u32_at(at).ok_or_else(truncated)?,
+                u32_at(at + 4).ok_or_else(truncated)?,
+            );
+            if cmd == 0x19 {
+                let nsects = u32_at(at + 64).ok_or_else(truncated)? as usize;
+                for k in 0..nsects {
+                    let h = at + 72 + 80 * k;
+                    let (sect, seg) = (name_at(h, 16), name_at(h + 16, 16));
+                    let (Some(sect), Some(seg), Some(addr), Some(size)) =
+                        (sect, seg, u64_at(h + 32), u64_at(h + 40))
+                    else {
+                        return Err(truncated());
+                    };
+                    sections.push(OutSec {
+                        name: format!("{seg},{sect}"),
+                        addr,
+                        size,
+                    });
+                }
+            }
+            at += size as usize;
+        }
+        return Ok(sections);
+    }
+    parse_image_sections(image).map(|(sections, _)| sections)
 }
 
 fn map_err(msg: &str) -> C5Error {

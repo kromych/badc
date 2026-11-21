@@ -186,9 +186,27 @@ pub struct NativeEmit {
 
 /// A linked image and the program database its debug directory names.
 #[cfg(feature = "native-emit")]
+#[derive(Debug)]
 pub struct NativeImage {
     pub image: Vec<u8>,
     pub pdb: Option<Vec<u8>>,
+    /// Where the writer placed the program's streams; the link map reads it.
+    pub(crate) placement: StreamPlacement,
+}
+
+/// Where an image writer placed the program's streams: the address of the
+/// text stream's first byte and the range of the entry stub ahead of it,
+/// the data stream's regions, and the first byte of the zero-fill and
+/// thread-local streams, with the BFD name of the image's format.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct StreamPlacement {
+    pub(crate) format: &'static str,
+    pub(crate) text: u64,
+    pub(crate) stub: Option<(u64, u64)>,
+    #[cfg(feature = "native-emit")]
+    pub(crate) data: Vec<DataRegion>,
+    pub(crate) bss: Option<u64>,
+    pub(crate) tls: Option<u64>,
 }
 
 #[cfg(feature = "native-emit")]
@@ -758,7 +776,11 @@ fn write_image_for(
     build: &Build,
     target: Target,
 ) -> Result<NativeImage, C5Error> {
-    let image = |image: Vec<u8>| NativeImage { image, pdb: None };
+    let image = |image: Vec<u8>| NativeImage {
+        image,
+        pdb: None,
+        placement: StreamPlacement::default(),
+    };
     #[cfg(feature = "std")]
     if build.output_kind == OutputKind::Relocatable {
         let machine = match target {
@@ -789,14 +811,12 @@ fn write_image_for(
             "an absolute address field reached an image writer",
         ));
     }
-    let pe = |machine| {
-        let (image, pdb) = pe::write_with_pdb(program, build, machine, target)?;
-        Ok(NativeImage { image, pdb })
-    };
+    let pe = |machine| pe::write_with_pdb(program, build, machine, target);
+
     match target {
-        Target::MacOSAarch64 => mach_o::write(program, build).map(image),
-        Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64).map(image),
-        Target::LinuxX64 => elf::write(program, build, Machine::X86_64).map(image),
+        Target::MacOSAarch64 => mach_o::write(program, build),
+        Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64),
+        Target::LinuxX64 => elf::write(program, build, Machine::X86_64),
         Target::WindowsX64 => pe(Machine::X86_64),
         Target::WindowsAarch64 => pe(Machine::Aarch64),
     }

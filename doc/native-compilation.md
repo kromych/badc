@@ -247,8 +247,9 @@ which has the compiler and the in-process JIT but no native output; see
 ## Linking
 
 The driver passes link options with `-Wl,` and `-Xlinker`. It takes GNU ld's
-linker scripts (`-T` / `--script`, with `.o` and `.a` inputs only) and link
-maps (`-Map`, `--print-map`) for an ELF target, and `--emit-relocs`, `-z`
+linker scripts (`-T` / `--script`, with `.o` and `.a` inputs only) for an ELF
+target, link maps (`-Map`, `--print-map`) in GNU ld's layout for every target,
+with a Mach-O section named `segment,section`, and `--emit-relocs`, `-z`
 keywords, `--build-id`, `--whole-archive` spans, `--start-group` / `--end-group`, and
 export control (`--export-all`, `--export-data`). `--help` lists the image
 options. A link option badc does not implement is refused by name.

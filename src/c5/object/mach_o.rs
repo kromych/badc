@@ -1897,7 +1897,7 @@ struct MachOWriter<'a> {
     out: Vec<u8>,
 }
 
-pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error> {
+pub(super) fn write(program: &Program, build: &Build) -> Result<super::NativeImage, C5Error> {
     let mut w = MachOWriter::new(program, build)?;
     w.size_load_commands();
     w.layout_segments()?;
@@ -1909,7 +1909,20 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     w.emit_text_segment()?;
     w.emit_data_segments()?;
     w.emit_dwarf_and_linkedit();
-    w.finish()
+    let l = &w.layout;
+    let placement = super::StreamPlacement {
+        format: "mach-o-arm64",
+        text: l.code_vmaddr_base(),
+        stub: None,
+        data: l.data_regions().to_vec(),
+        bss: Some(l.bss_base_vmaddr),
+        tls: w.tls_present.then(|| l.thread_storage_vmaddr()),
+    };
+    Ok(super::NativeImage {
+        image: w.finish()?,
+        pdb: None,
+        placement,
+    })
 }
 
 impl<'a> MachOWriter<'a> {
@@ -3042,7 +3055,7 @@ mod tests {
             lsda: None,
         }];
         b.plt_trampoline_offsets = alloc::vec![Some(0x40)];
-        let bytes = write(&tiny_program(), &b).unwrap();
+        let bytes = write(&tiny_program(), &b).unwrap().image;
         let (_, sect_off, _) = section_header(&bytes, "__TEXT", "__unwind_info");
         let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
         let section = &bytes[sect_off..];
@@ -3078,7 +3091,7 @@ mod tests {
                 lsda: None,
             },
         ];
-        let bytes = write(&tiny_program(), &b).unwrap();
+        let bytes = write(&tiny_program(), &b).unwrap().image;
         let (_, sect_off, _) = section_header(&bytes, "__TEXT", "__unwind_info");
         let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
         let (got, _, _) = section_header(&bytes, "__DATA", "__got");
@@ -3140,7 +3153,7 @@ mod tests {
             personality: None,
             lsda: None,
         }];
-        let image = write(&tiny_program(), &b).unwrap();
+        let image = write(&tiny_program(), &b).unwrap().image;
         let (eh_addr, eh_off, eh_size) = section_header(&image, "__TEXT", "__eh_frame");
         let (code_addr, code_off, _) = section_header(&image, "__TEXT", "__text");
         let (_, sect_off, _) = section_header(&image, "__TEXT", "__unwind_info");
@@ -3205,7 +3218,7 @@ mod tests {
                 addend,
             })
             .to_vec();
-        let bytes = write(&tiny_program(), &b).unwrap();
+        let bytes = write(&tiny_program(), &b).unwrap().image;
         let (got, _, _) = section_header(&bytes, "__DATA", "__got");
         let (data, _, _) = section_header(&bytes, "__DATA", "__data");
         let (binds, rebases) = dyld_info(&bytes);
@@ -3276,7 +3289,7 @@ mod tests {
 
     #[test]
     fn writes_mh_magic_64() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         assert_eq!(read_u32(&bytes, 0), MH_MAGIC_64);
     }
 
@@ -3305,19 +3318,19 @@ mod tests {
 
     #[test]
     fn cpu_type_is_arm64() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         assert_eq!(read_u32(&bytes, 4), CPU_TYPE_ARM64);
     }
 
     #[test]
     fn filetype_is_mh_execute() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         assert_eq!(read_u32(&bytes, 12), MH_EXECUTE);
     }
 
     #[test]
     fn flags_include_pie_and_dyldlink() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let flags = read_u32(&bytes, 24);
         assert_ne!(flags & MH_PIE, 0, "MH_PIE not set");
         assert_ne!(flags & MH_DYLDLINK, 0, "MH_DYLDLINK not set");
@@ -3325,7 +3338,7 @@ mod tests {
 
     #[test]
     fn ncmds_baseline_is_thirteen_plus_dylibs() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         assert_eq!(read_u32(&bytes, 16), 14);
     }
 
@@ -3333,7 +3346,7 @@ mod tests {
     /// file, and its CodeDirectory hashes every page ahead of it.
     #[test]
     fn an_image_ends_in_an_ad_hoc_signature_over_its_bytes() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let (ncmds, mut at) = (read_u32(&bytes, 16), 32usize);
         for _ in 1..ncmds {
             at += read_u32(&bytes, at + 4) as usize;
@@ -3358,7 +3371,7 @@ mod tests {
         // because we leave padding between the LC stream and the code so
         // codesign can grow the LCs in place without overwriting the entry
         // point.
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3385,7 +3398,7 @@ mod tests {
 
     #[test]
     fn output_alignment_invariants() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         // strtab is padded to 8 bytes, so the whole image is too.
         assert_eq!(bytes.len() % 8, 0);
         assert!(
@@ -3600,7 +3613,7 @@ mod tests {
 
     #[test]
     fn bind_stream_contains_symbol_name() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3638,7 +3651,7 @@ mod tests {
             is_object: false,
             weak: false,
         }];
-        let bytes = write(&tiny_program(), &build).unwrap();
+        let bytes = write(&tiny_program(), &build).unwrap().image;
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let (mut p, mut nsects, mut sect) = (32usize, 0u32, None);
         while p < 32 + sizeofcmds {
@@ -3700,7 +3713,7 @@ mod tests {
                 weak: false,
             },
         ];
-        let bytes = write(&tiny_program(), &build).unwrap();
+        let bytes = write(&tiny_program(), &build).unwrap().image;
 
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
@@ -3759,7 +3772,7 @@ mod tests {
 
     #[test]
     fn strtab_starts_with_leading_nul() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3788,7 +3801,7 @@ mod tests {
     fn otool_h_parses_the_image() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let path = crate::c5::tests::unique_temp_path("badc-m1-3", "h", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
@@ -3817,7 +3830,7 @@ mod tests {
     fn dyld_info_imports_lists_write() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let path = crate::c5::tests::unique_temp_path("badc-m1-3", "bind", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
@@ -3862,7 +3875,7 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O").image;
 
         let flags = read_u32(&bytes, 24);
         assert_ne!(
@@ -3941,7 +3954,7 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O").image;
         let flags = read_u32(&bytes, 24);
         assert_eq!(
             flags & MH_HAS_TLV_DESCRIPTORS,
@@ -3958,7 +3971,7 @@ mod tests {
     fn nm_reports_write_undefined() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let path = crate::c5::tests::unique_temp_path("badc-m1-3", "nm", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
@@ -4003,7 +4016,7 @@ mod tests {
         .expect("lower");
         build.bss_size = compacted.bss_size;
         assert!(build.bss_size > 0, "the zero array must occupy bss");
-        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O").image;
 
         let read_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
         let lc_end = 32 + read_u32(&bytes, 20) as usize;

@@ -17639,7 +17639,6 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
         ArchiveInclusion, emit_x86_64_plt, link_native_objects, parse_native_elf, render_link_map,
-        write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     use alloc::string::{String, ToString};
@@ -17684,7 +17683,7 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
     arch_o.source = "liba.a(archmem.o)".to_string();
     let mut merged = link_native_objects(&[main_o, helper_o, arch_o]).expect("link");
     let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
-    let exe = write_native_image_from_merged(
+    let exe = crate::write_native_image_and_pdb(
         &merged,
         &plt,
         "main",
@@ -17692,6 +17691,9 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
         OutputKind::Executable,
         target,
         None,
+        &crate::ImageOptions::default(),
+        None,
+        &[],
     )
     .expect("write executable");
     let pulls = [ArchiveInclusion {
@@ -17732,7 +17734,7 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
 
     // Every output section (bar the symbol/string tables ld omits)
     // appears with the image's own address and size.
-    let sections = map_image_sections(&exe);
+    let sections = map_image_sections(&exe.image);
     let header_line = |name: &str, addr: u64, size: u64| {
         let mut l = String::from(name);
         for _ in 0..16usize.saturating_sub(name.len()) {
@@ -17794,7 +17796,7 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
     }
 
     // The map's symbol rows carry the image's own addresses.
-    let symtab = map_image_symtab(&exe);
+    let symtab = map_image_symtab(&exe.image);
     for f in ["main", "helper", "archfn"] {
         let st_value = symtab
             .iter()
@@ -18985,6 +18987,121 @@ fn a_packed_object_behind_carved_const_data_keeps_its_access_alignment() {
         let opts = NativeOptions::new().with_optimize();
         if let Err(e) = super::link_executable_with_runtime(&program, target, opts) {
             panic!("{target:?}: {e}");
+        }
+    }
+}
+
+/// The map of a PE or Mach-O image names the format's sections and places
+/// each input's contribution and each global symbol inside the section that
+/// holds it, by the addresses the writer gave the streams.
+#[test]
+fn link_map_places_pe_and_mach_o_streams_in_their_sections() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_object,
+        render_link_map,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for (target, format, text) in [
+        (Target::WindowsX64, "pei-x86-64", ".text"),
+        (Target::WindowsAarch64, "pei-aarch64-little", ".text"),
+        (Target::MacOSAarch64, "mach-o-arm64", "__TEXT,__text"),
+    ] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let compile = |src: &str, no_entry: bool, label: &str| {
+            let front = CompileOptions::default().with_no_entry_point(no_entry);
+            let program = Compiler::with_options(src.into(), target, front)
+                .compile()
+                .expect("compile");
+            let bytes = emit_native_with_options(&program, target, opts.clone()).expect("emit");
+            let mut o = parse_native_object(&bytes).expect("parse");
+            o.source = label.into();
+            o
+        };
+        let a = compile(
+            "int counter = 3; int zeroed[16]; const char msg[] = \"hi\";\n\
+             int helper(int x) { return x + counter + zeroed[x] + msg[0]; }\n",
+            true,
+            "a.o",
+        );
+        let b = compile(
+            "int helper(int);\nint main(void) { return helper(1); }\n\
+             void __c5_entry(void) { main(); }\n",
+            false,
+            "b.o",
+        );
+        let mut merged = link_native_objects(&[a, b]).expect("link");
+        let plt = if target.is_aarch64() {
+            emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub)
+        } else {
+            emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub)
+        }
+        .expect("plt");
+        let image = crate::write_native_image_and_pdb(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+            &crate::ImageOptions::default(),
+            None,
+            &[],
+        )
+        .expect("write image");
+        let map = render_link_map(&merged, &image, &[], "prog").expect("render map");
+        assert!(
+            map.ends_with(&alloc::format!("OUTPUT(prog {format})\n")),
+            "{map}"
+        );
+        let hex = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).unwrap();
+        let mut section: Option<(&str, u64, u64)> = None;
+        // A name too long for its column puts the address and size on the
+        // next line.
+        let mut wrapped: Option<&str> = None;
+        let mut seen = alloc::vec::Vec::new();
+        for line in map.lines().skip_while(|l| !l.starts_with("Linker script")) {
+            let cols: alloc::vec::Vec<&str> = line.split_whitespace().collect();
+            match cols.as_slice() {
+                [name, addr, size] if !line.starts_with(' ') && addr.starts_with("0x") => {
+                    section = Some((name, hex(addr), hex(size)));
+                }
+                [name] if !line.starts_with(' ') && name.contains("__") => wrapped = Some(name),
+                [addr, size] if size.starts_with("0x") && wrapped.is_some() => {
+                    section = Some((wrapped.take().unwrap(), hex(addr), hex(size)));
+                }
+                [addr, sym] if line.starts_with(' ') && addr.starts_with("0x") => {
+                    let (sec, start, size) = section.expect("a symbol row follows a section");
+                    let at = hex(addr);
+                    assert!(
+                        at >= start && at < start + size,
+                        "`{sym}` outside {sec}:\n{map}"
+                    );
+                    seen.push((*sym, sec));
+                }
+                [name, addr, size, ..] if line.starts_with(' ') && addr.starts_with("0x") => {
+                    let (sec, start, end) = section.map(|(n, s, z)| (n, s, s + z)).unwrap();
+                    let (at, len) = (hex(addr), hex(size));
+                    assert!(
+                        at >= start && at + len <= end,
+                        "{name} outside {sec}:\n{map}"
+                    );
+                }
+                _ => {}
+            }
+        }
+        for (sym, sec) in [("helper", text), ("main", text)] {
+            assert!(seen.contains(&(sym, sec)), "`{sym}` not in {sec}:\n{map}");
+        }
+        for sym in ["counter", "zeroed", "msg"] {
+            assert!(
+                seen.iter().any(|&(s, _)| s == sym),
+                "`{sym}` missing:\n{map}"
+            );
         }
     }
 }

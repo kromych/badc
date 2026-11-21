@@ -373,7 +373,7 @@ pub(super) fn write(
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
-    write_with_pdb(program, build, machine, target).map(|w| w.0)
+    write_with_pdb(program, build, machine, target).map(|w| w.image)
 }
 
 /// The image, and the PDB `build.pdb_path` names.
@@ -382,7 +382,7 @@ pub(super) fn write_with_pdb(
     build: &Build,
     machine: Machine,
     target: super::Target,
-) -> Result<(Vec<u8>, Option<Vec<u8>>), C5Error> {
+) -> Result<super::NativeImage, C5Error> {
     let mut w = PeWriter::new(program, build, machine, target)?;
     w.layout_code_sections()?;
     w.layout_data_sections()?;
@@ -392,11 +392,16 @@ pub(super) fn write_with_pdb(
     w.emit_headers()?;
     let pdb = w.build_pdb()?;
     let native = w.subsystem == IMAGE_SUBSYSTEM_NATIVE;
+    let placement = w.placement();
     let mut image = w.emit_sections()?;
     if native {
         store_checksum(&mut image);
     }
-    Ok((image, pdb))
+    Ok(super::NativeImage {
+        image,
+        pdb,
+        placement,
+    })
 }
 
 /// Offset of `OptionalHeader.CheckSum`: past the PE signature, the COFF
@@ -561,6 +566,31 @@ impl<'a> PeWriter<'a> {
 
     /// `IMAGE_TLS_DIRECTORY64`. The whole thread-local block is the
     /// template, with no zero fill.
+    /// Where the streams landed, for the link map.
+    fn placement(&self) -> super::StreamPlacement {
+        let l = &self.layout;
+        let va = |rva: u32| IMAGE_BASE + rva as u64;
+        let mut data = self.data_regions();
+        for r in &mut data {
+            r.base += IMAGE_BASE;
+        }
+        let prologue = va(l.text_rva);
+        super::StreamPlacement {
+            format: match self.machine {
+                Machine::X86_64 => "pei-x86-64",
+                Machine::Aarch64 => "pei-aarch64-little",
+            },
+            text: prologue + u64::from(self.text_prologue_len),
+            stub: (self.text_prologue_len > 0)
+                .then(|| (prologue, prologue + u64::from(self.text_prologue_len))),
+            data,
+            bss: Some(va(l.data_rva + l.bss_base_in_data)),
+            tls: self
+                .tls_directory_rva()
+                .map(|_| va(l.data_rva + l.tls.tls_init_offset_in_data)),
+        }
+    }
+
     fn tls_directory(&self) -> [u8; IMAGE_TLS_DIRECTORY64_SIZE as usize] {
         let l = &self.layout;
         let va = |rva: u32| IMAGE_BASE + rva as u64;

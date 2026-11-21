@@ -256,8 +256,13 @@ static void __c5_crt_startup(void) {
 #endif
 }
 #else
+// C17 7.21.3p7: stderr as initially opened is not fully buffered. msvcrt.dll
+// gives it a full buffer when it is not a console, where the UCRT does not.
+#include <stdio.h>
+
 static void __c5_crt_startup(void) {
     __c5_vcrt_startup();
+    setvbuf(stderr, 0, _IONBF, 0);
 }
 #endif
 

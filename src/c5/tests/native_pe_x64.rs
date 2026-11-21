@@ -128,12 +128,8 @@ fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
     build_and_run_with_options(src, stem, args, NativeOptions::default())
 }
 
-fn build_and_run_with_options(
-    src: &str,
-    stem: &str,
-    args: &[&str],
-    opts: NativeOptions,
-) -> RunOutcome {
+/// Compile and link `src` as a Windows x64 executable at a temporary path.
+fn build_pe(src: &str, stem: &str, opts: NativeOptions) -> Result<std::path::PathBuf, String> {
     // Compile with the same target the codegen will lower for, so
     // the per-target header (`headers/badc-windows-x64.h`) is the
     // one whose `#pragma dylib` / `#pragma binding` directives end
@@ -144,24 +140,28 @@ fn build_and_run_with_options(
     // reference resolved by the runtime rather than a tentative def
     // that collides with `runtime.c` at link time.
     let copts = crate::CompileOptions::default().with_no_entry_point(true);
-    let program = match Compiler::with_options(super::with_prelude(src), Target::WindowsX64, copts)
+    let program = Compiler::with_options(super::with_prelude(src), Target::WindowsX64, copts)
         .compile()
-    {
-        Ok(p) => p,
-        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
-    };
-    let bytes = match super::link_executable_with_runtime(&program, Target::WindowsX64, opts) {
-        Ok(b) => b,
-        Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
-    };
-
+        .map_err(|e| format!("compile: {e}"))?;
+    let bytes = super::link_executable_with_runtime(&program, Target::WindowsX64, opts)
+        .map_err(|e| format!("emit_native: {e}"))?;
     let path = super::unique_temp_path("badc-pe64-test", stem, ".exe");
-    {
-        let mut f = std::fs::File::create(&path).expect("create temp file");
-        f.write_all(&bytes).expect("write temp file");
-        f.sync_all().expect("sync temp file");
-    }
+    let mut f = std::fs::File::create(&path).expect("create temp file");
+    f.write_all(&bytes).expect("write temp file");
+    f.sync_all().expect("sync temp file");
+    Ok(path)
+}
 
+fn build_and_run_with_options(
+    src: &str,
+    stem: &str,
+    args: &[&str],
+    opts: NativeOptions,
+) -> RunOutcome {
+    let path = match build_pe(src, stem, opts) {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(e),
+    };
     let output = match run_pe(&path, args) {
         Some(r) => r,
         None => {
@@ -237,6 +237,32 @@ fn string_literal_store_faults() {
         &[],
         0,
     );
+}
+
+/// C17 7.21.3p7: stderr is not fully buffered, so what a program wrote to
+/// it survives the program's fault, as under the UCRT. msvcrt.dll buffers a
+/// stderr that is not a console unless the startup code says otherwise.
+/// Windows-native only, as `string_literal_store_faults`.
+#[test]
+fn stderr_written_before_a_fault_reaches_the_pipe() {
+    #[cfg(target_os = "windows")]
+    {
+        let src = "#include <stdio.h>\n\
+                   int main(int argc, char **argv) {\n\
+                       (void)argv;\n\
+                       fputs(\"before the fault\\n\", stderr);\n\
+                       return *(volatile int *)(argc - 1);\n\
+                   }\n";
+        let path = build_pe(src, "stderr_fault", NativeOptions::default()).expect("build");
+        let o = run_pe(&path, &[]).expect("PE runner").expect("run");
+        let _ = std::fs::remove_file(&path);
+        assert!(!o.status.success(), "{o:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&o.stderr),
+            "before the fault\r\n",
+            "{o:?}"
+        );
+    }
 }
 
 #[test]

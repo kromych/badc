@@ -71,7 +71,10 @@ fn a_failed_overflow_check_reports_once_and_the_program_goes_on() {
             quiet.status.success() && quiet.stderr.is_empty(),
             "{opt}: {quiet:?}"
         );
-        assert_eq!(String::from_utf8_lossy(&quiet.stdout), "42 8589934592 -1\n");
+        assert_eq!(
+            String::from_utf8_lossy(&quiet.stdout).replace("\r\n", "\n"),
+            "42 8589934592 -1\n"
+        );
         let o = run(&exe, &["a", "b", "c"]);
         assert!(o.status.success(), "{opt}: {o:?}");
         assert_eq!(
@@ -205,25 +208,50 @@ __attribute__((noinline)) int dv(int a, int b) { return a / b; }
 __attribute__((noinline)) long long md(long long a, long long b) { return a % b; }
 __attribute__((noinline)) unsigned udv(unsigned a, unsigned b) { return a / b; }
 int main(int argc, char **argv) {
-    (void)argv;
-    int k = argc;
-    printf(\"%u\\n\", ushl(3u, 30 + k));
-    big(1, 31 + k);
-    neg(1, -k);
-    base(-k, 1);
-    lost(3, 30 + k);
-    wide(1, 63 + k);
-    dv(INT_MIN, -k);
-    md(5, k - 1);
-    udv(5u, k - 1u);
+    int k = argc - (argc > 1);
+    char site = argc > 1 ? argv[1][0] : 's';
+    if (site == 's') {
+        printf(\"%u\\n\", ushl(3u, 30 + k));
+        big(1, 31 + k);
+        neg(1, -k);
+        base(-k, 1);
+        lost(3, 30 + k);
+        wide(1, 63 + k);
+    }
+    if (site == 'd')
+        dv(INT_MIN, -k);
+    if (site == 'm')
+        md(5, k - 1);
+    if (site == 'u')
+        udv(5u, k - 1u);
     return 0;
 }
 ";
 
+/// Whether the run ended in the target's integer-division fault: SIGFPE,
+/// or STATUS_INTEGER_DIVIDE_BY_ZERO / STATUS_INTEGER_OVERFLOW.
+fn division_faulted(o: &Output) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        o.status.signal() == Some(8)
+    }
+    #[cfg(windows)]
+    {
+        matches!(
+            o.status.code().map(|c| c as u32),
+            Some(0xC000_0094 | 0xC000_0095)
+        )
+    }
+}
+
 /// Each site of a shift and a division reports what clang's runtime does:
 /// the amount negative or past the width, a negative or overflowing base
 /// of a signed left shift (an unsigned one has none), `INT_MIN / -1`, and
-/// a zero divisor, signed or unsigned.
+/// a zero divisor, signed or unsigned. The division still executes after
+/// the report, as gcc's and clang's instrumentation lets it, so each
+/// division site ends a run of its own: a zero divisor faults on x86-64
+/// and on Windows arm64, and `INT_MIN / -1` may on x86-64.
 #[test]
 fn shifts_and_divisions_are_checked() {
     let dir = TempDir::new("badc-sanitize-shifts");
@@ -253,12 +281,38 @@ fn shifts_and_divisions_are_checked() {
                 "6:61: runtime error: left shift of 3 by 31 places cannot be represented in \
                  type 'int'",
                 "7:73: runtime error: shift exponent 64 is too large for 64-bit type 'long long'",
-                "9:59: runtime error: division of -2147483648 by -1 cannot be represented in \
-                 type 'int'",
-                "10:77: runtime error: division by zero",
-                "11:75: runtime error: division by zero",
             ],
             "{opt}"
         );
+        let zero_faults = cfg!(target_arch = "x86_64") || cfg!(windows);
+        for (site, report, may_fault, must_fault) in [
+            (
+                "d",
+                "9:59: runtime error: division of -2147483648 by -1 cannot be represented in \
+                 type 'int'",
+                cfg!(target_arch = "x86_64"),
+                false,
+            ),
+            (
+                "m",
+                "10:77: runtime error: division by zero",
+                zero_faults,
+                zero_faults,
+            ),
+            (
+                "u",
+                "11:75: runtime error: division by zero",
+                zero_faults,
+                zero_faults,
+            ),
+        ] {
+            let o = run(&exe, &[site]);
+            assert_eq!(reports(&o), [report], "{opt} {site}: {o:?}");
+            let faulted = division_faulted(&o);
+            assert!(
+                (o.status.success() && !must_fault) || (faulted && may_fault),
+                "{opt} {site}: {o:?}"
+            );
+        }
     }
 }

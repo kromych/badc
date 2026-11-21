@@ -25,10 +25,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 // Without `native-emit` the on-disk writers are gated out, leaving
 // their support code (the `Machine` enum, `lower_for`, reloc tables,
-// per-binding metadata read only by the writers) unreferenced. That
-// configuration is a deliberate slim build, so allow the dead code
-// rather than gating each field and helper individually.
-#![cfg_attr(not(feature = "native-emit"), allow(dead_code))]
+// per-binding metadata read only by the writers) unreferenced; without
+// `linker` (which implies `native-emit`) so is the link's (the relocation
+// kinds it applies, the symbol-version reader, the link map's placement
+// record). Those configurations are deliberate slim builds, so allow the
+// dead code rather than gating each field and helper individually; the
+// `full` build keeps the lint.
+#![cfg_attr(not(feature = "linker"), allow(dead_code))]
 // `+` and `-` at the start of a doc-comment line are heavy-use
 // markdown bullets in this codebase's narrative comments
 // (declarator / parser shapes, ABI option-bit lists). Rust 1.95

@@ -268,9 +268,10 @@ UNSUPPORTED_EXACT = {
 }
 
 UNSUPPORTED_PREFIX = (
-    # badc emits no sanitizer instrumentation, so the checks CONFIG_UBSAN
-    # asks for -- array bounds and shift-exponent among them -- are absent
-    # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
+    # A CONFIG_UBSAN check badc implements is forwarded (`sanitizer_option`,
+    # answered by `badc_accepts`) and calls the handlers in lib/ubsan.c; one
+    # it does not -- array bounds and `bool` among them -- is absent from a
+    # unit built here and reported.
     "-fsanitize=", "-fsanitize-trap=",
     # Clears the call-clobbered registers a function used before it returns
     # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
@@ -381,12 +382,21 @@ def warning_option(a: str) -> bool:
     return a.startswith("-W") and not a.startswith(("-Wa,", "-Wl,", "-Wp,"))
 
 
+def sanitizer_option(a: str) -> bool:
+    """An option naming UndefinedBehaviorSanitizer checks, which badc takes
+    for the checks it implements and refuses for the others."""
+    return a == "-fsanitize-undefined-trap-on-error" or a.startswith((
+        "-fsanitize=", "-fsanitize-trap=", "-fno-sanitize=", "-fsanitize-recover=",
+        "-fno-sanitize-recover="))
+
+
 def badc_accepts(badc: str, flag: str, cache: str | None = None) -> bool:
-    """Whether badc takes the diagnostic option `flag`: kbuild's
-    `cc-option` question, an empty unit compiled under `-Werror`. badc
-    refuses a selector no diagnostic, alias or group answers, and reports
-    one naming a gcc or clang warning it does not implement (B7012),
-    which `-Werror` makes an error, so neither is forwarded. The answers
+    """Whether badc takes the diagnostic or sanitizer option `flag`:
+    kbuild's `cc-option` question, an empty unit compiled under `-Werror`.
+    badc refuses a selector no diagnostic, alias or group answers, and
+    reports one naming a gcc or clang warning it does not implement
+    (B7012), which `-Werror` makes an error, so neither is forwarded; it
+    refuses a sanitizer check it does not implement. The answers
     are kept in one file, `cache` or $BADC_WFLAGS_CACHE (which verify.py
     places in the build's work directory), so a build asks once per
     spelling; a file written for another badc binary is replaced."""
@@ -479,7 +489,7 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
             # configurations that ask for none are unaffected.
             debug = True
             i += 1
-        elif forwarded(a) or (warning_option(a) and accepts(a)):
+        elif forwarded(a) or ((warning_option(a) or sanitizer_option(a)) and accepts(a)):
             out.append(a)
             i += 1
         elif not a.startswith("-"):
@@ -783,6 +793,13 @@ def _self_test() -> int:
     assert rewrite(["-Wframe-larger-than"]) == Rewritten([], [], [])
     # A diagnostic option badc takes reaches it in the kernel's order; one it
     # does not take is dropped, and none is taken unasked.
+    # A sanitizer check badc implements is forwarded; one it refuses is
+    # dropped and reported.
+    takes = {"-fsanitize=shift", "-fsanitize-trap=undefined"}.__contains__
+    r = rewrite(["-fsanitize=shift", "-fsanitize=bounds-strict",
+                 "-fsanitize-trap=undefined"], takes)
+    assert r == Rewritten(["-fsanitize=shift", "-fsanitize-trap=undefined"],
+                          ["-fsanitize=bounds-strict"], []), r
     takes = {"-Wall", "-Wno-pointer-sign", "-Werror=return-type"}.__contains__
     r = rewrite(["-Wall", "-Wundef", "-Wno-pointer-sign", "-Wa,-x",
                  "-Werror=return-type", "-Wl,-r"], takes)

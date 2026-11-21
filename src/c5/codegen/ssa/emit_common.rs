@@ -1489,6 +1489,35 @@ pub(crate) fn time_pass_arch<R>(_label: &str, _arch: &str, f: impl FnOnce() -> R
     f()
 }
 
+/// Under the `codegen_test` feature, print the SSA of every function after
+/// each pass whose label contains `BADC_DUMP_AFTER` (`all` matches every
+/// pass), optionally only the functions named in `BADC_DUMP_FN`.
+#[cfg(feature = "codegen_test")]
+fn dump_after_pass(funcs: &[super::super::ir::FunctionSsa], label: &str) {
+    let Ok(want) = std::env::var("BADC_DUMP_AFTER") else {
+        return;
+    };
+    if want != "all" && !label.contains(want.as_str()) {
+        return;
+    }
+    let only = std::env::var("BADC_DUMP_FN").ok();
+    for f in funcs {
+        if only
+            .as_deref()
+            .is_none_or(|n| n.split(',').any(|n| n == f.name))
+        {
+            eprintln!(
+                "; after {label}: {}\n{}",
+                f.name,
+                super::dump::dump_ssa(f, None)
+            );
+        }
+    }
+}
+
+#[cfg(not(feature = "codegen_test"))]
+fn dump_after_pass(_funcs: &[super::super::ir::FunctionSsa], _label: &str) {}
+
 /// How one lowering runs its passes: each under its timing label, and
 /// with `verify` set, followed by the SSA checks naming it.
 #[derive(Clone, Copy)]
@@ -1506,6 +1535,7 @@ impl Pipeline {
     ) -> R {
         let r = time_pass_arch(label, self.arch, || pass(funcs));
         self.check(funcs, label);
+        dump_after_pass(funcs, label);
         r
     }
 

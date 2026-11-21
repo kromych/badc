@@ -543,6 +543,76 @@ fn a_unit_without_functions_places_its_objects_as_any_unit_does() {
     }
 }
 
+/// gcc `-fno-plt`: a call to a function the link resolves loads the callee
+/// from its GOT entry, on x86-64 ELF always and on aarch64 under `-fPIC`; a
+/// hidden callee and a `static` one stay direct, and so does every call
+/// without the option, at -O0 and -O.
+#[test]
+fn no_plt_calls_load_the_callee_from_its_got_entry() {
+    use crate::c5::object::elf_reloc_types::*;
+    let src = "extern void g(int);\n\
+               __attribute__((visibility(\"hidden\"))) extern void h(void);\n\
+               static void s(void) {}\n\
+               void f(void) { g(1); h(); s(); }\n";
+    let relocs = |target: Target, no_plt: bool, pic: bool, optimize: bool| {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            no_plt,
+            pic,
+            optimize,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_et_rel(&bytes, "n.o").expect("parse");
+        let text = obj
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        let mut out: Vec<(String, u32)> = (text.relocs.iter())
+            .map(|r| (obj.symbols[r.sym as usize].name.clone(), r.rtype))
+            .collect();
+        out.sort();
+        out
+    };
+    let calls = |r: &[(String, u32)], name: &str| -> Vec<u32> {
+        r.iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, t)| *t)
+            .collect()
+    };
+    for optimize in [false, true] {
+        let x64 = relocs(Target::LinuxX64, true, false, optimize);
+        assert_eq!(calls(&x64, "g"), [R_X86_64_REX_GOTPCRELX], "{x64:?}");
+        assert_eq!(calls(&x64, "h"), [R_X86_64_PLT32], "{x64:?}");
+        assert!(calls(&x64, "s").is_empty(), "{x64:?}");
+        let x64 = relocs(Target::LinuxX64, false, false, optimize);
+        assert_eq!(calls(&x64, "g"), [R_X86_64_PLT32], "{x64:?}");
+        let a64 = relocs(Target::LinuxAarch64, true, true, optimize);
+        assert_eq!(
+            calls(&a64, "g"),
+            [R_AARCH64_ADR_GOT_PAGE, R_AARCH64_LD64_GOT_LO12_NC],
+            "{a64:?}"
+        );
+        let direct = |r: &[(String, u32)], name: &str| {
+            let t = calls(r, name);
+            !t.is_empty()
+                && t.iter()
+                    .all(|t| matches!(*t, R_AARCH64_CALL26 | R_AARCH64_JUMP26))
+        };
+        assert!(direct(&a64, "h"), "{a64:?}");
+        let a64 = relocs(Target::LinuxAarch64, true, false, optimize);
+        assert!(direct(&a64, "g"), "{a64:?}");
+    }
+}
+
 #[test]
 fn a_pic_unit_names_its_interposable_definitions() {
     // System V gABI, symbol visibility: `-fPIC` code reaches the functions

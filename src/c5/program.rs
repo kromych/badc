@@ -382,6 +382,9 @@ pub struct Program {
     /// decides its preemption (position-independent ELF relocatable output);
     /// see [`crate::c5::symbol::Symbol::is_interposable_definition`].
     pub(crate) interposable_refs: bool,
+    /// `-fno-plt` in effect: a call to a function the link resolves goes
+    /// through the address its GOT entry holds.
+    pub(crate) no_plt_calls: bool,
     /// `-ffp-contract=fast`: `-O` contracts any product the add or subtract
     /// using it is the only use of, not only a contractible one.
     pub(crate) fp_contract_fast: bool,
@@ -855,6 +858,7 @@ impl DataOffsets for Program {
             bind_trampoline_slots: _, // a mode
             weak_refs_by_name: _,     // a mode
             interposable_refs: _,     // a mode
+            no_plt_calls: _,          // a mode
             fp_contract_fast: _,      // a mode
             tls_data_relocs,
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
@@ -1009,6 +1013,7 @@ mod data_offset_tests {
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
             interposable_refs: false,
+            no_plt_calls: false,
             fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),

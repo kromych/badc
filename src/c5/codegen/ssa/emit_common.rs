@@ -2070,12 +2070,14 @@ pub(crate) fn extern_fn_targets(
             )
         })
         .collect();
+    let named_refs = crate::c5::irgen::NamedRefs::of(program);
     for (i, sym) in program.symbols.iter().enumerate() {
         if !sym.is_fun_entity() || sym.defined_here {
             continue;
         }
-        // A dllimport function is called through its import slot.
-        if sym.dllimport {
+        // A dllimport function is called through its import slot, and
+        // under `-fno-plt` one through its GOT entry.
+        if sym.dllimport || named_refs.calls_through_got(sym) {
             out.remove(&(sym.val as usize));
             continue;
         }
@@ -2896,9 +2898,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // candidate and the cloned call sites join the inliner's
         // worklist. The post-inline constant folder then collapses the
         // per-copy `Extend(Imm)` / `BinopI(Imm, k)` index chains.
-        pipeline.run("passes::unroll::run", &mut ssa_funcs, |funcs| {
-            super::super::passes::unroll::run(funcs);
-        });
+        if native.unroll_loops {
+            pipeline.run("passes::unroll::run", &mut ssa_funcs, |funcs| {
+                super::super::passes::unroll::run(funcs);
+            });
+        }
         // Merge byte-at-a-time memory idioms after the unroll, which
         // straight-lines the per-byte loops they are often written as,
         // and before the inliner: a helper that collapses to one wide

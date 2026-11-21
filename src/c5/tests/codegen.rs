@@ -12618,6 +12618,42 @@ fn long_double_conditional_merges_in_the_fp_class() {
     }
 }
 
+/// `-fno-unroll-loops` keeps -O from fully unrolling a constant-trip loop:
+/// the loop keeps its header phi, which the default unroll removes.
+#[test]
+fn no_unroll_loops_keeps_a_constant_trip_loop() {
+    use crate::{Compiler, NativeOptions, OutputKind};
+    const SRC: &str =
+        "int sum4(const int *a) { int s = 0; for (int i = 0; i < 4; i++) s += a[i]; return s; }\n";
+    let target = crate::Target::LinuxX64;
+    let phis = |unroll_loops: bool| {
+        let opts = crate::CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true);
+        let program = Compiler::with_options(String::from(SRC), target, opts)
+            .compile()
+            .unwrap();
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            unroll_loops,
+            ..NativeOptions::new().with_optimize().with_dump_ssa()
+        };
+        let dump = crate::c5::codegen::lower_for(&program, target, opts)
+            .unwrap()
+            .ssa_dump;
+        let start = dump
+            .find("; name=sum4\n")
+            .unwrap_or_else(|| panic!("{dump}"));
+        let body = &dump[start + "; name=sum4\n".len()..];
+        let body = body.split("\n; ").next().unwrap_or(body);
+        (body.matches("Phi {").count(), body.to_string())
+    };
+    let (unrolled, body) = phis(true);
+    assert_eq!(unrolled, 0, "{body}");
+    let (kept, body) = phis(false);
+    assert!(kept > 0, "{body}");
+}
+
 /// Scalar promotion runs in every function holding an aggregate: a struct
 /// copied in from a pointer and read by field is split and lifted where
 /// neither the inliner nor the unroller changed the function.

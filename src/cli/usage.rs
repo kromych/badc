@@ -455,6 +455,9 @@ Compile knobs:
                            whatever the default is. With --gnu the model
                            is reported as __GNUC_GNU_INLINE__ /
                            __GNUC_STDC_INLINE__.
+  -fms-extensions          Accepted: the unnamed members of a tagged or
+                           typedef'd structure or union type it allows
+                           are accepted without it.
   -fstrict-flex-arrays[=N] Which trailing array members
                            __builtin_object_size treats as unbounded
                            when reached through a pointer: at level 0
@@ -478,6 +481,15 @@ Compile knobs:
                            the function returns is not turned into a
                            jump after the epilogue.
                            -foptimize-sibling-calls restores the default.
+  -fno-plt                 A call to a library function or to one the
+                           unit declares without defining loads the
+                           callee from its GOT entry and calls through
+                           it, with no PLT stub: x86-64 ELF objects, and
+                           aarch64 ones under -fPIC. A hidden or static
+                           callee stays direct. -fplt restores the
+                           default.
+  -fno-unroll-loops        Keep -O from fully unrolling constant-trip
+                           loops. -funroll-loops restores the default.
   -fPIC, -fpic             Emit a position-independent `-c` object: a
   -fPIE, -fpie             switch table takes the label-difference form,
                            so no absolute relocation reaches the object.
@@ -540,6 +552,9 @@ Compile knobs:
                            float or double copied from memory to memory
                            moves through a general register; one the
                            source computes is refused.
+  -mno-outline-atomics     AArch64: accepted; every atomic operation is
+                           emitted inline, never as a call to the
+                           __aarch64_* helpers.
   -mstrict-align, -mno-strict-align
                            Keep every compiler-generated memory access
                            naturally aligned for its width, as memory

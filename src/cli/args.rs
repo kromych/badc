@@ -175,6 +175,8 @@ pub(crate) struct Codegen {
     pub(crate) conserve_stack: bool,
     pub(crate) zero_init_in_bss: bool,
     pub(crate) sibling_calls: bool,
+    pub(crate) no_plt: bool,
+    pub(crate) unroll_loops: bool,
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
     pub(crate) align_functions: u32,
@@ -217,6 +219,8 @@ impl Default for Codegen {
             conserve_stack: false,
             zero_init_in_bss: true,
             sibling_calls: true,
+            no_plt: false,
+            unroll_loops: true,
             keep_local_labels: false,
             min_function_alignment: 1,
             align_functions: 1,
@@ -696,6 +700,8 @@ struct Parser {
     /// `-arch <name>`, checked against the target once it is known.
     arch: Option<String>,
     mcpu: Option<String>,
+    /// Options only the AArch64 targets take, checked once the target is known.
+    aarch64_args: Vec<String>,
     /// `-march=`, `-mtune=` and the x86 `-m<ext>` / `-mno-<ext>` options
     /// in command-line order, resolved once the target is known.
     isa_args: Vec<String>,
@@ -1525,6 +1531,10 @@ impl Parser {
             // `-fgnu89-inline`: make the GNU89 inline linkage model the
             // unit default in place of C99's.
             "-fgnu89-inline" => front.gnu89_inline = Some(true),
+            // In C, gcc's Microsoft extensions are the unnamed members of a
+            // tagged or typedef'd structure or union type, which badc takes
+            // with or without the option.
+            "-fms-extensions" => {}
             "-fno-gnu89-inline" => front.gnu89_inline = Some(false),
             // gcc `-fstrict-flex-arrays[=N]`: which trailing array members
             // `__builtin_object_size` treats as unbounded. The bare form
@@ -1816,6 +1826,13 @@ impl Parser {
             // on the chain.
             "-foptimize-sibling-calls" => code.sibling_calls = true,
             "-fno-optimize-sibling-calls" => code.sibling_calls = false,
+            "-fplt" => code.no_plt = false,
+            "-fno-plt" => code.no_plt = true,
+            "-funroll-loops" => code.unroll_loops = true,
+            "-fno-unroll-loops" => code.unroll_loops = false,
+            // badc emits every atomic operation inline and never calls the
+            // `__aarch64_*` helpers `-moutline-atomics` selects.
+            "-mno-outline-atomics" => self.aarch64_args.push(arg.to_string()),
             // gcc `-fmin-function-alignment=N`: every function entry
             // lands on a multiple of N, never skipping a large gap as
             // `-falign-functions` may.
@@ -2874,6 +2891,11 @@ impl Parser {
                     "badc: error: `-mcpu=` names an AArch64 CPU; the x86-64 targets take none",
                 ));
             }
+            if let Some(arg) = self.aarch64_args.first() {
+                return Err(ParseError::diag(format!(
+                    "badc: error: `{arg}` is an AArch64 option; the x86-64 targets take none"
+                )));
+            }
             return Ok(());
         }
         let mut march = None;
@@ -3185,6 +3207,8 @@ impl Codegen {
         opts.conserve_stack = self.conserve_stack;
         opts.zero_init_in_bss = self.zero_init_in_bss;
         opts.sibling_calls = self.sibling_calls;
+        opts.no_plt = self.no_plt;
+        opts.unroll_loops = self.unroll_loops;
         opts.min_function_alignment = self.min_function_alignment.max(self.align_functions);
         opts.branches_within_32b = self.branches_within_32b;
         opts.patchable_function_entry = self.patchable_function_entry;
@@ -4600,6 +4624,37 @@ mod tests {
         assert_eq!(parse(&["--shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["-shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["a.c"]).mode, Mode::NativeExecutable);
+    }
+
+    /// `-fno-plt` and `-fno-unroll-loops` reach the codegen options, the
+    /// last of a pair winning; `-fms-extensions` is accepted;
+    /// `-mno-outline-atomics` is an AArch64 option.
+    #[test]
+    fn plt_unroll_ms_extensions_and_outline_atomics_options() {
+        let a64 = "--target=linux-aarch64";
+        let cli = parse(&[
+            X64,
+            "-fno-plt",
+            "-fno-unroll-loops",
+            "-fms-extensions",
+            "a.c",
+        ]);
+        assert!(cli.codegen.no_plt && !cli.codegen.unroll_loops);
+        let cli = parse(&[
+            X64,
+            "-fno-plt",
+            "-fplt",
+            "-fno-unroll-loops",
+            "-funroll-loops",
+            "a.c",
+        ]);
+        assert!(!cli.codegen.no_plt && cli.codegen.unroll_loops);
+        parse(&[a64, "-mno-outline-atomics", "a.c"]);
+        assert!(
+            reject(&[X64, "-mno-outline-atomics", "a.c"])
+                .0
+                .contains("AArch64 option")
+        );
     }
 
     /// The ld64 options CMake's Darwin platform passes on every link:

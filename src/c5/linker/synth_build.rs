@@ -524,6 +524,7 @@ fn synth_program(
         bind_trampoline_slots: false,
         weak_refs_by_name: false,
         interposable_refs: false,
+        no_plt_calls: false,
         fp_contract_fast: false,
         tls_data_relocs: Vec::new(),
         tls_extern_data_relocs: Vec::new(),

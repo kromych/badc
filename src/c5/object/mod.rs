@@ -617,6 +617,10 @@ fn compact_and_lower(
         && options.pic
         && !options.pie
         && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+    program.no_plt_calls = options.no_plt
+        && options.output_kind == OutputKind::Relocatable
+        && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf
+        && (target.is_x86_64() || options.pic);
     let segregate = match options.bss_segregate && !bss_segregation_disabled() {
         false => shadow::ZeroFill::Off,
         true if options.zero_init_in_bss => shadow::ZeroFill::All,
@@ -865,6 +869,7 @@ pub(crate) mod test_support {
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
             interposable_refs: false,
+            no_plt_calls: false,
             fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),

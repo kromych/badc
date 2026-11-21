@@ -154,10 +154,7 @@ pub(crate) fn walk_program(
             target,
             optimize,
             jump_tables,
-            crate::c5::irgen::NamedRefs {
-                weak: program.weak_refs_by_name,
-                interposable: program.interposable_refs,
-            },
+            crate::c5::irgen::NamedRefs::of(program),
             program.freestanding,
             (program.x86_features, program.no_fp_regs),
         )

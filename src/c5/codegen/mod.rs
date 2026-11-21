@@ -4631,6 +4631,14 @@ pub struct NativeOptions {
     /// returns into the frame that made it, which a frame-pointer unwinder
     /// walking the call chain relies on.
     pub sibling_calls: bool,
+    /// `-fno-plt`: a call to a function the link resolves loads the
+    /// callee's address from its GOT entry and calls through it, with no
+    /// PLT stub between, where gcc applies it: x86-64 ELF objects, and
+    /// aarch64 ELF objects under `-fPIC`. PE and Mach-O have no PLT.
+    pub no_plt: bool,
+    /// `-funroll-loops` / `-fno-unroll-loops`: whether `-O` fully unrolls
+    /// a constant-trip loop.
+    pub unroll_loops: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
     /// final images use -- no absolute relocation reaches the object,
@@ -5112,6 +5120,8 @@ impl NativeOptions {
             jump_tables: true,
             conserve_stack: false,
             sibling_calls: true,
+            no_plt: false,
+            unroll_loops: true,
             pic: false,
             pie: false,
             pic_link: false,

@@ -1,10 +1,11 @@
 // The -fcrash-report handler. Installed before main by the constructor below,
 // it reports a fatal signal the program takes (an exception no handler takes,
 // on Windows) -- the signal and the address it names, the registers, and the
-// frames, which the frame records chain (the system unwinder finds them on
-// Windows), each with the function the dynamic loader, the symbol table or
-// DbgHelp names and its offset in its module -- and lets the signal end the
-// program as it would have. The driver links it with `-u __badc_crash_report`.
+// frames, which the system unwinder steps through by the unwind tables (the
+// frame records chain them where it cannot), each with the function the
+// dynamic loader, the symbol table or DbgHelp names and its offset in its
+// module -- and lets the signal end the program as it would have. The driver
+// links it with `-u __badc_crash_report`.
 //
 // The report is formatted on the stack and written straight to the stderr
 // descriptor: the fault may have stopped the program inside stdio or the
@@ -476,16 +477,120 @@ static void __badc_crash_registers(struct __badc_crash_out *o, ucontext_t *uc, u
         __badc_crash_str(o, "\n");
 }
 
-// Frame #0 at `pc`, then the frames the records from `fp` chain: each holds
-// the caller's record and the return address, and the walk stops at a
-// record that does not lie above the one before. The caller of a frameless
-// function is in no record.
-// TODO(#878, #2144): step by the unwind tables once badc's images describe
-// every function.
-static void __badc_crash_frames(struct __badc_crash_out *o, uintptr_t pc, uintptr_t fp) {
+#if defined(__APPLE__)
+// libunwind's cursor API, which libSystem exports. Its unwinder steps from
+// `_sigtramp` to the interrupted function's caller, so the cursor starts at
+// the interrupted registers instead. The buffers exceed its context and
+// cursor sizes.
+typedef struct {
+    uint64_t data[128];
+} __badc_unw_buf;
+static int (*__badc_unw_getcontext)(__badc_unw_buf *);
+static int (*__badc_unw_init_local)(__badc_unw_buf *, __badc_unw_buf *);
+static int (*__badc_unw_set_reg)(__badc_unw_buf *, int, uintptr_t);
+static int (*__badc_unw_get_reg)(__badc_unw_buf *, int, uintptr_t *);
+static int (*__badc_unw_step)(__badc_unw_buf *);
+
+static void __badc_crash_unwinder(void) {
+    *(void **)&__badc_unw_getcontext = dlsym(RTLD_DEFAULT, "unw_getcontext");
+    *(void **)&__badc_unw_init_local = dlsym(RTLD_DEFAULT, "unw_init_local");
+    *(void **)&__badc_unw_set_reg = dlsym(RTLD_DEFAULT, "unw_set_reg");
+    *(void **)&__badc_unw_get_reg = dlsym(RTLD_DEFAULT, "unw_get_reg");
+    *(void **)&__badc_unw_step = dlsym(RTLD_DEFAULT, "unw_step");
+}
+
+// The frames from the interrupted one; how many were reported.
+static unsigned __badc_crash_unwind(struct __badc_crash_out *o, ucontext_t *uc, uintptr_t pc) {
+    __badc_unw_buf context, cursor;
+    if (!__badc_unw_getcontext || !__badc_unw_init_local || !__badc_unw_set_reg ||
+        !__badc_unw_get_reg || !__badc_unw_step || __badc_unw_getcontext(&context) ||
+        __badc_unw_init_local(&cursor, &context))
+        return 0;
+    struct __darwin_arm_thread_state64 *ss = &uc->uc_mcontext->__ss;
+    for (int i = 0; i < 29; i++)
+        __badc_unw_set_reg(&cursor, i, ss->__x[i]);
+    __badc_unw_set_reg(&cursor, 29, ss->__fp);
+    __badc_unw_set_reg(&cursor, 30, ss->__lr);
+    // UNW_REG_SP, then UNW_REG_IP, which looks up the function's unwind info.
+    __badc_unw_set_reg(&cursor, -2, ss->__sp);
+    __badc_unw_set_reg(&cursor, -1, pc);
+    unsigned k = 0;
+    for (uintptr_t ip = pc, prev;;) {
+        __badc_crash_frame(o, k, ip, k ? ip - 1 : ip);
+        int more = ++k < 64 ? __badc_unw_step(&cursor) : -1;
+        prev = ip;
+        if (more < 0 || __badc_unw_get_reg(&cursor, -1, &ip) || !ip || ip == prev)
+            break;
+        // A step that returns 0 has moved to the last frame, one with no
+        // unwind information, such as dyld's `start`.
+        if (!more) {
+            __badc_crash_frame(o, k, ip, ip - 1);
+            return k + 1;
+        }
+    }
+    return k;
+}
+#else
+// libgcc_s's `_Unwind_Backtrace`, opened as glibc's `backtrace` opens it,
+// which steps through the signal frame.
+typedef int (*__badc_crash_trace)(void *, void *);
+static int (*__badc_unwind_backtrace)(__badc_crash_trace, void *);
+static uintptr_t (*__badc_unwind_get_ip)(void *);
+
+static void __badc_crash_unwinder(void) {
+    void *gcc_s = dlopen("libgcc_s.so.1", RTLD_NOW | RTLD_LOCAL);
+    if (!gcc_s)
+        return;
+    *(void **)&__badc_unwind_get_ip = dlsym(gcc_s, "_Unwind_GetIP");
+    *(void **)&__badc_unwind_backtrace = dlsym(gcc_s, "_Unwind_Backtrace");
+}
+
+struct __badc_crash_walk {
+    struct __badc_crash_out *o;
+    uintptr_t pc;
+    unsigned k;
+};
+
+// Each frame from the one the signal interrupted, whose ip is `pc`, past the
+// handler's own and the signal frame; each later ip is a return address.
+static int __badc_crash_step(void *context, void *arg) {
+    struct __badc_crash_walk *w = arg;
+    uintptr_t ip = __badc_unwind_get_ip(context);
+    if (w->k == 0 && ip != w->pc)
+        return 0;
+    // _URC_NO_REASON continues; _URC_END_OF_STACK stops, as at the frame
+    // past the outermost, whose ip is 0.
+    if (w->k && !ip)
+        return 5;
+    __badc_crash_frame(w->o, w->k, ip, w->k ? ip - 1 : ip);
+    return ++w->k < 64 ? 0 : 5;
+}
+
+// The frames from the interrupted one; how many were reported.
+static unsigned __badc_crash_unwind(struct __badc_crash_out *o, ucontext_t *uc, uintptr_t pc) {
+    (void)uc;
+    if (!__badc_unwind_backtrace || !__badc_unwind_get_ip)
+        return 0;
+    struct __badc_crash_walk w = {o, pc, 0};
+    __badc_unwind_backtrace(__badc_crash_step, &w);
+    return w.k;
+}
+#endif
+
+// Frame #0 at `pc` and its callers as the system unwinder steps through them
+// by the unwind tables; where it gets no further than frame #0, the frames
+// the records from `fp` chain: each holds the caller's record and the return
+// address, and the walk stops at a record that does not lie above the one
+// before. The caller of a frameless function is in no record.
+static void __badc_crash_frames(struct __badc_crash_out *o, ucontext_t *uc, uintptr_t pc,
+                                uintptr_t fp) {
     __badc_crash_str(o, "frames:\n");
     __badc_crash_flush(o);
-    __badc_crash_frame(o, 0, pc, pc);
+    unsigned unwound = __badc_crash_unwind(o, uc, pc);
+    if (unwound > 1)
+        return;
+    if (!unwound)
+        __badc_crash_frame(o, 0, pc, pc);
     for (unsigned k = 1; k < 64 && fp && !(fp & 7); k++) {
         uintptr_t next = ((uintptr_t *)fp)[0];
         uintptr_t ret = ((uintptr_t *)fp)[1];
@@ -515,13 +620,14 @@ static void __badc_crash_handler(int sig, siginfo_t *si, void *context) {
     __badc_crash_str(&o, "\n");
     uintptr_t pc, fp;
     __badc_crash_registers(&o, (ucontext_t *)context, &pc, &fp);
-    __badc_crash_frames(&o, pc, fp);
+    __badc_crash_frames(&o, (ucontext_t *)context, pc, fp);
     raise(sig);
 }
 
 static char __badc_crash_stack[65536];
 
 void __badc_crash_report(void) {
+    __badc_crash_unwinder();
     // A separate stack, so the report runs when the program's has overflowed.
     stack_t ss;
     memset(&ss, 0, sizeof ss);

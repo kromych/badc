@@ -761,13 +761,9 @@ fn a_fault_is_reported_with_the_frames_that_led_to_it() {
             .skip_while(|l| *l != "frames:")
             .skip(1)
             .collect();
-        // TODO(#878, #2144): the frame records Linux and macOS walk hold no
-        // frameless function's caller, which `deep` is at -O.
-        let chain: &[&str] = match opt == "-O" && !cfg!(windows) {
-            true => &["deep"],
-            false => &["deep", "middle", "main"],
-        };
-        for (at, name) in chain.iter().enumerate() {
+        // The unwinder reaches a frameless `deep`'s caller, which no frame
+        // record holds.
+        for (at, name) in ["deep", "middle", "main"].iter().enumerate() {
             let frame = frames.get(at).copied().unwrap_or_default();
             assert!(
                 frame.starts_with(&format!("  #{at} 0x"))

@@ -600,6 +600,10 @@ impl<'a> Walker<'a> {
         } else if is_floating_scalar(op_ty) {
             let lv = self.convert_scalar_value(b, old, ty, op_ty);
             let res = self.walk_fp_operation(b, op, lv, rhs, op_ty)?;
+            // The result is held to the integer type it converts to.
+            if let Some(stored) = stored {
+                self.check_value(b, stored, res);
+            }
             self.convert_scalar_value(b, res, op_ty, store_ty)
         } else if let Some(check) = check {
             // The checked operation runs in `op_ty`, the left operand and,
@@ -613,7 +617,7 @@ impl<'a> Walker<'a> {
             self.walk_int_binop(b, op, old, lhs, rhs, ty)?
         };
         // The value computed in `op_ty`, before the store converts it.
-        if let Some(stored) = stored {
+        if let Some(stored) = stored.filter(|_| !is_floating_scalar(op_ty)) {
             self.check_value(b, stored, new_val);
         }
         // C99 6.5.16p3: a bit-field's value is the one it now holds.

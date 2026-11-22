@@ -391,6 +391,76 @@ fn a_non_positive_vla_bound_is_reported() {
     }
 }
 
+const FLOAT_CAST: &str = "#include <math.h>
+#include <stdio.h>
+volatile double big = 1e10;
+int take(int x) { return x; }
+int back(void) { return big; }
+int main(int argc, char **argv) {
+    (void)argv;
+    int a = (int)big;
+    int b = 0;
+    b += big;
+    int c = take(big);
+    int d = back();
+    int e;
+    e = big * argc;
+    unsigned char f = (unsigned char)(big + 1);
+    volatile float nf = NAN, sf = -0.5f;
+    unsigned g = sf;
+    long long h = nf;
+    printf(\"%d %d %d %d %d %d %u %lld\\n\", a, b, c, d, e, f, g, h);
+    return 0;
+}
+";
+
+/// A floating value converted to an integer type it lies outside the range
+/// of reports under `-fsanitize=float-cast-overflow` (C17 6.3.1.4p1), as
+/// clang words it: an explicit cast at its `(`, an implicit conversion of an
+/// initializer, an assignment, an argument or a returned value at the value,
+/// a compound assignment at its operator; a NaN and a `float` too. A value
+/// whose discarded fraction leaves it in range, -0.5 to `unsigned`, does not.
+#[test]
+fn a_floating_value_out_of_an_integer_range_is_reported() {
+    let dir = TempDir::new("badc-sanitize-float-cast");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, FLOAT_CAST).unwrap();
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("float{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-w", opt, "-fsanitize=float-cast-overflow", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        let int = "is outside the range of representable values of type 'int'";
+        assert_eq!(
+            reports(&o),
+            [
+                format!("8:13: runtime error: 1e+10 {int}"),
+                format!("10:7: runtime error: 1e+10 {int}"),
+                format!("11:18: runtime error: 1e+10 {int}"),
+                format!("5:25: runtime error: 1e+10 {int}"),
+                format!("14:9: runtime error: 1e+10 {int}"),
+                "15:23: runtime error: 1e+10 is outside the range of representable values of \
+                 type 'unsigned char'"
+                    .to_string(),
+                "18:19: runtime error: nan is outside the range of representable values of type \
+                 'long long'"
+                    .to_string(),
+            ],
+            "{opt}"
+        );
+    }
+}
+
 const SHIFTS: &str = "#include <limits.h>
 #include <stdio.h>
 __attribute__((noinline)) int big(int a, int b) { return a << b; }

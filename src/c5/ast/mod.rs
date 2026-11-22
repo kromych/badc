@@ -1102,6 +1102,15 @@ pub(crate) enum ValueTest {
     Truncation { from: (u8, bool), to: (u8, bool) },
     /// A variable-length array bound: above 0, or not 0 for an unsigned one.
     Positive { signed: bool },
+    /// A floating value converted to an integer type: above `lo` (or at it,
+    /// `lo_inclusive`) and below `hi`, the bounds `f64` bit patterns; a
+    /// `float` value (`single`) compared as the `double` it widens to.
+    FloatRange {
+        lo: u64,
+        hi: u64,
+        lo_inclusive: bool,
+        single: bool,
+    },
 }
 
 /// A runtime check of the operation at a node (`-fsanitize=`): what it

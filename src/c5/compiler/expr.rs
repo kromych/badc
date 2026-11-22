@@ -3874,6 +3874,7 @@ impl Compiler {
     }
 
     fn parse_parenthesized(&mut self) -> Result<(), C5Error> {
+        let open_at = self.lex.position();
         self.next()?;
         if self.lex.tk == '{' {
             self.parse_stmt_expr_body()?;
@@ -3882,7 +3883,7 @@ impl Compiler {
             self.pending.object_ref = None;
             self.drop_operand_array_decay();
         } else if self.lex_is_type_start() {
-            self.parse_cast_or_compound_literal()?;
+            self.parse_cast_or_compound_literal(open_at)?;
         } else {
             self.expr_or_void(Token::Assign as i64)?;
             // A comma chain is reached only in parentheses because
@@ -3897,7 +3898,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn parse_cast_or_compound_literal(&mut self) -> Result<(), C5Error> {
+    fn parse_cast_or_compound_literal(&mut self, open_at: (u32, u32)) -> Result<(), C5Error> {
         let unprototyped = self.unprototyped_lists.len();
         let type_name = self.parse_type_name()?;
         self.note_cast_type_name(type_name.base);
@@ -3945,7 +3946,7 @@ impl Compiler {
         }
         let function = type_name.fn_ty.as_ref().is_some_and(|f| f.ptr_depth == 0);
         self.reject_cast_type(!type_name.dims.is_empty() || type_name.is_vla, function)?;
-        self.parse_cast_operand(type_name)
+        self.parse_cast_operand(type_name, open_at)
     }
 
     /// C99 6.5.4p2: a cast names `void` or a scalar type.
@@ -3960,12 +3961,18 @@ impl Compiler {
 
     /// The operand of a cast and its conversion to the named type
     /// (C99 6.5.4).
-    fn parse_cast_operand(&mut self, type_name: TypeName) -> Result<(), C5Error> {
+    /// The operand of the cast whose `(` is at `open_at`.
+    fn parse_cast_operand(
+        &mut self,
+        type_name: TypeName,
+        open_at: (u32, u32),
+    ) -> Result<(), C5Error> {
         // C99 6.5.4p5: a cast to a qualified type is one to its
         // unqualified version.
         let t = strip_object_const(type_name.ty);
         let at = self.site();
         self.expr_or_void(Token::Inc as i64)?;
+        let from_ty = self.ty;
         if !is_void_ty(t) {
             self.reject_void_value(self.ty)?;
             self.reject_incomplete_value(self.ty)?;
@@ -4024,6 +4031,7 @@ impl Compiler {
         // The cast node replaces the conversion's intermediate nodes, which
         // have no consumer.
         if let Some(child) = cast_child_ast {
+            self.sanitize_cast(child, from_ty, t, open_at);
             self.ast_emit_cast(child, t);
         }
         // C99 6.7.5.2p5: the variable-length array the cast type derives

@@ -396,6 +396,29 @@ impl<'a> Walker<'a> {
                 let one = b.imm(1);
                 b.binop(BinOp::Ugt, value, one)
             }
+            ValueTest::FloatRange {
+                lo,
+                hi,
+                lo_inclusive,
+                single,
+            } => {
+                let v = if single {
+                    b.fp_widen_to_f64(value)
+                } else {
+                    value
+                };
+                let (lo, hi) = (b.imm(lo as i64), b.imm(hi as i64));
+                let above_op = if lo_inclusive {
+                    BinOp::FgeQuiet
+                } else {
+                    BinOp::FgtQuiet
+                };
+                let above = b.binop(above_op, v, lo);
+                let below = b.binop(BinOp::FltQuiet, v, hi);
+                let fits = b.binop(BinOp::And, above, below);
+                let zero = b.imm(0);
+                b.binop(BinOp::Eq, fits, zero)
+            }
             ValueTest::Positive { signed } => {
                 let zero = b.imm(0);
                 b.binop(if signed { BinOp::Le } else { BinOp::Eq }, value, zero)

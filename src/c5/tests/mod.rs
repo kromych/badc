@@ -1663,6 +1663,7 @@ fn compiled_sources(
                 SOURCES_COMPILED.with(|n| n.set(n.get() + 1));
                 let copts = CompileOptions::default()
                     .with_no_entry_point(true)
+                    .with_no_fp_regs(reloc.no_fp_regs)
                     .with_defines(defines.to_vec());
                 let p = Compiler::with_options(body.to_string(), target, copts)
                     .compile()

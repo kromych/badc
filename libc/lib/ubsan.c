@@ -52,6 +52,11 @@ struct __ubsan_implicit_conversion_data {
     unsigned int bitfield_bits;
 };
 
+struct __ubsan_float_cast_data {
+    struct __ubsan_source_location loc;
+    const struct __ubsan_type_descriptor *from_type;
+    const struct __ubsan_type_descriptor *to_type;
+};
 struct __ubsan_vla_bound_data {
     struct __ubsan_source_location loc;
     const struct __ubsan_type_descriptor *type;
@@ -320,3 +325,48 @@ _Noreturn void __ubsan_handle_vla_bound_not_positive_abort(struct __ubsan_vla_bo
     __ubsan_vla_bound(d, bound);
     abort();
 }
+
+// -mgeneral-regs-only and -mno-sse withhold the registers a floating value
+// needs, and no unit so built converts one.
+#if defined __SSE2__ || defined __ARM_FP
+// A floating operand: its bits in the value where its width, `info`, is 64
+// or less, else at the address the value holds.
+static void __ubsan_print_float(const struct __ubsan_type_descriptor *t, uintptr_t value) {
+    union {
+        uint64_t bits;
+        double d;
+        uint32_t bits32;
+        float f;
+    } u;
+    if (t->info == 32) {
+        u.bits32 = (uint32_t)value;
+        fprintf(stderr, "%g", (double)u.f);
+    } else if (t->info == 64) {
+        u.bits = value;
+        fprintf(stderr, "%g", u.d);
+    } else {
+        fprintf(stderr, "%Lg", *(const long double *)value);
+    }
+}
+
+static void __ubsan_float_cast(struct __ubsan_float_cast_data *d, uintptr_t from) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    fprintf(stderr, "%s:%u:%u: runtime error: ", d->loc.file, d->loc.line, column);
+    __ubsan_print_float(d->from_type, from);
+    fprintf(stderr, " is outside the range of representable values of type %s\n",
+            d->to_type->name);
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_float_cast_overflow(struct __ubsan_float_cast_data *d, uintptr_t from) {
+    __ubsan_float_cast(d, from);
+}
+
+_Noreturn void __ubsan_handle_float_cast_overflow_abort(struct __ubsan_float_cast_data *d,
+                                                        uintptr_t from) {
+    __ubsan_float_cast(d, from);
+    abort();
+}
+#endif

@@ -7,7 +7,9 @@
 use alloc::string::String;
 
 use super::Compiler;
-use super::types::{is_bool_ty, is_integer_scalar_ty, is_unsigned_ty};
+use super::types::{
+    is_bool_ty, is_float_ty, is_floating_scalar, is_integer_scalar_ty, is_unsigned_ty,
+};
 use crate::c5::ast::{ExprId, SanitizeCheck, ValueCheck, ValueTest};
 use crate::c5::ir::BinOp;
 use crate::c5::program::DataReloc;
@@ -41,6 +43,9 @@ pub enum Check {
     /// A load of a `_Bool` whose byte is neither 0 nor 1 (C17 6.2.6.1p5,
     /// a trap representation).
     Bool,
+    /// A floating value converted to an integer type it lies outside the
+    /// range of, its fraction discarded (C17 6.3.1.4p1).
+    FloatCastOverflow,
     /// A variable-length array bound that is not positive (C17 6.7.6.2p5).
     VlaBound,
     /// A `__builtin_unreachable()` reached: its handler reports it and ends
@@ -64,7 +69,7 @@ pub enum Check {
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
     /// clang's checks of defined behavior.
-    pub const ALL: [Check; 14] = [
+    pub const ALL: [Check; 15] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -73,6 +78,7 @@ impl Check {
         Check::Bounds,
         Check::BoundsStrict,
         Check::Bool,
+        Check::FloatCastOverflow,
         Check::VlaBound,
         Check::Unreachable,
         Check::Return,
@@ -92,6 +98,7 @@ impl Check {
             Check::Bounds => "bounds",
             Check::BoundsStrict => "bounds-strict",
             Check::Bool => "bool",
+            Check::FloatCastOverflow => "float-cast-overflow",
             Check::VlaBound => "vla-bound",
             Check::Unreachable => "unreachable",
             Check::Return => "return",
@@ -173,6 +180,8 @@ impl Sanitize {
 
 /// `TypeDescriptor::kind` of an integer type.
 const TK_INTEGER: u16 = 0;
+/// `TypeDescriptor::kind` of a floating type.
+const TK_FLOAT: u16 = 1;
 /// `TypeDescriptor::kind` of a type the handlers know by its name alone.
 const TK_UNKNOWN: u16 = 0xffff;
 
@@ -396,6 +405,10 @@ impl Compiler {
     /// implicit conversion to the narrower `to` changes it, at the start of
     /// `e` (`at`), under the implicit truncation checks.
     pub(super) fn sanitize_conversion(&mut self, e: ExprId, from: i64, to: i64, at: (u32, u32)) {
+        if let Some(check) = self.float_cast_check(from, to, at) {
+            self.ast.value_checks.entry(e).or_default().push(check);
+            return;
+        }
         let Some(test) = self.truncation_test(from, to) else {
             return;
         };
@@ -407,11 +420,67 @@ impl Compiler {
     /// increment `id` computes in `from` and stores into its `to` lvalue,
     /// at its operator.
     pub(super) fn sanitize_stored_conversion(&mut self, id: ExprId, from: i64, to: i64) {
+        if let Some(check) = self.float_cast_check(from, to, self.operator_at) {
+            self.ast.store_checks.insert(id, check);
+            return;
+        }
         let Some(test) = self.truncation_test(from, to) else {
             return;
         };
         let check = self.conversion_check(test, from, to, self.operator_at);
         self.ast.store_checks.insert(id, check);
+    }
+
+    /// Check the operand node `e` of the cast `(to)` beginning at `at`, of
+    /// the floating type `from`, under `-fsanitize=float-cast-overflow`.
+    pub(super) fn sanitize_cast(&mut self, e: ExprId, from: i64, to: i64, at: (u32, u32)) {
+        if let Some(check) = self.float_cast_check(from, to, at) {
+            self.ast.value_checks.entry(e).or_default().push(check);
+        }
+    }
+
+    /// The check of a value of the floating type `from` converted to the
+    /// integer type `to` at `at`, under `-fsanitize=float-cast-overflow`:
+    /// the values whose fraction discarded fits `to`, between -2^(n-1) - 1
+    /// and 2^(n-1) for a signed `to` of `n` bits, between -1 and 2^n for an
+    /// unsigned one, both open; -2^63 - 1 is no `double`, so a signed 64-bit
+    /// `to` holds -2^63 and up. clang's `FloatCastOverflowDataV2`: the site
+    /// and the two types.
+    fn float_cast_check(&mut self, from: i64, to: i64, at: (u32, u32)) -> Option<ValueCheck> {
+        let check = Check::FloatCastOverflow;
+        if !self.sanitize.runs(check)
+            || !is_floating_scalar(from)
+            || !is_integer_scalar_ty(to)
+            || is_bool_ty(to)
+        {
+            return None;
+        }
+        let bits = 8 * self.size_of_type(to) as i32;
+        if !matches!(bits, 8 | 16 | 32 | 64) {
+            return None;
+        }
+        // 2^n, exact, from its exponent bits.
+        let pow2 = |n: i32| f64::from_bits(((1023 + n) as u64) << 52);
+        let (lo, hi, lo_inclusive) = match (is_unsigned_ty(to), bits) {
+            (true, _) => (-1.0, pow2(bits), false),
+            (false, 64) => (-pow2(63), pow2(63), true),
+            (false, _) => (-pow2(bits - 1) - 1.0, pow2(bits - 1), false),
+        };
+        let types = [self.ubsan_type(from), self.ubsan_type(to)];
+        let data = self.ubsan_site_at(at, &types);
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_float_cast_overflow", 1);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        let test = ValueTest::FloatRange {
+            lo: f64::to_bits(lo),
+            hi: f64::to_bits(hi),
+            lo_inclusive,
+            single: is_float_ty(from),
+        };
+        Some(ValueCheck { check, test })
     }
 
     /// The test of an integer `from` converted to `to` where that can lose
@@ -625,19 +694,27 @@ impl Compiler {
         at
     }
 
+    /// A floating type's descriptor is kind 1 with its width as `info`: the
+    /// width of the value a check passes, `float`'s 32 bits and 64 for the
+    /// others, as badc computes in `double` precision.
     fn ubsan_type(&mut self, ty: i64) -> i64 {
         if let Some(&at) = self.ubsan_types.get(&ty) {
             return at;
         }
-        let bits = 8 * self.size_of_type(ty) as u16;
-        let info = (bits.trailing_zeros() as u16) << 1 | u16::from(!is_unsigned_ty(ty));
+        let (kind, info) = if is_floating_scalar(ty) {
+            (TK_FLOAT, if is_float_ty(ty) { 32 } else { 64 })
+        } else {
+            let bits = 8 * self.size_of_type(ty) as u16;
+            let info = (bits.trailing_zeros() as u16) << 1 | u16::from(!is_unsigned_ty(ty));
+            (TK_INTEGER, info)
+        };
         // The type as C spells it, unqualified and an enumeration's by its
         // compatible integer type.
         let bare = super::types::unqualified_version_ty(super::types::without_enum(ty));
         let name = alloc::format!("'{}'", super::types::format_type(bare, &self.structs));
         self.align_data_to(2);
         let at = self.data.len() as i64;
-        self.data.extend_from_slice(&TK_INTEGER.to_le_bytes());
+        self.data.extend_from_slice(&kind.to_le_bytes());
         self.data.extend_from_slice(&info.to_le_bytes());
         self.data.extend_from_slice(name.as_bytes());
         self.data.push(0);

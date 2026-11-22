@@ -162,6 +162,9 @@ link.exe's `/STACK` (default 8 MiB reserved, one page committed).
 A PE DLL link writes the DLL's import library under `--out-implib=<file>`,
 as link.exe writes one beside a DLL: an archive of short import members, a
 data export's naming only its `__imp_` slot.
+A PE link includes a library's `_load_config_used`, the load-config
+structure the image's directory names, whether or not an input refers to it,
+as link.exe does.
 A COFF weak external or `/alternatename:` resolves a name nothing defines to its
 alternate, a definition or a DLL import; an archive member holding a weak
 external of the alias kind is pulled for its name, as link.exe pulls the

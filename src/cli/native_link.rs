@@ -1135,6 +1135,14 @@ fn select_archive_members(
         sel.undefined
             .insert(entry.to_string(), "<command line>".to_string());
     }
+    // A PE image takes the runtime's load-config structure where a library
+    // defines it, as link.exe does whether or not anything names it: the
+    // kernel's loader seeds a driver's stack cookie through it.
+    const LOAD_CONFIG: &str = "_load_config_used";
+    let image_root = String::from("<image>");
+    if embedded.cli.target.binary_format() == badc::BinaryFormat::Pe {
+        (sel.undefined).insert(LOAD_CONFIG.to_string(), image_root.clone());
+    }
     // So is a name `-u` lists, as gcc and GNU ld have it.
     for name in &embedded.cli.link.required {
         sel.undefined
@@ -1173,6 +1181,10 @@ fn select_archive_members(
         let span = all_lazy(&slots);
         sel.pull(&mut slots, &span);
         pull_default_libraries(embedded.cli, &mut sel, &mut slots, shared_libs);
+    }
+    // An image no library gives one goes without it.
+    if sel.undefined.get(LOAD_CONFIG) == Some(&image_root) {
+        sel.undefined.remove(LOAD_CONFIG);
     }
     // The inputs stalled; offer the on-demand sources once, as the last
     // archive. A name a `-l` shared library or the target's C library

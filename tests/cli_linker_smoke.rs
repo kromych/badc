@@ -12622,6 +12622,58 @@ fn a_load_config_structure_takes_the_guard_symbols_and_its_directory() {
 
 /// A PE image's preferred base, its sections as `(rva, file offset, raw
 /// size)`, and the RVAs its `IMAGE_REL_BASED_DIR64` entries cover.
+/// A library's `_load_config_used` joins a PE image though nothing names
+/// it, as link.exe takes it: the kernel's loader seeds a driver's stack
+/// cookie through the directory, and the WDK's `__security_init_cookie`
+/// fails fast where it did not.
+#[test]
+fn a_librarys_load_config_structure_joins_the_image_unnamed() {
+    let dir = tempdir("a_librarys_load_config_structure_joins_the_image_unnamed");
+    write_source(
+        &dir,
+        "lc.c",
+        "unsigned long long cookie = 0x2B992DDFA232;\n\
+         struct load_config { unsigned size, stamp; void *pad[11]; unsigned long long *cookie; };\n\
+         const struct load_config _load_config_used = {sizeof(struct load_config), 0, {0}, &cookie};\n",
+    );
+    write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    for target in ["windows-x64", "windows-arm64"] {
+        let t = format!("--target={target}");
+        run(
+            Command::new(badc())
+                .args([&t, "-c", "lc.c", "-o", "lc.o"])
+                .current_dir(&dir),
+            "compile",
+        );
+        std::fs::remove_file(dir.join("liblc.a")).ok();
+        run(
+            Command::new(badc())
+                .args(["--ar", "rcs", "liblc.a", "lc.o"])
+                .current_dir(&dir),
+            "archive",
+        );
+        run(
+            Command::new(badc())
+                .args([&t, "main.c", "liblc.a", "-o", "main.exe"])
+                .current_dir(&dir),
+            "link",
+        );
+        let image = std::fs::read(dir.join("main.exe")).expect("read image");
+        let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+        let opt = u32le(0x3c) as usize + 24;
+        let (rva, size) = (u32le(opt + 192), u32le(opt + 196));
+        assert_eq!(size, 104, "{target}: the directory's size");
+        let at = pe_rva_offset(&image, rva).expect("the directory in a section");
+        assert_eq!(
+            u32le(at),
+            104,
+            "{target}: the directory names the structure"
+        );
+    }
+}
+
+/// A PE image's preferred base, its sections as `(rva, file offset, raw
+/// size)`, and the RVAs its `IMAGE_REL_BASED_DIR64` entries cover.
 fn pe_layout(image: &[u8]) -> (u64, Vec<(u32, usize, usize)>, Vec<u32>) {
     let u16le = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap()) as usize;
     let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());

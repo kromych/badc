@@ -3,7 +3,7 @@ addr_null_compare_past_a_subobject_size_query.aarch64:	file format elf64-littlea
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

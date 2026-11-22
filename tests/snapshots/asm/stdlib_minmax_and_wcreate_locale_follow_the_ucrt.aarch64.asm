@@ -3,7 +3,7 @@ stdlib_minmax_and_wcreate_locale_follow_the_ucrt.aarch64:	file format elf64-litt
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

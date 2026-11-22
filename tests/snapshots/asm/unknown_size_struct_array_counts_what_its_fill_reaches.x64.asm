@@ -3,7 +3,7 @@ unknown_size_struct_array_counts_what_its_fill_reaches.x64:	file format elf64-x8
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi

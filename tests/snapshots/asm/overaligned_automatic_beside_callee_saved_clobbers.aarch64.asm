@@ -3,7 +3,7 @@ overaligned_automatic_beside_callee_saved_clobbers.aarch64:	file format elf64-li
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

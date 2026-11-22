@@ -3,7 +3,7 @@ wide_formatted_and_character_io_through_a_file_and_a_buffer.aarch64:	file format
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

@@ -3,7 +3,7 @@ arm_neon_multi_register_table_lookups_on_seeded_lanes.aarch64:	file format elf64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

@@ -3,7 +3,7 @@ scanf_family_reads_percent_a_as_a_floating_conversion.x64:	file format elf64-x86
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi

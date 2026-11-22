@@ -3,7 +3,7 @@ inline_asm_a64_x19_clobber_dynamic_frame.aarch64:	file format elf64-littleaarch6
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

@@ -3,7 +3,7 @@ aarch64_nan_operands_rank_signaling_and_addend_first.x64:	file format elf64-x86-
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi

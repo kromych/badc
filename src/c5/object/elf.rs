@@ -2759,7 +2759,8 @@ impl<'a> ElfImageWriter<'a> {
     /// local `STT_FUNC` per PLT trampoline (so a debugger's `b malloc`
     /// resolves to the trampoline) and per defined function, the section
     /// symbols the relocation tables reference right after the sentinel,
-    /// and `_GLOBAL_OFFSET_TABLE_` as bfd defines it.
+    /// `_GLOBAL_OFFSET_TABLE_` as bfd defines it, and the entry stub as
+    /// `_start`, the name crt1's entry has, unless the program defines one.
     fn build_static_symtab(&mut self) {
         let build = self.build;
         let rela_text = self.build_rela(&self.tail.er_text);
@@ -2771,6 +2772,8 @@ impl<'a> ElfImageWriter<'a> {
         let text_vmaddr = self.text_vmaddr();
         let text_shndx = self.dynamic.text_shndx;
         let image_rows = self.image_symbol_rows();
+        let entry_stub = (self.stub_len > 0 && !image_rows.iter().any(|(n, _)| *n == "_start"))
+            .then(|| (self.va(self.seg.code_off), self.stub_len - self.text_gap));
         let tail = &mut self.tail;
         let (mut symtab, mut strtab) = if !build.plt_trampoline_offsets.is_empty() {
             build_plt_symtab(build, text_vmaddr, trampoline_size, text_shndx)
@@ -2833,6 +2836,21 @@ impl<'a> ElfImageWriter<'a> {
                 strtab.push(0);
                 locals += u64::from(sym.st_info >> 4 == STB_LOCAL);
                 write_struct(&mut symtab, &sym);
+            }
+            if let Some((st_value, st_size)) = entry_stub {
+                let st_name = strtab.len() as u32;
+                strtab.extend_from_slice(b"_start\0");
+                write_struct(
+                    &mut symtab,
+                    &Elf64Sym {
+                        st_name,
+                        st_info: (STB_GLOBAL << 4) | STT_FUNC,
+                        st_other: 0,
+                        st_shndx: text_shndx,
+                        st_value,
+                        st_size,
+                    },
+                );
             }
         }
         tail.symtab_locals = locals as u32;

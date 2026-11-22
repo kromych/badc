@@ -3,7 +3,7 @@ printf_sharp_flag_leaves_infinity_and_nan_alone.aarch64:	file format elf64-littl
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

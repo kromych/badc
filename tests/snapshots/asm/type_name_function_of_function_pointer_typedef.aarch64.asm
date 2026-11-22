@@ -3,7 +3,7 @@ type_name_function_of_function_pointer_typedef.aarch64:	file format elf64-little
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

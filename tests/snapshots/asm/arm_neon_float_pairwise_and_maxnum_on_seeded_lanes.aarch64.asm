@@ -3,7 +3,7 @@ arm_neon_float_pairwise_and_maxnum_on_seeded_lanes.aarch64:	file format elf64-li
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

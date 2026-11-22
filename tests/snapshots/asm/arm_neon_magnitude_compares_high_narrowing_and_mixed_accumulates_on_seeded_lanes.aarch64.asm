@@ -3,7 +3,7 @@ arm_neon_magnitude_compares_high_narrowing_and_mixed_accumulates_on_seeded_lanes
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

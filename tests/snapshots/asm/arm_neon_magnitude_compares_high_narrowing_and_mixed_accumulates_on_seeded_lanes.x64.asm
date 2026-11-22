@@ -3,7 +3,7 @@ arm_neon_magnitude_compares_high_narrowing_and_mixed_accumulates_on_seeded_lanes
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi

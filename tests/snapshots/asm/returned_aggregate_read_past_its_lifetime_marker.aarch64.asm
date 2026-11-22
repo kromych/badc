@@ -3,7 +3,7 @@ returned_aggregate_read_past_its_lifetime_marker.aarch64:	file format elf64-litt
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

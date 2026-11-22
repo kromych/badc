@@ -3,7 +3,7 @@ function_slot_names_a_file_scope_asm_function.aarch64:	file format elf64-littlea
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

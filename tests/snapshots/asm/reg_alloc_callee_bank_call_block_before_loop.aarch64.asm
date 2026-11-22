@@ -3,7 +3,7 @@ reg_alloc_callee_bank_call_block_before_loop.aarch64:	file format elf64-littleaa
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

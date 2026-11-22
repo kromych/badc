@@ -21437,6 +21437,42 @@ fn a_cxx_exception_crosses_a_badc_function() {
     }
 }
 
+/// The entry stub of a Linux executable is the global function `_start`
+/// in `.symtab`, at `e_entry` and covering the stub, as crt1's entry is in a
+/// GNU-linked image, so a debugger or a crash report names the outermost
+/// frame; a program defining its own `_start` keeps the one name.
+#[test]
+fn the_entry_stub_is_named_start() {
+    let dir = tempdir("the_entry_stub_is_named_start");
+    write_source(&dir, "plain.c", "int main(void) { return 0; }\n");
+    write_source(
+        &dir,
+        "own.c",
+        "int _start_calls;\nvoid _start(void) { _start_calls++; }\nint main(void) { return 0; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        for (src, own) in [("plain.c", false), ("own.c", true)] {
+            run(
+                Command::new(badc())
+                    .args([&format!("--target={target}"), src, "-o", "image"])
+                    .current_dir(&dir),
+                "link",
+            );
+            let bytes = std::fs::read(dir.join("image")).expect("read image");
+            let entry = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
+            let (rows, locals) = elf_symtab(&bytes);
+            let starts: Vec<_> = rows.iter().filter(|r| r.0 == "_start").collect();
+            assert_eq!(starts.len(), 1, "{target} {src}: {starts:?}");
+            let (_, info, value, size, _) = starts[0];
+            assert_eq!(*info, 0x12, "{target} {src}: a global function");
+            assert_eq!(*value == entry, !own, "{target} {src}: e_entry {entry:#x}");
+            assert!(*size > 0, "{target} {src}");
+            let first_global = rows.iter().position(|r| r.1 >> 4 != 0).unwrap();
+            assert_eq!(first_global as u32, locals, "{target} {src}: locals first");
+        }
+    }
+}
+
 /// A Linux image's unwind tables cost their bytes, not a page: every field
 /// of badc's `.eh_frame` is a link-time PC-relative value, so the relro
 /// region holding it joins the read-only load, as `.rodata` does, rather

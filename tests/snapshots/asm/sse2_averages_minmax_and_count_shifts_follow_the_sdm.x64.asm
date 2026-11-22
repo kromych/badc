@@ -3,7 +3,7 @@ sse2_averages_minmax_and_count_shifts_follow_the_sdm.x64:	file format elf64-x86-
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi

@@ -3,7 +3,7 @@ wide_formatted_and_character_io_through_a_file_and_a_buffer.x64:	file format elf
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi

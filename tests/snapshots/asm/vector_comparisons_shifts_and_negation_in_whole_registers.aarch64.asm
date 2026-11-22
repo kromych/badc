@@ -3,7 +3,7 @@ vector_comparisons_shifts_and_negation_in_whole_registers.aarch64:	file format e
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

@@ -3,7 +3,7 @@ arm_neon_qrshl_cvtx_recpx_and_poly_forms_on_seeded_lanes.x64:	file format elf64-
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi

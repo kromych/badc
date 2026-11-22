@@ -3,7 +3,7 @@ formatted_output_to_buffers_and_va_lists.aarch64:	file format elf64-littleaarch6
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

@@ -3,7 +3,7 @@ atomic_init_gives_allocated_storage_a_valid_state.aarch64:	file format elf64-lit
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

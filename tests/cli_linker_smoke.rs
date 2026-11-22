@@ -21436,7 +21436,7 @@ fn a_cxx_exception_crosses_a_badc_function() {
          int main(int argc, char **) {\n\
            long p = argc * 7, q = argc * 11, r = argc * 13;\n\
            try { call(thrower, p, q); } catch (int e) {\n\
-             std::printf(\"caught %d\\n\", e);\n\
+             std::fputs(e == 42 ? \"caught 42\\n\" : \"caught\\n\", stdout);\n\
              return e == 42 && p + q + r == 31 ? 0 : 2;\n\
            }\n\
            return 1;\n\

@@ -1402,7 +1402,8 @@ impl FunctionEmitter<'_, '_> {
                     negate,
                 } => (taken, other, negate),
             };
-        if let Some(bcc) = flag_step_cond(&self.flag_steps, cond, negate)
+        let owner_block = &func.blocks[owner];
+        if let Some(bcc) = flag_step_cond(&self.flag_steps, owner_block, cond, negate)
             .or_else(|| fused_branch_cond(func, alloc, cond, negate))
         {
             self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));

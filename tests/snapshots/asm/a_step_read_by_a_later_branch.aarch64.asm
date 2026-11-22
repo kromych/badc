@@ -29,7 +29,7 @@ Disassembly of section .text:
                	b.lo	<addr>
                	sub	x3, x2, #0x1
                	cbnz	x2, <addr>
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	add	x0, x0, #0x1
                	mov	x2, #0x2                // =2
                	b	<addr>
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	sturb	w4, [x1, #-0x1]
                	sub	x4, x3, #0x1
                	cbnz	x3, <addr>
-               	b.eq	<addr>
+               	cbz	x2, <addr>
                	add	x1, x1, #0x1
                	mov	x3, #0x2c               // =44
                	sturb	w3, [x1, #-0x1]

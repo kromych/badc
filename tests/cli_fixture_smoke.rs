@@ -2046,6 +2046,29 @@ fn interp_exits_with_the_program_status() {
     assert_eq!(run("--jit").status.code(), Some(3));
 }
 
+// `abort()` under `--interp` ends the program with the status a shell
+// reports for a process SIGABRT ends, 128 + 6, or the C runtime's 3 on
+// Windows, after what it wrote; the interpreter's own process goes on.
+#[test]
+fn interp_abort_ends_the_program_abnormally() {
+    let dir = TempDir::new("badc-interp-abort");
+    let src = dir.join("ab.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n#include <stdlib.h>\n\
+         int main(void) { fputs(\"before\\n\", stdout); abort(); }\n",
+    )
+    .expect("write source");
+    let out = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .arg("--interp")
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    let want = if cfg!(windows) { 3 } else { 134 };
+    assert_eq!(out.status.code(), Some(want), "{out:?}");
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "before\n");
+}
+
 // The address constants a function designator builds keep their offsets in
 // the image `-o` writes, under `--jit` and under `--interp`.
 #[test]

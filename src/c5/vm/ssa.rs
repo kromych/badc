@@ -2015,6 +2015,7 @@ pub(super) fn interp_supplies(name: &str) -> bool {
         || matches!(
             name,
             "exit"
+                | "abort"
                 | "memcpy"
                 | "memmove"
                 | "memset"
@@ -2197,6 +2198,11 @@ fn dispatch_callext<H: Host>(
             let code = args.first().copied().unwrap_or(0);
             Err(exit_signal(code))
         }
+        // `abort()` ends the program abnormally (C17 7.22.4.1), with the
+        // status a shell reports for a process SIGABRT ends (128 + 6) and
+        // the C runtime's on Windows (3). The interpreter's own process
+        // goes on: it may be a library's.
+        "abort" => Err(exit_signal(if mem.target.is_windows() { 3 } else { 134 })),
         // `void *memcpy(void *dst, const void *src, size_t n)`.
         // c5's cdecl pushes args right-to-left; the walker
         // delivers them to `Inst::CallExt::args` in declared
@@ -5895,6 +5901,7 @@ mod tests {
         let mut mem = Memory::with_stdio(&[0u8; 64], crate::c5::codegen::Target::LinuxX64);
         let names = [
             "exit",
+            "abort",
             "memcpy",
             "memmove",
             "memset",

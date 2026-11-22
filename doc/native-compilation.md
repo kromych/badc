@@ -686,6 +686,12 @@ with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=`, and
 - `sysreg` (AArch64) reads it at an offset above a system register, such as
   `-mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=N`.
 
+`-Wstack-protector` (B4009, off by default) notes what gcc notes: under
+`-fstack-protector` a function whose character arrays are all shorter than
+the bound, which stays unprotected, and in every mode a variable-length array
+or `alloca` buffer, which lies below the other locals, so the canary catches
+its overflow only past them.
+
 The protector needs a linked image, since the failure path is a relocation
 against `__stack_chk_fail`. `--jit` and `--interp` refuse it, as do the
 Windows targets, whose C library exports neither symbol.

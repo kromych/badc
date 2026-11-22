@@ -292,6 +292,9 @@ catalog! {
     4008, "attribute-warning", [], Warning, Controllable,
         [DEFAULT], Live,
         "a call left in the emitted code to a function declared with `__attribute__((warning(\"message\")))`, which the diagnostic quotes";
+    4009, "stack-protector", [], Ignore, Controllable,
+        [], Live,
+        "under `-fstack-protector*`, a function `-fstack-protector` leaves unprotected because its character arrays are all shorter than `--param ssp-buffer-size=`, or a variable-length array or `alloca` buffer, which lies below the other locals, so the canary catches an overflow of it only past them; gcc's notes";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";
@@ -577,6 +580,7 @@ impl Code {
     pub const GENERAL_REGS_ONLY: Code = Code::new(4006);
     pub const ATTRIBUTE_ERROR: Code = Code::new(4007);
     pub const ATTRIBUTE_WARNING: Code = Code::new(4008);
+    pub const STACK_PROTECTOR: Code = Code::new(4009);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
 }

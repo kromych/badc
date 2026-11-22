@@ -178,6 +178,7 @@ output of `badc --list-diagnostics`.
 | B4006 | `general-regs-only` | error | hard | - | a floating-point value in a function compiled under `-mno-sse` or `-mgeneral-regs-only`, which withhold the floating-point and SIMD registers it needs |
 | B4007 | `attribute-error` | error | hard | - | a call left in the emitted code to a function declared with `__attribute__((error("message")))`, which the diagnostic quotes |
 | B4008 | `attribute-warning` | warning | controllable | default | a call left in the emitted code to a function declared with `__attribute__((warning("message")))`, which the diagnostic quotes |
+| B4009 | `stack-protector` | ignore | controllable | - | under `-fstack-protector*`, a function `-fstack-protector` leaves unprotected because its character arrays are all shorter than `--param ssp-buffer-size=`, or a variable-length array or `alloca` buffer, which lies below the other locals, so the canary catches an overflow of it only past them; gcc's notes |
 | B5001 | `asm-syntax` | error | hard | - | an `asm` statement whose operand list, constraints or template does not parse |
 | B5002 | `assembler` | error | hard | - | an instruction or directive the assembler cannot parse or encode for the target |
 | B6001 | `orphan-section` | warning | controllable | default | an input section no script rule names, placed by the linker's own rule |

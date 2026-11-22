@@ -1235,3 +1235,66 @@ fn neon_wrappers_inline_into_a_large_frame() {
     let report = stderr.lines().find(|l| l.contains("function `fold`"));
     assert!(report.is_none(), "{report:?}");
 }
+
+/// Functions with a short character array, a large one, a variable-length
+/// array, an `alloca` buffer, an `int` array, and a variable-length array
+/// opted out of the protector.
+const SSP_NOTES: &str = "void use(char *);
+void small(void) { char b[4]; use(b); }
+void big(void) { char b[64]; use(b); }
+void vla(int n) { char b[n]; use(b); }
+void al(int n) { char *b = __builtin_alloca(n); use(b); }
+int ints(void) { int a[8]; use((char *)a); return a[1]; }
+__attribute__((no_stack_protector)) void off(int n) { char b[n]; use(b); }
+";
+
+/// `-Wstack-protector` notes what gcc 16 notes, by line: under
+/// `-fstack-protector` a function whose character arrays are all shorter
+/// than `--param ssp-buffer-size=`, which it leaves unprotected, and in every
+/// mode a variable-length buffer, which lies below the other locals. A
+/// function opted out takes none, and without the option there are none.
+#[test]
+fn stack_protector_notes_the_buffers_gcc_notes() {
+    let dir = tempdir("ssp-notes");
+    let src = dir.join("ssp.c");
+    std::fs::write(&src, SSP_NOTES).expect("write source");
+    let notes = |args: &[&str]| -> Vec<String> {
+        let out = badc()
+            .args(["--target=linux-x64", "-O", "-c", "-o"])
+            .arg(dir.join("ssp.o"))
+            .args(args)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stderr)
+            .lines()
+            .filter(|l| l.contains("[B4009]"))
+            .map(|l| l.split_once("ssp.c:").map_or(l, |(_, r)| r).to_string())
+            .collect()
+    };
+    let vla = |line: u32| {
+        format!(
+            "{line}: warning: stack protector not protecting local variables: variable length \
+             buffer [B4009] [-Wstack-protector]"
+        )
+    };
+    let small = "2: warning: stack protector not protecting function: all local arrays are less \
+                 than 8 bytes long [B4009] [-Wstack-protector]";
+    assert_eq!(
+        notes(&["-fstack-protector", "-Wstack-protector"]),
+        [small.to_string(), vla(4), vla(5)]
+    );
+    for mode in ["-fstack-protector-strong", "-fstack-protector-all"] {
+        assert_eq!(
+            notes(&[mode, "-Wstack-protector"]),
+            [vla(4), vla(5)],
+            "{mode}"
+        );
+    }
+    assert!(notes(&["-fstack-protector"]).is_empty());
+}

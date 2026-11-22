@@ -1636,6 +1636,33 @@ pub(crate) fn protected(
     !func.is_naked && !func.no_stack_protector && ssp.protects(func.ssp, has_frame)
 }
 
+/// gcc's `-Wstack-protector` note on `func` under `ssp`: a function
+/// `-fstack-protector` leaves unprotected because its character arrays are
+/// all shorter than the bound, or a variable-length buffer, which lies below
+/// the other locals and the canary.
+fn stack_protector_gap(
+    ssp: super::super::StackProtect,
+    func: &super::super::ir::FunctionSsa,
+) -> Option<alloc::string::String> {
+    use super::super::StackProtector;
+    if func.is_naked || func.no_stack_protector || ssp.mode == StackProtector::Off {
+        return None;
+    }
+    let facts = func.ssp;
+    if facts.dynamic_alloca {
+        return Some(
+            "stack protector not protecting local variables: variable length buffer".into(),
+        );
+    }
+    let short = facts.char_array_bytes > 0 && facts.char_array_bytes < ssp.buffer_size;
+    (ssp.mode == StackProtector::Basic && short).then(|| {
+        alloc::format!(
+            "stack protector not protecting function: all local arrays are less than {} bytes long",
+            ssp.buffer_size
+        )
+    })
+}
+
 /// Frame-base-relative byte offset of the canary slot: the topmost 8 bytes
 /// of the reserved region, directly below the saved frame pointer.
 pub(crate) const CANARY_SLOT_OFF: i32 = -8;
@@ -3591,6 +3618,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                     bytes = stack.total(),
                     parts = stack.describe(),
                 ),
+            );
+        }
+        if let Some(note) = stack_protector_gap(native.stack_protect, func_ssa) {
+            sink.emit(
+                Code::STACK_PROTECTOR,
+                function_loc(program, func_ssa.ent_pc),
+                note,
             );
         }
         report_call_diagnostics(&mut sink, program, imports, func_ssa);

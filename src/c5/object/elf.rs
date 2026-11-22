@@ -1461,6 +1461,9 @@ struct Segments {
     eh_hdr_len: u64,
     ro_total: u64,
     has_rodata: bool,
+    /// The relro region rides a read-only load: in a placed image, and in
+    /// one whose loader writes none of its slots.
+    relro_ro: bool,
     n_program_headers: u64,
     phoff: u64,
     phsize: u64,
@@ -2188,6 +2191,13 @@ impl<'a> ElfImageWriter<'a> {
             .data_relro_len
             .clamp(build.data_ro_len, build.data.len()) as u64;
         seg.relro_size = seg.relro_total - seg.ro_len;
+        let relro = seg.ro_len..seg.relro_total;
+        let loader_writes_relro = (build.data_relocs.iter().map(|r| r.data_offset))
+            .chain(build.code_relocs.iter().map(|r| r.data_offset))
+            .chain(build.label_relocs.iter().map(|r| r.data_offset))
+            .chain(build.data_import_binds.iter().map(|b| b.data_offset))
+            .any(|off| relro.contains(&off));
+        seg.relro_ro = placed || (seg.relro_size > 0 && !loader_writes_relro);
         seg.jt_len = build.rodata.bytes.len() as u64;
         seg.jt_off = if seg.jt_len > 0 {
             round_up(seg.ro_len, 8)
@@ -2202,7 +2212,7 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             seg.rodata_len
         };
-        seg.has_rodata = seg.ro_total > 0;
+        seg.has_rodata = seg.ro_total > 0 || (seg.relro_ro && seg.relro_size > 0);
         seg.n_program_headers = N_BASE_PROGRAM_HEADERS
             + if self.loader_tables {
                 N_LOADER_PROGRAM_HEADERS
@@ -2303,7 +2313,9 @@ impl<'a> ElfImageWriter<'a> {
     /// region joins the read-execute load too: every slot in it holds a
     /// link-time address and the loader writes none of them, so nothing
     /// needs `PT_GNU_RELRO` to re-protect it, which a static image lacks.
-    /// Each load's `p_align` covers its strictest content, as GNU ld sets it.
+    /// A position-independent image's relro region joins its read-only load
+    /// on the same condition. Each load's `p_align` covers its strictest
+    /// content, as GNU ld sets it.
     fn layout_data_segments(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let placed = self.placed();
@@ -2352,13 +2364,19 @@ impl<'a> ElfImageWriter<'a> {
             seg.rw_bias = seg.rw_seg_align;
         } else {
             seg.ro_seg_align = data_load_align;
-            seg.rodata_off = if seg.ro_total > 0 {
+            let ro_load = seg.ro_total + if seg.relro_ro { seg.relro_size } else { 0 };
+            seg.rodata_off = if ro_load > 0 {
                 round_up(seg.segment1_filesize, seg.ro_seg_align)
             } else {
                 round_up(seg.segment1_filesize, seg.align)
             };
-            seg.rodata_end = if seg.ro_total > 0 {
-                round_up(seg.rodata_off + seg.ro_total, seg.align)
+            let mut ro_end = seg.rodata_off + seg.ro_total;
+            if seg.relro_ro {
+                seg.relro_off = round_up(ro_end, seg.data_align);
+                ro_end = seg.relro_off + seg.relro_size;
+            }
+            seg.rodata_end = if ro_load > 0 {
+                round_up(ro_end, seg.align)
             } else {
                 seg.rodata_off
             };
@@ -2371,8 +2389,8 @@ impl<'a> ElfImageWriter<'a> {
         let got_end = seg.got_off + seg.got_size;
         // The rw load's relro part: `.dynamic`, `.got` and, in a
         // position-independent image, the relro region.
-        let rw_relro_size = if placed { 0 } else { seg.relro_size };
-        if !placed {
+        let rw_relro_size = if seg.relro_ro { 0 } else { seg.relro_size };
+        if !seg.relro_ro {
             seg.relro_off = if seg.relro_size > 0 {
                 round_up(got_end, seg.data_align)
             } else {
@@ -2386,7 +2404,7 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             RELRO_EMPTY_END_ALIGN
         };
-        let rw_relro_start = if placed { got_end } else { seg.relro_off };
+        let rw_relro_start = if seg.relro_ro { got_end } else { seg.relro_off };
         seg.relro_end = round_up(rw_relro_start + rw_relro_size, relro_end_align);
         seg.data_off = round_up(seg.relro_end, seg.data_align);
         seg.data_size = build.data.len() as u64 - seg.relro_total;
@@ -3092,14 +3110,20 @@ impl<'a> ElfImageWriter<'a> {
             seg.code_seg_align,
         );
         if seg.has_rodata && !self.placed() {
+            let relro_end = if seg.relro_ro {
+                seg.relro_off + seg.relro_size
+            } else {
+                0
+            };
+            let size = (seg.rodata_off + seg.ro_total).max(relro_end) - seg.rodata_off;
             write_phdr(
                 &mut out,
                 PT_LOAD,
                 PF_R,
                 seg.rodata_off,
                 self.va(seg.rodata_off),
-                seg.ro_total,
-                seg.ro_total,
+                size,
+                size,
                 seg.ro_seg_align,
             );
         }
@@ -3458,8 +3482,8 @@ impl<'a> ElfImageWriter<'a> {
             )?;
         }
         // `.eh_frame_hdr`, which `fill_eh_frame_hdr` writes once
-        // `.eh_frame` is relocated, and a placed image's relro bytes, which
-        // `emit_rw_segment` bakes.
+        // `.eh_frame` is relocated, and a read-only relro region's bytes,
+        // which `emit_rw_segment` bakes.
         out.resize(seg.segment2_off as usize, 0);
         Ok(())
     }
@@ -3585,10 +3609,9 @@ impl<'a> ElfImageWriter<'a> {
                 }
             }
         }
-        let placed = self.placed();
         let out = &mut self.out;
         let relro = &data[..seg.relro_size as usize];
-        if placed {
+        if seg.relro_ro {
             let at = seg.relro_off as usize;
             out[at..at + relro.len()].copy_from_slice(relro);
         }
@@ -3599,7 +3622,7 @@ impl<'a> ElfImageWriter<'a> {
         }
         let out = &mut self.out;
         out.extend_from_slice(&got);
-        if !placed {
+        if !seg.relro_ro {
             out.resize(seg.relro_off as usize, 0);
             debug_assert_eq!(out.len() as u64, seg.relro_off);
             out.extend_from_slice(relro);
@@ -3665,8 +3688,8 @@ impl<'a> ElfImageWriter<'a> {
     /// The headers of `slot`'s named sections, which follow its family
     /// header.
     fn named_shdrs(&mut self, slot: Sec) {
-        // A placed image's relro region joins the read-execute load.
-        let read_only = slot == Sec::RelRo && self.placed();
+        // A relro region on a read-only load.
+        let read_only = slot == Sec::RelRo && self.seg.relro_ro;
         let named: Vec<Elf64Shdr> = self
             .named_in(slot)
             .map(|n| Elf64Shdr {
@@ -3966,7 +3989,7 @@ impl<'a> ElfImageWriter<'a> {
                 alloc_shdr(
                     ".data.rel.ro",
                     SHT_PROGBITS,
-                    if self.placed() {
+                    if seg.relro_ro {
                         SHF_ALLOC
                     } else {
                         SHF_ALLOC | SHF_WRITE

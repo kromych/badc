@@ -21437,6 +21437,45 @@ fn a_cxx_exception_crosses_a_badc_function() {
     }
 }
 
+/// A Linux image's unwind tables cost their bytes, not a page: every field
+/// of badc's `.eh_frame` is a link-time PC-relative value, so the relro
+/// region holding it joins the read-only load, as `.rodata` does, rather
+/// than moving the writable data to the next 64K boundary on aarch64. A
+/// table of pointers, which the loader relocates, keeps its relro.
+#[test]
+fn unwind_tables_cost_their_bytes_not_a_page() {
+    let dir = tempdir("unwind_tables_cost_their_bytes_not_a_page");
+    write_source(
+        &dir,
+        "hello.c",
+        "#include <stdio.h>\nint main(int c, char **v) { printf(\"%s\\n\", v[0]); return c; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let link = |extra: &[&str], out: &str| {
+            run(
+                Command::new(badc())
+                    .args([&format!("--target={target}"), "hello.c", "-o", out])
+                    .args(extra)
+                    .current_dir(&dir),
+                "link",
+            );
+            std::fs::read(dir.join(out)).expect("read image")
+        };
+        let with = link(&[], "with");
+        let without = link(&["-fno-asynchronous-unwind-tables"], "without");
+        assert!(
+            with.len() < without.len() + 4096,
+            "{target}: {} bytes with the tables, {} without",
+            with.len(),
+            without.len()
+        );
+        let flags = (elf_sections(&with).into_iter())
+            .find(|s| s.0 == ".eh_frame")
+            .map(|s| s.2);
+        assert_eq!(flags.map(|f| f & SHF_WRITE), Some(0), "{target}");
+    }
+}
+
 /// Every function badc compiles for Linux takes an FDE, which the image's
 /// `.eh_frame_hdr` indexes by the function's address, as gcc's default
 /// `-fasynchronous-unwind-tables` gives it; without the tables the image
@@ -21495,9 +21534,8 @@ fn every_lowered_function_has_an_fde_in_the_image() {
 /// indexes under `PT_GNU_EH_FRAME`, as `ld --eh-frame-hdr` links it; an
 /// input's `.debug_frame` records stay, and the link adds records only for
 /// the functions it lowered, so a debugger unwinds each function by its
-/// producer's rules. The table rides the relro region: writable until the
-/// loader has relocated a position-independent image, read-only in a
-/// placed one.
+/// producer's rules. The table rides the relro region, which the loader
+/// writes none of here, so it takes a read-only load in either form.
 #[test]
 fn input_call_frame_tables_reach_the_image() {
     const PT_GNU_EH_FRAME: u32 = 0x6474_e550;
@@ -21547,7 +21585,7 @@ fn input_call_frame_tables_reach_the_image() {
             .map(|s| s.2);
         assert_eq!(
             flags.map(|f| f & SHF_WRITE != 0),
-            Some(form == "-pie"),
+            Some(false),
             "{what}: .eh_frame flags {flags:?}"
         );
         let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());

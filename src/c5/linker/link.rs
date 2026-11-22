@@ -79,6 +79,26 @@ pub(crate) const TLS_INDEX: &str = "_tls_index";
 /// A PE image's `IMAGE_TLS_DIRECTORY`, as the MSVC runtime names it.
 pub(crate) const TLS_DIRECTORY: &str = "_tls_used";
 
+/// A PE image's `IMAGE_LOAD_CONFIG_DIRECTORY`, as the MSVC and WDK
+/// runtimes name it.
+const LOAD_CONFIG: &str = "_load_config_used";
+
+/// The control-flow-guard tables and counts a load-config directory names,
+/// which link.exe and lld-link define for a PE image: 0 in one linked
+/// without `/guard:cf`, which carries none of the tables.
+const PE_GUARD_SYMBOLS: [&str; 10] = [
+    "__guard_fids_table",
+    "__guard_fids_count",
+    "__guard_flags",
+    "__guard_iat_table",
+    "__guard_iat_count",
+    "__guard_longjmp_table",
+    "__guard_longjmp_count",
+    "__guard_eh_cont_table",
+    "__guard_eh_cont_count",
+    "__enclave_config",
+];
+
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a
 /// PC-relative distance to the symbol itself.
@@ -2925,6 +2945,13 @@ impl<'a> Link<'a> {
         for (name, value) in weak_absolute {
             self.absolute_defined.entry(name).or_insert(value);
         }
+        if self.pe_image {
+            for name in PE_GUARD_SYMBOLS {
+                if !self.defined.contains_key(name) {
+                    self.absolute_defined.entry(name).or_insert(0);
+                }
+            }
+        }
         // A name nothing defines takes its alternate's definition, transitively.
         let objs = self.objs;
         let mut progress = true;
@@ -5568,6 +5595,9 @@ impl<'a> Link<'a> {
         let symbols = self.image_symbols();
         let exec_stack_input = (self.objs.iter().find(|o| o.exec_stack)).map(|o| o.source.clone());
         let host_aliases = self.host_aliases;
+        let load_config = (self.defined.get(LOAD_CONFIG))
+            .filter(|d| self.pe_image && d.section == NativeSymSection::Data)
+            .map(|d| d.value);
         let defined: BTreeMap<String, MergedSymbol> = self
             .defined
             .into_iter()
@@ -5691,6 +5721,7 @@ impl<'a> Link<'a> {
                     .then_some((self.fini_array.0, self.fini_array.1 - self.fini_array.0)),
                 tls_callbacks: self.tls_callback_array,
                 tls_directory: self.tls_directory_slot,
+                load_config,
             },
             section_map: self.section_map,
             exec_stack_input,

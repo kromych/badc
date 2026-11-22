@@ -2071,6 +2071,9 @@ pub struct InitFiniArrays {
     pub tls_callbacks: Option<u64>,
     /// The PE TLS directory's own place, when a unit names `_tls_used`.
     pub tls_directory: Option<u64>,
+    /// The PE load-config directory, `_load_config_used`, where an input
+    /// defines it.
+    pub load_config: Option<u64>,
 }
 
 /// Stream a resolved relocation's site or target lives in. `Data`

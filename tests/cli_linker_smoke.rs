@@ -12509,6 +12509,49 @@ fn absolute_text_reloc_links_and_rebases_in_a_pe() {
     assert!(found, "no DIR64 base relocation covering rva {want:#x}");
 }
 
+/// A PE image's `_load_config_used` -- the MSVC and WDK runtimes' load-config
+/// structure, which names the control-flow-guard tables -- links with those
+/// symbols 0 and no base relocation on them, as link.exe and lld-link define
+/// them for an image without `/guard:cf`, and the load-config data directory
+/// points at it with the size its first field states.
+#[test]
+fn a_load_config_structure_takes_the_guard_symbols_and_its_directory() {
+    let dir = tempdir("a_load_config_structure_takes_the_guard_symbols_and_its_directory");
+    write_source(
+        &dir,
+        "lc.c",
+        "extern char __guard_fids_table[], __guard_fids_count[], __guard_flags[];\n\
+         struct load_config { unsigned size, stamp; void *fids, *count, *flags; };\n\
+         const struct load_config _load_config_used = {\n\
+             sizeof(struct load_config), 0, __guard_fids_table, __guard_fids_count, __guard_flags};\n\
+         int main(void) { return _load_config_used.size != sizeof(struct load_config); }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        run(
+            Command::new(badc())
+                .args([&format!("--target={target}"), "lc.c", "-o", "lc.exe"])
+                .current_dir(&dir),
+            "link",
+        );
+        let image = std::fs::read(dir.join("lc.exe")).expect("read image");
+        let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+        let opt = u32le(0x3c) as usize + 24;
+        let (rva, size) = (u32le(opt + 192), u32le(opt + 196));
+        assert_eq!(size, 32, "{target}: the directory's size");
+        let at = pe_rva_offset(&image, rva).expect("the directory in a section");
+        assert_eq!(u32le(at), 32, "{target}: the directory names the structure");
+        let (_, _, dir64) = pe_layout(&image);
+        for field in [8, 16, 24] {
+            let value = u64::from_le_bytes(image[at + field..at + field + 8].try_into().unwrap());
+            assert_eq!(value, 0, "{target}: field {field}");
+            assert!(
+                !dir64.contains(&(rva + field as u32)),
+                "{target}: field {field} relocated"
+            );
+        }
+    }
+}
+
 /// A PE image's preferred base, its sections as `(rva, file offset, raw
 /// size)`, and the RVAs its `IMAGE_REL_BASED_DIR64` entries cover.
 fn pe_layout(image: &[u8]) -> (u64, Vec<(u32, usize, usize)>, Vec<u32>) {

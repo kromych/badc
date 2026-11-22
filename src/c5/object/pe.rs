@@ -175,6 +175,7 @@ const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_BASERELOC: usize = 5;
 const DATA_DIRECTORY_DEBUG: usize = 6;
 const DATA_DIRECTORY_TLS: usize = 9;
+const DATA_DIRECTORY_LOAD_CONFIG: usize = 10;
 const DATA_DIRECTORY_IAT: usize = 12;
 const DATA_DIRECTORY_DELAY_IMPORT: usize = 13;
 
@@ -1618,6 +1619,27 @@ impl<'a> PeWriter<'a> {
             (rva, IMAGE_DEBUG_DIRECTORY_SIZE as u32)
         };
         let reloc_size = l.reloc_bytes.len() as u32;
+        // The directory's size is the structure's own first field, as
+        // link.exe and lld-link take it.
+        let load_config = match build.init_fini_arrays.load_config {
+            Some(off) => {
+                let at = off as usize;
+                let size = (build.data.get(at..at + 4))
+                    .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+                match size {
+                    Some(size) if at + size as usize <= build.data.len() => {
+                        (self.data_off_to_rva(off as u32), size)
+                    }
+                    _ => {
+                        return Err(C5Error::hard(
+                            Code::MALFORMED_INPUT,
+                            String::from("PE: `_load_config_used` states a size past its data"),
+                        ));
+                    }
+                }
+            }
+            None => (0, 0),
+        };
         write_optional_header(
             &mut out,
             OptionalHeaderInputs {
@@ -1644,6 +1666,7 @@ impl<'a> PeWriter<'a> {
                 }),
                 tls_table_rva,
                 tls_table_size,
+                load_config,
                 export_table_rva: l.edata_rva,
                 export_table_size: l.edata_bytes.len() as u32,
                 resource_table_rva: l.rsrc_rva,
@@ -2456,6 +2479,8 @@ struct OptionalHeaderInputs {
     delay_import: (u32, u32),
     tls_table_rva: u32,
     tls_table_size: u32,
+    /// `_load_config_used`'s RVA and the size its first field states.
+    load_config: (u32, u32),
     export_table_rva: u32,
     export_table_size: u32,
     resource_table_rva: u32,
@@ -2501,6 +2526,10 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     data_directory[DATA_DIRECTORY_TLS] = DataDirectoryEntry {
         rva: inp.tls_table_rva,
         size: inp.tls_table_size,
+    };
+    data_directory[DATA_DIRECTORY_LOAD_CONFIG] = DataDirectoryEntry {
+        rva: inp.load_config.0,
+        size: inp.load_config.1,
     };
     data_directory[DATA_DIRECTORY_DEBUG] = DataDirectoryEntry {
         rva: inp.debug_rva,

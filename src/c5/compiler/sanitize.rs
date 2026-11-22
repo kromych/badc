@@ -45,6 +45,9 @@ pub enum Check {
     Bool,
     /// An access through a null pointer (C17 6.5.3.2p4).
     Null,
+    /// Pointer arithmetic on a null pointer, or whose result wraps around
+    /// the address space (C17 6.5.6p8).
+    PointerOverflow,
     /// An access through an address not aligned for its type (C17
     /// 6.3.2.3p7); for a member, the alignment the containing structure's
     /// and the member offset's give.
@@ -75,7 +78,7 @@ pub enum Check {
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
     /// clang's checks of defined behavior.
-    pub const ALL: [Check; 17] = [
+    pub const ALL: [Check; 18] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -85,6 +88,7 @@ impl Check {
         Check::BoundsStrict,
         Check::Bool,
         Check::Null,
+        Check::PointerOverflow,
         Check::Alignment,
         Check::FloatCastOverflow,
         Check::VlaBound,
@@ -107,6 +111,7 @@ impl Check {
             Check::BoundsStrict => "bounds-strict",
             Check::Bool => "bool",
             Check::Null => "null",
+            Check::PointerOverflow => "pointer-overflow",
             Check::Alignment => "alignment",
             Check::FloatCastOverflow => "float-cast-overflow",
             Check::VlaBound => "vla-bound",
@@ -326,6 +331,34 @@ impl Compiler {
         if let Some(check) = self.access_check((ty, Some(id)), align, TCK_LOAD, at) {
             self.ast.access_checks.insert(id, check);
         }
+    }
+
+    /// Check the pointer arithmetic at node `id` -- `+` or `-` of an integer,
+    /// a subscript, `+=`, `-=`, `++` or `--` -- by the byte offset node
+    /// `offset`, at `at`, under `-fsanitize=pointer-overflow`. An offset
+    /// that folds to 0 takes no check: clang's folds the step away.
+    pub(super) fn sanitize_pointer_step(
+        &mut self,
+        id: ExprId,
+        offset: Option<ExprId>,
+        at: (u32, u32),
+    ) {
+        let check = Check::PointerOverflow;
+        if !self.sanitize.runs(check) || self.unevaluated > 0 {
+            return;
+        }
+        if offset.is_some_and(|o| self.ast_const_value(o).is_some_and(|(v, _)| v == 0)) {
+            return;
+        }
+        let data = self.ubsan_site_at(at, &[]);
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_pointer_overflow", 2);
+        let checks = check.bit();
+        let check = SanitizeCheck {
+            checks,
+            data,
+            handler,
+        };
+        self.ast.checks.insert(id, check);
     }
 
     /// Check the member access at node `member`, of the field `(ty, off)`

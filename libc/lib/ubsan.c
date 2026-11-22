@@ -63,6 +63,9 @@ struct __ubsan_type_mismatch_data {
     unsigned char log_alignment;
     unsigned char type_check_kind;
 };
+struct __ubsan_pointer_overflow_data {
+    struct __ubsan_source_location loc;
+};
 struct __ubsan_vla_bound_data {
     struct __ubsan_source_location loc;
     const struct __ubsan_type_descriptor *type;
@@ -378,6 +381,44 @@ void __ubsan_handle_type_mismatch_v1(struct __ubsan_type_mismatch_data *d, uintp
 _Noreturn void __ubsan_handle_type_mismatch_v1_abort(struct __ubsan_type_mismatch_data *d,
                                                      uintptr_t pointer) {
     __ubsan_type_mismatch(d, pointer);
+    abort();
+}
+
+// A pointer step from `base` to `result`, named by which is null and, for
+// two others, by the signs they have as signed integers.
+static void __ubsan_pointer_overflow(struct __ubsan_pointer_overflow_data *d, uintptr_t base,
+                                     uintptr_t result) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    unsigned long long from = base, to = result;
+    fprintf(stderr, "%s:%u:%u: runtime error: ", d->loc.file, d->loc.line, column);
+    if (!from && !to)
+        fprintf(stderr, "applying zero offset to null pointer\n");
+    else if (!from)
+        fprintf(stderr, "applying non-zero offset %llu to null pointer\n", to);
+    else if (!to)
+        fprintf(stderr,
+                "applying non-zero offset to non-null pointer 0x%012llx produced null pointer\n",
+                from);
+    else if (((intptr_t)base >= 0) == ((intptr_t)result >= 0))
+        fprintf(stderr, "%s 0x%012llx overflowed to 0x%012llx\n",
+                from > to ? "addition of unsigned offset to" : "subtraction of unsigned offset from",
+                from, to);
+    else
+        fprintf(stderr, "pointer index expression with base 0x%012llx overflowed to 0x%012llx\n",
+                from, to);
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_pointer_overflow(struct __ubsan_pointer_overflow_data *d, uintptr_t base,
+                                     uintptr_t result) {
+    __ubsan_pointer_overflow(d, base, result);
+}
+
+_Noreturn void __ubsan_handle_pointer_overflow_abort(struct __ubsan_pointer_overflow_data *d,
+                                                     uintptr_t base, uintptr_t result) {
+    __ubsan_pointer_overflow(d, base, result);
     abort();
 }
 

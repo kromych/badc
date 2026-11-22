@@ -1405,6 +1405,10 @@ impl Compiler {
         } else {
             crate::c5::ir::BinOp::Sub
         };
+        if super::types::is_pointer_ty(ty) {
+            self.sanitize_pointer_step(id, None, self.operator_at);
+            return;
+        }
         if self.sanitize_arith(id, Some(op), ty)
             && let Expr::PreInc { nsw, .. } | Expr::PostInc { nsw, .. } = self.ast.expr_mut(id)
         {
@@ -1599,6 +1603,10 @@ impl Compiler {
                 self.sanitize_shift(id, op_ty, amount)
             }
             BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu => self.sanitize_divide(id, op_ty),
+            _ if super::types::is_pointer_ty(op_ty) => {
+                self.sanitize_pointer_step(id, Some(rhs), self.operator_at);
+                false
+            }
             _ => self.sanitize_arith(id, Some(op), op_ty),
         };
         if checked && let Expr::CompoundAssign { nsw, .. } = self.ast.expr_mut(id) {

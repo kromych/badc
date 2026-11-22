@@ -943,15 +943,7 @@ impl<'a> Walker<'a> {
         idx: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        let arr = self.walk_expr_rvalue(b, array)?;
-        let i = self.walk_expr_rvalue(b, idx)?;
-        // The parser already scaled `idx` by the element size, and for
-        // a literal index that walk folds to a single `Imm`, so the
-        // address is `arr + Imm` and takes the immediate form.
-        let addr = match b.peek_imm(i) {
-            Some(k) => b.binop_imm(BinOp::Add, arr, k),
-            None => b.binop(BinOp::Add, arr, i),
-        };
+        let addr = self.index_address(b, id, array, idx)?;
         self.check_access(b, id, addr);
         // C99 6.5.2.1p2 with the address-as-value rule: for a
         // struct-value element `arr[i]` yields the element's address
@@ -962,6 +954,31 @@ impl<'a> Walker<'a> {
         let kind = load_kind_for(ty, self.target);
         let seg = self.access_seg(id, ty)?;
         Ok(load_place(b, addr, kind, seg, self.expr_is_volatile(id), 0))
+    }
+
+    /// The address the subscript node `id` designates, `array` stepped by
+    /// the scaled index `idx`, checked where `-fsanitize=pointer-overflow`
+    /// checks the step.
+    pub(super) fn index_address(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+        array: ExprId,
+        idx: ExprId,
+    ) -> Result<ValueId, WalkError> {
+        let arr = self.walk_expr_rvalue(b, array)?;
+        if let Some(&check) = self.ast.checks.get(&id) {
+            let offset = self.pointer_offset(b, idx)?;
+            return Ok(self.checked_pointer_step(b, check, arr, offset, false));
+        }
+        // The parser already scaled `idx` by the element size, and for a
+        // literal index that walk folds to a single `Imm`, so the address
+        // is `arr + Imm` and takes the immediate form.
+        let i = self.walk_expr_rvalue(b, idx)?;
+        Ok(match b.peek_imm(i) {
+            Some(k) => b.binop_imm(BinOp::Add, arr, k),
+            None => b.binop(BinOp::Add, arr, i),
+        })
     }
 
     /// C99 6.5.2.4 / 6.5.3.1: step an lvalue by `by`. The expression's
@@ -994,6 +1011,20 @@ impl<'a> Walker<'a> {
             vol,
             old,
         } = self.rmw_open(b, lvalue, ty)?;
+        // A pointer's step is checked as `p + by`.
+        if let Some(check) = check.filter(|&c| Self::is_pointer_step(c)) {
+            let offset = crate::c5::irgen::builtin::PointerOffset {
+                value: b.imm(by),
+                signed: true,
+                overflow: None,
+            };
+            let stepped = self.checked_pointer_step(b, check, old, offset, false);
+            place.store_marked(b, stepped, store_kind, vol, nsw);
+            return Ok(match yields {
+                crate::c5::irgen::Yields::Old => old,
+                crate::c5::irgen::Yields::New => stepped,
+            });
+        }
         // A decrement reports `x - 1`, which its handler words.
         if let Some(check) = check {
             let step = b.imm(by);

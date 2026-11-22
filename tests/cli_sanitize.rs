@@ -613,6 +613,122 @@ fn null_and_misaligned_accesses_are_reported() {
     }
 }
 
+const STEPS: &str = "#include <stddef.h>
+#include <stdint.h>
+struct T { int t[3]; long long l; };
+volatile int sink;
+volatile uintptr_t sinkp;
+int main(int argc, char **argv) {
+    char k = argc > 1 ? argv[1][0] : '0';
+    int *n = 0;
+    char *top = (char *)UINTPTR_MAX - 2;
+    long i = argc + 1;
+    long long big = INT64_MAX / 2;
+    if (k == 'a') sinkp = (uintptr_t)(n + i);
+    if (k == 'b') sinkp = (uintptr_t)(n + 0);
+    if (k == 'c') sinkp = (uintptr_t)(top + i * 4);
+    if (k == 'd') sinkp = (uintptr_t)(top - (-i));
+    if (k == 'e') sinkp = (uintptr_t)&n[i];
+    if (k == 'f') { int *q = n; q++; sinkp = (uintptr_t)q; }
+    if (k == 'g') { int *q = n; q += i; sinkp = (uintptr_t)q; }
+    if (k == 'h') sinkp = (uintptr_t)((int *)8 - 2);
+    if (k == 'i') { int *q = (int *)16; sinkp = (uintptr_t)(q + big); }
+    if (k == 'k') sinkp = (uintptr_t)(i + n);
+    if (k == 'l') sinkp = (uintptr_t)(n - i);
+    if (k == 'm') { int *q = (int *)(uintptr_t)(4 * argc); sinkp = (uintptr_t)(q - argc); }
+    if (k == 'n') { int *q = n; --q; sinkp = (uintptr_t)q; }
+    if (k == 'o') sinkp = offsetof(struct T, t[1]) + offsetof(struct T, t[argc]);
+    if (k == 'p') sinkp = (uintptr_t)&((struct T *)0)->t[1];
+    if (k == 'q') { int *q = &n[0]; sinkp = (uintptr_t)(q + (size_t)-1); }
+    if (k == 'r') { int *q = (int *)64; sinkp = (uintptr_t)(q + (size_t)-1); }
+    if (k == 's') { int *q = (int *)64; sinkp = (uintptr_t)(q + (i - 3)); }
+    return 0;
+}
+";
+
+/// Pointer arithmetic that `-fsanitize=pointer-overflow` finds undefined
+/// (C17 6.5.6p8) reports as clang reports it in C: a step from or to a
+/// null pointer, a result on the wrong side of the base for the offset's
+/// sign or, for an unsigned index, past it, and an index whose scaling to
+/// bytes overflows -- `+`, `-`, a subscript, `+=`, `++` and `--`, at the
+/// operator or the subscript's pointer operand. A zero literal offset
+/// folds away, and `offsetof` steps from no pointer.
+#[test]
+fn undefined_pointer_steps_are_reported() {
+    let dir = TempDir::new("badc-sanitize-steps");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, STEPS).unwrap();
+    let null = |at: &str, n: u64| {
+        format!("{at}: runtime error: applying non-zero offset {n} to null pointer")
+    };
+    let to_null = |at: &str, p: &str| {
+        format!(
+            "{at}: runtime error: applying non-zero offset to non-null pointer {p} produced null pointer"
+        )
+    };
+    let cases: [(&str, Vec<String>); 19] = [
+        ("0", vec![]),
+        ("a", vec![null("12:41", 12)]),
+        ("b", vec![]),
+        (
+            "c",
+            vec![
+                "14:43: runtime error: pointer index expression with base 0xfffffffffffffffd \
+                  overflowed to 0x000000000009"
+                    .to_string(),
+            ],
+        ),
+        ("d", vec![to_null("15:43", "0xfffffffffffffffd")]),
+        ("e", vec![null("16:39", 12)]),
+        ("f", vec![null("17:34", 4)]),
+        ("g", vec![null("18:35", 12)]),
+        ("h", vec![to_null("19:48", "0x000000000008")]),
+        (
+            "i",
+            vec![
+                "20:63: runtime error: addition of unsigned offset to 0x000000000010 overflowed \
+                  to 0x00000000000c"
+                    .to_string(),
+            ],
+        ),
+        ("k", vec![null("21:41", 12)]),
+        ("l", vec![null("22:41", 18446744073709551604)]),
+        ("m", vec![to_null("23:82", "0x000000000008")]),
+        ("n", vec![null("24:33", 18446744073709551612)]),
+        ("o", vec![]),
+        ("p", vec![null("26:39", 4)]),
+        ("q", vec![null("27:59", 18446744073709551612)]),
+        (
+            "r",
+            vec![
+                "28:63: runtime error: addition of unsigned offset to 0x000000000040 overflowed \
+                  to 0x00000000003c"
+                    .to_string(),
+            ],
+        ),
+        ("s", vec![]),
+    ];
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("steps{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-w", opt, "-fsanitize=pointer-overflow", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        for (arg, want) in &cases {
+            let o = run(&exe, &[arg]);
+            assert!(o.status.success(), "{opt} {arg}: {o:?}");
+            assert_eq!(&reports(&o), want, "{opt} {arg}");
+        }
+    }
+}
+
 const SHIFTS: &str = "#include <limits.h>
 #include <stdio.h>
 __attribute__((noinline)) int big(int a, int b) { return a << b; }

@@ -247,6 +247,17 @@ impl<'a> Walker<'a> {
         (lhs, rhs): (ExprId, ExprId),
         ty: i64,
     ) -> Result<ValueId, WalkError> {
+        if Self::is_pointer_step(check) {
+            let lhs_is_pointer = expr_ty(self.ast.expr(lhs)).is_some_and(is_pointer_ty);
+            let (base, offset) = if lhs_is_pointer {
+                let base = self.walk_expr_rvalue(b, lhs)?;
+                (base, self.pointer_offset(b, rhs)?)
+            } else {
+                let offset = self.pointer_offset(b, lhs)?;
+                (self.walk_expr_rvalue(b, rhs)?, offset)
+            };
+            return Ok(self.checked_pointer_step(b, check, base, offset, op == BinOp::Sub));
+        }
         let va = self.walk_expr_rvalue(b, lhs)?;
         let vb = self.walk_expr_rvalue(b, rhs)?;
         if !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
@@ -265,6 +276,91 @@ impl<'a> Walker<'a> {
         let flag = self.overflow_flag(b, op, (va, vb), raw, ty);
         self.report_failed_check(b, check, flag, &[va, vb]);
         Ok(raw)
+    }
+
+    /// Whether `check` is the check of a pointer step.
+    pub(super) fn is_pointer_step(check: crate::c5::ast::SanitizeCheck) -> bool {
+        check.checks == crate::c5::compiler::sanitize::Check::PointerOverflow.bit()
+    }
+
+    /// The byte offset node `off` of a pointer step, evaluated: its value,
+    /// whether it is signed, and where the parser scaled an index by a
+    /// constant element size, the flag of the product overflowing.
+    pub(super) fn pointer_offset(
+        &mut self,
+        b: &mut SsaBuilder,
+        off: ExprId,
+    ) -> Result<PointerOffset, WalkError> {
+        if let Expr::Binary {
+            op: BinOp::Mul,
+            lhs,
+            rhs,
+            ty,
+        } = *self.ast.expr(off)
+            && let Some(k) = self.const_fold_int(rhs).filter(|&k| k > 1)
+        {
+            let index = self.walk_expr_rvalue(b, lhs)?;
+            let value = b.binop_imm(BinOp::Mul, index, k);
+            let signed = !is_unsigned_ty(ty);
+            let overflow = if signed {
+                let (hi, lo) = (b.imm(i64::MAX / k), b.imm(i64::MIN / k));
+                let above = b.binop(BinOp::Gt, index, hi);
+                let below = b.binop(BinOp::Lt, index, lo);
+                b.binop(BinOp::Or, above, below)
+            } else {
+                let hi = b.imm((u64::MAX / k as u64) as i64);
+                b.binop(BinOp::Ugt, index, hi)
+            };
+            return Ok(PointerOffset {
+                value,
+                signed,
+                overflow: Some(overflow),
+            });
+        }
+        let signed = !expr_ty(self.ast.expr(off)).is_some_and(is_unsigned_ty);
+        Ok(PointerOffset {
+            value: self.walk_expr_rvalue(b, off)?,
+            signed,
+            overflow: None,
+        })
+    }
+
+    /// `base` stepped by `offset`, back where `sub`, with `check` reporting
+    /// the step `-fsanitize=pointer-overflow` finds undefined, as clang does
+    /// in C: a null base or result, a result on the wrong side of the base
+    /// for the direction -- a signed offset's sign, an unsigned offset's
+    /// operator -- or the offset's scaling overflowing. The handler takes
+    /// the base and the result.
+    pub(super) fn checked_pointer_step(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        base: ValueId,
+        offset: PointerOffset,
+        sub: bool,
+    ) -> ValueId {
+        let op = if sub { BinOp::Sub } else { BinOp::Add };
+        let result = b.binop(op, base, offset.value);
+        let zero = b.imm(0);
+        let null_base = b.binop(BinOp::Eq, base, zero);
+        let null_result = b.binop(BinOp::Eq, result, zero);
+        let null = b.binop(BinOp::Or, null_base, null_result);
+        let wrong_side = if offset.signed {
+            let forward_op = if sub { BinOp::Le } else { BinOp::Ge };
+            let forward = b.binop(forward_op, offset.value, zero);
+            let ahead = b.binop(BinOp::Uge, result, base);
+            b.binop(BinOp::Ne, forward, ahead)
+        } else if sub {
+            b.binop(BinOp::Ugt, result, base)
+        } else {
+            b.binop(BinOp::Ult, result, base)
+        };
+        let mut flag = b.binop(BinOp::Or, null, wrong_side);
+        if let Some(overflow) = offset.overflow {
+            flag = b.binop(BinOp::Or, flag, overflow);
+        }
+        self.report_failed_check(b, check, flag, &[base, result]);
+        result
     }
 
     /// Whether `va op vb`, a shift of a left operand promoted to `ty`,
@@ -924,4 +1020,12 @@ fn extend_from(b: &mut SsaBuilder, value: ValueId, (bits, signed): (u8, bool)) -
     let shift = b.imm(i64::from(64 - bits));
     let high = b.binop(BinOp::Shl, value, shift);
     b.binop(if signed { BinOp::Shr } else { BinOp::Shru }, high, shift)
+}
+
+/// A pointer step's byte offset, evaluated.
+pub(super) struct PointerOffset {
+    pub(super) value: ValueId,
+    pub(super) signed: bool,
+    /// The flag of the index's scaling to the offset overflowing.
+    pub(super) overflow: Option<ValueId>,
 }

@@ -309,14 +309,8 @@ impl<'a> Walker<'a> {
             // `arr[i] = v`: the address, without the load the rvalue
             // path would append.
             Expr::Index { array, idx, .. } => {
-                let (array_id, idx_id) = (*array, *idx);
-                let arr = self.walk_expr_rvalue(b, array_id)?;
-                let i = self.walk_expr_rvalue(b, idx_id)?;
-                // The constant-index fold of the rvalue path.
-                match b.peek_imm(i) {
-                    Some(k) => Ok(b.binop_imm(BinOp::Add, arr, k)),
-                    None => Ok(b.binop(BinOp::Add, arr, i)),
-                }
+                let (array, idx) = (*array, *idx);
+                self.index_address(b, id, array, idx)
             }
             // `s.f = v`: the object's address plus the field offset.
             Expr::Member { obj, field_off, .. } => {

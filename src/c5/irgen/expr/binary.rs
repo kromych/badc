@@ -605,6 +605,9 @@ impl<'a> Walker<'a> {
                 self.check_value(b, stored, res);
             }
             self.convert_scalar_value(b, res, op_ty, store_ty)
+        } else if let Some(check) = check.filter(|&c| Self::is_pointer_step(c)) {
+            let offset = self.pointer_offset(b, rhs)?;
+            self.checked_pointer_step(b, check, old, offset, op == BinOp::Sub)
         } else if let Some(check) = check {
             // The checked operation runs in `op_ty`, the left operand and,
             // but for a shift's amount, the right converted to it; the store

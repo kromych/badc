@@ -5649,8 +5649,32 @@ impl Compiler {
         } else {
             self.sub_values(lhs_ty, fn_ptr_arith);
         }
+        if is_pointer_ty(self.ty) {
+            self.sanitize_pointer_binary(at);
+        }
         self.pending.object_ref = displaced;
         Ok(())
+    }
+
+    /// Check the pointer arithmetic node the accumulator holds, `p + k`,
+    /// `k + p` or `p - k`, at `at`.
+    fn sanitize_pointer_binary(&mut self, at: (u32, u32)) {
+        use super::super::ir::BinOp;
+        let Some(id) = self.ast_acc else {
+            return;
+        };
+        if let super::super::ast::Expr::Binary {
+            op: BinOp::Add | BinOp::Sub,
+            lhs,
+            rhs,
+            ..
+        } = *self.ast.expr(id)
+        {
+            let lhs_ty = super::super::ast::expr_ty(self.ast.expr(lhs));
+            let lhs_is_pointer = lhs_ty.is_some_and(is_pointer_ty);
+            let offset = if lhs_is_pointer { rhs } else { lhs };
+            self.sanitize_pointer_step(id, Some(offset), at);
+        }
     }
 
     /// C99 6.5.6p8: `p + k` and `p - k` with a constant `k` designate
@@ -6145,7 +6169,10 @@ impl Compiler {
             } else if row != 1 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, row);
             }
+            // The step yields a pointer to the row.
+            self.ty = lhs_ty;
             self.ast_binop(crate::c5::ir::BinOp::Add);
+            self.sanitize_pointer_binary(begin);
             self.record_row_fn(array_ast);
             self.decay_ptr_array_value(id);
             // The row's address is the value: no indirection level is
@@ -6186,6 +6213,7 @@ impl Compiler {
                 self.lvalue_at = begin;
                 self.ast_emit_index(array, idx, elem_ty);
                 if let Some(id) = self.ast_acc {
+                    self.sanitize_pointer_step(id, Some(idx), begin);
                     let align = self.align_of_type(elem_ty) as i64;
                     self.sanitize_access(id, object_ref, (elem_ty, align), begin);
                 }

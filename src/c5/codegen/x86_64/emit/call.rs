@@ -1286,6 +1286,7 @@ pub(super) fn emit_tail_call(
     func: &FunctionSsa,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    ex: &mut Vec<(usize, super::X64ExitStep)>,
 ) -> Emit {
     let TailCall {
         args, fp_arg_mask, ..
@@ -1314,9 +1315,9 @@ pub(super) fn emit_tail_call(
     // `detect_tail_call` admits it, no address of the object being taken.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame, alloc);
-    restore_callee_saved(code, frame, alloc);
+    restore_callee_saved(code, frame, alloc, ex);
     clear_upper(code, frame, wide_args(args, &[], &plan, alloc));
-    emit_frame_teardown(code, func, frame, alloc, abi);
+    emit_frame_teardown(code, func, frame, alloc, abi, ex);
     // A Call-kind fixup resolves the rel32 like an intra-unit call, an import
     // fixup as a call through the import's trampoline; the opcode is `jmp`.
     let jmp_site = code.len();

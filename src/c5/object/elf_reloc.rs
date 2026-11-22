@@ -1164,6 +1164,8 @@ struct Output {
 struct RelocWriter<'a> {
     program: &'a Program,
     build: &'a Build,
+    /// The unit's assembler sections and its functions' `.eh_frame`.
+    asm_sections: &'a [&'a crate::c5::asm::AsmSection],
     machine: Machine,
     target: super::Target,
     class: ElfClass,
@@ -1179,6 +1181,40 @@ struct RelocWriter<'a> {
     out: Output,
 }
 
+/// The `.eh_frame` of the unit's functions under [`Build::unwind_tables`]
+/// on Linux: an FDE for each, from the frame its emitter recorded.
+fn own_eh_frame(
+    build: &Build,
+    target: super::Target,
+) -> Result<Option<crate::c5::asm::AsmSection>, C5Error> {
+    use crate::c5::codegen::ssa::cfi::{self, CfiArch, CfiTarget};
+    let arch = match target {
+        _ if !build.unwind_tables => return Ok(None),
+        super::Target::LinuxX64 if build.elf_class == ElfClass::Elf64 => CfiArch::X86_64,
+        super::Target::LinuxAarch64 => CfiArch::Aarch64,
+        _ => return Ok(None),
+    };
+    let funcs: Vec<_> = match arch {
+        CfiArch::Aarch64 => (build.a64_unwind.iter())
+            .map(|u| (u.begin, u.end, super::dwarf::a64_frame_ops(build, u)))
+            .collect(),
+        _ => (build.fn_unwind.iter())
+            .map(|u| (u.begin, u.end, super::dwarf::x64_frame_ops(build, u)))
+            .collect(),
+    };
+    let funcs: Vec<_> = funcs.into_iter().filter(|(b, e, _)| e > b).collect();
+    if funcs.is_empty() {
+        return Ok(None);
+    }
+    let t = CfiTarget {
+        arch,
+        addr_bytes: 8,
+    };
+    cfi::eh_frame_section(&funcs, t)
+        .map(Some)
+        .map_err(|e| RelocWriter::internal(alloc::format!("elf_reloc: `.eh_frame`: {e}")))
+}
+
 /// Emit a relocatable ELF object holding the contents of `build`,
 /// consumable by `ld` / `lld` and by badc's own linker.
 pub(super) fn write_relocatable(
@@ -1187,7 +1223,9 @@ pub(super) fn write_relocatable(
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
-    let mut w = RelocWriter::new(program, build, machine, target);
+    let own = own_eh_frame(build, target)?;
+    let asm_sections: Vec<_> = build.asm_sections.iter().chain(&own).collect();
+    let mut w = RelocWriter::new(program, build, &asm_sections, machine, target);
     w.plan_text_carve()?;
     let named_objs = w.plan_named_data()?;
     w.plan_data(&named_objs)?;
@@ -1241,6 +1279,7 @@ impl<'a> RelocWriter<'a> {
     fn new(
         program: &'a Program,
         build: &'a Build,
+        asm_sections: &'a [&'a crate::c5::asm::AsmSection],
         machine: Machine,
         target: super::Target,
     ) -> Self {
@@ -1253,6 +1292,7 @@ impl<'a> RelocWriter<'a> {
         RelocWriter {
             program,
             build,
+            asm_sections,
             machine,
             target,
             class,
@@ -1541,8 +1581,7 @@ impl<'a> RelocWriter<'a> {
 
     /// Inline-asm `.pushsection` payloads join the same table.
     fn place_asm_sections(&mut self) -> Result<(), C5Error> {
-        let build = self.build;
-        for s in &build.asm_sections {
+        for s in self.asm_sections {
             let mut flags: u64 = 0;
             for c in s.flags.bytes() {
                 match c {
@@ -1971,11 +2010,10 @@ impl<'a> RelocWriter<'a> {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
         let (program, build) = (self.program, self.build);
+        let asm_sections = self.asm_sections;
         let names = &mut self.names;
         names.defined_fn_names = build.func_names.iter().map(|s| s.as_str()).collect();
-        names.asm_label_names = build
-            .asm_sections
-            .iter()
+        names.asm_label_names = (asm_sections.iter())
             .flat_map(|s| s.labels.iter().map(|l| l.name.as_str()))
             .chain(build.asm_text_labels.iter().map(|l| l.name.as_str()))
             .collect();
@@ -2183,9 +2221,7 @@ impl<'a> RelocWriter<'a> {
         // A reference through a dropped alias resolves against its chain's
         // end; the ends of all dropped aliases follow, since GNU as emits
         // the undefined entry for an unreferenced `.set` target too.
-        let section_syms = build
-            .asm_sections
-            .iter()
+        let section_syms = (self.asm_sections.iter())
             .flat_map(|s| &s.relocs)
             .map(|r| &r.target);
         let operand_syms = build.asm_sym_fixups.iter().map(|r| &r.target);
@@ -2261,7 +2297,7 @@ impl<'a> RelocWriter<'a> {
             .layout
             .asm_placements
             .iter()
-            .zip(build.asm_sections.iter())
+            .zip(self.asm_sections.iter())
             .flat_map(|(&(e, base), s)| {
                 let shndx = carve.shndx[e];
                 let sec_sym = carve.sym_idx[e];
@@ -2626,6 +2662,8 @@ impl<'a> RelocWriter<'a> {
             let steps = UnwindSteps::X64 {
                 leaf: u.leaf,
                 steps: u.steps.clone(),
+                saves: u.saves.clone(),
+                exits: u.exits.clone(),
             };
             (u.begin, steps)
         });
@@ -2900,7 +2938,7 @@ impl<'a> RelocWriter<'a> {
                 data_start(carve.shndx[e], base, build.rodata.literals.spans[k].1);
             }
         }
-        for (&(e, base), s) in layout.asm_placements.iter().zip(build.asm_sections.iter()) {
+        for (&(e, base), s) in layout.asm_placements.iter().zip(self.asm_sections.iter()) {
             marks.extend(s.map.shifted(base as u32).map(|m| (carve.shndx[e], m)));
         }
         marks.sort_by_key(|&(shndx, _)| shndx);
@@ -3803,7 +3841,6 @@ impl<'a> RelocWriter<'a> {
     /// by the block's placement base.
     fn emit_asm_section_relocs(&mut self) -> Result<(), C5Error> {
         use crate::c5::asm::{AsmRelocKind as RK, AsmSectionTarget};
-        let build = self.build;
         // The STT_SECTION symbols a reduction can land on; a branch against
         // one names no function, so no PLT slot can carry it.
         let section_syms: BTreeSet<u64> = self
@@ -3814,7 +3851,7 @@ impl<'a> RelocWriter<'a> {
             .collect();
         for i in 0..self.layout.asm_placements.len() {
             let (e, base) = self.layout.asm_placements[i];
-            let s = &build.asm_sections[i];
+            let s = self.asm_sections[i];
             for r in &s.relocs {
                 let (sym_idx, addend) = match &r.target {
                     AsmSectionTarget::Text(off) => {
@@ -3830,9 +3867,7 @@ impl<'a> RelocWriter<'a> {
                         base as i64 + *off as i64 + r.addend,
                     ),
                     AsmSectionTarget::SectionStart(key) => {
-                        let at = build
-                            .asm_sections
-                            .iter()
+                        let at = (self.asm_sections.iter())
                             .position(|s| crate::c5::asm::section_key_of(s) == *key)
                             .ok_or_else(|| {
                                 Self::internal(alloc::format!(
@@ -4601,7 +4636,7 @@ impl<'a> RelocWriter<'a> {
             }
             ent.bytes.extend_from_slice(bytes);
         };
-        for (&(e, base), s) in layout.asm_placements.iter().zip(build.asm_sections.iter()) {
+        for (&(e, base), s) in layout.asm_placements.iter().zip(self.asm_sections.iter()) {
             append_at(&mut carve.table.entries[e], base, &s.bytes);
         }
         for (e, base, body) in &layout.writer_bodies {

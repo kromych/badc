@@ -3196,6 +3196,7 @@ fn build_x86_64_pdata(
             end: stub_len,
             leaf: false,
             steps: stub_steps.to_vec(),
+            ..super::FnUnwind::default()
         };
         let stub_rva = text_rva + stub_at;
         rows.push((stub_rva, stub_rva + stub_len, Ok(info(&uw, 0, None))));
@@ -4614,7 +4615,7 @@ mod tests {
             begin: 0,
             end: 16,
             leaf: false,
-            steps: Vec::new(),
+            ..Default::default()
         };
         let x64 = build_x86_64_pdata(0x1000, 16, 0, (0, 0, &[]), &[uw], &[], &[], seh).map(|_| ());
         let a64 = super::super::A64Unwind {

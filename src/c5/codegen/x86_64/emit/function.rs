@@ -392,6 +392,7 @@ pub(crate) fn emit_function(
             ..BranchWindows::default()
         },
         seh_placed: Vec::new(),
+        exits: Vec::new(),
         block_addr_fixups: Vec::new(),
         jump_table_fixups: Vec::new(),
     };
@@ -545,6 +546,8 @@ struct FnEmit<'a, 'b> {
     /// `(block, start)` of each block placed, in order, in a function with
     /// a `__try` region.
     seh_placed: Vec<(super::super::ir::BlockId, usize)>,
+    /// The epilogues placed, at offsets from the function's start.
+    exits: Vec<super::X64Exit>,
 }
 
 impl FnEmit<'_, '_> {
@@ -607,6 +610,9 @@ impl FnEmit<'_, '_> {
                 .load_disp32(field, bits, if single { 4 } else { 8 });
         }
         uw.end = self.out.cx.code.len() as u32;
+        if !uw.leaf {
+            uw.exits = core::mem::take(&mut self.exits);
+        }
         Ok(uw)
     }
 
@@ -801,6 +807,7 @@ impl FnEmit<'_, '_> {
             self.out.fp_literals.clear();
             self.jump_table_fixups.clear();
             self.seh_placed.clear();
+            self.exits.clear();
             for block_idx in 0..self.fcx.func.blocks.len() {
                 if self.plan.is_skipped(block_idx) {
                     #[cfg(debug_assertions)]
@@ -1115,6 +1122,7 @@ impl FnEmit<'_, '_> {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => Ok(()),
             Terminator::Return(v) => {
+                let mut steps = Vec::new();
                 if let Some(tail) = tail_call {
                     emit_tail_call(
                         self.out.cx.code,
@@ -1127,7 +1135,8 @@ impl FnEmit<'_, '_> {
                         func,
                         self.out.cx.asm_extern_call_sites,
                         self.out.cx.user_extern_data_refs,
-                    )
+                        &mut steps,
+                    )?;
                 } else {
                     emit_return(
                         self.out.cx.code,
@@ -1138,8 +1147,17 @@ impl FnEmit<'_, '_> {
                         abi,
                         self.out.cx.asm_extern_call_sites,
                         self.out.cx.user_extern_data_refs,
-                    )
+                        &mut steps,
+                    )?;
                 }
+                let rel = |at: usize| (at - self.start) as u32;
+                if !steps.is_empty() {
+                    self.exits.push(super::X64Exit {
+                        steps: steps.into_iter().map(|(at, s)| (rel(at), s)).collect(),
+                        end: rel(self.out.cx.code.len()),
+                    });
+                }
+                Ok(())
             }
             Terminator::Jmp(t) | Terminator::FallThrough(t) => self.jump_unless_next(block_idx, t),
             Terminator::Bz {
@@ -1634,13 +1652,34 @@ fn saved_xmm_off(alloc: &Allocation) -> i32 {
 /// completed frame, and the non-volatile xmms are stored above them
 /// (full 128-bit `movups`, the caller may use the upper lanes). The offsets
 /// have one source, so the prologue and every return path agree.
-fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
+/// Each save goes to `uw` with its slot below rbp, which sits `alloc_bytes`
+/// above rsp at the first push; `func_start` is the function's offset.
+fn save_callee_saved(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    alloc_bytes: u32,
+    uw: &mut super::FnUnwind,
+    func_start: usize,
+) {
+    let mut below = alloc_bytes;
+    let mut saved = |code: &Vec<u8>, reg: u8, xmm: bool, below_fp: u32| {
+        uw.saves.push(super::X64Save {
+            at: (code.len() - func_start) as u32,
+            reg,
+            xmm,
+            below_fp,
+        });
+    };
     for &r in alloc.gpr_used.iter().rev() {
         emit_push_r(code, Reg(r));
+        below += 8;
+        saved(code, r, false, below);
     }
     let base = saved_xmm_off(alloc);
     for (i, &r) in alloc.fp_used.iter().enumerate() {
-        emit_movups_mem_xmm(code, Reg::RSP, base + (i as i32) * 16, Reg(r));
+        let off = base + (i as i32) * 16;
+        emit_movups_mem_xmm(code, Reg::RSP, off, Reg(r));
+        saved(code, r, true, below - off as u32);
     }
 }
 
@@ -1701,8 +1740,14 @@ pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame, alloc: &Alloc
 /// the xmm loads, then the pops, which leave rsp `pushed_gpr_bytes` above it.
 /// The Win64 block's xmm loads go through rbp; its pops are the teardown's.
 /// No rsp-relative access may follow. Every return path routes through this
-/// so the saved-region offsets cannot drift.
-pub(super) fn restore_callee_saved(code: &mut Vec<u8>, frame: Frame, alloc: &Allocation) {
+/// so the saved-region offsets cannot drift. Each pop goes to `ex` at the
+/// offset past it.
+pub(super) fn restore_callee_saved(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    alloc: &Allocation,
+    ex: &mut Vec<(usize, super::X64ExitStep)>,
+) {
     if frame.saves_top > 0 {
         let base = -(frame.saves_top as i32);
         for (j, &r) in alloc.fp_used.iter().enumerate() {
@@ -1716,6 +1761,7 @@ pub(super) fn restore_callee_saved(code: &mut Vec<u8>, frame: Frame, alloc: &All
     }
     for &r in alloc.gpr_used.iter() {
         emit_pop_r(code, Reg(r));
+        ex.push((code.len(), super::X64ExitStep::Pop(r)));
     }
 }
 
@@ -1822,7 +1868,7 @@ fn emit_prologue(
     // none), and of any callee-saved scratch a `-ffixed-` fallback moved off
     // the Win64 volatile set.
     if frame.saves_top == 0 {
-        save_callee_saved(code, alloc);
+        save_callee_saved(code, alloc, alloc_bytes, &mut uw, func_start);
     }
     // The canary slot is rbp-relative, so it is stored before the realign.
     emit_canary_store(code, frame, abi, extern_data_refs);
@@ -1995,6 +2041,7 @@ fn emit_return(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    ex: &mut Vec<(usize, super::X64ExitStep)>,
 ) -> Emit {
     // A return in registers moves its parts ahead of the restores: rax, rdx
     // and the xmm registers are not restored.
@@ -2002,8 +2049,8 @@ fn emit_return(
         emit_parts_return(code, parts, fp_mask, alloc, frame)?;
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame, alloc);
-        restore_callee_saved(code, frame, alloc);
-        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+        restore_callee_saved(code, frame, alloc, ex);
+        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites, ex);
         return Ok(());
     }
     // A return value in a callee-saved register stages through rcx
@@ -2073,8 +2120,8 @@ fn emit_return(
         }
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame, alloc);
-        restore_callee_saved(code, frame, alloc);
-        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+        restore_callee_saved(code, frame, alloc, ex);
+        emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites, ex);
         return Ok(());
     }
     // An FP return rides xmm0 (C99 6.2.5p10); the declared type decides, since
@@ -2142,7 +2189,7 @@ fn emit_return(
     // ahead of the pops.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame, alloc);
-    restore_callee_saved(code, frame, alloc);
+    restore_callee_saved(code, frame, alloc, ex);
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
     }
@@ -2150,7 +2197,7 @@ fn emit_return(
     // AMD64 / Win64: scalar floating returns in xmm0). The receiving
     // call site is FP-classed (`Inst::Call::fp_return`) and reads
     // xmm0, so no rax mirror is emitted.
-    emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
+    emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites, ex);
     Ok(())
 }
 
@@ -2220,9 +2267,10 @@ fn emit_epilogue_ret(
     alloc: &Allocation,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
+    ex: &mut Vec<(usize, super::X64ExitStep)>,
 ) {
     clear_upper(code, frame, wide_result(func, abi));
-    emit_frame_teardown(code, func, frame, alloc, abi);
+    emit_frame_teardown(code, func, frame, alloc, abi, ex);
     emit_hardened_ret(code, abi, extern_sites);
 }
 
@@ -2230,14 +2278,16 @@ fn emit_epilogue_ret(
 /// or `pop rbp` alone when the pops left rsp at rbp (the pushes were the
 /// whole frame). rsp only ascends and the return address stays where the
 /// caller pushed it. Every return path and the tail-call jump route through
-/// here.
+/// here; each pop and the `leave` go to `ex` at the offset past them.
 pub(super) fn emit_frame_teardown(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
     frame: Frame,
     alloc: &Allocation,
     abi: super::Abi,
+    ex: &mut Vec<(usize, super::X64ExitStep)>,
 ) {
+    use super::X64ExitStep as S;
     if is_full_leaf(func, frame, alloc, abi) {
         return;
     }
@@ -2248,15 +2298,19 @@ pub(super) fn emit_frame_teardown(
         emit_lea_r_mem(code, Reg::RSP, Reg::RBP, last);
         for &r in alloc.gpr_used.iter().rev() {
             emit_pop_r(code, Reg(r));
+            ex.push((code.len(), S::Pop(r)));
         }
         emit_pop_r(code, Reg::RBP);
+        ex.push((code.len(), S::Pop(Reg::RBP.0)));
         return;
     }
     let rsp_at_bottom = !frame.dynamic_sp || reestablishes_sp(frame, alloc);
     if frame.frame_bytes > pushed_gpr_bytes(alloc) || !rsp_at_bottom {
         super::encode::emit_leave(code);
+        ex.push((code.len(), S::Leave));
     } else {
         emit_pop_r(code, Reg::RBP);
+        ex.push((code.len(), S::Pop(Reg::RBP.0)));
     }
 }
 

@@ -468,6 +468,7 @@ fn synth_program_and_build(
         // writers then skip the section emit entirely instead of
         // dumping zero-length placeholders.
         debug_info: !opts.strip_debug && !merged.debug_info.is_empty(),
+        unwind_tables: false,
         merged_dwarf: synth_merged_dwarf(merged).filter(|_| !opts.strip_debug),
         pdb_path: None,
         resources: Vec::new(),
@@ -685,18 +686,25 @@ fn x86_64_unwind(
     let functions = recorded_unwind(merged, functions, target == Target::WindowsX64)?;
     let mut out = Vec::with_capacity(functions.len());
     for (begin, end, steps) in functions {
-        let (leaf, steps) = match steps {
-            Some(UnwindSteps::X64 { leaf, steps }) => (*leaf, steps.clone()),
+        let (leaf, steps, saves, exits) = match steps {
+            Some(UnwindSteps::X64 {
+                leaf,
+                steps,
+                saves,
+                exits,
+            }) => (*leaf, steps.clone(), saves.clone(), exits.clone()),
             Some(UnwindSteps::A64 { .. }) => {
                 return Err(internal_err(MODULE, "arm64 unwind steps in an x86-64 link"));
             }
-            None => (true, Vec::new()),
+            None => (true, Vec::new(), Vec::new(), Vec::new()),
         };
         out.push(FnUnwind {
             begin,
             end,
             leaf,
             steps,
+            saves,
+            exits,
         });
     }
     Ok(out)

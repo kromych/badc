@@ -7297,6 +7297,7 @@ fn a_frame_past_an_early_return_decodes_from_its_anchor() {
 #[test]
 fn unwind_step_records_round_trip() {
     use crate::c5::codegen::{A64Exit, A64Step, PrologueStep as P, UnwindSteps};
+    use crate::c5::codegen::{X64Exit, X64ExitStep as E, X64Save};
     let records = [
         UnwindSteps::X64 {
             leaf: false,
@@ -7307,10 +7308,28 @@ fn unwind_step_records_round_trip() {
                 (14, P::SaveXmm { xmm: 6, off: 32 }),
                 (19, P::SetFrame(48)),
             ],
+            saves: alloc::vec![X64Save {
+                at: 25,
+                reg: 13,
+                xmm: false,
+                below_fp: 0x10,
+            }],
+            exits: alloc::vec![
+                X64Exit {
+                    steps: alloc::vec![(0x41, E::Pop(13)), (0x42, E::Leave)],
+                    end: 0x43,
+                },
+                X64Exit {
+                    steps: alloc::vec![(0x52, E::Pop(5))],
+                    end: 0x57,
+                },
+            ],
         },
         UnwindSteps::X64 {
             leaf: true,
             steps: alloc::vec::Vec::new(),
+            saves: alloc::vec::Vec::new(),
+            exits: alloc::vec::Vec::new(),
         },
         UnwindSteps::A64 {
             steps: alloc::vec![
@@ -7410,7 +7429,7 @@ fn the_pe_link_takes_the_recorded_unwind_steps() {
             steps.clone()
         };
         match (steps("f"), target) {
-            (UnwindSteps::X64 { leaf, steps }, crate::Target::WindowsX64) => {
+            (UnwindSteps::X64 { leaf, steps, .. }, crate::Target::WindowsX64) => {
                 assert!(!leaf && steps.len() >= 2, "{steps:?}")
             }
             (UnwindSteps::A64 { steps, exits, .. }, crate::Target::WindowsAarch64) => {
@@ -12252,14 +12271,15 @@ fn asm_section_operand_symbol_self_link_matches_ld() {
             "{target:?}: writable .optab joins the data stream"
         );
         let key = merged.defined.get("key").expect("key in merged");
-        let ro_len = merged.data_ro_len as u64;
+        let (ro_len, rw_at) = (merged.data_ro_len as u64, merged.data_relro_len as u64);
         let (rodata_addr, rodata) = elf_image_section(&image, ".rodata").expect("image .rodata");
         let (data_addr, data) = elf_image_section(&image, ".data").expect("image .data");
+        // The stream is the read-only prefix, the relro region, the rest.
         let addr_of = |off: u64| {
             if off < ro_len {
                 rodata_addr + off
             } else {
-                data_addr + (off - ro_len)
+                data_addr + (off - rw_at)
             }
         };
         let str_pos = rodata
@@ -12267,7 +12287,7 @@ fn asm_section_operand_symbol_self_link_matches_ld() {
             .position(|w| w == b"probe9.c\0")
             .expect("operand string in image .rodata") as u64;
         let str_vaddr = rodata_addr + str_pos;
-        let body_at = |off: u64| (off - ro_len) as usize;
+        let body_at = |off: u64| (off - rw_at) as usize;
         assert_eq!(
             &data[body_at(optab.value)..body_at(optab.value) + 8],
             b"OpTaB9mk",
@@ -12320,7 +12340,7 @@ fn asm_section_operand_symbol_in_exec_section_self_links() {
             "{target:?}: executable .optab joins the text stream"
         );
         let key = merged.defined.get("key").expect("key in merged");
-        let ro_len = merged.data_ro_len as u64;
+        let rw_at = merged.data_relro_len as u64;
         let (rodata_addr, rodata) = elf_image_section(&image, ".rodata").expect("image .rodata");
         let (data_addr, _) = elf_image_section(&image, ".data").expect("image .data");
         let (text_addr, text) = elf_image_section(&image, ".text").expect("image .text");
@@ -12350,7 +12370,7 @@ fn asm_section_operand_symbol_in_exec_section_self_links() {
             &[0u8; 4],
             "{target:?}: the `.long 0` spacer is untouched"
         );
-        let key_vaddr = (data_addr + (key.value - ro_len)) as i64;
+        let key_vaddr = (data_addr + (key.value - rw_at)) as i64;
         assert_eq!(
             (text_addr + q_idx as u64) as i64 + field_q,
             key_vaddr + 4,
@@ -17287,8 +17307,9 @@ fn relro_stream_separates_relocated_const_from_read_only() {
 #[test]
 #[cfg(feature = "native-emit")]
 fn relro_segment_covers_dynamic_and_got_without_relro_content() {
-    // With no relocated const anywhere the relro stream is empty, but
-    // PT_GNU_RELRO still protects `.dynamic` and `.got`, as ld does.
+    // With no relocated const anywhere, unwind tables included, the relro
+    // stream is empty, but PT_GNU_RELRO still protects `.dynamic` and
+    // `.got`, as ld does.
     use crate::c5::linker::{
         link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
@@ -17297,6 +17318,7 @@ fn relro_segment_covers_dynamic_and_got_without_relro_content() {
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
+        unwind_tables: false,
         ..Default::default()
     };
     for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
@@ -17826,11 +17848,12 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
             "symbol row for `{f}` at 0x{st_value:x} missing in:\n{map}"
         );
     }
-    // Data-stream symbols: the read-only prefix backs `.rodata`, the
-    // remainder `.data`.
+    // Data-stream symbols: the read-only prefix backs `.rodata`, the part
+    // past the relro region `.data`.
     let sec_addr = |n: &str| sections.iter().find(|(s, _, _)| s == n).unwrap().1;
     let a_msg = merged.defined["a_msg"].value + sec_addr(".rodata");
-    let g_global = merged.defined["g_global"].value - merged.data_ro_len as u64 + sec_addr(".data");
+    let g_global =
+        merged.defined["g_global"].value - merged.data_relro_len as u64 + sec_addr(".data");
     for (sym, addr) in [("a_msg", a_msg), ("g_global", g_global)] {
         let row = alloc::format!("                0x{addr:016x}                {sym}");
         assert!(

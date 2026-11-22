@@ -2564,6 +2564,8 @@ pub(crate) struct Build {
     /// appear in the output image. `Build::default()` derives
     /// `false`.
     pub debug_info: bool,
+    /// [`NativeOptions::unwind_tables`].
+    pub unwind_tables: bool,
     /// Pre-baked merged DWARF byte streams. Set by the
     /// multi-TU link synthesizer (`synth_build.rs`) so the
     /// final-image writer consumes the linker-merged bytes
@@ -2765,6 +2767,38 @@ pub(crate) struct FnUnwind {
     pub leaf: bool,
     /// The described steps, each with its offset from `begin`.
     pub steps: alloc::vec::Vec<(u32, PrologueStep)>,
+    /// The System V callee saves past the steps.
+    pub saves: alloc::vec::Vec<X64Save>,
+    /// The epilogues, which the DWARF frame tables describe.
+    pub exits: alloc::vec::Vec<X64Exit>,
+}
+
+/// A callee save after rbp is set: machine register `reg`, an xmm register
+/// when `xmm`, `below_fp` bytes below rbp, stored by the instruction ending
+/// at `at` bytes from [`FnUnwind::begin`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct X64Save {
+    pub at: u32,
+    pub reg: u8,
+    pub xmm: bool,
+    pub below_fp: u32,
+}
+
+/// An x86_64 epilogue: each instruction that reloads a saved register or
+/// drops the frame, at the offset past it from [`FnUnwind::begin`], and the
+/// offset past its `ret` or jump.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct X64Exit {
+    pub steps: Vec<(u32, X64ExitStep)>,
+    pub end: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum X64ExitStep {
+    /// `pop r`; `pop rbp` drops the frame as `leave` does.
+    Pop(u8),
+    /// `leave`.
+    Leave,
 }
 
 /// One x86_64 prologue instruction an unwinder replays.
@@ -2852,10 +2886,13 @@ pub(crate) enum A64Step {
 /// them to the link, keyed by its entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UnwindSteps {
-    /// [`FnUnwind::leaf`] and [`FnUnwind::steps`].
+    /// [`FnUnwind::leaf`], [`FnUnwind::steps`], [`FnUnwind::saves`] and
+    /// [`FnUnwind::exits`].
     X64 {
         leaf: bool,
         steps: Vec<(u32, PrologueStep)>,
+        saves: Vec<X64Save>,
+        exits: Vec<X64Exit>,
     },
     /// [`A64Unwind::steps`], [`A64Unwind::exits`] and [`A64Unwind::saves`];
     /// none for a frameless function.
@@ -2867,10 +2904,10 @@ pub(crate) enum UnwindSteps {
 }
 
 impl UnwindSteps {
-    /// Append the record: its kind, step count and (arm64) exit and save
-    /// counts, then 12 bytes per step, `[offset u32, tag u8, a u8, b u8,
-    /// flags u8, value u32]`; an arm64 exit is its offset and step count,
-    /// then its steps; its saves follow, one field each.
+    /// Append the record, 12-byte fields `[offset u32, tag u8, a u8, b u8,
+    /// flags u8, value u32]`: its kind and counts, its steps, then an arm64
+    /// record's exits (each a header and its steps) and saves, an x86_64
+    /// record's saves and exits.
     pub(crate) fn encode(&self, out: &mut Vec<u8>) {
         let mut step = |offset: u32, tag: u8, a: u8, b: u8, flags: u8, value: u32| {
             out.extend(offset.to_le_bytes());
@@ -2878,14 +2915,32 @@ impl UnwindSteps {
             out.extend(value.to_le_bytes());
         };
         match self {
-            UnwindSteps::X64 { leaf, steps } => {
-                step(0, u8::from(*leaf), 0, 0, 0, steps.len() as u32);
+            UnwindSteps::X64 {
+                leaf,
+                steps,
+                saves,
+                exits,
+            } => {
+                let (n_exits, n_saves) = (exits.len() as u32, saves.len() as u8);
+                step(n_exits, u8::from(*leaf), n_saves, 0, 0, steps.len() as u32);
                 for &(at, s) in steps {
                     match s {
                         PrologueStep::Push(r) => step(at, 0, r, 0, 0, 0),
                         PrologueStep::Alloc(n) => step(at, 1, 0, 0, 0, n),
                         PrologueStep::SaveXmm { xmm, off } => step(at, 2, xmm, 0, 0, off),
                         PrologueStep::SetFrame(off) => step(at, 3, 0, 0, 0, off),
+                    }
+                }
+                for s in saves {
+                    step(s.at, 11, s.reg, u8::from(s.xmm), 0, s.below_fp);
+                }
+                for e in exits {
+                    step(e.end, 10, 0, 0, 0, e.steps.len() as u32);
+                    for &(at, s) in &e.steps {
+                        match s {
+                            X64ExitStep::Pop(r) => step(at, 0, r, 0, 0, 0),
+                            X64ExitStep::Leave => step(at, 1, 0, 0, 0, 0),
+                        }
                     }
                 }
             }
@@ -2976,9 +3031,8 @@ impl UnwindSteps {
                 .collect()
         };
         let steps = match kind {
-            0 | 1 => UnwindSteps::X64 {
-                leaf: kind == 1,
-                steps: records
+            0 | 1 => {
+                let steps = records
                     .map(|r| {
                         let (at, [tag, a, ..], value) = r?;
                         Some((
@@ -2992,8 +3046,47 @@ impl UnwindSteps {
                             },
                         ))
                     })
-                    .collect::<Option<_>>()?,
-            },
+                    .collect::<Option<_>>()?;
+                let mut saves = Vec::with_capacity(save_count.into());
+                for _ in 0..save_count {
+                    let (at, [tag, reg, xmm, _], below_fp) = field(len)?;
+                    if tag != 11 {
+                        return None;
+                    }
+                    saves.push(X64Save {
+                        at,
+                        reg,
+                        xmm: xmm != 0,
+                        below_fp,
+                    });
+                    len += 12;
+                }
+                let mut exits = Vec::new();
+                for _ in 0..exit_count {
+                    let (end, [tag, ..], n) = field(len)?;
+                    if tag != 10 {
+                        return None;
+                    }
+                    let steps = (1..=n as usize)
+                        .map(|i| {
+                            let (at, [tag, reg, ..], _) = field(len + 12 * i)?;
+                            match tag {
+                                0 => Some((at, X64ExitStep::Pop(reg))),
+                                1 => Some((at, X64ExitStep::Leave)),
+                                _ => None,
+                            }
+                        })
+                        .collect::<Option<_>>()?;
+                    exits.push(X64Exit { steps, end });
+                    len += 12 * (n as usize + 1);
+                }
+                UnwindSteps::X64 {
+                    leaf: kind == 1,
+                    steps,
+                    saves,
+                    exits,
+                }
+            }
             2 => {
                 let steps = a64(1, count)?;
                 let mut exits = Vec::new();
@@ -4611,6 +4704,10 @@ pub struct NativeOptions {
     /// the source path, a no-DWARF build is also byte-identical
     /// across runs, useful for golden-hash bisection.
     pub debug_info: bool,
+    /// `.eh_frame` in a Linux object, rules for every instruction of each
+    /// function (gcc's `-fasynchronous-unwind-tables`); on by default, as in
+    /// gcc and clang.
+    pub unwind_tables: bool,
     /// Print each SSA function's IR + allocator output to stderr
     /// before lowering. Same as `--dump-asm` for native code: a
     /// diagnostic emitted alongside the build. Off by default.
@@ -5157,6 +5254,7 @@ impl NativeOptions {
             optimize: false,
             output_kind: OutputKind::Executable,
             debug_info: false,
+            unwind_tables: true,
             dump_ssa: false,
             verify_ssa: false,
             inline_cap: 64,
@@ -5471,6 +5569,7 @@ pub(crate) fn lower_for_with_prebuilt(
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
     build.debug_info = cfg!(feature = "debuginfo") && options.debug_info;
+    build.unwind_tables = options.unwind_tables;
     Ok(build)
 }
 

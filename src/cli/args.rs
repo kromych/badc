@@ -171,6 +171,10 @@ pub(crate) struct Codegen {
     /// `-Wframe-larger-than=<n>`: the bound a function's stack frame is
     /// reported against; `None` reports nothing.
     pub(crate) frame_larger_than: Option<u64>,
+    /// `-f[no-]asynchronous-unwind-tables` and `-f[no-]unwind-tables`: an
+    /// object carries `.eh_frame` when either is on, as with gcc.
+    pub(crate) async_unwind_tables: bool,
+    pub(crate) unwind_tables: bool,
     pub(crate) dump_ssa: bool,
     pub(crate) verify_ssa: bool,
     pub(crate) no_fp_regs: bool,
@@ -215,6 +219,8 @@ impl Default for Codegen {
             emit_debug_info: false,
             inline_cap: 64,
             frame_larger_than: None,
+            async_unwind_tables: true,
+            unwind_tables: false,
             dump_ssa: false,
             verify_ssa: false,
             no_fp_regs: false,
@@ -1912,6 +1918,10 @@ impl Parser {
             "-fno-optimize-sibling-calls" => code.sibling_calls = false,
             "-fplt" => code.no_plt = false,
             "-fno-plt" => code.no_plt = true,
+            "-fasynchronous-unwind-tables" => code.async_unwind_tables = true,
+            "-fno-asynchronous-unwind-tables" => code.async_unwind_tables = false,
+            "-funwind-tables" => code.unwind_tables = true,
+            "-fno-unwind-tables" => code.unwind_tables = false,
             "-funroll-loops" => code.unroll_loops = true,
             "-fno-unroll-loops" => code.unroll_loops = false,
             // badc emits every atomic operation inline and never calls the
@@ -3343,6 +3353,7 @@ impl Codegen {
         opts.fixed_regs = self.fixed_regs;
         opts.elf_class = self.elf_class;
         opts.keep_local_labels = self.keep_local_labels;
+        opts.unwind_tables = self.async_unwind_tables || self.unwind_tables;
         if optimize {
             opts = opts.with_optimize();
         }

@@ -3939,6 +3939,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         elf_tpoff_fixups: st.elf_tpoff_fixups,
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
+        unwind_tables: false,
         merged_dwarf: None,
         pdb_path: None,
         resources: alloc::vec::Vec::new(),

@@ -454,6 +454,8 @@ pub(crate) fn seh_unwind(
                     false => UnwindSteps::X64 {
                         leaf: o.x64.is_empty(),
                         steps: o.x64,
+                        saves: Vec::new(),
+                        exits: Vec::new(),
                     },
                 };
                 out.push((o.name.clone(), steps));
@@ -1355,6 +1357,121 @@ pub(crate) fn a64_frame_ops(
     out
 }
 
+/// The CFI of an x86_64 function from what its emitter recorded, at offsets
+/// from its start: the prologue's steps, each later save from its store,
+/// each epilogue between remember- and restore-state, and the entry rules
+/// again from `early`, an early return's start.
+pub(crate) fn x64_frame_ops(u: &crate::c5::codegen::FnUnwind, early: Option<u32>) -> FrameOps {
+    use crate::c5::codegen::{PrologueStep as P, X64ExitStep as E};
+    // System V AMD64 3.6.2 numbers rax, rdx, rcx, rbx, rsi, rdi, rbp, rsp,
+    // then r8-r15, the return address and xmm0-15.
+    const DWARF_GPR: [u64; 16] = [0, 2, 1, 3, 7, 6, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15];
+    let (rbp, rsp) = (CfiReg::Num(6), CfiReg::Num(7));
+    let number = |reg: u8, xmm: bool| {
+        if xmm {
+            17 + u64::from(reg)
+        } else {
+            DWARF_GPR[usize::from(reg & 15)]
+        }
+    };
+    let mut out: FrameOps = alloc::vec![(0, CfiOp::StartProc { simple: false })];
+    if u.leaf {
+        return out;
+    }
+    let (mut cfa, mut fp) = (8i64, None::<i64>);
+    let mut saved = Vec::new();
+    let mut save = |out: &mut FrameOps, at: u32, reg: u64, off: i64| {
+        saved.push(reg);
+        out.push((
+            at,
+            CfiOp::Offset {
+                reg: CfiReg::Num(reg),
+                off,
+            },
+        ));
+    };
+    for &(at, step) in &u.steps {
+        match (step, fp) {
+            (P::Push(r), None) => {
+                cfa += 8;
+                out.push((at, CfiOp::DefCfaOffset(cfa)));
+                save(&mut out, at, number(r, false), -cfa);
+            }
+            (P::Alloc(n), None) => {
+                cfa += i64::from(n);
+                out.push((at, CfiOp::DefCfaOffset(cfa)));
+            }
+            (P::SaveXmm { xmm, off }, _) => {
+                save(&mut out, at, number(xmm, true), i64::from(off) - cfa)
+            }
+            (P::SetFrame(off), None) => {
+                fp = Some(cfa - i64::from(off));
+                let op = match off {
+                    0 => CfiOp::DefCfaRegister(rbp.clone()),
+                    _ => CfiOp::DefCfa {
+                        reg: rbp.clone(),
+                        off: cfa - i64::from(off),
+                    },
+                };
+                out.push((at, op));
+            }
+            // rsp moves below a frame the CFA no longer follows.
+            _ => {}
+        }
+    }
+    if let Some(fp) = fp {
+        for s in &u.saves {
+            save(
+                &mut out,
+                s.at,
+                number(s.reg, s.xmm),
+                -fp - i64::from(s.below_fp),
+            );
+        }
+    }
+    let size = u.end - u.begin;
+    let entry = |out: &mut FrameOps, at: u32, kept: &[u64]| {
+        out.push((
+            at,
+            CfiOp::DefCfa {
+                reg: rsp.clone(),
+                off: 8,
+            },
+        ));
+        for &reg in kept {
+            out.push((at, CfiOp::Restore(CfiReg::Num(reg))));
+        }
+    };
+    for exit in &u.exits {
+        let Some(&(first, _)) = exit.steps.first() else {
+            continue;
+        };
+        out.push((first, CfiOp::RememberState));
+        let mut kept = saved.clone();
+        for &(at, step) in &exit.steps {
+            match step {
+                E::Pop(r) if r != 5 => {
+                    let reg = number(r, false);
+                    kept.retain(|&k| k != reg);
+                    out.push((at, CfiOp::Restore(CfiReg::Num(reg))));
+                }
+                E::Pop(_) | E::Leave => {
+                    entry(&mut out, at, &kept);
+                    kept.clear();
+                }
+            }
+        }
+        if exit.end < size {
+            out.push((exit.end, CfiOp::RestoreState));
+        }
+    }
+    if let Some(early) = early.filter(|&e| e < size) {
+        entry(&mut out, early, &saved);
+    }
+    out.sort_by_key(|&(at, _)| at);
+    out
+}
+
 /// The compact unwind mode an arm64 function's body frame fits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum A64Body {
@@ -1404,18 +1521,9 @@ pub(crate) fn fde_instructions(ops: &[(u32, CfiOp)], t: CfiTarget) -> Result<Vec
     Ok(out)
 }
 
-/// An `.eh_frame` table of `funcs` -- each its `[begin, end)` text offsets
-/// and its CFI at offsets from `begin` -- as an [`EhFrameBlock`]: the bytes,
-/// each FDE's PC-relative pointer to its function as a text field, and each
-/// FDE's offset with its function's.
-///
-/// [`EhFrameBlock`]: crate::c5::codegen::EhFrameBlock
-pub(crate) fn eh_frame_block(
-    funcs: &[(u32, u32, FrameOps)],
-    t: CfiTarget,
-) -> Result<crate::c5::codegen::EhFrameBlock, String> {
-    use crate::c5::codegen::{EhFrameBlock, EhFrameField, EhFrameTarget};
-    let fdes: Vec<Fde> = (funcs.iter())
+/// An FDE for each of `funcs`, its pointer to the text at `begin`.
+fn text_fdes(funcs: &[(u32, u32, FrameOps)]) -> Vec<Fde> {
+    (funcs.iter())
         .map(|(begin, end, ops)| Fde {
             key: String::from(".text"),
             start: *begin,
@@ -1427,8 +1535,36 @@ pub(crate) fn eh_frame_block(
                 .map(|(at, op)| (begin + at, op.clone()))
                 .collect(),
         })
-        .collect();
-    let table = encode_table(&fdes, t, true)?;
+        .collect()
+}
+
+/// A relocatable object's `.eh_frame` for `funcs` -- each its `[begin,
+/// end)` text offsets and its CFI at offsets from `begin` -- each FDE's
+/// PC-relative pointer relocated against its function's text.
+pub(crate) fn eh_frame_section(
+    funcs: &[(u32, u32, FrameOps)],
+    t: CfiTarget,
+) -> Result<AsmSection, String> {
+    let mut section = encode_table(&text_fdes(funcs), t, true)?;
+    for r in &mut section.relocs {
+        r.target = AsmSectionTarget::Text(r.addend as usize);
+        r.addend = 0;
+    }
+    Ok(section)
+}
+
+/// An `.eh_frame` table of `funcs` -- each its `[begin, end)` text offsets
+/// and its CFI at offsets from `begin` -- as an [`EhFrameBlock`]: the bytes,
+/// each FDE's PC-relative pointer to its function as a text field, and each
+/// FDE's offset with its function's.
+///
+/// [`EhFrameBlock`]: crate::c5::codegen::EhFrameBlock
+pub(crate) fn eh_frame_block(
+    funcs: &[(u32, u32, FrameOps)],
+    t: CfiTarget,
+) -> Result<crate::c5::codegen::EhFrameBlock, String> {
+    use crate::c5::codegen::{EhFrameBlock, EhFrameField, EhFrameTarget};
+    let table = encode_table(&text_fdes(funcs), t, true)?;
     let mut block = EhFrameBlock {
         bytes: table.bytes,
         fields: Vec::new(),
@@ -1592,13 +1728,19 @@ mod seh_tests {
         ];
         let got = seh_unwind(&records).unwrap();
         let steps = alloc::vec![(1, S::Push(5)), (5, S::Alloc(48)), (10, S::SetFrame(32))];
-        assert_eq!(
-            got[0],
-            (String::from("f"), UnwindSteps::X64 { leaf: false, steps })
-        );
+        let (saves, exits) = (Vec::new(), Vec::new());
+        let f = UnwindSteps::X64 {
+            leaf: false,
+            steps,
+            saves,
+            exits,
+        };
+        assert_eq!(got[0], (String::from("f"), f));
         let leaf = UnwindSteps::X64 {
             leaf: true,
             steps: Vec::new(),
+            saves: Vec::new(),
+            exits: Vec::new(),
         };
         assert_eq!(got[1], (String::from("g"), leaf));
         assert!(parse_seh_directive(".seh_setframe", "%rbx, 0", false, &eval).is_err());
@@ -1658,7 +1800,7 @@ mod seh_tests {
 }
 
 #[cfg(test)]
-mod a64_frame_tests {
+mod frame_tests {
     use super::*;
     use crate::c5::codegen::{A64Exit, A64Save, A64Step as S, A64Unwind};
     use alloc::collections::BTreeMap;
@@ -1672,8 +1814,8 @@ mod a64_frame_tests {
         signed: bool,
     }
 
-    /// The row in effect after each offset an op names.
-    fn rows(ops: &[(u32, CfiOp)]) -> BTreeMap<u32, Row> {
+    /// The row in effect after each offset an op names, from `entry`.
+    fn rows_from(ops: &[(u32, CfiOp)], entry: &Row) -> BTreeMap<u32, Row> {
         let num = |r: &CfiReg| match r {
             CfiReg::Num(n) => *n,
             CfiReg::Name(n) => panic!("named register {n}"),
@@ -1681,8 +1823,9 @@ mod a64_frame_tests {
         let (mut row, mut stack, mut out) = (Row::default(), Vec::new(), BTreeMap::new());
         for (at, op) in ops {
             match op {
-                CfiOp::StartProc { .. } => row.cfa = (31, 0),
+                CfiOp::StartProc { .. } => row = entry.clone(),
                 CfiOp::DefCfa { reg, off } => row.cfa = (num(reg), *off),
+                CfiOp::DefCfaRegister(reg) => row.cfa.0 = num(reg),
                 CfiOp::DefCfaOffset(off) => row.cfa.1 = *off,
                 CfiOp::Offset { reg, off } => _ = row.saved.insert(num(reg), *off),
                 CfiOp::Restore(reg) => _ = row.saved.remove(&num(reg)),
@@ -1694,6 +1837,10 @@ mod a64_frame_tests {
             out.insert(*at, row.clone());
         }
         out
+    }
+
+    fn rows(ops: &[(u32, CfiOp)]) -> BTreeMap<u32, Row> {
+        rows_from(ops, &row((31, 0), &[], false))
     }
 
     fn row(cfa: (u64, i64), saved: &[(u64, i64)], signed: bool) -> Row {
@@ -1778,5 +1925,47 @@ mod a64_frame_tests {
         assert_eq!(rows[&0x28], row((31, 0), &[], true));
         assert_eq!(rows[&0x2c], entry);
         assert_eq!(rows[&0x30], entry);
+    }
+
+    /// `push rbp; mov rbp, rsp; sub rsp, 16`, then rbx and r12 pushed below
+    /// the allocation; an epilogue popping both and leaving, a `ret`, and an
+    /// early return. DWARF numbers rbx 3, rbp 6, rsp 7, r12 12, the return
+    /// address 16.
+    #[test]
+    fn x86_64_saves_pops_and_leave_follow_each_instruction() {
+        use crate::c5::codegen::{FnUnwind, PrologueStep as P, X64Exit, X64ExitStep as E, X64Save};
+        let save = |at, reg, below_fp| X64Save {
+            at,
+            reg,
+            xmm: false,
+            below_fp,
+        };
+        let u = FnUnwind {
+            begin: 0x200,
+            end: 0x240,
+            leaf: false,
+            steps: alloc::vec![(1, P::Push(5)), (4, P::SetFrame(0)), (8, P::Alloc(16))],
+            saves: alloc::vec![save(10, 3, 24), save(12, 12, 32)],
+            exits: alloc::vec![X64Exit {
+                steps: alloc::vec![(0x31, E::Pop(12)), (0x32, E::Pop(3)), (0x33, E::Leave)],
+                end: 0x34,
+            }],
+        };
+        let entry = row((7, 8), &[(16, -8)], false);
+        let rows = rows_from(&x64_frame_ops(&u, Some(0x38)), &entry);
+        let ra_rbp = [(6, -16), (16, -8)];
+        let body = [(3, -40), (6, -16), (12, -48), (16, -8)];
+        assert_eq!(rows[&0], entry);
+        assert_eq!(rows[&1], row((7, 16), &ra_rbp, false));
+        assert_eq!(rows[&4], row((6, 16), &ra_rbp, false));
+        assert_eq!(rows[&12], row((6, 16), &body, false));
+        assert_eq!(
+            rows[&0x31],
+            row((6, 16), &[(3, -40), (6, -16), (16, -8)], false)
+        );
+        assert_eq!(rows[&0x32], row((6, 16), &ra_rbp, false));
+        assert_eq!(rows[&0x33], entry);
+        assert_eq!(rows[&0x34], rows[&12], "the body's rules past the `ret`");
+        assert_eq!(rows[&0x38], entry, "the early return");
     }
 }

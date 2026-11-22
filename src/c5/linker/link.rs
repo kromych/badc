@@ -7442,6 +7442,8 @@ mod tests {
         ] {
             let mut opts = NativeOptions::new().with_debug_info(false);
             opts.output_kind = OutputKind::Relocatable;
+            // The unit's `.eh_frame` relocates against its text.
+            opts.unwind_tables = false;
             let obj = compile_native_with(
                 "#include <stdio.h>\nint (*fp)(const char *) = puts;\n\
                  int main(void) { return fp == 0; }\n",

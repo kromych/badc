@@ -119,12 +119,15 @@ Disassembly of section .text:
 
 <text_tbl>:
                	enter	$-0x2, $-0x1
-               	rcrb	$0x0, (%rdx)
+               	pushq	%rax
+               	subb	(%rax), %al
                	addb	%dl, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)
-               	addb	%dh, (%rdx,%rbx)
+               	addb	%al, (%rdx,%rbp)
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
                	addb	%al, (%rax)
 
 <text_end>:

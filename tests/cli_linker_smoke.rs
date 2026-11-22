@@ -21224,6 +21224,272 @@ fn debug_frame_fdes(table: &[u8]) -> Vec<(usize, u64)> {
     fdes
 }
 
+/// libgcc's unwinder steps from a badc function through badc callers to
+/// an assembly function that loaded the callee-saved registers, and reads
+/// there the values it loaded: each badc frame between restores the
+/// registers it saved -- in a large frame, a small one and across a call --
+/// from its FDE; glibc's `backtrace()` passes through three badc frames to
+/// the C library's. Without the tables neither holds.
+#[cfg(target_os = "linux")]
+#[test]
+fn libgcc_unwinds_badc_frames_and_restores_their_saves() {
+    let dir = tempdir("libgcc_unwinds_badc_frames_and_restores_their_saves");
+    write_source(&dir, "unwind.c", UNWIND_PROBE);
+    for (opt, tables) in [("-O0", true), ("-O", true), ("-O", false)] {
+        let mut cmd = Command::new(badc());
+        cmd.args(["-q", opt, "unwind.c", "-ldl", "-o", "unwind"]);
+        if !tables {
+            cmd.arg("-fno-asynchronous-unwind-tables");
+        }
+        run(cmd.current_dir(&dir), "link the probe");
+        let out = Command::new(dir.join("unwind"))
+            .output()
+            .expect("run the probe");
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(
+            out.status.success(),
+            tables,
+            "{opt} tables={tables}: {text}"
+        );
+    }
+}
+
+/// The program [`libgcc_unwinds_badc_frames_and_restores_their_saves`] runs.
+#[cfg(target_os = "linux")]
+const UNWIND_PROBE: &str = r#"#include <dlfcn.h>
+#include <execinfo.h>
+#include <stdint.h>
+#include <stdio.h>
+long chain(long);
+long seed(long);
+extern char seed_return[];
+#if defined(__x86_64__)
+/* seed(x): rbx, r12-r15 = 0x300, 0x1200..0x1500, then chain(x). */
+__asm__(".text\n.globl seed\nseed:\n"
+        "push %rbx\npush %r12\npush %r13\npush %r14\npush %r15\n"
+        "mov $0x300, %rbx\nmov $0x1200, %r12\nmov $0x1300, %r13\n"
+        "mov $0x1400, %r14\nmov $0x1500, %r15\ncall chain\n"
+        ".globl seed_return\nseed_return:\n"
+        "pop %r15\npop %r14\npop %r13\npop %r12\npop %rbx\nret\n");
+static const int regs[] = {3, 12, 13, 14, 15};
+static const uintptr_t want[] = {0x300, 0x1200, 0x1300, 0x1400, 0x1500};
+#else
+/* seed(x): x19..x28 = 0x1900, 0x2000..0x2800, then chain(x). */
+__asm__(".text\n.p2align 2\n.globl seed\nseed:\n"
+        "stp x29, x30, [sp, #-96]!\nmov x29, sp\n"
+        "stp x19, x20, [sp, #16]\nstp x21, x22, [sp, #32]\nstp x23, x24, [sp, #48]\n"
+        "stp x25, x26, [sp, #64]\nstp x27, x28, [sp, #80]\n"
+        "mov x19, #0x1900\nmov x20, #0x2000\nmov x21, #0x2100\nmov x22, #0x2200\n"
+        "mov x23, #0x2300\nmov x24, #0x2400\nmov x25, #0x2500\nmov x26, #0x2600\n"
+        "mov x27, #0x2700\nmov x28, #0x2800\nbl chain\n"
+        ".globl seed_return\nseed_return:\n"
+        "ldp x19, x20, [sp, #16]\nldp x21, x22, [sp, #32]\nldp x23, x24, [sp, #48]\n"
+        "ldp x25, x26, [sp, #64]\nldp x27, x28, [sp, #80]\nldp x29, x30, [sp], #96\nret\n");
+static const int regs[] = {19, 20, 21, 22, 23, 24, 25, 26, 27, 28};
+static const uintptr_t want[] = {0x1900, 0x2000, 0x2100, 0x2200, 0x2300,
+                                 0x2400, 0x2500, 0x2600, 0x2700, 0x2800};
+#endif
+typedef int (*trace_fn)(void *, void *);
+static int (*unwind_backtrace)(trace_fn, void *);
+static uintptr_t (*unwind_get_ip)(void *);
+static uintptr_t (*unwind_get_gr)(void *, int);
+struct walk { int frames, found, bad; };
+/* At seed's frame, the registers seed loaded. */
+static int step(void *ctx, void *arg) {
+    struct walk *w = arg;
+    w->frames++;
+    if (unwind_get_ip(ctx) != (uintptr_t)seed_return)
+        return 0;
+    w->found = 1;
+    for (unsigned i = 0; i < sizeof regs / sizeof regs[0]; i++) {
+        uintptr_t v = unwind_get_gr(ctx, regs[i]);
+        if (v != want[i])
+            w->bad++, printf("reg %d = %#lx\n", regs[i], (unsigned long)v);
+    }
+    return 5;
+}
+volatile long sink;
+__attribute__((noinline)) long walk(long x) {
+    long keep[4] = {x * 3, x * 5, x ^ 9, x + 11};
+    char big[1500];
+    struct walk w = {0, 0, 0};
+    for (int i = 0; i < (int)sizeof big; i++)
+        big[i] = (char)(x + i);
+    unwind_backtrace(step, &w);
+    if (!w.found)
+        printf("no seed frame in %d frames\n", w.frames);
+    sink = keep[0] + keep[1] + keep[2] + keep[3] + big[x & 1023];
+    return w.found ? w.bad : 1000;
+}
+__attribute__((noinline)) double mid(long x) {
+    double a = x * 1.5, b = x * 2.5;
+    long p = x * 3, q = x * 5, r = x ^ 7, s = x + 13;
+    long w = walk(x + 1);
+    return a + b + (double)(p + q + r + s) + (double)w * 1e6;
+}
+__attribute__((noinline)) long chain(long x) {
+    double m = mid(x * 11);
+    return (long)(m / 1e6);
+}
+__attribute__((noinline)) int depth3(void) { void *b[64]; return backtrace(b, 64); }
+__attribute__((noinline)) int depth2(void) { return depth3() + 0 * (int)sink; }
+__attribute__((noinline)) int depth1(void) { return depth2() + 0 * (int)sink; }
+int main(void) {
+    void *gcc = dlopen("libgcc_s.so.1", RTLD_NOW);
+    if (!gcc)
+        return puts("no libgcc_s.so.1"), 2;
+    unwind_backtrace = (int (*)(trace_fn, void *))dlsym(gcc, "_Unwind_Backtrace");
+    unwind_get_ip = (uintptr_t (*)(void *))dlsym(gcc, "_Unwind_GetIP");
+    unwind_get_gr = (uintptr_t (*)(void *, int))dlsym(gcc, "_Unwind_GetGR");
+    long bad = seed(3);
+    int frames = depth1();
+    printf("restored %s, backtrace %d frames\n", bad ? "FAIL" : "ok", frames);
+    /* depth3, depth2, depth1, main and the C library's start. */
+    return bad != 0 || frames < 5;
+}
+"#;
+
+/// A C++ exception thrown below a badc-compiled C function reaches the
+/// caller's `catch` with the caller's values intact, linked by the system
+/// compiler and by badc.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_cxx_exception_crosses_a_badc_function() {
+    let test = "a_cxx_exception_crosses_a_badc_function";
+    let cxx = std::env::var_os("CXX").unwrap_or_else(|| "c++".into());
+    let probe = |args: &[&str]| {
+        Command::new(&cxx)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+    let (Some(stdcxx), Some(gcc_s)) = (
+        probe(&["-print-file-name=libstdc++.so"]),
+        probe(&["-print-file-name=libgcc_s.so.1"]),
+    ) else {
+        eprintln!("skipping {test}: no system C++ compiler");
+        return;
+    };
+    let dir = tempdir(test);
+    write_source(
+        &dir,
+        "call.c",
+        "volatile long sink;\n\
+         long call(void (*f)(void), long a, long b) {\n\
+           long x = a * 3, y = b * 5, z = a ^ b;\n\
+           f();\n\
+           sink = x + y + z;\n\
+           return x + y + z;\n\
+         }\n",
+    );
+    write_source(
+        &dir,
+        "main.cc",
+        "#include <cstdio>\n\
+         extern \"C\" long call(void (*)(), long, long);\n\
+         static void thrower() { throw 42; }\n\
+         int main(int argc, char **) {\n\
+           long p = argc * 7, q = argc * 11, r = argc * 13;\n\
+           try { call(thrower, p, q); } catch (int e) {\n\
+             std::printf(\"caught %d\\n\", e);\n\
+             return e == 42 && p + q + r == 31 ? 0 : 2;\n\
+           }\n\
+           return 1;\n\
+         }\n",
+    );
+    run(
+        Command::new(&cxx)
+            .args(["-O2", "-fPIE", "-c", "main.cc", "-o", "main.o"])
+            .current_dir(&dir),
+        "compile the C++ unit",
+    );
+    let lib_dir = Path::new(&stdcxx).parent().expect("libstdc++'s directory");
+    for opt in ["-O0", "-O"] {
+        run(
+            Command::new(badc())
+                .args(["-q", opt, "-c", "call.c", "-o", "call.o"])
+                .current_dir(&dir),
+            "compile the C unit",
+        );
+        run(
+            Command::new(&cxx)
+                .args(["main.o", "call.o", "-o", "by_cxx"])
+                .current_dir(&dir),
+            "link with the system compiler",
+        );
+        run(
+            Command::new(badc())
+                .args([
+                    "-q", "main.o", "call.o", "-lstdc++", &gcc_s, "-o", "by_badc",
+                ])
+                .arg(format!("-L{}", lib_dir.display()))
+                .current_dir(&dir),
+            "link with badc",
+        );
+        for image in ["by_cxx", "by_badc"] {
+            let out = Command::new(dir.join(image)).output().expect("run");
+            let text = String::from_utf8_lossy(&out.stdout);
+            assert!(out.status.success(), "{opt} {image}: {out:?}");
+            assert_eq!(text.trim(), "caught 42", "{opt} {image}");
+        }
+    }
+}
+
+/// Every function badc compiles for Linux takes an FDE, which the image's
+/// `.eh_frame_hdr` indexes by the function's address, as gcc's default
+/// `-fasynchronous-unwind-tables` gives it; without the tables the image
+/// has none.
+#[test]
+fn every_lowered_function_has_an_fde_in_the_image() {
+    let dir = tempdir("every_lowered_function_has_an_fde_in_the_image");
+    write_source(
+        &dir,
+        "fns.c",
+        "__attribute__((noinline)) int leaf(int a) { return a * 3; }\n\
+         __attribute__((noinline)) int mid(int a) { return leaf(a) + leaf(a + 1); }\n\
+         int main(int argc, char **argv) { (void)argv; return mid(argc) == 9 ? 0 : 1; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        for opt in ["-O0", "-O"] {
+            run(
+                Command::new(badc())
+                    .args([&format!("--target={target}"), opt, "fns.c", "-o", "fns"])
+                    .current_dir(&dir),
+                "link with unwind tables",
+            );
+            let bytes = std::fs::read(dir.join("fns")).expect("read image");
+            let spans = elf_section_spans(&bytes);
+            let hdr = (spans.iter()).find(|s| s.0 == ".eh_frame_hdr");
+            let (_, _, hdr_addr, hdr_off, _, _) = hdr.expect("an .eh_frame_hdr");
+            let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+            let starts: Vec<u64> = (0..rd32(hdr_off + 8) as usize)
+                .map(|i| hdr_addr.wrapping_add(rd32(hdr_off + 12 + 8 * i) as i32 as u64))
+                .collect();
+            assert!(starts.is_sorted(), "{target} {opt}: {starts:x?}");
+            let syms = elf_symbols(&bytes);
+            for f in ["leaf", "mid", "main"] {
+                let at = syms.iter().find(|s| s.0 == f).expect(f).1;
+                assert!(starts.contains(&at), "{target} {opt}: no FDE for `{f}`");
+            }
+            run(
+                Command::new(badc())
+                    .args([&format!("--target={target}"), opt])
+                    .args(["-fno-asynchronous-unwind-tables", "fns.c", "-o", "bare"])
+                    .current_dir(&dir),
+                "link without unwind tables",
+            );
+            let bytes = std::fs::read(dir.join("bare")).expect("read image");
+            let names: Vec<_> = elf_section_spans(&bytes).into_iter().map(|s| s.0).collect();
+            assert!(
+                !names.iter().any(|n| n.starts_with(".eh_frame")),
+                "{target} {opt}: {names:?}"
+            );
+        }
+    }
+}
+
 /// Another producer's call-frame information reaches the image: every
 /// input's `.eh_frame` forms one terminated section that `.eh_frame_hdr`
 /// indexes under `PT_GNU_EH_FRAME`, as `ld --eh-frame-hdr` links it; an
@@ -21260,10 +21526,12 @@ fn input_call_frame_tables_reach_the_image() {
                 "assemble a framed function",
             );
         }
+        // badc's own tables off: the image's is the input's alone.
         run(
             Command::new(badc())
                 .arg(format!("--target={target}"))
-                .args([form, "-g", "main.c", "eh.o", "dbg.o", "-o", "prog"])
+                .args([form, "-g", "-fno-asynchronous-unwind-tables"])
+                .args(["main.c", "eh.o", "dbg.o", "-o", "prog"])
                 .current_dir(&dir),
             "link the framed functions",
         );

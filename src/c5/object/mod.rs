@@ -1015,6 +1015,7 @@ pub(crate) mod test_support {
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
             debug_info: false,
+            unwind_tables: false,
             merged_dwarf: None,
             pdb_path: None,
             resources: Vec::new(),

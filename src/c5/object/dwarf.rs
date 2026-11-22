@@ -6,7 +6,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::vec::Vec;
 
-use super::{Build, PrologueStep, Target};
+use super::{Build, Target};
 use crate::c5::compiler::{StructDef, types};
 use crate::c5::layout::pad_to_align as pad_to_alignment;
 use crate::c5::program::Program;
@@ -101,15 +101,15 @@ const LINE_BASE: i8 = -1;
 const LINE_RANGE: u8 = 14;
 const OPCODE_BASE: u8 = 13;
 
+use crate::c5::codegen::ssa::cfi;
 /// `DW_CFA_advance_loc` is encoded as an opcode-with-operand: the top two
 /// bits are `0b01` (= 0x40) and the low six bits carry the factored delta.
-use crate::c5::codegen::A64Unwind;
-use crate::c5::codegen::ssa::cfi;
 use crate::c5::codegen::ssa::cfi::{
     DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
-    DW_CFA_DEF_CFA, DW_CFA_DEF_CFA_OFFSET, DW_CFA_DEF_CFA_REGISTER, DW_CFA_NEGATE_RA_STATE,
-    DW_CFA_OFFSET_HI, DW_CFA_RESTORE_HI, DW_CFA_UNDEFINED, write_sleb128, write_uleb128,
+    DW_CFA_DEF_CFA, DW_CFA_NEGATE_RA_STATE, DW_CFA_OFFSET_HI, DW_CFA_RESTORE_HI, DW_CFA_UNDEFINED,
+    write_sleb128, write_uleb128,
 };
+use crate::c5::codegen::{A64Unwind, FnUnwind};
 
 const AARCH64_REG_X29: u8 = 29;
 const AARCH64_REG_X30: u8 = 30;
@@ -302,21 +302,24 @@ pub(crate) fn emit(
 enum FrameRules {
     PostPrologue,
     Leaf,
-    X86Frame(Vec<(u32, PrologueStep)>),
-    /// The FDE instructions of an arm64 function's recorded frame.
-    A64(Vec<u8>),
+    /// The FDE instructions of the frame the function's emitter recorded.
+    Recorded(Vec<u8>),
 }
 
 impl FrameRules {
     fn of(build: &Build, arch: CfiArch, ent_pc: usize, low_pc: usize) -> Self {
-        let a64 = (build.a64_unwind.iter()).find(|u| u.begin as usize == low_pc);
-        if let Some(u) = a64.filter(|u| !u.steps.is_empty()) {
-            // The rules name registers by number and advance by whole
-            // instructions, which the encoder accepts.
-            match cfi::fde_instructions(&a64_frame_ops(build, u), A64_CFI) {
-                Ok(bytes) => return FrameRules::A64(bytes),
-                Err(e) => debug_assert!(false, "arm64 frame rules: {e}"),
+        let recorded = |ops: cfi::FrameOps, t| match cfi::fde_instructions(&ops, t) {
+            Ok(bytes) => Some(FrameRules::Recorded(bytes)),
+            Err(e) => {
+                debug_assert!(false, "recorded frame rules: {e}");
+                None
             }
+        };
+        let a64 = (build.a64_unwind.iter()).find(|u| u.begin as usize == low_pc);
+        if let Some(u) = a64.filter(|u| !u.steps.is_empty())
+            && let Some(rules) = recorded(a64_frame_ops(build, u), A64_CFI)
+        {
+            return rules;
         }
         match build.fn_unwind.iter().find(|u| u.begin as usize == low_pc) {
             None if arch == CfiArch::Aarch64 && a64_prologue_is_hints(build, ent_pc, low_pc) => {
@@ -324,7 +327,9 @@ impl FrameRules {
             }
             None => FrameRules::PostPrologue,
             Some(u) if u.leaf => FrameRules::Leaf,
-            Some(u) => FrameRules::X86Frame(u.steps.clone()),
+            Some(u) => {
+                recorded(x64_frame_ops(build, u), X64_CFI).unwrap_or(FrameRules::PostPrologue)
+            }
         }
     }
 }
@@ -366,10 +371,21 @@ const A64_CFI: cfi::CfiTarget = cfi::CfiTarget {
     addr_bytes: 8,
 };
 
+const X64_CFI: cfi::CfiTarget = cfi::CfiTarget {
+    arch: cfi::CfiArch::X86_64,
+    addr_bytes: 8,
+};
+
 /// The CFI of the arm64 function `u` describes, at offsets from its start.
 pub(crate) fn a64_frame_ops(build: &Build, u: &A64Unwind) -> cfi::FrameOps {
     let early = build.early_returns.iter().find(|e| e.begin == u.begin);
     cfi::a64_frame_ops(u, early.map_or(0, |e| e.frame), early.map(|e| e.exit))
+}
+
+/// The CFI of the x86_64 function `u` describes, at offsets from its start.
+pub(crate) fn x64_frame_ops(build: &Build, u: &FnUnwind) -> cfi::FrameOps {
+    let early = build.early_returns.iter().find(|e| e.begin == u.begin);
+    cfi::x64_frame_ops(u, early.map(|e| e.exit))
 }
 
 struct Subprog {
@@ -1961,61 +1977,6 @@ fn write_entry_rules(out: &mut Vec<u8>, arch: CfiArch, signed: bool) {
     }
 }
 
-/// The rules of an x86_64 frame, one per prologue step: while rsp carries
-/// the CFA each push and allocation moves it, a push or an xmm store saves a
-/// register at its slot, and setting rbp makes the CFA rbp-relative. The
-/// return address stays at `CFA - 8`, the CIE's rule. Returns the offset of
-/// the last rule.
-fn write_x86_64_frame_rules(out: &mut Vec<u8>, steps: &[(u32, PrologueStep)]) -> u32 {
-    // DWARF numbers the registers rax, rdx, rcx, rbx, rsi, rdi, rbp, rsp
-    // (AMD64 psABI 3.6.2); xmm0-15 are 17-32.
-    const DWARF_GPR: [u8; 16] = [0, 2, 1, 3, 7, 6, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15];
-    let (mut ruled, mut cfa, mut via_rsp) = (0, 8u32, true);
-    let mut at = |out: &mut Vec<u8>, end: u32| {
-        write_advance_loc(out, CfiArch::X86_64, end - ruled);
-        ruled = end;
-    };
-    let saved = |out: &mut Vec<u8>, reg: u8, below_cfa: u32| {
-        out.push(DW_CFA_OFFSET_HI | reg);
-        write_uleb128(out, u64::from(below_cfa / 8));
-    };
-    for &(end, step) in steps {
-        match step {
-            PrologueStep::Push(r) if via_rsp => {
-                cfa += 8;
-                at(out, end);
-                out.push(DW_CFA_DEF_CFA_OFFSET);
-                write_uleb128(out, u64::from(cfa));
-                saved(out, DWARF_GPR[r as usize], cfa);
-            }
-            PrologueStep::Alloc(n) if via_rsp => {
-                cfa += n;
-                at(out, end);
-                out.push(DW_CFA_DEF_CFA_OFFSET);
-                write_uleb128(out, u64::from(cfa));
-            }
-            PrologueStep::SaveXmm { xmm, off } if via_rsp => {
-                at(out, end);
-                saved(out, 17 + xmm, cfa - off);
-            }
-            PrologueStep::SetFrame(off) => {
-                at(out, end);
-                if off == 0 {
-                    out.push(DW_CFA_DEF_CFA_REGISTER);
-                    write_uleb128(out, X86_64_REG_RBP as u64);
-                } else {
-                    out.push(DW_CFA_DEF_CFA);
-                    write_uleb128(out, X86_64_REG_RBP as u64);
-                    write_uleb128(out, u64::from(cfa - off));
-                }
-                via_rsp = false;
-            }
-            _ => {}
-        }
-    }
-    ruled
-}
-
 /// Encode a `DW_CFA_advance_loc` covering `bytes` of native code, expanding
 /// into the smallest opcode form that fits the factored delta.
 fn write_advance_loc(out: &mut Vec<u8>, arch: CfiArch, bytes: u32) {
@@ -2166,7 +2127,7 @@ fn build_debug_frame(
         // Where the rules below end, and whether they sign the return address.
         let (ruled, signed) = match frame_rules {
             // The rules cover an early return.
-            FrameRules::A64(bytes) => {
+            FrameRules::Recorded(bytes) => {
                 fde_body.extend_from_slice(bytes);
                 (0, false)
             }
@@ -2179,7 +2140,6 @@ fn build_debug_frame(
                 }
                 None => (0, false),
             },
-            FrameRules::X86Frame(steps) => (write_x86_64_frame_rules(&mut fde_body, steps), false),
             FrameRules::PostPrologue => {
                 let sign_end = sub.ra_signed_at.map(|at| at + 4);
                 let signed = sign_end.is_some_and(|end| sub.prologue_size >= end);
@@ -2198,7 +2158,7 @@ fn build_debug_frame(
         };
         if let Some(exit) = sub
             .early_return
-            .filter(|_| !matches!(frame_rules, FrameRules::A64(_)))
+            .filter(|_| !matches!(frame_rules, FrameRules::Recorded(_)))
         {
             write_advance_loc(&mut fde_body, arch, exit - ruled);
             write_entry_rules(&mut fde_body, arch, signed);
@@ -2879,12 +2839,22 @@ mod tests {
             }
             b
         };
-        use PrologueStep::{Alloc, Push, SaveXmm, SetFrame};
+        use crate::c5::codegen::PrologueStep::{Alloc, Push, SaveXmm, SetFrame};
+        use cfi::{DW_CFA_DEF_CFA_OFFSET, DW_CFA_DEF_CFA_REGISTER};
+        let x86 = |steps| {
+            let u = FnUnwind {
+                end: 0x40,
+                steps,
+                ..FnUnwind::default()
+            };
+            let ops = cfi::x64_frame_ops(&u, None);
+            FrameRules::Recorded(cfi::fde_instructions(&ops, X64_CFI).unwrap())
+        };
         // Past `push rbp` the CFA is rsp + 16 with rbp at CFA - 16; past
         // `mov rbp, rsp` the CFA register is rbp, and the allocation after it
         // takes no rule.
         assert_eq!(
-            body(FrameRules::X86Frame(alloc::vec![
+            body(x86(alloc::vec![
                 (1, Push(5)),
                 (4, SetFrame(0)),
                 (8, Alloc(32)),
@@ -2903,7 +2873,7 @@ mod tests {
         // The Win64 save block: rbx (DWARF 3) at CFA - 24, the 24-byte pad and
         // xmm area, xmm6 (DWARF 23) at CFA - 48, rbp = rsp + 32 = CFA - 16.
         assert_eq!(
-            body(FrameRules::X86Frame(alloc::vec![
+            body(x86(alloc::vec![
                 (1, Push(5)),
                 (2, Push(3)),
                 (6, Alloc(24)),

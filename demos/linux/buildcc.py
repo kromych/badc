@@ -142,6 +142,11 @@ FORWARD_EXACT = {
     # dispatch is an indirect branch, which those configurations forbid
     # unthunked and require a landing pad at.
     "-fno-jump-tables", "-fjump-tables",
+    # The 64-bit vDSO units ask for unwind tables, which a userspace unwinder
+    # walking into them reads; every other unit passes the negative spelling,
+    # and badc, which emits `.eh_frame` by default as gcc does, then emits none.
+    "-fasynchronous-unwind-tables", "-funwind-tables",
+    "-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
     # The top-level Makefile adds this: the inliner's stack-growth bounds
     # tighten to gcc's values under it.
     "-fconserve-stack",
@@ -266,9 +271,6 @@ FORWARD_PREFIX = (
 UNSUPPORTED_EXACT = {
     # Calls mcount/__fentry__ on entry; see -mfentry below.
     "-pg",
-    # badc emits no .eh_frame, so the 64-bit vDSO units that ask for unwind
-    # tables get none. The negative spelling is already what badc does.
-    "-fasynchronous-unwind-tables", "-funwind-tables",
 }
 
 UNSUPPORTED_PREFIX = (
@@ -300,10 +302,9 @@ IGNORE_EXACT = {
     # relaxations are already what it does.
     "-fno-strict-aliasing", "-fno-delete-null-pointer-checks",
     # What badc already emits: a tentative definition placed in .data rather
-    # than left common, no stack probe, no .eh_frame, one .text and one
-    # .data per object, and a frame pointer in every function.
+    # than left common, no stack probe, one .text and one .data per object,
+    # and a frame pointer in every function.
     "-fno-common", "-fno-stack-check", "-fno-stack-clash-protection",
-    "-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
     "-fno-function-sections", "-fno-data-sections",
     "-fno-omit-frame-pointer", "-fomit-frame-pointer",
     # Anonymous members of a named struct type are accepted unconditionally,
@@ -764,9 +765,9 @@ def _self_test() -> int:
     for flag in ("-ftrivial-auto-var-init=zero",
                  "-ftrivial-auto-var-init=pattern"):
         assert rewrite([flag]).argv == [flag], flag
-    for flag in ("-fasynchronous-unwind-tables",):
-        r = rewrite([flag])
-        assert r.dropped == [flag] and r.unknown == [], (flag, r)
+    for flag in ("-fasynchronous-unwind-tables", "-fno-asynchronous-unwind-tables",
+                 "-funwind-tables", "-fno-unwind-tables"):
+        assert rewrite([flag]).argv == [flag], flag
     # The flexible-array level reaches badc, which implements it.
     assert rewrite(["-fstrict-flex-arrays=3"]).argv == ["-fstrict-flex-arrays=3"]
     for flag in ("-Wall", "-Werror=return-type", "-Wno-sign-compare",

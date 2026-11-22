@@ -54,17 +54,23 @@ static void __badc_crash_str(struct __badc_crash_out *o, const char *s) {
     }
 }
 
-static void __badc_crash_hex(struct __badc_crash_out *o, uintptr_t v) {
+// `v` in at least `width` hex digits.
+static void __badc_crash_hex_width(struct __badc_crash_out *o, uintptr_t v, unsigned width) {
     char digits[2 + 2 * sizeof v + 1];
     char *p = digits + sizeof digits - 1;
+    char *least = p - width;
     *p = 0;
     do {
         *--p = "0123456789abcdef"[v & 15];
         v >>= 4;
-    } while (v);
+    } while (v || p > least);
     *--p = 'x';
     *--p = '0';
     __badc_crash_str(o, p);
+}
+
+static void __badc_crash_hex(struct __badc_crash_out *o, uintptr_t v) {
+    __badc_crash_hex_width(o, v, 1);
 }
 
 static void __badc_crash_dec(struct __badc_crash_out *o, unsigned v) {
@@ -90,12 +96,24 @@ static void __badc_crash_frame(struct __badc_crash_out *o, unsigned k, uintptr_t
     __badc_crash_flush(o);
 }
 
+// The widest register name the dump writes: `x28`, `rflags`.
+#if defined(__aarch64__)
+#define __BADC_CRASH_NAME_WIDTH 3
+#else
+#define __BADC_CRASH_NAME_WIDTH 6
+#endif
+
 static void __badc_crash_reg(struct __badc_crash_out *o, const char *name, uintptr_t v,
                              unsigned *column) {
     __badc_crash_str(o, "  ");
+    unsigned len = 0;
+    while (name[len])
+        len++;
+    for (; len < __BADC_CRASH_NAME_WIDTH; len++)
+        __badc_crash_str(o, " ");
     __badc_crash_str(o, name);
     __badc_crash_str(o, "=");
-    __badc_crash_hex(o, v);
+    __badc_crash_hex_width(o, v, 2 * sizeof v);
     if (++*column == 4) {
         __badc_crash_str(o, "\n");
         *column = 0;
@@ -294,7 +312,7 @@ static LONG WINAPI __badc_crash_filter(EXCEPTION_POINTERS *e) {
     __badc_crash_reg(&o, "r14", c->R14, &column);
     __badc_crash_reg(&o, "r15", c->R15, &column);
     __badc_crash_reg(&o, "rip", c->Rip, &column);
-    __badc_crash_reg(&o, "eflags", c->EFlags, &column);
+    __badc_crash_reg(&o, "rflags", c->EFlags, &column);
 #endif
     if (column)
         __badc_crash_str(&o, "\n");
@@ -453,7 +471,7 @@ static void __badc_crash_registers(struct __badc_crash_out *o, ucontext_t *uc, u
                 {"rsi", REG_RSI}, {"rdi", REG_RDI}, {"rbp", REG_RBP}, {"rsp", REG_RSP},
                 {"r8", REG_R8},   {"r9", REG_R9},   {"r10", REG_R10}, {"r11", REG_R11},
                 {"r12", REG_R12}, {"r13", REG_R13}, {"r14", REG_R14}, {"r15", REG_R15},
-                {"rip", REG_RIP}, {"eflags", REG_EFL}};
+                {"rip", REG_RIP}, {"rflags", REG_EFL}};
     for (unsigned i = 0; i < sizeof regs / sizeof regs[0]; i++)
         __badc_crash_reg(o, regs[i].name, (uintptr_t)uc->uc_mcontext.gregs[regs[i].reg], &column);
     *pc = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];

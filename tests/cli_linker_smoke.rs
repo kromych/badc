@@ -1928,6 +1928,74 @@ fn cli_entry_and_subsystem_stamp_a_precompiled_object_link() {
     );
 }
 
+/// A named entry is a link root, as link.exe takes `/ENTRY`: a driver that
+/// enters at a routine an archive member defines -- the WDK's
+/// `GsDriverEntry`, in BufferOverflowFastFailK.lib -- pulls the member. An
+/// entry nothing defines is the user's error, not the linker's.
+#[test]
+fn a_named_entry_pulls_the_archive_member_that_defines_it() {
+    let dir = tempdir("a_named_entry_pulls_the_archive_member_that_defines_it");
+    write_source(
+        &dir,
+        "gs.c",
+        "long DriverEntry(void *d, void *r);\n\
+         long GsDriverEntry(void *d, void *r) { return DriverEntry(d, r); }\n",
+    );
+    write_source(
+        &dir,
+        "drv.c",
+        "long DriverEntry(void *d, void *r) { (void)d; (void)r; return 0; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let t = format!("--target={target}");
+        for unit in ["gs", "drv"] {
+            run(
+                Command::new(badc())
+                    .args([&t, "-c", &format!("{unit}.c"), "-o", &format!("{unit}.o")])
+                    .current_dir(&dir),
+                "compile",
+            );
+        }
+        std::fs::remove_file(dir.join("libgs.a")).ok();
+        run(
+            Command::new(badc())
+                .args(["--ar", "rcs", "libgs.a", "gs.o"])
+                .current_dir(&dir),
+            "archive",
+        );
+        run(
+            Command::new(badc())
+                .args([&t, "--subsystem=driver", "--entry=GsDriverEntry"])
+                .args(["drv.o", "libgs.a", "-o", "drv.sys"])
+                .current_dir(&dir),
+            "link with the entry in an archive member",
+        );
+        let image = std::fs::read(dir.join("drv.sys")).expect("read drv.sys");
+        let opt = u32::from_le_bytes(image[0x3c..0x40].try_into().unwrap()) as usize + 24;
+        let entry = u32::from_le_bytes(image[opt + 16..opt + 20].try_into().unwrap());
+        assert_ne!(entry, 0, "{target}: the entry resolves");
+        let out = Command::new(badc())
+            .args([
+                &t,
+                "--subsystem=driver",
+                "--entry=NoSuchEntry",
+                "drv.o",
+                "-o",
+                "none.sys",
+            ])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let text = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{target}: {text}");
+        assert!(
+            text.contains("the image entry `NoSuchEntry` is not defined in any input")
+                && !text.contains("internal compiler error"),
+            "{target}: {text}"
+        );
+    }
+}
+
 #[test]
 fn compile_only_warns_when_link_pragmas_are_dropped() {
     // `#pragma subsystem` / `#pragma entrypoint` ride the in-memory

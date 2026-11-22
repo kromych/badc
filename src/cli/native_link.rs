@@ -140,6 +140,12 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             .unwrap_or("__c5_entry")
             .to_string()
     });
+    // A named entry is a link root as well, as link.exe takes `/ENTRY` and
+    // GNU ld `-e`: a WDK driver enters at `GsDriverEntry`, an archive
+    // member of BufferOverflowFastFailK.lib.
+    let entry_root = freestanding_entry
+        .clone()
+        .or_else(|| entry_override.clone());
     // Link order: the startup runtime where crt1.o stands, then the inputs.
     let mut slots = vec![Slot::Fixed(Vec::new())];
     let mut source_slots = vec![0; sources.len()];
@@ -267,7 +273,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         slots,
         &mut shared_libs,
         &mut target_libc,
-        freestanding_entry.as_deref(),
+        entry_root.as_deref(),
         &mut stats,
     );
     stats.mark("select");
@@ -276,18 +282,23 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         std::process::exit(1);
     }
     // With every source, object, and pulled archive member now
-    // parsed, a freestanding image's entry must be defined.
-    if let Some(entry) = &freestanding_entry {
+    // parsed, a named or freestanding image's entry must be defined.
+    if let Some(entry) = &entry_root {
         let defined = native_objs.iter().any(|o| {
             o.symbols
                 .iter()
                 .any(|s| s.name == *entry && s.section == badc::NativeSymSection::Text)
         });
         if !defined {
-            eprint_diagnostic(format!(
-                "badc: error: --freestanding: image entry `{entry}` is not defined; \
-                 a freestanding image must provide its own entry point"
-            ));
+            eprint_diagnostic(match cli.freestanding {
+                true => format!(
+                    "badc: error: --freestanding: image entry `{entry}` is not defined; \
+                     a freestanding image must provide its own entry point"
+                ),
+                false => {
+                    format!("badc: error: the image entry `{entry}` is not defined in any input")
+                }
+            });
             std::process::exit(1);
         }
     }
@@ -1113,14 +1124,14 @@ fn select_archive_members(
     mut slots: Vec<Slot>,
     shared_libs: &mut Vec<badc::SharedLibrary>,
     target_libc: &mut Option<badc::TargetCLibrary>,
-    freestanding_entry: Option<&str>,
+    entry_root: Option<&str>,
     stats: &mut LinkStats,
 ) -> (Vec<badc::NativeObject>, Vec<badc::ArchiveInclusion>) {
     let in_order = embedded.cli.target.binary_format() == badc::BinaryFormat::Elf;
     let mut sel = Selection::new(embedded.cli.target);
-    // A freestanding entry is a link root: seed it as undefined so an
-    // archive member that only defines the entry is pulled.
-    if let Some(entry) = freestanding_entry {
+    // The entry is a link root: seed it as undefined so an archive member
+    // that only defines the entry is pulled.
+    if let Some(entry) = entry_root {
         sel.undefined
             .insert(entry.to_string(), "<command line>".to_string());
     }

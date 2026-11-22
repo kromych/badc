@@ -78,7 +78,7 @@ impl<'a> Walker<'a> {
                 let check = self.ast.checks[&id];
                 self.walk_checked_neg(b, check, *child, *ty)
             }
-            Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
+            Expr::Unary { op, child, ty } => self.walk_unary(b, id, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => match self.ast.checks.get(&id) {
                 Some(&check) => self.walk_checked_binary(b, check, *op, (*lhs, *rhs), *ty),
                 None => self.walk_binary(b, *op, *lhs, *rhs, *ty),
@@ -272,6 +272,24 @@ impl<'a> Walker<'a> {
     /// `Unary{AddrOf}` cases drive into this path; the rvalue
     /// walker re-enters from this address with a matching load.
     pub(super) fn walk_expr_lvalue(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+    ) -> Result<ValueId, WalkError> {
+        let addr = self.walk_lvalue_address(b, id)?;
+        self.check_access(b, id, addr);
+        Ok(addr)
+    }
+
+    /// Check the address `addr` the node `id` accesses, where
+    /// `-fsanitize=` checks it.
+    pub(super) fn check_access(&mut self, b: &mut SsaBuilder, id: ExprId, addr: ValueId) {
+        if let Some(&check) = self.ast.access_checks.get(&id) {
+            self.check_value(b, check, addr);
+        }
+    }
+
+    fn walk_lvalue_address(
         &mut self,
         b: &mut SsaBuilder,
         id: ExprId,

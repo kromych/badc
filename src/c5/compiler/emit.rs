@@ -1190,6 +1190,7 @@ impl Compiler {
         // Each filter funclet takes the unit after its function's.
         let funclet_pcs = (end_pc..end_pc + self.seh_funclets as usize).collect();
         self.next_ent_pc += core::mem::take(&mut self.seh_funclets) as usize;
+        self.settle_access_checks();
         self.rewrite_loop_idioms();
         self.expr_fns.clear();
         self.expr_enums.clear();

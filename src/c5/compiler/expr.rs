@@ -4127,6 +4127,10 @@ impl Compiler {
                     pos,
                 );
                 self.sanitize_bool_load(id, result_ty);
+                if !is_void_ty(result_ty) {
+                    let align = self.align_of_type(result_ty) as i64;
+                    self.sanitize_access(id, operand_ref, (result_ty, align), star_at);
+                }
                 self.ast_acc = Some(id);
             }
             // `*arr` is the first element, not the array: an enclosing
@@ -6178,9 +6182,13 @@ impl Compiler {
                 }
             }
             if let (Some(array), Some(idx)) = (array_ast, idx_ast_scaled) {
-                let idx_ty = self.ty;
+                let elem_ty = self.ty;
                 self.lvalue_at = begin;
-                self.ast_emit_index(array, idx, idx_ty);
+                self.ast_emit_index(array, idx, elem_ty);
+                if let Some(id) = self.ast_acc {
+                    let align = self.align_of_type(elem_ty) as i64;
+                    self.sanitize_access(id, object_ref, (elem_ty, align), begin);
+                }
             }
         }
         if let (Some(r), Some(subscript), Some(index)) = (object_ref, self.ast_acc, idx_ast) {
@@ -6257,6 +6265,7 @@ impl Compiler {
         // `->` runs on a struct pointer the operand loaded; `.` on a struct
         // value, whose address is already the value.
         let obj_ast = self.ast_acc;
+        let begin = self.lex.position_at(self.operand_start);
         let is_dot = self.lex.tk == Token::Dot;
         let valid = if is_dot {
             is_struct_value_ty(lhs_ty)
@@ -6366,6 +6375,15 @@ impl Compiler {
             {
                 self.set_expr_fn(id, f, depth);
             }
+        }
+        if let Some(obj) = obj_ast {
+            // A bit-field's storage unit and an array, which decays, are not
+            // accessed as the member's type.
+            let accessed = field.bit_width == 0 && field.array_size == 0;
+            let member = self.ast_acc.filter(|_| accessed);
+            let off = field.offset as i64;
+            let at = (member_at, begin);
+            self.sanitize_member((obj, member), (obj_ty, !is_dot), (field_ty, off), at);
         }
         Ok(())
     }

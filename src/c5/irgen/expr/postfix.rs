@@ -920,6 +920,7 @@ impl<'a> Walker<'a> {
         } else {
             base
         };
+        self.check_access(b, id, addr);
         // C99 6.3.2.1p3: an array-typed field decays to a pointer to
         // its first element, so the field's address is the rvalue, as
         // it is for a struct-value field.
@@ -951,6 +952,7 @@ impl<'a> Walker<'a> {
             Some(k) => b.binop_imm(BinOp::Add, arr, k),
             None => b.binop(BinOp::Add, arr, i),
         };
+        self.check_access(b, id, addr);
         // C99 6.5.2.1p2 with the address-as-value rule: for a
         // struct-value element `arr[i]` yields the element's address
         // and the enclosing site handles the bytes.

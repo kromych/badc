@@ -12,6 +12,7 @@ impl<'a> Walker<'a> {
     pub(super) fn walk_unary(
         &mut self,
         b: &mut SsaBuilder,
+        id: ExprId,
         op: UnOp,
         child: ExprId,
         ty: i64,
@@ -75,6 +76,7 @@ impl<'a> Walker<'a> {
             UnOp::AddrOf => self.walk_expr_lvalue(b, child),
             UnOp::Deref => {
                 let addr = self.walk_expr_rvalue(b, child)?;
+                self.check_access(b, id, addr);
                 // C99 6.5.3.2p4 with the address-as-value rule for
                 // struct rvalues: the dereference yields the struct's
                 // address, which the enclosing site consumes, so there

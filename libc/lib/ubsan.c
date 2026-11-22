@@ -57,6 +57,12 @@ struct __ubsan_float_cast_data {
     const struct __ubsan_type_descriptor *from_type;
     const struct __ubsan_type_descriptor *to_type;
 };
+struct __ubsan_type_mismatch_data {
+    struct __ubsan_source_location loc;
+    const struct __ubsan_type_descriptor *type;
+    unsigned char log_alignment;
+    unsigned char type_check_kind;
+};
 struct __ubsan_vla_bound_data {
     struct __ubsan_source_location loc;
     const struct __ubsan_type_descriptor *type;
@@ -323,6 +329,55 @@ void __ubsan_handle_vla_bound_not_positive(struct __ubsan_vla_bound_data *d, uin
 _Noreturn void __ubsan_handle_vla_bound_not_positive_abort(struct __ubsan_vla_bound_data *d,
                                                            uintptr_t bound) {
     __ubsan_vla_bound(d, bound);
+    abort();
+}
+
+// The accesses `type_check_kind` names, as clang's runtime words them.
+static const char *const __ubsan_access_kinds[] = {
+    "load of",
+    "store to",
+    "reference binding to",
+    "member access within",
+    "member call on",
+    "constructor call on",
+    "downcast of",
+    "downcast of",
+    "upcast of",
+    "cast to virtual base of",
+    "_Nonnull binding to",
+    "dynamic operation on",
+};
+
+static void __ubsan_type_mismatch(struct __ubsan_type_mismatch_data *d, uintptr_t pointer) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    size_t kinds = sizeof __ubsan_access_kinds / sizeof __ubsan_access_kinds[0];
+    const char *kind =
+        d->type_check_kind < kinds ? __ubsan_access_kinds[d->type_check_kind] : "access of";
+    unsigned long long alignment = 1ull << d->log_alignment;
+    unsigned long long address = pointer;
+    fprintf(stderr, "%s:%u:%u: runtime error: ", d->loc.file, d->loc.line, column);
+    if (!pointer)
+        fprintf(stderr, "%s null pointer of type %s\n", kind, d->type->name);
+    else if (address & (alignment - 1))
+        fprintf(stderr,
+                "%s misaligned address 0x%012llx for type %s, which requires %llu byte "
+                "alignment\n",
+                kind, address, d->type->name, alignment);
+    else
+        fprintf(stderr, "%s address 0x%012llx with insufficient space for an object of type %s\n",
+                kind, address, d->type->name);
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_type_mismatch_v1(struct __ubsan_type_mismatch_data *d, uintptr_t pointer) {
+    __ubsan_type_mismatch(d, pointer);
+}
+
+_Noreturn void __ubsan_handle_type_mismatch_v1_abort(struct __ubsan_type_mismatch_data *d,
+                                                     uintptr_t pointer) {
+    __ubsan_type_mismatch(d, pointer);
     abort();
 }
 

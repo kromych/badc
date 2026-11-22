@@ -1319,7 +1319,7 @@ impl Compiler {
     /// and shift operators over them, each computed in the type its node
     /// carries (C99 6.6, 6.3.1.3). `None` for anything else, a division by
     /// zero and a shift by more than the width.
-    fn ast_const_value(&self, e: ExprId) -> Option<(i128, i64)> {
+    pub(super) fn ast_const_value(&self, e: ExprId) -> Option<(i128, i64)> {
         // TODO: constants of the 128-bit integer types, whose arithmetic the
         // AST carries as aggregate operations.
         let norm = |v: i128, ty: i64| {

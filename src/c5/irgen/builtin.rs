@@ -419,6 +419,21 @@ impl<'a> Walker<'a> {
                 let zero = b.imm(0);
                 b.binop(BinOp::Eq, fits, zero)
             }
+            ValueTest::Pointer { null, align_mask } => {
+                let zero = b.imm(0);
+                let misaligned = if align_mask != 0 {
+                    let low = b.binop_imm(BinOp::And, value, align_mask as i64);
+                    Some(b.binop(BinOp::Ne, low, zero))
+                } else {
+                    None
+                };
+                let is_null = null.then(|| b.binop(BinOp::Eq, value, zero));
+                match (is_null, misaligned) {
+                    (Some(n), Some(m)) => b.binop(BinOp::Or, n, m),
+                    (Some(f), None) | (None, Some(f)) => f,
+                    (None, None) => zero,
+                }
+            }
             ValueTest::Positive { signed } => {
                 let zero = b.imm(0);
                 b.binop(if signed { BinOp::Le } else { BinOp::Eq }, value, zero)

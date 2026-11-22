@@ -1079,6 +1079,9 @@ pub(crate) struct Ast {
     /// The runtime check of the value a compound assignment or an increment
     /// computes, before its store converts it, keyed by the node.
     pub store_checks: alloc::collections::BTreeMap<ExprId, ValueCheck>,
+    /// The runtime check of the address a dereference, subscript or member
+    /// node accesses, keyed by the node.
+    pub access_checks: alloc::collections::BTreeMap<ExprId, ValueCheck>,
 }
 
 /// A runtime check of a node's value: the check, and what the value is
@@ -1111,6 +1114,9 @@ pub(crate) enum ValueTest {
         lo_inclusive: bool,
         single: bool,
     },
+    /// An address accessed: not null where `null`, and with no bit of
+    /// `align_mask` set.
+    Pointer { null: bool, align_mask: u64 },
 }
 
 /// A runtime check of the operation at a node (`-fsanitize=`): what it
@@ -1277,7 +1283,11 @@ impl Ast {
         for value in self.value_checks.values_mut().flatten() {
             f(&mut value.check.data);
         }
-        for value in self.store_checks.values_mut() {
+        for value in self
+            .store_checks
+            .values_mut()
+            .chain(self.access_checks.values_mut())
+        {
             f(&mut value.check.data);
         }
         visit_data_offsets!(&mut self.exprs, &mut self.decls, f);
@@ -1292,7 +1302,11 @@ impl Ast {
         for value in self.value_checks.values().flatten() {
             read(&value.check.data);
         }
-        for value in self.store_checks.values() {
+        for value in self
+            .store_checks
+            .values()
+            .chain(self.access_checks.values())
+        {
             read(&value.check.data);
         }
         visit_data_offsets!(&self.exprs, &self.decls, read);

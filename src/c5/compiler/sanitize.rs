@@ -10,7 +10,7 @@ use super::Compiler;
 use super::types::{
     is_bool_ty, is_float_ty, is_floating_scalar, is_integer_scalar_ty, is_unsigned_ty,
 };
-use crate::c5::ast::{ExprId, SanitizeCheck, ValueCheck, ValueTest};
+use crate::c5::ast::{Expr, ExprId, SanitizeCheck, ValueCheck, ValueTest};
 use crate::c5::ir::BinOp;
 use crate::c5::program::DataReloc;
 use crate::c5::token::Token;
@@ -43,6 +43,12 @@ pub enum Check {
     /// A load of a `_Bool` whose byte is neither 0 nor 1 (C17 6.2.6.1p5,
     /// a trap representation).
     Bool,
+    /// An access through a null pointer (C17 6.5.3.2p4).
+    Null,
+    /// An access through an address not aligned for its type (C17
+    /// 6.3.2.3p7); for a member, the alignment the containing structure's
+    /// and the member offset's give.
+    Alignment,
     /// A floating value converted to an integer type it lies outside the
     /// range of, its fraction discarded (C17 6.3.1.4p1).
     FloatCastOverflow,
@@ -69,7 +75,7 @@ pub enum Check {
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
     /// clang's checks of defined behavior.
-    pub const ALL: [Check; 15] = [
+    pub const ALL: [Check; 17] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -78,6 +84,8 @@ impl Check {
         Check::Bounds,
         Check::BoundsStrict,
         Check::Bool,
+        Check::Null,
+        Check::Alignment,
         Check::FloatCastOverflow,
         Check::VlaBound,
         Check::Unreachable,
@@ -98,6 +106,8 @@ impl Check {
             Check::Bounds => "bounds",
             Check::BoundsStrict => "bounds-strict",
             Check::Bool => "bool",
+            Check::Null => "null",
+            Check::Alignment => "alignment",
             Check::FloatCastOverflow => "float-cast-overflow",
             Check::VlaBound => "vla-bound",
             Check::Unreachable => "unreachable",
@@ -182,6 +192,11 @@ impl Sanitize {
 const TK_INTEGER: u16 = 0;
 /// `TypeDescriptor::kind` of a floating type.
 const TK_FLOAT: u16 = 1;
+/// `TypeMismatchData::TypeCheckKind` of a load, a store, and the access of
+/// a member through the containing structure's address.
+const TCK_LOAD: u8 = 0;
+const TCK_STORE: u8 = 1;
+const TCK_MEMBER_ACCESS: u8 = 3;
 /// `TypeDescriptor::kind` of a type the handlers know by its name alone.
 const TK_UNKNOWN: u16 = 0xffff;
 
@@ -280,8 +295,170 @@ impl Compiler {
     /// ([`super::ObjectRef`]): inside a `__builtin_object_size` operand, and
     /// under a bounds check, which holds a subscript to the array's bound.
     pub(super) fn tracks_objects(&self) -> bool {
+        let tracked = [
+            Check::Bounds,
+            Check::BoundsStrict,
+            Check::Null,
+            Check::Alignment,
+        ];
         self.pending.object_size_operands > 0
-            || self.sanitize.enabled & (Check::Bounds.bit() | Check::BoundsStrict.bit()) != 0
+            || tracked
+                .iter()
+                .any(|&c| self.sanitize.enabled & c.bit() != 0)
+    }
+
+    /// Check the address the dereference or subscript node `id` accesses, a
+    /// `ty` object aligned to `align`, under `-fsanitize=null` and
+    /// `alignment`, at `at`, but where the operand `base` designates is a
+    /// named object: its address is neither null nor misaligned. The access
+    /// is a load until [`Self::settle_access_checks`] finds it stored.
+    pub(super) fn sanitize_access(
+        &mut self,
+        id: ExprId,
+        base: Option<super::ObjectRef>,
+        (ty, align): (i64, i64),
+        at: (u32, u32),
+    ) {
+        let named = base.is_some_and(|r| r.addr && !r.via_pointer);
+        if named || self.unevaluated > 0 {
+            return;
+        }
+        if let Some(check) = self.access_check((ty, Some(id)), align, TCK_LOAD, at) {
+            self.ast.access_checks.insert(id, check);
+        }
+    }
+
+    /// Check the member access at node `member`, of the field `(ty, off)`
+    /// of the structure type `record`, whose operand `obj` is the
+    /// structure's address (`->`) or the structure (`.`): the structure's
+    /// address as clang checks it, at the member name `at` for `->` and
+    /// where the operand begins (`begin`) for `.` of a dereference, then the
+    /// member's. A `.` operand that is a named object takes no check, nor,
+    /// as clang's checks none, a structure address that is a constant.
+    pub(super) fn sanitize_member(
+        &mut self,
+        (obj, member): (ExprId, Option<ExprId>),
+        (record, arrow): (i64, bool),
+        (ty, off): (i64, i64),
+        (at, begin): ((u32, u32), (u32, u32)),
+    ) {
+        if self.unevaluated > 0 {
+            return;
+        }
+        let record_align = self.align_of_type(record) as i64;
+        let base_align = if arrow {
+            let constant = match self.ast.expr(obj) {
+                Expr::Cast { child, .. } => self.ast_const_value(*child).is_some(),
+                _ => self.ast_const_value(obj).is_some(),
+            };
+            if !constant
+                && let Some(check) =
+                    self.access_check((record, None), record_align, TCK_MEMBER_ACCESS, at)
+            {
+                self.ast.value_checks.entry(obj).or_default().push(check);
+            }
+            record_align
+        } else {
+            let deref = matches!(
+                self.ast.expr(obj),
+                Expr::Unary {
+                    op: crate::c5::ast::UnOp::Deref,
+                    ..
+                }
+            );
+            let Some(check) = self.ast.access_checks.get(&obj).copied() else {
+                return;
+            };
+            let data = check.check.data as usize;
+            self.data[data + 25] = TCK_MEMBER_ACCESS;
+            if deref {
+                self.data[data + 8..data + 12].copy_from_slice(&begin.0.to_le_bytes());
+                self.data[data + 12..data + 16].copy_from_slice(&begin.1.to_le_bytes());
+            }
+            1 << self.data[data + 24]
+        };
+        // The alignment the structure's address and the offset give.
+        let align = match off {
+            0 => base_align,
+            _ => base_align.min(1 << off.trailing_zeros()),
+        };
+        if let Some(member) = member
+            && let Some(check) = self.access_check((ty, Some(member)), align, TCK_LOAD, at)
+        {
+            self.ast.access_checks.insert(member, check);
+        }
+    }
+
+    /// The check of an access of a `ty` object aligned to `align` at `at`,
+    /// by the node `node` where it names a pointer to a function: clang's
+    /// `TypeMismatchDataV1`, the site, the type, the alignment's log2 and
+    /// the access `kind`. A volatile access is not checked, as clang checks
+    /// none.
+    fn access_check(
+        &mut self,
+        (ty, node): (i64, Option<ExprId>),
+        align: i64,
+        kind: u8,
+        at: (u32, u32),
+    ) -> Option<ValueCheck> {
+        if super::types::is_volatile_object_ty(ty) {
+            return None;
+        }
+        let null = self.sanitize.runs(Check::Null);
+        let aligned = self.sanitize.runs(Check::Alignment) && align > 1;
+        let checks = match (null, aligned) {
+            (false, false) => return None,
+            (true, false) => Check::Null.bit(),
+            (false, true) => Check::Alignment.bit(),
+            (true, true) => Check::Null.bit() | Check::Alignment.bit(),
+        };
+        let types = [self.ubsan_object_type(ty, node)];
+        let data = self.ubsan_site_at(at, &types);
+        self.data.resize(self.data.len() + 8, 0);
+        self.data[data as usize + 24] = align.max(1).trailing_zeros() as u8;
+        self.data[data as usize + 25] = kind;
+        let handler = self.ubsan_handler(checks, "__ubsan_handle_type_mismatch_v1", 1);
+        let check = SanitizeCheck {
+            checks,
+            data,
+            handler,
+        };
+        let align_mask = if aligned { align as u64 - 1 } else { 0 };
+        let test = ValueTest::Pointer { null, align_mask };
+        Some(ValueCheck { check, test })
+    }
+
+    /// Settle the function's access checks once its body is parsed: the
+    /// lvalue an assignment, a compound assignment or an increment writes
+    /// is a store, and the operand of `&` is not accessed (C17 6.5.3.2p3).
+    pub(super) fn settle_access_checks(&mut self) {
+        if self.ast.access_checks.is_empty() {
+            return;
+        }
+        let mut stored = alloc::vec::Vec::new();
+        let mut addressed = alloc::vec::Vec::new();
+        for e in &self.ast.exprs {
+            match e {
+                Expr::Assign { lhs, .. }
+                | Expr::CompoundAssign { lhs, .. }
+                | Expr::PreInc { lvalue: lhs, .. }
+                | Expr::PostInc { lvalue: lhs, .. } => stored.push(*lhs),
+                Expr::Unary {
+                    op: crate::c5::ast::UnOp::AddrOf,
+                    child,
+                    ..
+                } => addressed.push(*child),
+                _ => {}
+            }
+        }
+        for id in addressed {
+            self.ast.access_checks.remove(&id);
+        }
+        for id in stored {
+            if let Some(check) = self.ast.access_checks.get(&id) {
+                self.data[check.check.data as usize + 25] = TCK_STORE;
+            }
+        }
     }
 
     /// Check the subscript at node `subscript`, by the index node `index`
@@ -668,58 +845,96 @@ impl Compiler {
         at
     }
 
-    /// The `TypeDescriptor` of the integer type `ty`, once per type: the
-    /// kind, the width's log2 shifted left by one with the signedness in
-    /// bit 0, and the type's name in single quotes.
     /// The `TypeDescriptor` of an array of `len` elements of `elem_ty`,
     /// named as C spells the type: `'int[10]'`, `'int[3][5]'`.
     fn ubsan_array_type(&mut self, elem_ty: i64, len: u64) -> i64 {
-        let elem =
-            super::types::format_type(super::types::unqualified_version_ty(elem_ty), &self.structs);
+        let elem = clang_spelling(&super::types::format_type(
+            super::types::unqualified_version_ty(elem_ty),
+            &self.structs,
+        ));
         let name = match elem.find('[') {
             Some(i) => alloc::format!("'{}[{len}]{}'", elem[..i].trim_end(), &elem[i..]),
             None => alloc::format!("'{elem}[{len}]'"),
         };
-        if let Some(&at) = self.ubsan_arrays.get(&name) {
-            return at;
-        }
-        self.align_data_to(2);
-        let at = self.data.len() as i64;
-        self.data.extend_from_slice(&TK_UNKNOWN.to_le_bytes());
-        self.data.extend_from_slice(&0u16.to_le_bytes());
-        self.data.extend_from_slice(name.as_bytes());
-        self.data.push(0);
-        self.data_object_starts.push(at);
-        self.ubsan_arrays.insert(name, at);
-        at
+        self.type_descriptor((name, TK_UNKNOWN, 0))
     }
 
-    /// A floating type's descriptor is kind 1 with its width as `info`: the
-    /// width of the value a check passes, `float`'s 32 bits and 64 for the
-    /// others, as badc computes in `double` precision.
+    /// The `TypeDescriptor` of a value of type `ty`, named as C spells the
+    /// type, unqualified and an enumeration's by its compatible integer type.
     fn ubsan_type(&mut self, ty: i64) -> i64 {
-        if let Some(&at) = self.ubsan_types.get(&ty) {
-            return at;
-        }
-        let (kind, info) = if is_floating_scalar(ty) {
+        let bare = super::types::unqualified_version_ty(super::types::without_enum(ty));
+        let name = clang_spelling(&super::types::format_type(bare, &self.structs));
+        let name = alloc::format!("'{name}'");
+        let (kind, info) = self.descriptor_kind(ty);
+        self.type_descriptor((name, kind, info))
+    }
+
+    /// The `TypeDescriptor` of an object of type `ty`, named as declared,
+    /// qualifiers and all, as clang names an accessed object; a pointer to
+    /// a function by the function type the node `node` has.
+    fn ubsan_object_type(&mut self, ty: i64, node: Option<ExprId>) -> i64 {
+        let spelled = match node.and_then(|id| self.expr_fn(id)) {
+            Some((f, depth)) if depth >= 1 => self.fn_type_text(ty, &f, depth),
+            _ => super::types::format_type(ty, &self.structs),
+        };
+        let name = clang_spelling(&spelled);
+        let name = alloc::format!("'{name}'");
+        let (kind, info) = self.descriptor_kind(ty);
+        self.type_descriptor((name, kind, info))
+    }
+
+    /// A `TypeDescriptor`'s kind and `info` word for `ty`. An integer type's
+    /// `info` is its width's log2 shifted left by one with the signedness in
+    /// bit 0; a floating type's is the width of the value a check passes,
+    /// `float`'s 32 bits and 64 for the others, as badc computes in
+    /// `double` precision; any other type's kind is unknown.
+    fn descriptor_kind(&self, ty: i64) -> (u16, u16) {
+        if is_floating_scalar(ty) {
             (TK_FLOAT, if is_float_ty(ty) { 32 } else { 64 })
+        } else if !is_integer_scalar_ty(ty) {
+            (TK_UNKNOWN, 0)
         } else {
             let bits = 8 * self.size_of_type(ty) as u16;
             let info = (bits.trailing_zeros() as u16) << 1 | u16::from(!is_unsigned_ty(ty));
             (TK_INTEGER, info)
-        };
-        // The type as C spells it, unqualified and an enumeration's by its
-        // compatible integer type.
-        let bare = super::types::unqualified_version_ty(super::types::without_enum(ty));
-        let name = alloc::format!("'{}'", super::types::format_type(bare, &self.structs));
+        }
+    }
+
+    /// The `TypeDescriptor` carrying `name`, `kind` and `info`, once per
+    /// unit.
+    fn type_descriptor(&mut self, key: (String, u16, u16)) -> i64 {
+        if let Some(&at) = self.ubsan_types.get(&key) {
+            return at;
+        }
         self.align_data_to(2);
         let at = self.data.len() as i64;
-        self.data.extend_from_slice(&kind.to_le_bytes());
-        self.data.extend_from_slice(&info.to_le_bytes());
-        self.data.extend_from_slice(name.as_bytes());
+        self.data.extend_from_slice(&key.1.to_le_bytes());
+        self.data.extend_from_slice(&key.2.to_le_bytes());
+        self.data.extend_from_slice(key.0.as_bytes());
         self.data.push(0);
         self.data_object_starts.push(at);
-        self.ubsan_types.insert(ty, at);
+        self.ubsan_types.insert(key, at);
         at
     }
+}
+
+/// The type `text` spells as clang spells it in a report: a space before a
+/// pointer declarator that follows a name and none after a `*` (`int *`,
+/// `int *const *`, `int (*)[4]`).
+fn clang_spelling(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 4);
+    let mut prev = ' ';
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == ' ' && prev == '*' {
+            continue;
+        }
+        let declarator = c == '*' || (c == '(' && chars.peek() == Some(&'*'));
+        if declarator && (prev.is_ascii_alphanumeric() || prev == '_') {
+            out.push(' ');
+        }
+        out.push(c);
+        prev = c;
+    }
+    out
 }

@@ -461,6 +461,158 @@ fn a_floating_value_out_of_an_integer_range_is_reported() {
     }
 }
 
+const ACCESSES: &str = "#include <stdint.h>
+#include <stdio.h>
+struct S { int a; long long b; };
+struct __attribute__((packed)) P { char c; int i; };
+volatile int sink;
+int main(int argc, char **argv) {
+    char k = argc > 1 ? argv[1][0] : 'z';
+    struct S *s = 0;
+    int *p = 0;
+    int **pp = 0;
+    int (**pf)(int) = 0;
+    char buf[32] = {0};
+    uintptr_t at8 = ((uintptr_t)buf + 7) & ~(uintptr_t)7;
+    int *m = (int *)(at8 + 1);
+    struct S *ms = (struct S *)(at8 + 4);
+    struct P *pk = (struct P *)buf;
+    if (k == 'z') {
+        sink = *m;
+        *m = 1;
+        sink = ms->a;
+        sink = pk->i;
+        sink = *(volatile int *)m;
+        sink = *(char *)m;
+    }
+    if (k == 'a') sink = *p;
+    if (k == 'b') *p = 1;
+    if (k == 'c') p[0] += 1;
+    if (k == 'd') sink = s->a;
+    if (k == 'e') s->b = 2;
+    if (k == 'f') sink = (*s).a;
+    if (k == 'g') sink = &s->a != 0;
+    if (k == 'h') sink = &*p == &p[0];
+    if (k == 'i') sink = **pp;
+    if (k == 'j') sink = pf[0] != 0;
+    if (k == 'k') sink = &((struct S *)0)->b != 0;
+    if (k == 'l') sink = ((struct S *)0)->a;
+    printf(\"done\\n\");
+    return 0;
+}
+";
+
+/// The reports with each address the runtime prints replaced by `ADDR`.
+fn without_addresses(o: &Output) -> Vec<String> {
+    let strip = |r: String| {
+        let mut out = String::new();
+        let mut rest = r.as_str();
+        while let Some(i) = rest.find("0x") {
+            out.push_str(&rest[..i]);
+            out.push_str("ADDR");
+            rest = rest[i + 2..].trim_start_matches(|c: char| c.is_ascii_hexdigit());
+        }
+        out + rest
+    };
+    reports(o).into_iter().map(strip).collect()
+}
+
+/// An access through a null or misaligned address reports under
+/// `-fsanitize=null` and `alignment` as clang reports it: the load or store
+/// at the `*`, the pointer operand of a subscript or the member name, a
+/// member access through the structure's address first, with the alignment
+/// the structure's and the offset's give. `&` accesses nothing (C17
+/// 6.5.3.2p3); a volatile access, a character access, a packed member and
+/// a structure address that is a constant are not checked.
+#[test]
+fn null_and_misaligned_accesses_are_reported() {
+    let dir = TempDir::new("badc-sanitize-access");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, ACCESSES).unwrap();
+    let int = "null pointer of type 'int'";
+    let cases: [(&str, &[&str]); 13] = [
+        (
+            "",
+            &[
+                "18:16: runtime error: load of misaligned address ADDR for type 'int', which \
+                 requires 4 byte alignment",
+                "19:9: runtime error: store to misaligned address ADDR for type 'int', which \
+                 requires 4 byte alignment",
+                "20:20: runtime error: member access within misaligned address ADDR for type \
+                 'struct S', which requires 8 byte alignment",
+                "20:20: runtime error: load of misaligned address ADDR for type 'int', which \
+                 requires 8 byte alignment",
+            ],
+        ),
+        ("a", &[&format!("25:26: runtime error: load of {int}")]),
+        ("b", &[&format!("26:19: runtime error: store to {int}")]),
+        ("c", &[&format!("27:19: runtime error: store to {int}")]),
+        (
+            "d",
+            &[
+                "28:29: runtime error: member access within null pointer of type 'struct S'",
+                &format!("28:29: runtime error: load of {int}"),
+            ],
+        ),
+        (
+            "e",
+            &["29:22: runtime error: member access within null pointer of type 'struct S'"],
+        ),
+        (
+            "f",
+            &[
+                "30:26: runtime error: member access within null pointer of type 'struct S'",
+                &format!("30:31: runtime error: load of {int}"),
+            ],
+        ),
+        (
+            "g",
+            &["31:30: runtime error: member access within null pointer of type 'struct S'"],
+        ),
+        ("h", &[]),
+        (
+            "i",
+            &["33:27: runtime error: load of null pointer of type 'int *'"],
+        ),
+        (
+            "j",
+            &["34:26: runtime error: load of null pointer of type 'int (*)(int)'"],
+        ),
+        ("k", &[]),
+        ("l", &[&format!("36:43: runtime error: load of {int}")]),
+    ];
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("access{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args([
+                "-q",
+                "-w",
+                opt,
+                "-fno-crash-report",
+                "-fsanitize=null,alignment",
+                "-o",
+            ])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        for (arg, want) in cases {
+            let args: &[&str] = if arg.is_empty() { &[] } else { &[arg] };
+            let o = run(&exe, args);
+            assert_eq!(without_addresses(&o), want, "{opt} {arg}: {o:?}");
+            // Those that access no null address go on.
+            if matches!(arg, "" | "g" | "h" | "k") {
+                assert!(o.status.success(), "{opt} {arg}: {o:?}");
+            }
+        }
+    }
+}
+
 const SHIFTS: &str = "#include <limits.h>
 #include <stdio.h>
 __attribute__((noinline)) int big(int a, int b) { return a << b; }

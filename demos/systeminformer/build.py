@@ -24,6 +24,14 @@ builds name.
 The outputs, under ``.cache/build-<arch><opt>/bin``: SystemInformer.exe,
 peview.exe, and phlib-test.exe, phlib's self-test, which only its MSBuild
 project describes.
+
+The kernel driver, which only its MSBuild projects and ``Common.Kernel.props``
+describe, builds where the WDK's kernel-mode headers and libraries for the
+target are installed: kphlib_km, the ksi.dll export driver with its import
+library, and KSystemInformer.sys, under ``bin/driver``. The props' platform
+definitions, ``_NT_TARGET_VERSION`` and include order apply, with
+``KSI_NO_WPP``, the switch they give for building without WPP tracing; the
+images link the WDK's default kernel libraries and enter as its projects do.
 """
 
 from __future__ import annotations
@@ -542,6 +550,72 @@ def vcxproj(path: Path, platform_name: str) -> dict:
     }
 
 
+# --- The driver ----------------------------------------------------------------
+
+# The driver's projects in link order: the static library, the export driver
+# whose import library the driver links, the driver.
+KERNEL_PROJECTS = [
+    ("kphlib_km", Path("kphlib") / "kphlib_km.vcxproj"),
+    ("ksidll", Path("KSystemInformer") / "ksidll.vcxproj"),
+    ("KSystemInformer", Path("KSystemInformer") / "KSystemInformer.vcxproj"),
+]
+# The libraries a WDK driver project links by default.
+WDK_DEFAULT_LIBS = ["ntoskrnl", "hal", "wmilib", "BufferOverflowFastFailK"]
+MSBUILD_NS = "{http://schemas.microsoft.com/developer/msbuild/2003}"
+
+
+def msbuild_condition(text: str, props: dict) -> bool:
+    """An MSBuild `Condition` of the `'$(X)'=='v'` / `!=` form the kernel
+    props and projects use, case-insensitively as MSBuild compares."""
+    if not text.strip():
+        return True
+    expanded = re.sub(r"\$\((\w+)\)", lambda m: props.get(m.group(1), ""), text)
+    m = re.fullmatch(r"\s*'?([^'=!]*)'?\s*(==|!=)\s*'([^']*)'\s*", expanded)
+    if not m:
+        raise Error(f"MSBuild condition `{text}`")
+    return (m.group(1).strip().lower() == m.group(3).lower()) == (m.group(2) == "==")
+
+
+def kernel_project(rel: Path, props: dict) -> dict:
+    """A kernel project's sources and what it and Common.Kernel.props state
+    for a Release build in their property and item-definition groups:
+    definitions, include directories in order, dependencies, module
+    definition file and `_NT_TARGET_VERSION`."""
+    path = SRC / rel
+    props = dict(props, ProjectDir=str(path.parent) + os.sep)
+    out = {"defines": [], "includes": [], "libs": [], "def": None, "nt_target_version": None}
+
+    def expand(text: str) -> str:
+        return re.sub(r"\$\((\w+)\)", lambda m: props.get(m.group(1), m.group(0)), text)
+
+    def walk(e) -> None:
+        if not msbuild_condition(e.get("Condition", ""), props):
+            return
+        tag, text = e.tag.replace(MSBUILD_NS, ""), (e.text or "").strip()
+        items = [x for x in expand(text).split(";") if x and not x.startswith("%(")]
+        if tag == "PreprocessorDefinitions":
+            out["defines"] += items
+        elif tag == "AdditionalIncludeDirectories":
+            out["includes"] += items
+        elif tag == "AdditionalDependencies":
+            out["libs"] += [Path(x).stem for x in items]
+        elif tag == "ModuleDefinitionFile":
+            out["def"] = path.parent / expand(text)
+        elif tag == "_NT_TARGET_VERSION":
+            out["nt_target_version"] = text
+        for child in e:
+            walk(child)
+
+    for doc in (SRC / "Common.Kernel.props", path):
+        for group in ET.parse(doc).getroot():
+            if group.tag.replace(MSBUILD_NS, "") in ("PropertyGroup", "ItemDefinitionGroup"):
+                walk(group)
+    out["sources"] = [path.parent / e.get("Include")
+                      for g in ET.parse(path).getroot().iter(f"{MSBUILD_NS}ItemGroup")
+                      for e in g.iter(f"{MSBUILD_NS}ClCompile")]
+    return out
+
+
 # --- Toolchain ----------------------------------------------------------------
 
 class Toolchain:
@@ -607,6 +681,8 @@ class Build:
         self.bin = self.out / "bin"
         self.cm = evaluate(target, self.tools.find, self.out)
         self.failures: list[str] = []
+        # Why the driver was not built, where it was not.
+        self.driver_skipped: str | None = None
 
     def obj(self, t: str, src: Path, ext: str) -> Path:
         rel = src.relative_to(SRC) if src.is_relative_to(SRC) else Path(src.name)
@@ -733,6 +809,76 @@ class Build:
             raise Error(f"link {name}: {first_error(text)}")
         return exe
 
+    def driver(self) -> list[Path]:
+        """kphlib_km, ksi.dll and KSystemInformer.sys for the target, under
+        `bin/driver`; none, with the reason logged, where the WDK has no
+        kernel-mode kit for it."""
+        target, tools = self.target, self.tools
+        found = _win_kits.wdk_flags(target, ["ntoskrnl"])
+        if found is None:
+            self.driver_skipped = f"no WDK kernel-mode headers and {target} libraries"
+            return []
+        version, flags = found
+        libdir = flags[flags.index("-L") + 1]
+        kit = {Path(flags[i + 1]).name: flags[i + 1] for i, f in enumerate(flags) if f == "-isystem"}
+        props = {"Platform": PLATFORM[target], "Configuration": "Release", "KsiNoWpp": "true",
+                 "KSI_NO_WPP": "1", "SystemInformerRoot": str(SRC) + os.sep,
+                 "CRT_IncludePath": kit["crt"], "KM_IncludePath": kit["km"],
+                 "KIT_SHARED_IncludePath": kit["shared"], "PlatformArchitecture": "64"}
+        projects = {name: kernel_project(rel, props) for name, rel in KERNEL_PROJECTS}
+        missing = [n for p in projects.values() for n in p["libs"] + WDK_DEFAULT_LIBS
+                   if n not in projects and n not in ("ksi", "kphlib_km")
+                   and not (Path(libdir) / f"{n}.lib").is_file()]
+        if missing:
+            self.driver_skipped = f"WDK {version} lacks {', '.join(sorted(set(missing)))}.lib"
+            return []
+        # `_NT_TARGET_VERSION` names a Windows release: its high word alone,
+        # as 0x0A00 does, or a full NTDDI value.
+        ntv = int(projects["KSystemInformer"]["nt_target_version"], 16)
+        ntddi = ntv << 16 if ntv <= 0xFFFF else ntv
+        generated = sorted({str(Path(x).parent) for outs, _, _ in self.cm.custom for o in outs
+                            for x in self.cm.genex(o, "C") if x.lower().endswith(".h")})
+        drv = self.out / "obj" / "driver"
+        jobs = []
+        for name, p in projects.items():
+            defines = p["defines"] + ["_KERNEL_MODE", f"NTDDI_VERSION={ntddi:#010x}",
+                                      f"_WIN32_WINNT={ntddi >> 16:#06x}",
+                                      f"WINVER={ntddi >> 16:#06x}", "WINNT=1"]
+            includes = [d for d in p["includes"] + generated
+                        if "$(" not in d and Path(d).is_dir()]
+            for src in p["sources"]:
+                o = drv / name / (src.stem + ".o")
+                cmd = [tools.badc, f"--target={target}", "-c", "--msvc", "-nostdlibinc", tools.opt]
+                cmd += [f for f in flags if f.startswith("-D")] + [f"-D{d}" for d in defines]
+                cmd += [f"-I{d}" for d in dict.fromkeys(includes)] + [str(src), "-o", str(o)]
+                jobs.append(("cc", src, o, cmd, src.parent))
+        self.compile(jobs)
+        if self.failures:
+            raise Error(f"driver: {len(self.failures)} units failed:\n" + "\n".join(self.failures[:20]))
+        objs = {n: [str(j[2]) for j in jobs if j[2].is_relative_to(drv / n)] for n in projects}
+        out = self.bin / "driver"
+        out.mkdir(parents=True, exist_ok=True)
+        kphlib = self.archive("kphlib_km", [Path(o) for o in objs["kphlib_km"]])
+        base = [tools.badc, f"--target={target}", "--subsystem=driver", "-L", libdir]
+        ksi, implib = out / "ksi.dll", self.out / "lib" / "ksi.lib"
+        # An export driver defines no DriverEntry; its entry is DllInitialize.
+        cmd = base + ["-shared", "--entry=DllInitialize", *objs["ksidll"], str(projects["ksidll"]["def"]),
+                      "--out-implib", str(implib)] + [f"-l{n}" for n in WDK_DEFAULT_LIBS]
+        rc, text = run(cmd + ["-o", str(ksi)], tools.env)
+        if rc or not ksi.exists():
+            raise Error(f"link ksi.dll: {first_error(text)}")
+        # The WDK enters a driver at GsDriverEntry, which seeds the stack
+        # cookie and calls DriverEntry.
+        sys_file = out / "KSystemInformer.sys"
+        libs = [n for n in projects["KSystemInformer"]["libs"] if n not in ("ksi", "kphlib_km")]
+        cmd = base + ["--entry=GsDriverEntry", *objs["KSystemInformer"], str(kphlib), str(implib)]
+        cmd += [f"-l{n}" for n in dict.fromkeys(libs + WDK_DEFAULT_LIBS)] + ["-o", str(sys_file)]
+        rc, text = run(cmd, tools.env)
+        if rc or not sys_file.exists():
+            raise Error(f"link KSystemInformer.sys: {first_error(text)}")
+        self.log(f"driver: WDK {version}, NTDDI_VERSION {ntddi:#010x}")
+        return [ksi, sys_file]
+
     def go(self) -> list[Path]:
         t0 = time.time()
         self.generate()
@@ -793,6 +939,7 @@ class Build:
             names = [n for n in dict.fromkeys(names) if n != "delayimp"]
             outputs.append(self.link(name, of(name, ("cc", "cxx", "asm")), res,
                                      [archives[x] for x in libs], names, delay, console, defs))
+        outputs += self.driver()
         self.log(f"built {', '.join(p.name for p in outputs)} in {time.time() - t0:.0f} s")
         return outputs
 
@@ -815,8 +962,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"build: no source at {SRC}; run demos/systeminformer/setup.py", file=sys.stderr)
         return 1
     try:
-        for p in Build(args.target, args.opt, args.jobs, log).go():
+        build = Build(args.target, args.opt, args.jobs, log)
+        for p in build.go():
             print(p)
+        if build.driver_skipped:
+            print(f"build: the driver was not built: {build.driver_skipped}", file=sys.stderr)
     except Error as e:
         print(f"build: {e}", file=sys.stderr)
         return 1

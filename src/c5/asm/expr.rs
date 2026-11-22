@@ -301,13 +301,6 @@ pub(crate) fn eval_const_expr_ops(s: &str, op: &dyn Fn(u8) -> Option<i64>) -> Op
     eval_asm_value(s, &ctx).ok().and_then(|v| v.to_abs())
 }
 
-/// Evaluate an assembler `.if` condition: a constant expression whose result
-/// may come from the comparison (-1/0) and logical (1/0) operators. A
-/// non-zero result is true. `None` when the condition is not a constant.
-pub(crate) fn eval_asm_if_condition(s: &str) -> Option<i64> {
-    eval_asm_count(s, &|_| None)
-}
-
 /// Evaluate a constant expression whose leaves may include `%N` / `%cN`
 /// operand references, resolved through `op`. This is the form a
 /// `.skip` / `.fill` count takes.

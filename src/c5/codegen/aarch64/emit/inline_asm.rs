@@ -1498,10 +1498,11 @@ fn emit_bound_loads(
     Ok(())
 }
 
-/// The template text after the passes that run before the arch parser
-/// sees it: comments stripped, `%=` expanded once so the code text and any
-/// `.pushsection` content share one instance number, `.if` conditionals
-/// reduced.
+/// The template text after the passes that run before the operands are
+/// substituted: comments stripped, and `%=` expanded once so the code text
+/// and any `.pushsection` content share one instance number. The `.if`
+/// conditionals are the GNU-as pass's, which values them once the operands
+/// are registers and the template's `.equ` symbols are defined.
 fn template_text(
     asm: &super::super::ir::AsmBlock,
 ) -> Result<alloc::string::String, alloc::string::String> {
@@ -1513,10 +1514,8 @@ fn template_text(
     let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::A64);
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = crate::c5::asm::expand_template_uniq(raw_text);
-    let text = expanded.as_deref().unwrap_or(raw_text);
-    let reduced = crate::c5::asm::strip_asm_conditionals(text)?;
     Ok(alloc::string::String::from(
-        reduced.as_deref().unwrap_or(text),
+        expanded.as_deref().unwrap_or(raw_text),
     ))
 }
 

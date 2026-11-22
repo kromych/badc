@@ -1230,12 +1230,11 @@ fn asm_conditionals_keep_the_taken_branch() {
     // result keeps the branch. A true comparison is -1, as in GNU as.
     // `.else` / `.elseif` select the live arm, and a dropped branch takes
     // its `.pushsection` with it.
-    assert_eq!(eval_asm_if_condition("1 == 1"), Some(-1));
-    assert_eq!(eval_asm_if_condition("1 != 1"), Some(0));
-    assert_eq!(eval_asm_if_condition("(1 << 2) >= 4"), Some(-1));
-    assert_eq!(eval_asm_if_condition("nop"), None);
-    let reduce = |t: &str| strip_asm_conditionals(t).unwrap().unwrap();
+    let reduce = |t: &str| expand_asm_gas_macros(t, 4, &|_| None).unwrap().unwrap();
     assert_eq!(reduce(".if 1 == 1\nnop\n.endif\n"), "nop\n");
+    assert_eq!(reduce(".if (1 == 1) == -1\nnop\n.endif\n"), "nop\n");
+    assert_eq!(reduce(".if 1 != 1\nbad\n.else\ngood\n.endif\n"), "good\n");
+    assert_eq!(reduce(".if (1 << 2) >= 4\nnop\n.endif\n"), "nop\n");
     assert_eq!(reduce(".if 0\nbad\n.else\ngood\n.endif\n"), "good\n");
     assert_eq!(
         reduce(".if 0\n.pushsection .x\n.byte 1\n.popsection\n.endif\nkeep\n"),
@@ -1243,11 +1242,32 @@ fn asm_conditionals_keep_the_taken_branch() {
     );
     // A false outer branch suppresses a true inner one.
     assert_eq!(reduce(".if 0\n.if 1\nx\n.endif\n.endif\ny\n"), "y\n");
-    // Unbalanced and non-constant conditions are rejected.
-    assert!(strip_asm_conditionals(".if 1\nnop\n").is_err());
-    assert!(strip_asm_conditionals(".if x\n.endif\n").is_err());
-    // A template with no conditional is left untouched.
-    assert!(strip_asm_conditionals("nop\n").unwrap().is_none());
+    // A condition over symbols the template's `.equ` defines, after its
+    // operands are substituted: the register-number table and distinctness
+    // test Linux's arm64 per-CPU accessors make.
+    let table = ".irp num,0,1,2,3\n.equ .L__gpr_num_x\\num, \\num\n.endr\n";
+    let subst = |tok: &str| match tok {
+        "%0" => Some(alloc::string::String::from("x1")),
+        "%1" => Some(alloc::string::String::from("x2")),
+        _ => None,
+    };
+    let distinct =
+        alloc::format!("{table}.if .L__gpr_num_%0 == .L__gpr_num_%1\nsame\n.else\napart\n.endif\n");
+    let out = expand_asm_gas_macros(&distinct, 4, &subst)
+        .unwrap()
+        .unwrap();
+    assert!(out.contains("apart") && !out.contains("same"), "{out}");
+    let one = alloc::format!("{table}.if .L__gpr_num_%0 == .L__gpr_num_%0\nsame\n.endif\n");
+    let out = expand_asm_gas_macros(&one, 4, &subst).unwrap().unwrap();
+    assert!(out.contains("same"), "{out}");
+    // Non-constant conditions are rejected; a template with neither a
+    // conditional nor a macro directive is left untouched.
+    assert!(expand_asm_gas_macros(".if x\nnop\n.endif\n", 4, &|_| None).is_err());
+    assert!(
+        expand_asm_gas_macros("nop\n", 4, &|_| None)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

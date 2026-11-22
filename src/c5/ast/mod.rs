@@ -104,6 +104,41 @@ pub(crate) enum UnOp {
     Renormalize { nsw: bool },
 }
 
+/// The string function an [`Expr::MemLoop`] performs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StringOp {
+    /// C17 7.24.4.1 `memcmp`.
+    Compare,
+    /// C17 7.24.2.1 `memcpy`.
+    Copy,
+    /// C17 7.24.2.2 `memmove`.
+    Move,
+    /// C17 7.24.6.1 `memset`.
+    Set,
+}
+
+impl StringOp {
+    /// The library function's name.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            StringOp::Compare => "memcmp",
+            StringOp::Copy => "memcpy",
+            StringOp::Move => "memmove",
+            StringOp::Set => "memset",
+        }
+    }
+}
+
+impl From<MemTransferOp> for StringOp {
+    fn from(op: MemTransferOp) -> Self {
+        match op {
+            MemTransferOp::Copy => StringOp::Copy,
+            MemTransferOp::Move => StringOp::Move,
+            MemTransferOp::Fill => StringOp::Set,
+        }
+    }
+}
+
 /// Memory transfer the compiler expands inline, from a `__builtin_mem*`
 /// call whose byte count is an integer constant expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -573,6 +608,18 @@ pub(crate) enum Expr {
         src: ExprId,
         size: i64,
         align: u32,
+        ty: i64,
+    },
+    /// A call to `memcmp`, `memcpy`, `memmove` or `memset` that
+    /// `-finline-stringops` expands inline whatever its length: a loop over
+    /// the `len` bytes. `a` and `b` are the two addresses, or `memset`'s
+    /// destination and fill byte. The value is the destination address, or
+    /// `memcmp`'s difference of the first bytes that differ (`ty`).
+    MemLoop {
+        op: StringOp,
+        a: ExprId,
+        b: ExprId,
+        len: ExprId,
         ty: i64,
     },
     /// An MSVC intrinsic (`crate::c5::ms_intrinsic`): `args` are the value
@@ -1128,7 +1175,8 @@ macro_rules! visit_data_offsets {
                 | Expr::Simd { .. }
                 | Expr::ShuffleVector { .. }
                 | Expr::MsIntrinsic { .. }
-                | Expr::MemTransfer { .. } => {}
+                | Expr::MemTransfer { .. }
+                | Expr::MemLoop { .. } => {}
             }
         }
         for decl in $decls {
@@ -1468,6 +1516,7 @@ macro_rules! plain_ty_expr {
             | Expr::ShuffleVector { ty: $t, .. }
             | Expr::MsIntrinsic { ty: $t, .. }
             | Expr::MemTransfer { ty: $t, .. }
+            | Expr::MemLoop { ty: $t, .. }
     };
 }
 pub(crate) use plain_ty_expr;

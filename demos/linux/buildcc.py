@@ -198,6 +198,10 @@ FORWARD_EXACT = {
 
 FORWARD_PREFIX = (
     "-D", "-U",
+    # The vDSO units ask for `memset` expanded inline whatever its length
+    # (CONFIG_CC_OPT_INLINE_MEMSET): a vDSO links no C library, so a call
+    # the compiler made to it would not resolve. badc validates the list.
+    "-finline-stringops", "-fno-inline-stringops",
     # The dialect selects which declarations the kernel's headers reach:
     # `<asm/xen/interface_64.h>` gates the anonymous union naming both `rip`
     # and `eip` on `__GNUC__ && !__STRICT_ANSI__`. badc keys `__STRICT_ANSI__`
@@ -740,7 +744,7 @@ def _self_test() -> int:
         assert rewrite([flag]) == Rewritten([flag], [], []), flag
     for flag in ("-fno-builtin", "-ffreestanding", "-fno-builtin-wcslen",
                  "-fno-strict-overflow", "-fstrict-overflow", "-fwrapv",
-                 "-fno-wrapv"):
+                 "-fno-wrapv", "-finline-stringops=memset", "-finline-stringops"):
         assert rewrite([flag]).argv == [flag], flag
     # The stack protector and its guard placement reach badc verbatim; the
     # canary the configuration states is the one the object carries.

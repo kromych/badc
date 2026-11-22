@@ -130,6 +130,9 @@ pub(crate) struct FrontEnd {
     pub(crate) dump_macros: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
+    /// gcc's `-finline-stringops[=fn,...]`, the last ones given applied in
+    /// order; `-fno-inline-stringops[=fn,...]` takes functions out.
+    pub(crate) inline_stringops: badc::InlineStringOps,
     pub(crate) lax_vectors: Option<badc::LaxVectors>,
     /// `-ffreestanding`, the compile flag; `--freestanding` is the link's.
     pub(crate) freestanding: bool,
@@ -1714,6 +1717,26 @@ impl Parser {
                     .no_builtin_fns
                     .push(s["-fno-builtin-".len()..].to_string());
             }
+            s if s.starts_with("-finline-stringops") || s.starts_with("-fno-inline-stringops") => {
+                let (flag, list) = s.split_once('=').unwrap_or((s, ""));
+                let mut named = badc::InlineStringOps::default();
+                for name in list.split(',').filter(|n| !n.is_empty()) {
+                    named = named.with(badc::InlineStringOps::named(name).ok_or_else(|| {
+                        ParseError::diag(format!(
+                            "badc: error: `{s}`: `{name}` is none of {}",
+                            badc::InlineStringOps::NAMES.join(", ")
+                        ))
+                    })?);
+                }
+                if list.is_empty() {
+                    named = badc::InlineStringOps::ALL;
+                }
+                front.inline_stringops = match flag {
+                    "-finline-stringops" => front.inline_stringops.with(named),
+                    "-fno-inline-stringops" => front.inline_stringops.without(named),
+                    _ => return Err(ParseError::plain(format!("badc: unknown option `{s}`"))),
+                };
+            }
             // gcc's `-flax-vector-conversions` lets any two vector types of
             // one size convert; clang's `=integer` only two integer ones.
             "-flax-vector-conversions" | "-flax-vector-conversions=all" => {
@@ -3250,6 +3273,7 @@ impl FrontEnd {
             .with_compiler_include_dir(self.compiler_include_dir.clone())
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
+            .with_inline_stringops(self.inline_stringops)
             .with_lax_vectors(self.lax_vectors)
             .with_freestanding(self.freestanding)
             .with_gnu_dialect(self.gnu_dialect)
@@ -5517,5 +5541,31 @@ mod tests {
         for name in badc::X86Features::baseline_names() {
             assert!(host_x86_ext(name).is_some(), "{name}");
         }
+    }
+
+    /// gcc's `-finline-stringops[=fn,...]`: bare, every function; a list,
+    /// those; `-fno-inline-stringops[=fn,...]` takes them out, in order. A
+    /// name outside the four is refused.
+    #[test]
+    fn inline_stringops_takes_gcc_lists() {
+        use badc::InlineStringOps as S;
+        let named = |n| S::named(n).unwrap();
+        let ops = |args: &[&str]| parse(args).front.inline_stringops;
+        assert_eq!(ops(&["-finline-stringops", "a.c"]), S::ALL);
+        assert_eq!(ops(&["-finline-stringops=memset", "a.c"]), named("memset"));
+        assert_eq!(
+            ops(&[
+                "-finline-stringops=memset,memcpy",
+                "-fno-inline-stringops=memset",
+                "a.c"
+            ]),
+            named("memcpy")
+        );
+        assert_eq!(
+            ops(&["-finline-stringops", "-fno-inline-stringops", "a.c"]),
+            S::default()
+        );
+        let (message, _) = reject(&["-finline-stringops=strlen", "a.c"]);
+        assert!(message.contains("strlen"), "{message}");
     }
 }

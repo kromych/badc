@@ -613,6 +613,40 @@ pub struct Preprocessed {
 /// `with_track_includes`) return `self` so the typical CLI shape is
 /// `CompileOptions::default().with_defines(d).with_include_paths(p)`.
 /// Which vector types of one size convert implicitly, as
+/// The string functions `-finline-stringops[=fn,...]` expands inline
+/// whatever their length, as gcc's option names them: a call it would
+/// make to one of them becomes a loop.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InlineStringOps(u8);
+
+impl InlineStringOps {
+    /// The functions, in the bit order of the set.
+    pub const NAMES: [&'static str; 4] = ["memcmp", "memcpy", "memmove", "memset"];
+    /// The bare option's set: every function.
+    pub const ALL: Self = Self(0b1111);
+
+    /// The set holding the function `name`; `None` for any other name.
+    pub fn named(name: &str) -> Option<Self> {
+        Self::NAMES
+            .iter()
+            .position(|n| *n == name)
+            .map(|i| Self(1 << i))
+    }
+
+    pub fn with(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    pub fn without(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
+
+    /// Whether the set holds the function `name`.
+    pub fn has(self, name: &str) -> bool {
+        Self::named(name).is_some_and(|f| self.0 & f.0 != 0)
+    }
+}
+
 /// `-flax-vector-conversions` selects them: none (the default), two
 /// integer vectors (clang's default), or any two (gcc's flag; MSVC, whose
 /// NEON vectors are all one `__n128`).
@@ -673,6 +707,8 @@ pub struct CompileOptions {
     /// `-fno-builtin-<name>` -- the same, for one library name each:
     /// that name neither folds nor is declared by the auto-include retry.
     pub no_builtin_fns: Vec<String>,
+    /// `-finline-stringops[=fn,...]`.
+    pub inline_stringops: InlineStringOps,
     /// `-flax-vector-conversions[=...]`: which same-size vector types
     /// convert implicitly; `None` takes the identity's default.
     pub lax_vectors: Option<LaxVectors>,
@@ -1021,6 +1057,11 @@ impl CompileOptions {
     /// The same for the named library functions (`-fno-builtin-<name>`).
     pub fn with_no_builtin_fns(mut self, names: Vec<String>) -> Self {
         self.no_builtin_fns = names;
+        self
+    }
+    /// Expand the string functions of `ops` inline (`-finline-stringops`).
+    pub fn with_inline_stringops(mut self, ops: InlineStringOps) -> Self {
+        self.inline_stringops = ops;
         self
     }
     /// Compile for a freestanding implementation (`-ffreestanding`).
@@ -2735,6 +2776,8 @@ pub struct Compiler {
     /// retry would decline the name.
     no_builtin: bool,
     no_builtin_fns: Vec<String>,
+    /// Mirror of [`CompileOptions::inline_stringops`].
+    inline_stringops: InlineStringOps,
     /// [`CompileOptions::lax_vectors`], or the identity's default.
     lax_vectors: LaxVectors,
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
@@ -3553,6 +3596,7 @@ impl Compiler {
             export_all_functions: opts.export_all_functions,
             default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
+            inline_stringops: opts.inline_stringops,
             lax_vectors: opts
                 .lax_vectors
                 .unwrap_or(if opts.msvc && target.is_windows() {

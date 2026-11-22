@@ -187,6 +187,13 @@ impl<'a> Walker<'a> {
                 let (block, value_item) = (*block, *value_item);
                 self.walk_stmt_expr(b, block, value_item)
             }
+            // A string function `-finline-stringops` expands inline.
+            Expr::MemLoop {
+                op, a, b: c, len, ..
+            } => {
+                let (op, abc) = (*op, (*a, *c, *len));
+                self.walk_mem_loop(b, op, abc)
+            }
             // `__builtin_mem*` with a constant byte count.
             Expr::MemTransfer {
                 op,

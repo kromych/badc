@@ -1086,13 +1086,13 @@ impl Compiler {
     /// the rest.
     fn parse_mem_transfer_builtin(
         &mut self,
-        op: super::super::ast::MemTransferOp,
+        string_op: super::super::ast::StringOp,
         name: &str,
     ) -> Result<(), C5Error> {
-        use super::super::ast::{Expr, ExprId, MemTransferOp};
+        use super::super::ast::{Expr, ExprId, MemTransferOp, StringOp};
         // The operands convert to the library function's parameters, with
         // the diagnostics of a call to it.
-        let params = self.library_param_types(mem_transfer_lib_name(op));
+        let params = self.library_param_types(string_op.name());
         let mut args: Vec<ExprId> = Vec::new();
         let mut ptr_align = MAX_MEM_TRANSFER_ALIGN;
         if self.lex.tk != ')' {
@@ -1110,7 +1110,7 @@ impl Compiler {
                 // alignment (C99 6.3.2.3p7); the fill byte contributes
                 // nothing. `void *` is `unsigned char *` here, so an
                 // untyped endpoint yields 1.
-                if args.len() < 2 && !(op == MemTransferOp::Fill && args.len() == 1) {
+                if args.len() < 2 && !(string_op == StringOp::Set && args.len() == 1) {
                     let a = if is_pointer_ty(self.ty) {
                         self.align_of_type(pointee_ty(self.ty)) as u32
                     } else {
@@ -1134,11 +1134,40 @@ impl Compiler {
             ));
         }
         self.next()?;
-        // Both forms yield the destination address (C99 7.21.2.1p2).
-        let ty = super::types::void_ptr_ty();
-        let size = match self.expr_const_int(args[2]) {
-            Some(n) if mem_transfer_fits(op, n, ptr_align) => n,
-            _ => return self.emit_builtin_libcall(mem_transfer_lib_name(op), &args, ty),
+        // The transfers yield the destination address (C99 7.21.2.1p2),
+        // `memcmp` an `int`.
+        let ty = match string_op {
+            StringOp::Compare => Ty::Int as i64,
+            _ => super::types::void_ptr_ty(),
+        };
+        let op = match string_op {
+            StringOp::Copy => Some(MemTransferOp::Copy),
+            StringOp::Move => Some(MemTransferOp::Move),
+            StringOp::Set => Some(MemTransferOp::Fill),
+            StringOp::Compare => None,
+        };
+        let (op, size) = match (op, self.expr_const_int(args[2])) {
+            (Some(op), Some(n)) if mem_transfer_fits(op, n, ptr_align) => (op, n),
+            // `-finline-stringops` loops over a count no expansion takes.
+            _ if self.inline_stringops.has(string_op.name()) => {
+                self.mark_emit_other();
+                let pos = self.ast_src_pos();
+                let (a, b, len) = (args[0], args[1], args[2]);
+                let id = self.ast.push_expr(
+                    Expr::MemLoop {
+                        op: string_op,
+                        a,
+                        b,
+                        len,
+                        ty,
+                    },
+                    pos,
+                );
+                self.ty = ty;
+                self.ast_acc = Some(id);
+                return Ok(());
+            }
+            _ => return self.emit_builtin_libcall(string_op.name(), &args, ty),
         };
         self.mark_emit_other();
         let pos = self.ast_src_pos();
@@ -1168,15 +1197,18 @@ impl Compiler {
 
     /// Symbol of the library function a synthesized transfer calls.
     /// `None` where the name may not be assumed to be the library's
-    /// (`-fno-builtin` / `-ffreestanding`), where the unit declared no
-    /// such function, or inside that function's own definition, where
-    /// the call would be recursion.
+    /// (`-fno-builtin` / `-ffreestanding`), where `-finline-stringops`
+    /// names it, where the unit declared no such function, or inside that
+    /// function's own definition, where the call would be recursion.
     pub(super) fn mem_transfer_lib_symbol(
         &self,
         op: super::super::ast::MemTransferOp,
     ) -> Option<usize> {
         let name = mem_transfer_lib_name(op);
-        if self.library_name_is_opaque(name) || self.current_function_name == name {
+        if self.library_name_is_opaque(name)
+            || self.current_function_name == name
+            || self.inline_stringops.has(name)
+        {
             return None;
         }
         self.callable_symbol(name)
@@ -2329,7 +2361,12 @@ impl Compiler {
             }
             Some(BuiltinCall::MemTransfer(op)) => {
                 let name = self.symbols[id_idx].name.clone();
-                self.parse_mem_transfer_builtin(op, &name)
+                self.parse_mem_transfer_builtin(op.into(), &name)
+            }
+            Some(BuiltinCall::MemCompare) => {
+                let name = self.symbols[id_idx].name.clone();
+                let compare = super::super::ast::StringOp::Compare;
+                self.parse_mem_transfer_builtin(compare, &name)
             }
             Some(BuiltinCall::ChooseExpr) => self.parse_choose_expr_builtin(),
             Some(BuiltinCall::ShuffleVector) => self.parse_shufflevector_builtin(),
@@ -2433,14 +2470,23 @@ impl Compiler {
         // The library `memcpy`, `memmove` and `memset` lower as their
         // builtins unless `-fno-builtin`; a definition in the unit, a
         // fortified wrapper among them, is called.
-        if !not_real_fn
-            && let Some(op) = library_mem_transfer_op(name)
-            && !self.library_name_is_opaque(name)
-            && !self.symbols[id_idx].defined_here
-            && self.current_function_name != name
-            && self.symbols[id_idx].params().len() == 3
+        let library = |name| {
+            !not_real_fn
+                && !self.library_name_is_opaque(name)
+                && !self.symbols[id_idx].defined_here
+                && self.current_function_name != name
+                && self.symbols[id_idx].params().len() == 3
+        };
+        if let Some(op) = library_mem_transfer_op(name)
+            && library(name)
         {
             return Some(BuiltinCall::MemTransfer(op));
+        }
+        // `memcmp` expands only where `-finline-stringops` names it.
+        if self.inline_stringops.has("memcmp")
+            && (name == "__builtin_memcmp" || (name == "memcmp" && library(name)))
+        {
+            return Some(BuiltinCall::MemCompare);
         }
         if not_real_fn {
             if let Some(op) = super::super::simd::lookup(name) {
@@ -7661,6 +7707,8 @@ fn vector_binop_op(tk: i64) -> super::super::ir::BinOp {
 enum BuiltinCall {
     Simd(u32),
     MemTransfer(super::super::ast::MemTransferOp),
+    /// `memcmp` under `-finline-stringops=memcmp`.
+    MemCompare,
     ChooseExpr,
     ShuffleVector,
     ConstantP,

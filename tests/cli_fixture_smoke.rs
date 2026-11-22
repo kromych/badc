@@ -860,6 +860,61 @@ fn quoted_include_resolves_relative_to_including_file() {
     );
 }
 
+/// The loops `-finline-stringops` makes compute what the library calls
+/// do: a fill, a copy, a move overlapping above and below, a comparison's
+/// sign as `unsigned char`, and a loop the idiom pass would make a fill.
+#[test]
+fn inline_stringops_loops_compute_what_the_calls_do() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-inline-stringops");
+    let src = dir.join("s.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n#include <string.h>\n\
+         __attribute__((noinline)) void var_set(char *p, int c, unsigned long n) { __builtin_memset(p, c, n); }\n\
+         __attribute__((noinline)) void const_set(char *p) { __builtin_memset(p, 0x5a, 4096); }\n\
+         __attribute__((noinline)) void var_copy(char *d, const char *s, unsigned long n) { memcpy(d, s, n); }\n\
+         __attribute__((noinline)) void var_move(char *d, const char *s, unsigned long n) { memmove(d, s, n); }\n\
+         __attribute__((noinline)) int var_cmp(const char *a, const char *b, unsigned long n) { return memcmp(a, b, n); }\n\
+         __attribute__((noinline)) void idiom(char *p, unsigned long n) { for (unsigned long i = 0; i < n; i++) p[i] = 0; }\n\
+         static char big[4096];\n\
+         int main(void) {\n\
+             char buf[32] = \"0123456789abcdefghijklmnopqrstu\";\n\
+             var_set(buf + 2, 'x', 3);\n\
+             const_set(big);\n\
+             char out[32];\n\
+             var_copy(out, buf, 32);\n\
+             var_move(out + 4, out, 10);\n\
+             var_move(out, out + 20, 6);\n\
+             int c1 = var_cmp(\"abcd\", \"abce\", 4), c2 = var_cmp(\"abc\", \"abc\", 3), c3 = var_cmp(\"\\xff\", \"\\x01\", 1);\n\
+             idiom(buf + 28, 3);\n\
+             printf(\"%s|%.31s|%d %d %d|%d|%d\\n\", buf, out, c1 < 0, c2, c3 > 0, big[4095], big[0]);\n\
+             return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("s{opt}"));
+        let built = Command::new(badc)
+            .args(["-q", opt, "-finline-stringops", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(
+            String::from_utf8_lossy(&run.stdout).trim_end(),
+            "01xxx56789abcdefghijklmnopqr|klmnopxxx56789efghijklmnopqrstu|1 0 1|90|90",
+            "{opt}"
+        );
+    }
+}
+
 /// Under `--msvc` a quoted include searches cl's way: the including file's
 /// directory, then those of the files including it, innermost first, before
 /// the `-I` directories. Without it the search stops at the including file's

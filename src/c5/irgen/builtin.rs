@@ -11,6 +11,90 @@ use crate::c5::ast::expr_ty;
 use crate::c5::ir::BitCountOp;
 
 impl<'a> Walker<'a> {
+    /// A string function `-finline-stringops` expands inline (an
+    /// `Expr::MemLoop`): a loop over the bytes, one at a time, its index in
+    /// a frame slot. `memmove` copies upward unless the destination lies
+    /// inside the source above it (C17 7.24.2.2); `memcmp` compares the
+    /// bytes as `unsigned char` and yields the first pair's difference
+    /// (7.24.4.1). The value is that difference, or the destination.
+    pub(super) fn walk_mem_loop(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: crate::c5::ast::StringOp,
+        (a, c, len): (ExprId, ExprId, ExprId),
+    ) -> Result<ValueId, WalkError> {
+        use crate::c5::ast::StringOp;
+        let p = self.walk_expr_rvalue(b, a)?;
+        let q = self.walk_expr_rvalue(b, c)?;
+        let n = self.walk_expr_rvalue(b, len)?;
+        let (index, result) = (b.alloc_synthetic_local(), b.alloc_synthetic_local());
+        let initial = if op == StringOp::Compare { b.imm(0) } else { p };
+        b.store_local(result, initial, StoreKind::I64);
+        let (up, after) = (b.new_block(), b.new_block());
+        let down = (op == StringOp::Move).then(|| b.new_block());
+        match down {
+            Some(down) => {
+                let gap = b.binop(BinOp::Sub, p, q);
+                let clear = b.binop(BinOp::Uge, gap, n);
+                b.branch_zero(clear, down, up);
+            }
+            None => b.jmp(up),
+        }
+        b.switch_to(up);
+        let zero = b.imm(0);
+        b.store_local(index, zero, StoreKind::I64);
+        let (head, body) = (b.new_block(), b.new_block());
+        b.jmp(head);
+        b.switch_to(head);
+        let i = b.load_local(index, LoadKind::I64);
+        let more = b.binop(BinOp::Ult, i, n);
+        b.branch_zero(more, after, body);
+        b.switch_to(body);
+        let at = b.binop(BinOp::Add, p, i);
+        match op {
+            StringOp::Set => {
+                b.store(at, q, StoreKind::I8);
+            }
+            StringOp::Copy | StringOp::Move => {
+                let from = b.binop(BinOp::Add, q, i);
+                let byte = b.load(from, LoadKind::U8);
+                b.store(at, byte, StoreKind::I8);
+            }
+            StringOp::Compare => {
+                let other = b.binop(BinOp::Add, q, i);
+                let (x, y) = (b.load(at, LoadKind::U8), b.load(other, LoadKind::U8));
+                let diff = b.binop(BinOp::Sub, x, y);
+                let (differs, same) = (b.new_block(), b.new_block());
+                b.branch_zero(diff, same, differs);
+                b.switch_to(differs);
+                b.store_local(result, diff, StoreKind::I64);
+                b.jmp(after);
+                b.switch_to(same);
+            }
+        }
+        let next = b.binop_imm(BinOp::Add, i, 1);
+        b.store_local(index, next, StoreKind::I64);
+        b.jmp(head);
+        if let Some(down) = down {
+            b.switch_to(down);
+            b.store_local(index, n, StoreKind::I64);
+            let (head, body) = (b.new_block(), b.new_block());
+            b.jmp(head);
+            b.switch_to(head);
+            let i = b.load_local(index, LoadKind::I64);
+            b.branch_zero(i, after, body);
+            b.switch_to(body);
+            let j = b.binop_imm(BinOp::Add, i, -1);
+            b.store_local(index, j, StoreKind::I64);
+            let (to, from) = (b.binop(BinOp::Add, p, j), b.binop(BinOp::Add, q, j));
+            let byte = b.load(from, LoadKind::U8);
+            b.store(to, byte, StoreKind::I8);
+            b.jmp(head);
+        }
+        b.switch_to(after);
+        Ok(b.load_local(result, LoadKind::I64))
+    }
+
     /// Expand a `__builtin_memcpy` / `__builtin_memmove` /
     /// `__builtin_memset` whose byte count is a constant. The copy rides
     /// `Inst::Mcpy`, which transfers forward in units and so carries the

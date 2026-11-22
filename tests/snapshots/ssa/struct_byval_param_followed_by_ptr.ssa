@@ -43,7 +43,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v24  LoadLocal { off=-1, kind=I32 }                   -> x2
     v25  ImmData(64)                                      -> x0
     v26  Load { addr=v12, disp=0, kind=I32 pc_rel }       -> x1
-    v27  CallExt { binding_idx=0, args=[v22, v55, v24, v26], fp_arg_mask=0x0 } -> x0
+    v27  CallExt { binding_idx=25, args=[v22, v55, v24, v26], fp_arg_mask=0x0 } -> x0
     v28  Imm(0)                                           -> x0
     v29  Extend { value=v55, kind=I32 }                   -> x0
     v30  LifetimeEnd(-1)                                  -> -
@@ -56,14 +56,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 5  start_pc=0
     v34  ImmData(33)                                      -> x7
     v35  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v36  CallExt { binding_idx=0, args=[v34, v32], fp_arg_mask=0x0 } -> x0
+    v36  CallExt { binding_idx=25, args=[v34, v32], fp_arg_mask=0x0 } -> x0
     v37  Imm(1)                                           -> x0
     v38  LifetimeEnd(-1)                                  -> -
     v39  LifetimeEnd(0)                                   -> -
     terminator Return(v37)   (exit_acc=v37)
   block 6  start_pc=0
     v40  ImmData(59)                                      -> x7
-    v41  CallExt { binding_idx=0, args=[v40], fp_arg_mask=0x0 } -> x0
+    v41  CallExt { binding_idx=25, args=[v40], fp_arg_mask=0x0 } -> x0
     v42  Imm(0)                                           -> x0
     v43  LifetimeEnd(-1)                                  -> -
     v44  LifetimeEnd(0)                                   -> -

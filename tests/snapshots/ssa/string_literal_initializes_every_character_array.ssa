@@ -75,13 +75,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=11
     v69  LocalAddr(-7)                                    -> x0
     v70  BinopI { op=add, lhs=v69, rhs_imm=9 }            -> x0
     v71  ImmData(96)                                      -> x6
-    v72  CallExt { binding_idx=18, args=[v3, v71], fp_arg_mask=0x0 } -> x0
+    v72  CallExt { binding_idx=33, args=[v3, v71], fp_arg_mask=0x0 } -> x0
     v73  BinopI { op=ne, lhs=v72, rhs_imm=0 }             -> x1
     terminator Bnz { cond=v72, target=b2, fall=b1 }   (exit_acc=v73)
   block 1  start_pc=0
     v246 ImmData(113)                                     -> x6
     v247 LocalAddr(-3)                                    -> x7
-    v248 CallExt { binding_idx=18, args=[v247, v246], fp_arg_mask=0x0 } -> x0
+    v248 CallExt { binding_idx=33, args=[v247, v246], fp_arg_mask=0x0 } -> x0
     v249 BinopI { op=ne, lhs=v248, rhs_imm=0 }            -> x1
     v250 Imm(0)                                           -> x1
     terminator Bz { cond=v248, target=b11, fall=b2 }   (exit_acc=v249)

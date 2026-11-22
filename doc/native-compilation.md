@@ -423,6 +423,12 @@ bundled `<stdio.h>` binds these to `ucrtbase.dll`, and a reference without a
 binding resolves to the library its name is bound to, `msvcrt.dll` or
 `ucrtbase.dll`, so such an object links without `ucrt.lib`.
 
+An object compiled against glibc's headers by another toolchain calls glibc's
+own entry points as well: under `_FORTIFY_SOURCE` its checking functions
+(`__printf_chk`, `__memcpy_chk`, `__read_chk`, `__open_2`, ...), and in C23
+mode on glibc 2.38 and later the `__isoc23_` functions, whose `strtol` and
+`%i` take a `0b` prefix. The bundled headers bind them to `libc.so.6`.
+
 A cl object's `/DEFAULTLIB:` naming one of the MSVC C runtime's libraries
 (`libcmt`, `msvcrt`, `libvcruntime`, `ucrt`, and their debug forms) is not
 followed, since the image's C runtime is `msvcrt.dll`. A cl C++ object that

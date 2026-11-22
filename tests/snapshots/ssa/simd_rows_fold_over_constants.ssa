@@ -134,7 +134,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v128 Copy { value=v11, fp=true }                      -> [spill 4]
     v129 Copy { value=v40, fp=true }                      -> [spill 2]
     v130 Copy { value=v94, fp=true }                      -> [spill 0]
-    v131 CallExt { binding_idx=11, args=[v108, v120, v126], fp_arg_mask=0x0 } -> x0
+    v131 CallExt { binding_idx=26, args=[v108, v120, v126], fp_arg_mask=0x0 } -> x0
     v132 BinopI { op=eq, lhs=v131, rhs_imm=0 }            -> x1
     v133 Extend { value=v132, kind=I32 }                  -> x1
     v134 Extend { value=v132, kind=I32 }                  -> x1
@@ -292,7 +292,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v272 LocalAddr(-537)                                  -> x0
     v273 LocalAddr(-538)                                  -> x0
     v274 Imm(16)                                          -> x2
-    v275 CallExt { binding_idx=11, args=[v256, v268, v274], fp_arg_mask=0x0 } -> x0
+    v275 CallExt { binding_idx=26, args=[v256, v268, v274], fp_arg_mask=0x0 } -> x0
     v276 BinopI { op=eq, lhs=v275, rhs_imm=0 }            -> x1
     v277 Extend { value=v276, kind=I32 }                  -> x1
     v278 Extend { value=v276, kind=I32 }                  -> x1
@@ -450,7 +450,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v416 LocalAddr(-539)                                  -> x0
     v417 LocalAddr(-540)                                  -> x0
     v418 Imm(16)                                          -> x2
-    v419 CallExt { binding_idx=11, args=[v400, v412, v418], fp_arg_mask=0x0 } -> x0
+    v419 CallExt { binding_idx=26, args=[v400, v412, v418], fp_arg_mask=0x0 } -> x0
     v420 BinopI { op=eq, lhs=v419, rhs_imm=0 }            -> x1
     v421 Extend { value=v420, kind=I32 }                  -> x1
     v422 Extend { value=v420, kind=I32 }                  -> x1
@@ -608,7 +608,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v560 LocalAddr(-541)                                  -> x0
     v561 LocalAddr(-542)                                  -> x0
     v562 Imm(16)                                          -> x2
-    v563 CallExt { binding_idx=11, args=[v544, v556, v562], fp_arg_mask=0x0 } -> x0
+    v563 CallExt { binding_idx=26, args=[v544, v556, v562], fp_arg_mask=0x0 } -> x0
     v564 BinopI { op=eq, lhs=v563, rhs_imm=0 }            -> x1
     v565 Extend { value=v564, kind=I32 }                  -> x1
     v566 Extend { value=v564, kind=I32 }                  -> x1
@@ -758,7 +758,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v696 LocalAddr(-543)                                  -> x0
     v697 LocalAddr(-544)                                  -> x0
     v698 Imm(16)                                          -> x2
-    v699 CallExt { binding_idx=11, args=[v685, v693, v698], fp_arg_mask=0x0 } -> x0
+    v699 CallExt { binding_idx=26, args=[v685, v693, v698], fp_arg_mask=0x0 } -> x0
     v700 BinopI { op=eq, lhs=v699, rhs_imm=0 }            -> x1
     v701 Extend { value=v700, kind=I32 }                  -> x1
     v702 Extend { value=v700, kind=I32 }                  -> x1
@@ -896,7 +896,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v820 LocalAddr(-545)                                  -> x0
     v821 LocalAddr(-546)                                  -> x0
     v822 Imm(16)                                          -> x2
-    v823 CallExt { binding_idx=11, args=[v809, v817, v822], fp_arg_mask=0x0 } -> x0
+    v823 CallExt { binding_idx=26, args=[v809, v817, v822], fp_arg_mask=0x0 } -> x0
     v824 BinopI { op=eq, lhs=v823, rhs_imm=0 }            -> x1
     v825 Extend { value=v824, kind=I32 }                  -> x1
     v826 Extend { value=v824, kind=I32 }                  -> x1
@@ -1034,7 +1034,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v944 LocalAddr(-547)                                  -> x0
     v945 LocalAddr(-548)                                  -> x0
     v946 Imm(16)                                          -> x2
-    v947 CallExt { binding_idx=11, args=[v933, v941, v946], fp_arg_mask=0x0 } -> x0
+    v947 CallExt { binding_idx=26, args=[v933, v941, v946], fp_arg_mask=0x0 } -> x0
     v948 BinopI { op=eq, lhs=v947, rhs_imm=0 }            -> x1
     v949 Extend { value=v948, kind=I32 }                  -> x1
     v950 Extend { value=v948, kind=I32 }                  -> x1
@@ -1180,7 +1180,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v1076 LocalAddr(-549)                                  -> x0
     v1077 LocalAddr(-550)                                  -> x0
     v1078 Imm(16)                                          -> x2
-    v1079 CallExt { binding_idx=11, args=[v1060, v1072, v1078], fp_arg_mask=0x0 } -> x0
+    v1079 CallExt { binding_idx=26, args=[v1060, v1072, v1078], fp_arg_mask=0x0 } -> x0
     v1080 BinopI { op=eq, lhs=v1079, rhs_imm=0 }           -> x1
     v1081 Extend { value=v1080, kind=I32 }                 -> x1
     v1082 Extend { value=v1080, kind=I32 }                 -> x1
@@ -1338,7 +1338,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v1220 LocalAddr(-551)                                  -> x0
     v1221 LocalAddr(-552)                                  -> x0
     v1222 Imm(16)                                          -> x2
-    v1223 CallExt { binding_idx=11, args=[v1204, v1216, v1222], fp_arg_mask=0x0 } -> x0
+    v1223 CallExt { binding_idx=26, args=[v1204, v1216, v1222], fp_arg_mask=0x0 } -> x0
     v1224 BinopI { op=eq, lhs=v1223, rhs_imm=0 }           -> x1
     v1225 Extend { value=v1224, kind=I32 }                 -> x1
     v1226 Extend { value=v1224, kind=I32 }                 -> x1
@@ -1492,7 +1492,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v1360 LocalAddr(-553)                                  -> x0
     v1361 LocalAddr(-554)                                  -> x0
     v1362 Imm(16)                                          -> x2
-    v1363 CallExt { binding_idx=11, args=[v1346, v1356, v1362], fp_arg_mask=0x0 } -> x0
+    v1363 CallExt { binding_idx=26, args=[v1346, v1356, v1362], fp_arg_mask=0x0 } -> x0
     v1364 BinopI { op=eq, lhs=v1363, rhs_imm=0 }           -> x1
     v1365 Extend { value=v1364, kind=I32 }                 -> x1
     v1366 Extend { value=v1364, kind=I32 }                 -> x1
@@ -1642,7 +1642,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v1496 LocalAddr(-555)                                  -> x0
     v1497 LocalAddr(-556)                                  -> x0
     v1498 Imm(16)                                          -> x2
-    v1499 CallExt { binding_idx=11, args=[v1480, v1492, v1498], fp_arg_mask=0x0 } -> x0
+    v1499 CallExt { binding_idx=26, args=[v1480, v1492, v1498], fp_arg_mask=0x0 } -> x0
     v1500 BinopI { op=eq, lhs=v1499, rhs_imm=0 }           -> x1
     v1501 Extend { value=v1500, kind=I32 }                 -> x1
     v1502 Extend { value=v1500, kind=I32 }                 -> x1
@@ -1800,7 +1800,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v1640 LocalAddr(-557)                                  -> x0
     v1641 LocalAddr(-558)                                  -> x0
     v1642 Imm(16)                                          -> x2
-    v1643 CallExt { binding_idx=11, args=[v1624, v1636, v1642], fp_arg_mask=0x0 } -> x0
+    v1643 CallExt { binding_idx=26, args=[v1624, v1636, v1642], fp_arg_mask=0x0 } -> x0
     v1644 BinopI { op=eq, lhs=v1643, rhs_imm=0 }           -> x1
     v1645 Extend { value=v1644, kind=I32 }                 -> x1
     v1646 Extend { value=v1644, kind=I32 }                 -> x1
@@ -1954,7 +1954,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v1780 LocalAddr(-559)                                  -> x0
     v1781 LocalAddr(-560)                                  -> x0
     v1782 Imm(16)                                          -> x2
-    v1783 CallExt { binding_idx=11, args=[v1767, v1777, v1782], fp_arg_mask=0x0 } -> x0
+    v1783 CallExt { binding_idx=26, args=[v1767, v1777, v1782], fp_arg_mask=0x0 } -> x0
     v1784 BinopI { op=eq, lhs=v1783, rhs_imm=0 }           -> x1
     v1785 Extend { value=v1784, kind=I32 }                 -> x1
     v1786 Extend { value=v1784, kind=I32 }                 -> x1
@@ -2104,7 +2104,7 @@ fn ent_pc=1334 n_params=0 variadic=false locals=0
     v1916 LocalAddr(-561)                                  -> x0
     v1917 LocalAddr(-562)                                  -> x0
     v1918 Imm(16)                                          -> x2
-    v1919 CallExt { binding_idx=11, args=[v1902, v1912, v1918], fp_arg_mask=0x0 } -> x0
+    v1919 CallExt { binding_idx=26, args=[v1902, v1912, v1918], fp_arg_mask=0x0 } -> x0
     v1920 BinopI { op=eq, lhs=v1919, rhs_imm=0 }           -> x1
     v1921 Extend { value=v1920, kind=I32 }                 -> x1
     v1922 Extend { value=v1920, kind=I32 }                 -> x1

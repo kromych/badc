@@ -9,7 +9,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v3   Undef                                            -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(64)                                          -> x7
-    v6   CallExt { binding_idx=72, args=[v5], fp_arg_mask=0x0 } -> x3
+    v6   CallExt { binding_idx=110, args=[v5], fp_arg_mask=0x0 } -> x3
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   ImmData(1)                                       -> x6
@@ -17,7 +17,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v11  Imm(22)                                          -> x1
     v12  Imm(33)                                          -> x8
     v13  Imm(44)                                          -> x9
-    v14  CallExt { binding_idx=2, args=[v6, v9, v10, v11, v12, v13], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=27, args=[v6, v9, v10, v11, v12, v13], fp_arg_mask=0x0 } -> x0
     v15  Imm(0)                                           -> x1
     v16  Extend { value=v14, kind=I32 }                   -> x1
     v17  BinopI { op=ne, lhs=v14, rhs_imm=11 }            -> x0
@@ -29,7 +29,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v19  Imm(0)                                           -> x0
     v20  ImmData(13)                                      -> x6
     v21  Imm(11)                                          -> x2
-    v22  CallExt { binding_idx=150, args=[v6, v20, v21], fp_arg_mask=0x0 } -> x0
+    v22  CallExt { binding_idx=203, args=[v6, v20, v21], fp_arg_mask=0x0 } -> x0
     v23  BinopI { op=ne, lhs=v22, rhs_imm=0 }             -> x1
     terminator Bz { cond=v22, target=b4, fall=b3 }   (exit_acc=v23)
   block 3  start_pc=0
@@ -37,7 +37,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Return(v24)   (exit_acc=v24)
   block 4  start_pc=0
     v25  Imm(0)                                           -> x0
-    v26  CallExt { binding_idx=75, args=[v6], fp_arg_mask=0x0 } -> x0
+    v26  CallExt { binding_idx=113, args=[v6], fp_arg_mask=0x0 } -> x0
     v27  Imm(0)                                           -> x0
     terminator Return(v27)   (exit_acc=v27)
 ; --- SSA dump (ok=true) ent_pc=0 ---

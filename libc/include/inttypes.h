@@ -212,3 +212,17 @@ static inline intmax_t strtoimax(const char *nptr, char **endptr, int base) {
 static inline uintmax_t strtoumax(const char *nptr, char **endptr, int base) {
     return strtoull((char *)nptr, endptr, base);
 }
+
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+// glibc 2.38's C23 entry points, which an object built against its headers in
+// C23 mode calls: there strtol and the scanners' %i take a 0b prefix.
+#pragma binding(libc::__isoc23_strtoimax, "__isoc23_strtoimax")
+#pragma binding(libc::__isoc23_strtoumax, "__isoc23_strtoumax")
+#pragma binding(libc::__isoc23_wcstoimax, "__isoc23_wcstoimax")
+#pragma binding(libc::__isoc23_wcstoumax, "__isoc23_wcstoumax")
+intmax_t __isoc23_strtoimax(const char *, char **, int);
+uintmax_t __isoc23_strtoumax(const char *, char **, int);
+intmax_t __isoc23_wcstoimax(const wchar_t *, wchar_t **, int);
+uintmax_t __isoc23_wcstoumax(const wchar_t *, wchar_t **, int);
+#endif

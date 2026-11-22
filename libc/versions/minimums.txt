@@ -47,15 +47,19 @@ libc.so.6 cfsetispeed
 libc.so.6 cfsetospeed
 
 [-] the SVID error-handling wrappers glibc kept when it dropped
-    `matherr` and `_LIB_VERSION` (2.27, 2.29, 2.35, 2.38, 2.43). Both
+    `matherr` and `_LIB_VERSION` (2.27, 2.29, 2.35, 2.38, 2.43, 2.44). Both
     definitions run the same core: identical results and identical
     errno over the sample. <math.h> declares neither `matherr` nor
     `_LIB_VERSION`, so the interface it states is the same for both.
+    cosh and sinh (GLIBC_2.44) were measured on glibc 2.44, x86_64 and
+    aarch64: 25 edge values, the overflow bounds among them, and -800 to
+    800 in steps of 0.37.
 libm.so.6 acosf
 libm.so.6 acoshf
 libm.so.6 asinf
 libm.so.6 atan2f
 libm.so.6 atanhf
+libm.so.6 cosh
 libm.so.6 coshf
 libm.so.6 exp
 libm.so.6 exp2
@@ -72,6 +76,7 @@ libm.so.6 pow
 libm.so.6 powf
 libm.so.6 remainder
 libm.so.6 remainderf
+libm.so.6 sinh
 libm.so.6 sinhf
 libm.so.6 sqrtf
 libm.so.6 tgammaf

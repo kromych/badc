@@ -133,7 +133,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v127 Imm(0)                                           -> x0
     v128 Extend { value=v1, kind=I8 }                     -> x0
     v129 Imm(64)                                          -> x2
-    v130 CallExt { binding_idx=10, args=[v124, v1, v129], fp_arg_mask=0x0 } -> x0
+    v130 CallExt { binding_idx=25, args=[v124, v1, v129], fp_arg_mask=0x0 } -> x0
     v131 LocalAddr(-50)                                   -> x0
     v132 Imm(32)                                          -> x1
     v133 Imm(31)                                          -> x1
@@ -283,7 +283,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v268 Imm(0)                                           -> x0
     v269 Extend { value=v1, kind=I8 }                     -> x0
     v270 Imm(64)                                          -> x2
-    v271 CallExt { binding_idx=10, args=[v265, v1, v270], fp_arg_mask=0x0 } -> x0
+    v271 CallExt { binding_idx=25, args=[v265, v1, v270], fp_arg_mask=0x0 } -> x0
     v272 LocalAddr(-51)                                   -> x0
     v273 Imm(63)                                          -> x0
     v274 BinopI { op=add, lhs=v272, rhs_imm=63 }          -> x0
@@ -337,7 +337,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=2
     v31  Imm(3)                                           -> x0
     v32  Imm(3)                                           -> x0
     v33  Imm(64)                                          -> x2
-    v34  CallExt { binding_idx=10, args=[v6, v1, v33], fp_arg_mask=0x0 } -> x0
+    v34  CallExt { binding_idx=25, args=[v6, v1, v33], fp_arg_mask=0x0 } -> x0
     v35  LocalAddr(-56)                                   -> x0
     v36  Imm(32)                                          -> x1
     v37  Imm(31)                                          -> x1
@@ -486,7 +486,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=2
     v180 Imm(0)                                           -> x0
     v181 Imm(3)                                           -> x0
     v182 Imm(64)                                          -> x2
-    v183 CallExt { binding_idx=10, args=[v177, v59, v182], fp_arg_mask=0x0 } -> x0
+    v183 CallExt { binding_idx=25, args=[v177, v59, v182], fp_arg_mask=0x0 } -> x0
     v184 LocalAddr(-57)                                   -> x0
     v185 Imm(32)                                          -> x1
     v186 Imm(31)                                          -> x1
@@ -529,7 +529,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=2
     v223 Imm(3)                                           -> x0
     v224 Imm(3)                                           -> x6
     v225 Imm(64)                                          -> x2
-    v226 CallExt { binding_idx=10, args=[v198, v224, v225], fp_arg_mask=0x0 } -> x0
+    v226 CallExt { binding_idx=25, args=[v198, v224, v225], fp_arg_mask=0x0 } -> x0
     v227 LocalAddr(-58)                                   -> x0
     v228 Imm(5)                                           -> x0
     v229 BinopI { op=add, lhs=v227, rhs_imm=5 }           -> x0
@@ -558,7 +558,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=1
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  CallExt { binding_idx=10, args=[v7, v3, v1], fp_arg_mask=0x0 } -> x0
+    v12  CallExt { binding_idx=25, args=[v7, v3, v1], fp_arg_mask=0x0 } -> x0
     v13  LocalAddr(-17)                                   -> x1
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
@@ -988,7 +988,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v275 LocalAddr(-48)                                   -> x7
     v276 Imm(4)                                           -> x0
     v277 Imm(64)                                          -> x2
-    v278 CallExt { binding_idx=10, args=[v275, v146, v277], fp_arg_mask=0x0 } -> x0
+    v278 CallExt { binding_idx=25, args=[v275, v146, v277], fp_arg_mask=0x0 } -> x0
     v279 LocalAddr(-48)                                   -> x0
     v280 Imm(32)                                          -> x1
     v281 Imm(31)                                          -> x1

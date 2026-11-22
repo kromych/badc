@@ -325,6 +325,34 @@ extern char **environ;
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__read_chk,          "__read_chk")
+#pragma binding(libc::__pread_chk,         "__pread_chk")
+#pragma binding(libc::__pread64_chk,       "__pread64_chk")
+#pragma binding(libc::__readlink_chk,      "__readlink_chk")
+#pragma binding(libc::__readlinkat_chk,    "__readlinkat_chk")
+#pragma binding(libc::__getcwd_chk,        "__getcwd_chk")
+#pragma binding(libc::__getwd_chk,         "__getwd_chk")
+#pragma binding(libc::__confstr_chk,       "__confstr_chk")
+#pragma binding(libc::__getgroups_chk,     "__getgroups_chk")
+#pragma binding(libc::__ttyname_r_chk,     "__ttyname_r_chk")
+#pragma binding(libc::__getlogin_r_chk,    "__getlogin_r_chk")
+#pragma binding(libc::__gethostname_chk,   "__gethostname_chk")
+#pragma binding(libc::__getdomainname_chk, "__getdomainname_chk")
+ssize_t __read_chk(int, void *, size_t, size_t);
+ssize_t __pread_chk(int, void *, size_t, off_t, size_t);
+ssize_t __pread64_chk(int, void *, size_t, off64_t, size_t);
+ssize_t __readlink_chk(const char *, char *, size_t, size_t);
+ssize_t __readlinkat_chk(int, const char *, char *, size_t, size_t);
+char *__getcwd_chk(char *, size_t, size_t);
+char *__getwd_chk(char *, size_t);
+size_t __confstr_chk(int, char *, size_t, size_t);
+int __getgroups_chk(int, gid_t *, size_t);
+int __ttyname_r_chk(int, char *, size_t, size_t);
+int __getlogin_r_chk(char *, size_t, size_t);
+int __gethostname_chk(char *, size_t, size_t);
+int __getdomainname_chk(char *, size_t, size_t);
 #pragma binding(libc::open,      "open")
 #pragma binding(libc::read,      "read")
 #pragma binding(libc::pread,     "pread")

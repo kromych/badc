@@ -827,7 +827,7 @@ fn ent_pc=497 n_params=2 variadic=false locals=10
     v168 Imm(16)                                          -> x2
     v169 Copy { value=v133, fp=true }                     -> [spill 0]
     v170 Copy { value=v143, fp=true }                     -> [spill 2]
-    v171 CallExt { binding_idx=78, args=[v163, v159, v168], fp_arg_mask=0x0 } -> x0
+    v171 CallExt { binding_idx=106, args=[v163, v159, v168], fp_arg_mask=0x0 } -> x0
     v172 BinopI { op=eq, lhs=v171, rhs_imm=0 }            -> x1
     v173 Extend { value=v172, kind=I32 }                  -> x1
     v174 LifetimeEnd(-2)                                  -> -
@@ -855,7 +855,7 @@ fn ent_pc=497 n_params=2 variadic=false locals=10
     v232 StoreLocal { off=-2, value=v222, kind=V128 }     -> -
     v233 LocalAddr(-2)                                    -> x0
     v234 Imm(16)                                          -> x2
-    v235 CallExt { binding_idx=78, args=[v229, v225, v234], fp_arg_mask=0x0 } -> x0
+    v235 CallExt { binding_idx=106, args=[v229, v225, v234], fp_arg_mask=0x0 } -> x0
     v236 BinopI { op=eq, lhs=v235, rhs_imm=0 }            -> x1
     v237 Extend { value=v236, kind=I32 }                  -> x1
     v238 LifetimeEnd(-2)                                  -> -
@@ -887,7 +887,7 @@ fn ent_pc=497 n_params=2 variadic=false locals=10
     v262 StoreLocal { off=-2, value=v252, kind=V128 }     -> -
     v263 LocalAddr(-2)                                    -> x0
     v264 Imm(16)                                          -> x2
-    v265 CallExt { binding_idx=78, args=[v259, v255, v264], fp_arg_mask=0x0 } -> x0
+    v265 CallExt { binding_idx=106, args=[v259, v255, v264], fp_arg_mask=0x0 } -> x0
     v266 BinopI { op=eq, lhs=v265, rhs_imm=0 }            -> x1
     v267 Extend { value=v266, kind=I32 }                  -> x1
     v268 LifetimeEnd(-2)                                  -> -
@@ -918,7 +918,7 @@ fn ent_pc=497 n_params=2 variadic=false locals=10
     v291 StoreLocal { off=-2, value=v281, kind=V128 }     -> -
     v292 LocalAddr(-2)                                    -> x0
     v293 Imm(16)                                          -> x2
-    v294 CallExt { binding_idx=78, args=[v288, v284, v293], fp_arg_mask=0x0 } -> x0
+    v294 CallExt { binding_idx=106, args=[v288, v284, v293], fp_arg_mask=0x0 } -> x0
     v295 BinopI { op=eq, lhs=v294, rhs_imm=0 }            -> x1
     v296 Extend { value=v295, kind=I32 }                  -> x1
     v297 LifetimeEnd(-2)                                  -> -
@@ -1245,7 +1245,7 @@ fn ent_pc=498 n_params=1 variadic=false locals=4
     v211 StoreLocal { off=-2, value=v206, kind=V128 }     -> -
     v212 LocalAddr(-2)                                    -> x0
     v213 Imm(16)                                          -> x2
-    v214 CallExt { binding_idx=78, args=[v208, v204, v213], fp_arg_mask=0x0 } -> x0
+    v214 CallExt { binding_idx=106, args=[v208, v204, v213], fp_arg_mask=0x0 } -> x0
     v215 BinopI { op=eq, lhs=v214, rhs_imm=0 }            -> x1
     v216 Extend { value=v215, kind=I32 }                  -> x1
     v217 LifetimeEnd(-2)                                  -> -
@@ -1403,7 +1403,7 @@ fn ent_pc=499 n_params=3 variadic=false locals=4
     v49  StoreLocal { off=-2, value=v40, kind=V128 }      -> -
     v50  LocalAddr(-2)                                    -> x0
     v51  Imm(16)                                          -> x2
-    v52  CallExt { binding_idx=78, args=[v46, v42, v51], fp_arg_mask=0x0 } -> x0
+    v52  CallExt { binding_idx=106, args=[v46, v42, v51], fp_arg_mask=0x0 } -> x0
     v53  BinopI { op=eq, lhs=v52, rhs_imm=0 }             -> x1
     v54  Extend { value=v53, kind=I32 }                   -> x1
     v55  LifetimeEnd(-2)                                  -> -
@@ -1531,7 +1531,7 @@ fn ent_pc=499 n_params=3 variadic=false locals=4
     v123 StoreLocal { off=-2, value=v114, kind=V128 }     -> -
     v124 LocalAddr(-2)                                    -> x0
     v125 Imm(16)                                          -> x2
-    v126 CallExt { binding_idx=78, args=[v120, v116, v125], fp_arg_mask=0x0 } -> x0
+    v126 CallExt { binding_idx=106, args=[v120, v116, v125], fp_arg_mask=0x0 } -> x0
     v127 BinopI { op=eq, lhs=v126, rhs_imm=0 }            -> x1
     v128 Extend { value=v127, kind=I32 }                  -> x1
     v129 LifetimeEnd(-2)                                  -> -
@@ -1658,7 +1658,7 @@ fn ent_pc=499 n_params=3 variadic=false locals=4
     v196 StoreLocal { off=-2, value=v187, kind=V128 }     -> -
     v197 LocalAddr(-2)                                    -> x0
     v198 Imm(16)                                          -> x2
-    v199 CallExt { binding_idx=78, args=[v193, v189, v198], fp_arg_mask=0x0 } -> x0
+    v199 CallExt { binding_idx=106, args=[v193, v189, v198], fp_arg_mask=0x0 } -> x0
     v200 BinopI { op=eq, lhs=v199, rhs_imm=0 }            -> x1
     v201 Extend { value=v200, kind=I32 }                  -> x1
     v202 LifetimeEnd(-2)                                  -> -
@@ -1785,7 +1785,7 @@ fn ent_pc=499 n_params=3 variadic=false locals=4
     v269 StoreLocal { off=-2, value=v260, kind=V128 }     -> -
     v270 LocalAddr(-2)                                    -> x0
     v271 Imm(16)                                          -> x2
-    v272 CallExt { binding_idx=78, args=[v266, v262, v271], fp_arg_mask=0x0 } -> x0
+    v272 CallExt { binding_idx=106, args=[v266, v262, v271], fp_arg_mask=0x0 } -> x0
     v273 BinopI { op=eq, lhs=v272, rhs_imm=0 }            -> x1
     v274 Extend { value=v273, kind=I32 }                  -> x1
     v275 LifetimeEnd(-2)                                  -> -
@@ -1912,7 +1912,7 @@ fn ent_pc=499 n_params=3 variadic=false locals=4
     v342 StoreLocal { off=-2, value=v333, kind=V128 }     -> -
     v343 LocalAddr(-2)                                    -> x0
     v344 Imm(16)                                          -> x2
-    v345 CallExt { binding_idx=78, args=[v339, v335, v344], fp_arg_mask=0x0 } -> x0
+    v345 CallExt { binding_idx=106, args=[v339, v335, v344], fp_arg_mask=0x0 } -> x0
     v346 BinopI { op=eq, lhs=v345, rhs_imm=0 }            -> x1
     v347 Extend { value=v346, kind=I32 }                  -> x1
     v348 LifetimeEnd(-2)                                  -> -
@@ -2002,7 +2002,7 @@ fn ent_pc=499 n_params=3 variadic=false locals=4
     v419 StoreLocal { off=-2, value=v409, kind=V128 }     -> -
     v420 LocalAddr(-2)                                    -> x0
     v421 Imm(16)                                          -> x2
-    v422 CallExt { binding_idx=78, args=[v416, v412, v421], fp_arg_mask=0x0 } -> x0
+    v422 CallExt { binding_idx=106, args=[v416, v412, v421], fp_arg_mask=0x0 } -> x0
     v423 BinopI { op=eq, lhs=v422, rhs_imm=0 }            -> x1
     v424 Extend { value=v423, kind=I32 }                  -> x1
     v425 LifetimeEnd(-2)                                  -> -
@@ -2393,7 +2393,7 @@ fn ent_pc=500 n_params=2 variadic=false locals=4
     v154 StoreLocal { off=-2, value=v145, kind=V128 }     -> -
     v155 LocalAddr(-2)                                    -> x0
     v156 Imm(16)                                          -> x2
-    v157 CallExt { binding_idx=78, args=[v151, v127, v156], fp_arg_mask=0x0 } -> x0
+    v157 CallExt { binding_idx=106, args=[v151, v127, v156], fp_arg_mask=0x0 } -> x0
     v158 BinopI { op=eq, lhs=v157, rhs_imm=0 }            -> x1
     v159 Extend { value=v158, kind=I32 }                  -> x1
     v160 LifetimeEnd(-2)                                  -> -
@@ -2460,7 +2460,7 @@ fn ent_pc=500 n_params=2 variadic=false locals=4
     v198 StoreLocal { off=-2, value=v189, kind=V128 }     -> -
     v199 LocalAddr(-2)                                    -> x0
     v200 Imm(16)                                          -> x2
-    v201 CallExt { binding_idx=78, args=[v195, v191, v200], fp_arg_mask=0x0 } -> x0
+    v201 CallExt { binding_idx=106, args=[v195, v191, v200], fp_arg_mask=0x0 } -> x0
     v202 BinopI { op=eq, lhs=v201, rhs_imm=0 }            -> x1
     v203 Extend { value=v202, kind=I32 }                  -> x1
     v204 LifetimeEnd(-2)                                  -> -
@@ -2527,7 +2527,7 @@ fn ent_pc=500 n_params=2 variadic=false locals=4
     v242 StoreLocal { off=-2, value=v233, kind=V128 }     -> -
     v243 LocalAddr(-2)                                    -> x0
     v244 Imm(16)                                          -> x2
-    v245 CallExt { binding_idx=78, args=[v239, v235, v244], fp_arg_mask=0x0 } -> x0
+    v245 CallExt { binding_idx=106, args=[v239, v235, v244], fp_arg_mask=0x0 } -> x0
     v246 BinopI { op=eq, lhs=v245, rhs_imm=0 }            -> x1
     v247 Extend { value=v246, kind=I32 }                  -> x1
     v248 LifetimeEnd(-2)                                  -> -
@@ -3801,7 +3801,7 @@ fn ent_pc=502 n_params=1 variadic=false locals=4
     v61  StoreLocal { off=-2, value=v51, kind=V128 }      -> -
     v62  LocalAddr(-2)                                    -> x0
     v63  Imm(16)                                          -> x2
-    v64  CallExt { binding_idx=78, args=[v58, v54, v63], fp_arg_mask=0x0 } -> x0
+    v64  CallExt { binding_idx=106, args=[v58, v54, v63], fp_arg_mask=0x0 } -> x0
     v65  BinopI { op=eq, lhs=v64, rhs_imm=0 }             -> x1
     v66  Extend { value=v65, kind=I32 }                   -> x1
     v67  LifetimeEnd(-2)                                  -> -
@@ -3948,7 +3948,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v42  StoreLocal { off=-2, value=v33, kind=V128 }      -> -
     v43  LocalAddr(-2)                                    -> x0
     v44  Imm(16)                                          -> x2
-    v45  CallExt { binding_idx=78, args=[v39, v35, v44], fp_arg_mask=0x0 } -> x0
+    v45  CallExt { binding_idx=106, args=[v39, v35, v44], fp_arg_mask=0x0 } -> x0
     v46  BinopI { op=eq, lhs=v45, rhs_imm=0 }             -> x1
     v47  Extend { value=v46, kind=I32 }                   -> x1
     v48  LifetimeEnd(-2)                                  -> -
@@ -4083,7 +4083,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v144 StoreLocal { off=-2, value=v135, kind=V128 }     -> -
     v145 LocalAddr(-2)                                    -> x0
     v146 Imm(16)                                          -> x2
-    v147 CallExt { binding_idx=78, args=[v141, v137, v146], fp_arg_mask=0x0 } -> x0
+    v147 CallExt { binding_idx=106, args=[v141, v137, v146], fp_arg_mask=0x0 } -> x0
     v148 BinopI { op=eq, lhs=v147, rhs_imm=0 }            -> x1
     v149 Extend { value=v148, kind=I32 }                  -> x1
     v150 LifetimeEnd(-2)                                  -> -
@@ -4218,7 +4218,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v247 StoreLocal { off=-2, value=v238, kind=V128 }     -> -
     v248 LocalAddr(-2)                                    -> x0
     v249 Imm(16)                                          -> x2
-    v250 CallExt { binding_idx=78, args=[v244, v240, v249], fp_arg_mask=0x0 } -> x0
+    v250 CallExt { binding_idx=106, args=[v244, v240, v249], fp_arg_mask=0x0 } -> x0
     v251 BinopI { op=eq, lhs=v250, rhs_imm=0 }            -> x1
     v252 Extend { value=v251, kind=I32 }                  -> x1
     v253 LifetimeEnd(-2)                                  -> -
@@ -4353,7 +4353,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v351 StoreLocal { off=-2, value=v342, kind=V128 }     -> -
     v352 LocalAddr(-2)                                    -> x0
     v353 Imm(16)                                          -> x2
-    v354 CallExt { binding_idx=78, args=[v348, v344, v353], fp_arg_mask=0x0 } -> x0
+    v354 CallExt { binding_idx=106, args=[v348, v344, v353], fp_arg_mask=0x0 } -> x0
     v355 BinopI { op=eq, lhs=v354, rhs_imm=0 }            -> x1
     v356 Extend { value=v355, kind=I32 }                  -> x1
     v357 LifetimeEnd(-2)                                  -> -
@@ -4488,7 +4488,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v456 StoreLocal { off=-2, value=v447, kind=V128 }     -> -
     v457 LocalAddr(-2)                                    -> x0
     v458 Imm(16)                                          -> x2
-    v459 CallExt { binding_idx=78, args=[v453, v449, v458], fp_arg_mask=0x0 } -> x0
+    v459 CallExt { binding_idx=106, args=[v453, v449, v458], fp_arg_mask=0x0 } -> x0
     v460 BinopI { op=eq, lhs=v459, rhs_imm=0 }            -> x1
     v461 Extend { value=v460, kind=I32 }                  -> x1
     v462 LifetimeEnd(-2)                                  -> -
@@ -4623,7 +4623,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v560 StoreLocal { off=-2, value=v551, kind=V128 }     -> -
     v561 LocalAddr(-2)                                    -> x0
     v562 Imm(16)                                          -> x2
-    v563 CallExt { binding_idx=78, args=[v557, v553, v562], fp_arg_mask=0x0 } -> x0
+    v563 CallExt { binding_idx=106, args=[v557, v553, v562], fp_arg_mask=0x0 } -> x0
     v564 BinopI { op=eq, lhs=v563, rhs_imm=0 }            -> x1
     v565 Extend { value=v564, kind=I32 }                  -> x1
     v566 LifetimeEnd(-2)                                  -> -
@@ -4760,7 +4760,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v664 StoreLocal { off=-2, value=v655, kind=V128 }     -> -
     v665 LocalAddr(-2)                                    -> x0
     v666 Imm(16)                                          -> x2
-    v667 CallExt { binding_idx=78, args=[v661, v657, v666], fp_arg_mask=0x0 } -> x0
+    v667 CallExt { binding_idx=106, args=[v661, v657, v666], fp_arg_mask=0x0 } -> x0
     v668 BinopI { op=eq, lhs=v667, rhs_imm=0 }            -> x1
     v669 Extend { value=v668, kind=I32 }                  -> x1
     v670 LifetimeEnd(-2)                                  -> -
@@ -4897,7 +4897,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v770 StoreLocal { off=-2, value=v761, kind=V128 }     -> -
     v771 LocalAddr(-2)                                    -> x0
     v772 Imm(16)                                          -> x2
-    v773 CallExt { binding_idx=78, args=[v767, v763, v772], fp_arg_mask=0x0 } -> x0
+    v773 CallExt { binding_idx=106, args=[v767, v763, v772], fp_arg_mask=0x0 } -> x0
     v774 BinopI { op=eq, lhs=v773, rhs_imm=0 }            -> x1
     v775 Extend { value=v774, kind=I32 }                  -> x1
     v776 LifetimeEnd(-2)                                  -> -
@@ -4929,7 +4929,7 @@ fn ent_pc=503 n_params=2 variadic=false locals=4
     v855 StoreLocal { off=-2, value=v844, kind=V128 }     -> -
     v856 LocalAddr(-2)                                    -> x0
     v857 Imm(16)                                          -> x2
-    v858 CallExt { binding_idx=78, args=[v852, v1, v857], fp_arg_mask=0x0 } -> x0
+    v858 CallExt { binding_idx=106, args=[v852, v1, v857], fp_arg_mask=0x0 } -> x0
     v859 BinopI { op=eq, lhs=v858, rhs_imm=0 }            -> x1
     v860 Extend { value=v859, kind=I32 }                  -> x1
     v861 LifetimeEnd(-2)                                  -> -
@@ -5555,7 +5555,7 @@ fn ent_pc=504 n_params=0 variadic=false locals=10
     v326 StoreLocal { off=-2, value=v321, kind=V128 }     -> -
     v327 LocalAddr(-2)                                    -> x0
     v328 Imm(16)                                          -> x2
-    v329 CallExt { binding_idx=78, args=[v323, v319, v328], fp_arg_mask=0x0 } -> x0
+    v329 CallExt { binding_idx=106, args=[v323, v319, v328], fp_arg_mask=0x0 } -> x0
     v330 BinopI { op=eq, lhs=v329, rhs_imm=0 }            -> x1
     v331 Extend { value=v330, kind=I32 }                  -> x1
     v332 LifetimeEnd(-2)                                  -> -

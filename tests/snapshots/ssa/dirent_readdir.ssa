@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(1)                                       -> x7
-    v2   CallExt { binding_idx=35, args=[v1], fp_arg_mask=0x0 } -> x13
+    v2   CallExt { binding_idx=36, args=[v1], fp_arg_mask=0x0 } -> x13
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   BinopI { op=eq, lhs=v2, rhs_imm=0 }              -> x0
@@ -27,7 +27,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v22  Imm(0)                                           -> x1
     v23  BinopI { op=add, lhs=v15, rhs_imm=19 }           -> x7
     v24  ImmData(3)                                       -> x6
-    v25  CallExt { binding_idx=62, args=[v23, v24], fp_arg_mask=0x0 } -> x0
+    v25  CallExt { binding_idx=78, args=[v23, v24], fp_arg_mask=0x0 } -> x0
     v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x1
     v27  Imm(1)                                           -> x1
     v28  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x2
@@ -40,14 +40,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v12  Phi { incoming=[b2:v9, b4:v29], kind=I64 }       -> x3
     v13  Phi { incoming=[b2:v9, b4:v20], kind=I64 }       -> x12
     v14  Imm(0)                                           -> x0
-    v15  CallExt { binding_idx=36, args=[v2], fp_arg_mask=0x0 } -> x0
+    v15  CallExt { binding_idx=37, args=[v2], fp_arg_mask=0x0 } -> x0
     v16  Imm(0)                                           -> x1
     v17  Imm(0)                                           -> x1
     v18  BinopI { op=ne, lhs=v15, rhs_imm=0 }             -> x1
     terminator Bz { cond=v15, target=b6, fall=b3 }   (exit_acc=v18)
   block 6  start_pc=0
     v30  Imm(0)                                           -> x0
-    v31  CallExt { binding_idx=38, args=[v2], fp_arg_mask=0x0 } -> x0
+    v31  CallExt { binding_idx=39, args=[v2], fp_arg_mask=0x0 } -> x0
     v32  Extend { value=v13, kind=I32 }                   -> x0
     v33  BinopI { op=gt, lhs=v13, rhs_imm=2 }             -> x0
     v34  Imm(0)                                           -> x1

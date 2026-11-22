@@ -21615,6 +21615,97 @@ int main(void) {
 }
 "#;
 
+/// An object compiled against glibc's headers with `_FORTIFY_SOURCE`, and in
+/// C23 mode on glibc 2.38 and later, calls glibc's checking entry points
+/// (`__printf_chk`, ...) and its C23 ones (`__isoc23_strtol`, ...) in place of
+/// the plain functions. A badc link binds them to libc.so.6 and the program
+/// runs.
+#[cfg(target_os = "linux")]
+#[test]
+fn glibcs_checking_and_c23_entry_points_bind() {
+    let test = "glibcs_checking_and_c23_entry_points_bind";
+    let cc = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
+    let glibc = Command::new("getconf").arg("GNU_LIBC_VERSION").output();
+    let Some(version) = glibc
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+    else {
+        eprintln!("skipping {test}: no getconf");
+        return;
+    };
+    let minor: u32 = (version.trim().rsplit('.').next())
+        .and_then(|m| m.parse().ok())
+        .unwrap_or(0);
+    let dir = tempdir(test);
+    write_source(
+        &dir,
+        "fort.c",
+        "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
+         #include <fcntl.h>\n#include <unistd.h>\n\
+         int main(int argc, char **argv) {\n\
+           char buf[32], copy[16], word[16];\n\
+           snprintf(buf, sizeof buf, \"%d-%s\", argc, \"x\");\n\
+           memcpy(copy, buf, (size_t)argc * 4);\n\
+           strcpy(word, argc > 5 ? argv[1] : \"ok\");\n\
+           int fd = open(argv[0], O_RDONLY);\n\
+           ssize_t got = read(fd, buf, (size_t)argc * 4);\n\
+           long v = strtol(\"0x10\", 0, 0);\n\
+           int s = 0;\n\
+           sscanf(\"7\", \"%d\", &s);\n\
+           printf(\"%s %s %zd %ld %d\\n\", copy, word, got, v, s);\n\
+           return 0;\n\
+         }\n",
+    );
+    let compiled = Command::new(&cc)
+        .args([
+            "-O2",
+            "-fPIE",
+            "-std=gnu2x",
+            "-D_FORTIFY_SOURCE=2",
+            "-c",
+            "fort.c",
+        ])
+        .current_dir(&dir)
+        .status();
+    if !compiled.is_ok_and(|s| s.success()) {
+        eprintln!("skipping {test}: no system C compiler");
+        return;
+    }
+    let nm = Command::new("nm")
+        .args(["-u", "fort.o"])
+        .current_dir(&dir)
+        .output();
+    let undefined = String::from_utf8_lossy(&nm.expect("run nm").stdout).into_owned();
+    let mut wanted = vec![
+        "__printf_chk",
+        "__snprintf_chk",
+        "__memcpy_chk",
+        "__strcpy_chk",
+        "__read_chk",
+    ];
+    if minor >= 38 {
+        wanted.extend(["__isoc23_strtol", "__isoc23_sscanf"]);
+    }
+    for name in &wanted {
+        assert!(
+            undefined.contains(name),
+            "the object calls {name}:\n{undefined}"
+        );
+    }
+    run(
+        Command::new(badc())
+            .args(["fort.o", "-o", "fort"])
+            .current_dir(&dir),
+        "link",
+    );
+    let out = Command::new(dir.join("fort")).output().expect("run");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "1-x ok 4 16 7\n",
+        "{out:?}"
+    );
+}
+
 /// A C++ exception thrown below a badc-compiled C function reaches the
 /// caller's `catch` with the caller's values intact, linked by the system
 /// compiler and by badc.

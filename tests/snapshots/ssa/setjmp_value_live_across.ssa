@@ -6,7 +6,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> x7
     v2   Imm(1)                                           -> x6
-    v3   CallExt { binding_idx=1, args=[v1, v2], fp_arg_mask=0x0 } -> x0
+    v3   CallExt { binding_idx=2, args=[v1, v2], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=test
@@ -26,7 +26,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v10  Extend { value=v9, kind=I32, nsw }               -> x0
     v11  Imm(0)                                           -> x0
     v12  ImmData(16)                                      -> x7
-    v13  CallExt { binding_idx=0, args=[v12], fp_arg_mask=0x0 } -> x0
+    v13  CallExt { binding_idx=1, args=[v12], fp_arg_mask=0x0 } -> x0
     terminator Bz { cond=v13, target=b2, fall=b1 }   (exit_acc=v13)
   block 1  start_pc=0
     v14  Imm(0)                                           -> x0

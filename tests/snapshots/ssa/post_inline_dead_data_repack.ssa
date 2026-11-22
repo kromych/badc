@@ -157,7 +157,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v131 Imm(16)                                          -> x0
     v132 BinopI { op=add, lhs=v83, rhs_imm=16 }           -> x0
     v133 Load { addr=v83, disp=16, kind=I64 pc_rel }      -> x0
-    v134 CallExt { binding_idx=0, args=[v120, v124, v116, v129, v90], fp_arg_mask=0x0 } -> x0
+    v134 CallExt { binding_idx=25, args=[v120, v124, v116, v129, v90], fp_arg_mask=0x0 } -> x0
     v135 Imm(0)                                           -> x0
     terminator Return(v135)   (exit_acc=v135)
 ; --- SSA dump (ok=true) ent_pc=0 ---

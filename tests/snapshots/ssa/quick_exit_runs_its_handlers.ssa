@@ -33,7 +33,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(99)                                          -> x7
-    v2   CallExt { binding_idx=20, args=[v1], fp_arg_mask=0x0 } -> x0
+    v2   CallExt { binding_idx=33, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=last
@@ -53,7 +53,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
   block 1  start_pc=0
     v13  Copy { value=v8, fp=false }                      -> x0
     v14  Imm(0)                                           -> x0
-    v15  CallExt { binding_idx=20, args=[v8], fp_arg_mask=0x0 } -> x0
+    v15  CallExt { binding_idx=33, args=[v8], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=main
@@ -63,18 +63,18 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=8)                                -> x7
     v2   Imm(0)                                           -> x6
-    v3   CallExt { binding_idx=38, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
+    v3   CallExt { binding_idx=51, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
     v4   ImmCode(ent_pc=9)                                -> x7
     v5   Imm(0)                                           -> x6
-    v6   CallExt { binding_idx=22, args=[v4, v5], fp_arg_mask=0x0 } -> x0
+    v6   CallExt { binding_idx=35, args=[v4, v5], fp_arg_mask=0x0 } -> x0
     v7   ImmCode(ent_pc=6)                                -> x7
     v8   Imm(0)                                           -> x6
-    v9   CallExt { binding_idx=22, args=[v7, v8], fp_arg_mask=0x0 } -> x0
+    v9   CallExt { binding_idx=35, args=[v7, v8], fp_arg_mask=0x0 } -> x0
     v10  ImmCode(ent_pc=7)                                -> x7
     v11  Imm(0)                                           -> x6
-    v12  CallExt { binding_idx=22, args=[v10, v11], fp_arg_mask=0x0 } -> x0
+    v12  CallExt { binding_idx=35, args=[v10, v11], fp_arg_mask=0x0 } -> x0
     v13  Imm(3)                                           -> x7
-    v14  CallExt { binding_idx=21, args=[v13], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=34, args=[v13], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

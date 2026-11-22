@@ -937,7 +937,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v894 BinopI { op=add, lhs=v892, rhs_imm=4 }           -> x7
     v895 Imm(0)                                           -> x0
     v896 Imm(16)                                          -> x2
-    v897 CallExt { binding_idx=13, args=[v894, v892, v896], fp_arg_mask=0x0 } -> x0
+    v897 CallExt { binding_idx=28, args=[v894, v892, v896], fp_arg_mask=0x0 } -> x0
     v898 Imm(0)                                           -> x0
     v899 Imm(0)                                           -> x0
     v900 Imm(0)                                           -> x0
@@ -1247,7 +1247,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v1164 Imm(4)                                           -> x0
     v1165 BinopI { op=add, lhs=v1162, rhs_imm=4 }          -> x6
     v1166 Imm(16)                                          -> x2
-    v1167 CallExt { binding_idx=13, args=[v1162, v1165, v1166], fp_arg_mask=0x0 } -> x0
+    v1167 CallExt { binding_idx=28, args=[v1162, v1165, v1166], fp_arg_mask=0x0 } -> x0
     v1168 Imm(0)                                           -> x0
     v1169 Imm(0)                                           -> x0
     v1170 Imm(0)                                           -> x0
@@ -1540,7 +1540,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v1417 LocalAddr(-64)                                   -> x7
     v1418 LocalAddr(-128)                                  -> x6
     v1419 Imm(512)                                         -> x2
-    v1420 CallExt { binding_idx=12, args=[v1417, v1418, v1419], fp_arg_mask=0x0 } -> x0
+    v1420 CallExt { binding_idx=27, args=[v1417, v1418, v1419], fp_arg_mask=0x0 } -> x0
     v1421 Imm(0)                                           -> x0
     v1422 Imm(0)                                           -> x1
     terminator Jmp(b73)   (exit_acc=v1421)
@@ -1570,7 +1570,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v1439 LocalAddr(-64)                                   -> x7
     v1440 Imm(0)                                           -> x6
     v1441 Imm(0)                                           -> x0
-    v1442 CallExt { binding_idx=10, args=[v1439, v1440, v1437], fp_arg_mask=0x0 } -> x0
+    v1442 CallExt { binding_idx=25, args=[v1439, v1440, v1437], fp_arg_mask=0x0 } -> x0
     v1443 Imm(0)                                           -> x0
     v1444 Imm(0)                                           -> x1
     terminator Jmp(b77)   (exit_acc=v1443)

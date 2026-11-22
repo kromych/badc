@@ -876,7 +876,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=13
     v495 LocalAddr(-13)                                   -> x0
     v496 LocalAddr(-9)                                    -> x0
     v497 Imm(8)                                           -> x2
-    v498 CallExt { binding_idx=11, args=[v481, v486, v497], fp_arg_mask=0x0 } -> x0
+    v498 CallExt { binding_idx=26, args=[v481, v486, v497], fp_arg_mask=0x0 } -> x0
     v499 BinopI { op=ne, lhs=v498, rhs_imm=0 }            -> x1
     terminator Bz { cond=v498, target=b33, fall=b32 }   (exit_acc=v499)
   block 32  start_pc=0

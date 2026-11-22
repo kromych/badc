@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> x7
     v2   Imm(3)                                           -> x6
-    v3   CallExt { binding_idx=3, args=[v1, v2], fp_arg_mask=0x0 } -> x0
+    v3   CallExt { binding_idx=4, args=[v1, v2], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=jump_sig
@@ -16,7 +16,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(224)                                     -> x7
     v2   Imm(5)                                           -> x6
-    v3   CallExt { binding_idx=5, args=[v1, v2], fp_arg_mask=0x0 } -> x0
+    v3   CallExt { binding_idx=6, args=[v1, v2], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
@@ -27,7 +27,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=33
     v1   Imm(0)                                           -> x0
     v2   StoreLocal { off=-33, value=v1, kind=I32, volatile } -> -
     v3   ImmData(16)                                      -> x7
-    v4   CallExt { binding_idx=2, args=[v3], fp_arg_mask=0x0 } -> x0
+    v4   CallExt { binding_idx=3, args=[v3], fp_arg_mask=0x0 } -> x0
     v5   Imm(0)                                           -> x1
     v6   Extend { value=v4, kind=I32 }                    -> x1
     v7   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x1
@@ -59,13 +59,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=33
     terminator Return(v22)   (exit_acc=v22)
   block 5  start_pc=0
     v25  LocalAddr(-32)                                   -> x7
-    v26  CallExt { binding_idx=11, args=[v25], fp_arg_mask=0x0 } -> x0
+    v26  CallExt { binding_idx=12, args=[v25], fp_arg_mask=0x0 } -> x0
     v27  LocalAddr(-32)                                   -> x7
     v28  Imm(10)                                          -> x6
-    v29  CallExt { binding_idx=13, args=[v27, v28], fp_arg_mask=0x0 } -> x0
+    v29  CallExt { binding_idx=14, args=[v27, v28], fp_arg_mask=0x0 } -> x0
     v30  ImmData(224)                                     -> x7
     v31  Imm(1)                                           -> x6
-    v32  CallExt { binding_idx=4, args=[v30, v31], fp_arg_mask=0x0 } -> x0
+    v32  CallExt { binding_idx=5, args=[v30, v31], fp_arg_mask=0x0 } -> x0
     v33  Imm(0)                                           -> x1
     v34  Extend { value=v32, kind=I32 }                   -> x1
     v35  BinopI { op=eq, lhs=v32, rhs_imm=0 }             -> x1
@@ -91,10 +91,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=33
     v56  Imm(2)                                           -> x7
     v57  Imm(0)                                           -> x6
     v58  LocalAddr(-16)                                   -> x2
-    v59  CallExt { binding_idx=16, args=[v56, v57, v58], fp_arg_mask=0x0 } -> x0
+    v59  CallExt { binding_idx=17, args=[v56, v57, v58], fp_arg_mask=0x0 } -> x0
     v60  LocalAddr(-16)                                   -> x7
     v61  Imm(10)                                          -> x6
-    v62  CallExt { binding_idx=15, args=[v60, v61], fp_arg_mask=0x0 } -> x0
+    v62  CallExt { binding_idx=16, args=[v60, v61], fp_arg_mask=0x0 } -> x0
     terminator Bz { cond=v62, target=b11, fall=b10 }   (exit_acc=v62)
   block 10  start_pc=0
     v63  Imm(5)                                           -> x0
@@ -111,7 +111,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=33
     v37  StoreLocal { off=-33, value=v36, kind=I32, volatile } -> -
     v38  Imm(0)                                           -> x7
     v39  LocalAddr(-32)                                   -> x6
-    v40  CallExt { binding_idx=16, args=[v38, v39, v38], fp_arg_mask=0x0 } -> x0
+    v40  CallExt { binding_idx=17, args=[v38, v39, v38], fp_arg_mask=0x0 } -> x0
     v41  Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=0 ---

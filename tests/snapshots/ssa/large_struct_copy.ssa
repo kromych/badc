@@ -96,7 +96,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=132
     v84  LocalAddr(-66)                                   -> x7
     v85  Imm(126)                                         -> x6
     v86  Imm(524)                                         -> x2
-    v87  CallExt { binding_idx=82, args=[v84, v85, v86], fp_arg_mask=0x0 } -> x0
+    v87  CallExt { binding_idx=122, args=[v84, v85, v86], fp_arg_mask=0x0 } -> x0
     v88  LocalAddr(-66)                                   -> x0
     v89  LocalAddr(-132)                                  -> x1
     v90  Mcpy { dst=v88, src=v89, size=524, align=4 }     -> -
@@ -276,7 +276,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=132
     terminator Bz { cond=v188, target=b25, fall=b20 }   (exit_acc=v188)
   block 25  start_pc=0
     v202 ImmData(1)                                       -> x7
-    v203 CallExt { binding_idx=0, args=[v202], fp_arg_mask=0x0 } -> x0
+    v203 CallExt { binding_idx=25, args=[v202], fp_arg_mask=0x0 } -> x0
     v204 Imm(0)                                           -> x0
     v205 LifetimeEnd(-66)                                 -> -
     v206 LifetimeEnd(-132)                                -> -

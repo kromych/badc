@@ -40,6 +40,10 @@ typedef unsigned long nfds_t;
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__poll_chk,  "__poll_chk")
+#pragma binding(libc::__ppoll_chk, "__ppoll_chk")
 #pragma binding(libc::poll, "poll")
 #pragma binding(libc::ppoll, "ppoll")
 #endif
@@ -60,4 +64,6 @@ struct timespec;
 #include <signal.h>
 int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo,
           const sigset_t *sigmask);
+int __poll_chk(struct pollfd *, nfds_t, int, size_t);
+int __ppoll_chk(struct pollfd *, nfds_t, const struct timespec *, const sigset_t *, size_t);
 #endif

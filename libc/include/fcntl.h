@@ -250,6 +250,16 @@ int openat(int dirfd, const char *path, int flags, ...);
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__open_2,     "__open_2")
+#pragma binding(libc::__open64_2,   "__open64_2")
+#pragma binding(libc::__openat_2,   "__openat_2")
+#pragma binding(libc::__openat64_2, "__openat64_2")
+int __open_2(const char *, int);
+int __open64_2(const char *, int);
+int __openat_2(int, const char *, int);
+int __openat64_2(int, const char *, int);
 #pragma binding(libc::fcntl, "fcntl")
 #pragma binding(libc::openat, "openat")
 #pragma binding(libc::splice, "splice")

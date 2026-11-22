@@ -6,14 +6,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(1)                                       -> x7
     v2   Imm(0)                                           -> x6
-    v3   CallExt { binding_idx=88, args=[v1, v2], fp_arg_mask=0x0 } -> x0
+    v3   CallExt { binding_idx=126, args=[v1, v2], fp_arg_mask=0x0 } -> x0
     v4   LocalAddr(-24)                                   -> x0
     v5   LoadLocal { off=-24, kind=F80 }                  -> d0
     v6   StoreLocal { off=-21, value=v5, kind=F80 }       -> -
     v7   LifetimeEnd(-24)                                 -> -
     v8   ImmData(12)                                      -> x7
     v9   Imm(0)                                           -> x6
-    v10  CallExt { binding_idx=88, args=[v8, v9], fp_arg_mask=0x0 } -> x0
+    v10  CallExt { binding_idx=126, args=[v8, v9], fp_arg_mask=0x0 } -> x0
     v11  LocalAddr(-25)                                   -> x0
     v12  LoadLocal { off=-25, kind=F80 }                  -> d0
     v13  StoreLocal { off=-22, value=v12, kind=F80 }      -> -
@@ -38,7 +38,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
   block 4  start_pc=0
     v25  ImmData(33)                                      -> x7
     v26  Imm(0)                                           -> x6
-    v27  CallExt { binding_idx=88, args=[v25, v26], fp_arg_mask=0x0 } -> x0
+    v27  CallExt { binding_idx=126, args=[v25, v26], fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-26)                                   -> x0
     v29  LoadLocal { off=-26, kind=F80 }                  -> d0
     v30  StoreLocal { off=-23, value=v29, kind=F80 }      -> -
@@ -56,7 +56,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v38  LocalAddr(-4)                                    -> x7
     v39  ImmData(41)                                      -> x6
     v40  LoadLocal { off=-21, kind=F80 }                  -> d0
-    v41  CallExt { binding_idx=2, args=[v38, v39, v40], fp_arg_mask=0x4 } -> x0
+    v41  CallExt { binding_idx=27, args=[v38, v39, v40], fp_arg_mask=0x4 } -> x0
     v42  Imm(0)                                           -> x1
     v43  Extend { value=v41, kind=I32 }                   -> x1
     v44  BinopI { op=le, lhs=v41, rhs_imm=0 }             -> x0

@@ -188,6 +188,61 @@ typedef struct __c5_FILE FILE;
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__printf_chk,          "__printf_chk")
+#pragma binding(libc::__fprintf_chk,         "__fprintf_chk")
+#pragma binding(libc::__sprintf_chk,         "__sprintf_chk")
+#pragma binding(libc::__snprintf_chk,        "__snprintf_chk")
+#pragma binding(libc::__vprintf_chk,         "__vprintf_chk")
+#pragma binding(libc::__vfprintf_chk,        "__vfprintf_chk")
+#pragma binding(libc::__vsprintf_chk,        "__vsprintf_chk")
+#pragma binding(libc::__vsnprintf_chk,       "__vsnprintf_chk")
+#pragma binding(libc::__asprintf_chk,        "__asprintf_chk")
+#pragma binding(libc::__vasprintf_chk,       "__vasprintf_chk")
+#pragma binding(libc::__dprintf_chk,         "__dprintf_chk")
+#pragma binding(libc::__vdprintf_chk,        "__vdprintf_chk")
+#pragma binding(libc::__obstack_printf_chk,  "__obstack_printf_chk")
+#pragma binding(libc::__obstack_vprintf_chk, "__obstack_vprintf_chk")
+#pragma binding(libc::__fgets_chk,           "__fgets_chk")
+#pragma binding(libc::__fgets_unlocked_chk,  "__fgets_unlocked_chk")
+#pragma binding(libc::__fread_chk,           "__fread_chk")
+#pragma binding(libc::__fread_unlocked_chk,  "__fread_unlocked_chk")
+#pragma binding(libc::__gets_chk,            "__gets_chk")
+struct obstack;
+int __printf_chk(int, const char *, ...);
+int __fprintf_chk(FILE *, int, const char *, ...);
+int __sprintf_chk(char *, int, size_t, const char *, ...);
+int __snprintf_chk(char *, size_t, int, size_t, const char *, ...);
+int __vprintf_chk(int, const char *, __builtin_va_list);
+int __vfprintf_chk(FILE *, int, const char *, __builtin_va_list);
+int __vsprintf_chk(char *, int, size_t, const char *, __builtin_va_list);
+int __vsnprintf_chk(char *, size_t, int, size_t, const char *, __builtin_va_list);
+int __asprintf_chk(char **, int, const char *, ...);
+int __vasprintf_chk(char **, int, const char *, __builtin_va_list);
+int __dprintf_chk(int, int, const char *, ...);
+int __vdprintf_chk(int, int, const char *, __builtin_va_list);
+int __obstack_printf_chk(struct obstack *, int, const char *, ...);
+int __obstack_vprintf_chk(struct obstack *, int, const char *, __builtin_va_list);
+char *__fgets_chk(char *, size_t, int, FILE *);
+char *__fgets_unlocked_chk(char *, size_t, int, FILE *);
+size_t __fread_chk(void *, size_t, size_t, size_t, FILE *);
+size_t __fread_unlocked_chk(void *, size_t, size_t, size_t, FILE *);
+char *__gets_chk(char *, size_t);
+// glibc 2.38's C23 entry points, which an object built against its headers in
+// C23 mode calls: there strtol and the scanners' %i take a 0b prefix.
+#pragma binding(libc::__isoc23_scanf,   "__isoc23_scanf")
+#pragma binding(libc::__isoc23_fscanf,  "__isoc23_fscanf")
+#pragma binding(libc::__isoc23_sscanf,  "__isoc23_sscanf")
+#pragma binding(libc::__isoc23_vscanf,  "__isoc23_vscanf")
+#pragma binding(libc::__isoc23_vfscanf, "__isoc23_vfscanf")
+#pragma binding(libc::__isoc23_vsscanf, "__isoc23_vsscanf")
+int __isoc23_scanf(const char *, ...);
+int __isoc23_fscanf(FILE *, const char *, ...);
+int __isoc23_sscanf(const char *, const char *, ...);
+int __isoc23_vscanf(const char *, __builtin_va_list);
+int __isoc23_vfscanf(FILE *, const char *, __builtin_va_list);
+int __isoc23_vsscanf(const char *, const char *, __builtin_va_list);
 #pragma binding(libc::printf,    "printf")
 #pragma binding(libc::fprintf,   "fprintf")
 #pragma binding(libc::sprintf,   "sprintf")

@@ -39,6 +39,10 @@ struct __jmp_buf_tag {
 };
 typedef struct __jmp_buf_tag jmp_buf[1];
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__longjmp_chk, "__longjmp_chk")
+_Noreturn void __longjmp_chk(struct __jmp_buf_tag *, int);
 #pragma binding(libc::setjmp,   "setjmp")
 #pragma binding(libc::longjmp,  "longjmp")
 #pragma binding(libc::_setjmp,  "_setjmp")

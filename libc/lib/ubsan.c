@@ -195,8 +195,8 @@ static void __ubsan_overflow(struct __ubsan_overflow_data *d, uintptr_t lhs, uin
     uint32_t column;
     if (!__ubsan_claim(&d->loc, &column))
         return;
-    fprintf(stderr, "%s:%u:%u: runtime error: signed integer overflow: ", d->loc.file,
-            d->loc.line, column);
+    fprintf(stderr, "%s:%u:%u: runtime error: %s integer overflow: ", d->loc.file,
+            d->loc.line, column, (d->type->info & 1) ? "signed" : "unsigned");
     __ubsan_print_int(d->type, lhs);
     fprintf(stderr, " %s ", op);
     __ubsan_print_int(d->type, rhs);
@@ -210,10 +210,10 @@ static void __ubsan_negate(struct __ubsan_overflow_data *d, uintptr_t v) {
         return;
     fprintf(stderr, "%s:%u:%u: runtime error: negation of ", d->loc.file, d->loc.line, column);
     __ubsan_print_int(d->type, v);
-    fprintf(stderr,
-            " cannot be represented in type %s; cast to an unsigned type to negate this value to "
-            "itself\n",
-            d->type->name);
+    fprintf(stderr, " cannot be represented in type %s%s\n", d->type->name,
+            (d->type->info & 1)
+                ? "; cast to an unsigned type to negate this value to itself"
+                : "");
     __ubsan_summary(&d->loc, column);
 }
 

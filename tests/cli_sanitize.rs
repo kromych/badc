@@ -214,6 +214,75 @@ fn compound_assignment_increment_and_negation_are_checked() {
     }
 }
 
+const UNSIGNED: &str = "#include <limits.h>
+#include <stdio.h>
+int main(int argc, char **argv) {
+    (void)argv;
+    unsigned z = argc - 1;
+    unsigned a = z - 1;
+    unsigned b = UINT_MAX - 1 + argc;
+    b += argc;
+    unsigned c = z + 1;
+    c = -c;
+    unsigned long long d = ULLONG_MAX / 2 + argc;
+    d *= 2;
+    unsigned e = UINT_MAX - 1 + argc;
+    e++;
+    unsigned short s = USHRT_MAX - 1 + argc;
+    s++;
+    printf(\"%u %u %u %llu %u %u\\n\", a, b, c, d, e, s);
+    return 0;
+}
+";
+
+/// clang's `unsigned-integer-overflow` reports an unsigned `+`, `-`, `*`,
+/// negation, compound assignment and `++` whose value wraps, defined as it is
+/// (C17 6.2.5p9), at its operator, and nothing for a step an `unsigned short`
+/// takes in `int`. `integer` names it, with the truncation of that step, and
+/// `undefined` does not.
+#[test]
+fn unsigned_wraps_are_checked_under_unsigned_integer_overflow() {
+    let dir = TempDir::new("badc-sanitize-unsigned");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, UNSIGNED).unwrap();
+    let all = [
+        "6:20: runtime error: unsigned integer overflow: 0 - 1 cannot be represented in type \
+         'unsigned int'",
+        "8:7: runtime error: unsigned integer overflow: 4294967295 + 1 cannot be represented \
+         in type 'unsigned int'",
+        "10:9: runtime error: negation of 1 cannot be represented in type 'unsigned int'",
+        "12:7: runtime error: unsigned integer overflow: 9223372036854775808 * 2 cannot be \
+         represented in type 'unsigned long long'",
+        "14:6: runtime error: unsigned integer overflow: 4294967295 + 1 cannot be represented \
+         in type 'unsigned int'",
+        "16:6: runtime error: implicit conversion from type 'int' of value 65536 (32-bit, \
+         signed) to type 'unsigned short' changed the value to 0 (16-bit, unsigned)",
+    ];
+    for (flag, want) in [
+        ("-fsanitize=unsigned-integer-overflow", &all[..5]),
+        ("-fsanitize=integer", &all[..]),
+        ("-fsanitize=undefined", &[][..]),
+    ] {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("unsigned{}{opt}", flag.replace('=', "_")));
+            let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+                .args(["-q", opt, flag, "-o"])
+                .arg(&exe)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert!(
+                built.status.success(),
+                "{}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            let o = run(&exe, &[]);
+            assert!(o.status.success(), "{flag} {opt}: {o:?}");
+            assert_eq!(reports(&o), want, "{flag} {opt}");
+        }
+    }
+}
+
 const SHIFTS: &str = "#include <limits.h>
 #include <stdio.h>
 __attribute__((noinline)) int big(int a, int b) { return a << b; }

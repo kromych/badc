@@ -226,29 +226,15 @@ impl<'a> Walker<'a> {
 
         let wrapped = b.binop(bin, va, vb);
         store_place(b, addr, wrapped, store_kind, seg, false, 0);
-        let flag = match (op, unsigned) {
-            // Unsigned add carries out iff the sum is below an addend.
-            (0, true) => b.binop(BinOp::Ult, wrapped, va),
-            (_, false) => signed_overflow64(b, bin, va, vb, wrapped),
-            // Unsigned subtract borrows iff the minuend is the smaller.
-            (1, true) => b.binop(BinOp::Ult, va, vb),
-            // Unsigned multiply overflows iff `a != 0 && product/a != b`.
-            // The divisor is forced non-zero so the unused `a == 0` lane
-            // does not divide by zero.
-            (_, true) => {
-                let zero = b.imm(0);
-                let iszero = b.binop(BinOp::Eq, va, zero);
-                let safe = b.binop(BinOp::Or, va, iszero);
-                let q = b.binop(BinOp::Divu, wrapped, safe);
-                let a_nz = b.binop(BinOp::Ne, va, zero);
-                let mism = b.binop(BinOp::Ne, q, vb);
-                b.binop(BinOp::And, a_nz, mism)
-            }
+        let flag = match unsigned {
+            true => unsigned_overflow64(b, bin, va, vb, wrapped),
+            false => signed_overflow64(b, bin, va, vb, wrapped),
         };
         Ok(flag)
     }
 
-    /// A signed `+`, `-` or `*` under `-fsanitize=signed-integer-overflow`:
+    /// A `+`, `-` or `*` under `-fsanitize=signed-integer-overflow` or
+    /// `unsigned-integer-overflow`:
     /// the 64-bit value [`Self::walk_binary`] gives, which the parser's
     /// renormalization narrows, and where the type cannot represent the
     /// exact value, the check's handler called with the site and the
@@ -350,8 +336,9 @@ impl<'a> Walker<'a> {
         flag
     }
 
-    /// `-x` under `-fsanitize=signed-integer-overflow`: `0 - x`, which
-    /// overflows for the type's minimum alone, reported with `x`.
+    /// `-x` under `-fsanitize=signed-integer-overflow`, `0 - x`, which
+    /// overflows for the type's minimum alone, or `unsigned-integer-overflow`,
+    /// for every `x` but 0; reported with `x`.
     pub(super) fn walk_checked_neg(
         &mut self,
         b: &mut SsaBuilder,
@@ -367,10 +354,9 @@ impl<'a> Walker<'a> {
         Ok(raw)
     }
 
-    /// Whether the signed `a op b` of type `ty`, whose 64-bit value is
-    /// `raw`, overflows `ty`. Under 8 bytes the operands are extended in
-    /// the register, so `raw` is exact and overflows where narrowing
-    /// changes it.
+    /// Whether the `a op b` of type `ty`, whose 64-bit value is `raw`,
+    /// overflows `ty`. Under 8 bytes the operands are extended in the
+    /// register, so `raw` is exact and overflows where narrowing changes it.
     pub(super) fn overflow_flag(
         &mut self,
         b: &mut SsaBuilder,
@@ -382,6 +368,8 @@ impl<'a> Walker<'a> {
         if type_size_bytes(ty, self.target) < 8 {
             let narrowed = self.extend_atomic_result(b, raw, ty);
             b.binop(BinOp::Ne, raw, narrowed)
+        } else if crate::c5::compiler::types::is_unsigned_ty(ty) {
+            unsigned_overflow64(b, op, va, vb, raw)
         } else {
             signed_overflow64(b, op, va, vb, raw)
         }
@@ -800,6 +788,33 @@ fn lower_ffs(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {
     let at_zero = b.binop_imm(BinOp::Shru, ctz, if width == 8 { 6 } else { 5 });
     let keep = b.binop_imm(BinOp::Sub, at_zero, 1);
     b.binop(BinOp::And, cp1, keep)
+}
+
+/// Whether the unsigned 64-bit `a op b` (`+`, `-` or `*`) overflows, given its
+/// wrapped value: an add carries out where the sum is below an addend, a
+/// subtract borrows where the minuend is the smaller, and a multiply
+/// overflows where `a != 0 && product / a != b`, the divisor forced non-zero
+/// so the unused `a == 0` lane does not divide by zero.
+fn unsigned_overflow64(
+    b: &mut SsaBuilder,
+    op: BinOp,
+    va: ValueId,
+    vb: ValueId,
+    wrapped: ValueId,
+) -> ValueId {
+    match op {
+        BinOp::Add => b.binop(BinOp::Ult, wrapped, va),
+        BinOp::Sub => b.binop(BinOp::Ult, va, vb),
+        _ => {
+            let zero = b.imm(0);
+            let iszero = b.binop(BinOp::Eq, va, zero);
+            let safe = b.binop(BinOp::Or, va, iszero);
+            let q = b.binop(BinOp::Divu, wrapped, safe);
+            let a_nz = b.binop(BinOp::Ne, va, zero);
+            let mism = b.binop(BinOp::Ne, q, vb);
+            b.binop(BinOp::And, a_nz, mism)
+        }
+    }
 }
 
 /// Whether the signed 64-bit `a op b` (`+`, `-` or `*`) overflows, given its

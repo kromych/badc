@@ -41,6 +41,9 @@ pub enum Check {
     /// A load of a `_Bool` whose byte is neither 0 nor 1 (C17 6.2.6.1p5,
     /// a trap representation).
     Bool,
+    /// An unsigned `+`, `-`, `*` or negation whose value its type cannot
+    /// represent: defined, reduced modulo (C17 6.2.5p9); clang's check.
+    UnsignedIntegerOverflow,
     /// An implicit conversion of an unsigned integer to a narrower unsigned
     /// type that changes the value (C17 6.3.1.3p2: defined, reduced modulo).
     ImplicitUnsignedIntegerTruncation,
@@ -51,8 +54,8 @@ pub enum Check {
 
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
-    /// clang's implicit-conversion checks.
-    pub const ALL: [Check; 10] = [
+    /// clang's checks of defined behavior.
+    pub const ALL: [Check; 11] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -61,6 +64,7 @@ impl Check {
         Check::Bounds,
         Check::BoundsStrict,
         Check::Bool,
+        Check::UnsignedIntegerOverflow,
         Check::ImplicitUnsignedIntegerTruncation,
         Check::ImplicitSignedIntegerTruncation,
     ];
@@ -76,6 +80,7 @@ impl Check {
             Check::Bounds => "bounds",
             Check::BoundsStrict => "bounds-strict",
             Check::Bool => "bool",
+            Check::UnsignedIntegerOverflow => "unsigned-integer-overflow",
             Check::ImplicitUnsignedIntegerTruncation => "implicit-unsigned-integer-truncation",
             Check::ImplicitSignedIntegerTruncation => "implicit-signed-integer-truncation",
         }
@@ -87,18 +92,26 @@ impl Check {
 
     /// The checks a `-fsanitize=` list item names: one check, clang's name
     /// for one, or a group: `shift`; `undefined`, which leaves out
-    /// `bounds-strict` as gcc's does and the implicit conversions, defined
-    /// behavior, as clang's does; and clang's implicit-conversion groups,
-    /// of which badc implements the truncations. `None` for a name badc does
-    /// not implement.
+    /// `bounds-strict` as gcc's does and the checks of defined behavior as
+    /// clang's does; clang's `integer`, the integer checks; and clang's
+    /// implicit-conversion groups. A group names the checks of it badc
+    /// implements. `None` for a name badc does not implement.
     pub fn named(name: &str) -> Option<u32> {
         let truncation = Check::ImplicitUnsignedIntegerTruncation.bit()
             | Check::ImplicitSignedIntegerTruncation.bit();
+        let defined = truncation | Check::UnsignedIntegerOverflow.bit();
         match name {
             "undefined" => Some(
                 (Check::ALL.iter())
-                    .filter(|&&c| c != Check::BoundsStrict && c.bit() & truncation == 0)
+                    .filter(|&&c| c != Check::BoundsStrict && c.bit() & defined == 0)
                     .fold(0, |m, c| m | c.bit()),
+            ),
+            "integer" => Some(
+                defined
+                    | Check::SignedIntegerOverflow.bit()
+                    | Check::ShiftBase.bit()
+                    | Check::ShiftExponent.bit()
+                    | Check::IntegerDivideByZero.bit(),
             ),
             "implicit-integer-truncation"
             | "implicit-integer-conversion"
@@ -149,9 +162,9 @@ const TK_INTEGER: u16 = 0;
 const TK_UNKNOWN: u16 = 0xffff;
 
 impl Compiler {
-    /// Check the signed `+`, `-` or `*` whose node the accumulator holds,
-    /// computed in the common type `ty`, under `-fsanitize=
-    /// signed-integer-overflow`; whether a check was attached.
+    /// Check the `+`, `-` or `*` whose node the accumulator holds, computed
+    /// in the common type `ty`, under `-fsanitize=signed-integer-overflow` or
+    /// `unsigned-integer-overflow`; whether a check was attached.
     pub(super) fn sanitize_overflow(&mut self, ty: i64) -> bool {
         let Some(id) = self.ast_acc else {
             return false;
@@ -163,15 +176,18 @@ impl Compiler {
         self.sanitize_arith(id, op, ty)
     }
 
-    /// Check the signed operation at node `id` -- `op` (`+`, `-`, `*`), or
-    /// a negation for `None` -- computed in `ty`, under
-    /// `-fsanitize=signed-integer-overflow`; whether a check was attached.
-    /// The operator is the last one [`Self::operator_at`] recorded.
+    /// Check the operation at node `id` -- `op` (`+`, `-`, `*`), or a
+    /// negation for `None` -- computed in `ty`, under
+    /// `-fsanitize=signed-integer-overflow` or, of an unsigned `ty`,
+    /// `unsigned-integer-overflow`; whether a check was attached. The
+    /// operator is the last one [`Self::operator_at`] recorded.
     pub(super) fn sanitize_arith(&mut self, id: ExprId, op: Option<BinOp>, ty: i64) -> bool {
-        let check = Check::SignedIntegerOverflow;
+        let check = match is_unsigned_ty(ty) {
+            true => Check::UnsignedIntegerOverflow,
+            false => Check::SignedIntegerOverflow,
+        };
         if !self.sanitize.runs(check)
             || !is_integer_scalar_ty(ty)
-            || is_unsigned_ty(ty)
             || is_bool_ty(ty)
             || !matches!(self.size_of_type(ty), 4 | 8)
         {

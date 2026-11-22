@@ -821,6 +821,10 @@ pub struct CompileOptions {
     /// every target, which narrows `L"..."` / `L'...'` elements and the
     /// `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` predefines with it.
     pub short_wchar: bool,
+    /// `-mmacosx-version-min=`: the macOS deployment target, `xxxx.yy.zz` in
+    /// nibbles, which the `__ENVIRONMENT_*_VERSION_MIN_REQUIRED__`
+    /// predefines spell; `None` for 11.0.
+    pub macos_min: Option<u32>,
     /// `-mno-sse` / `-mgeneral-regs-only`: the unit keeps off the SIMD
     /// register file, so the preprocessor drops the SSE feature macros.
     pub no_fp_regs: bool,
@@ -1001,6 +1005,11 @@ impl CompileOptions {
     /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
     pub fn with_short_wchar(mut self, on: bool) -> Self {
         self.short_wchar = on;
+        self
+    }
+    /// The macOS deployment target (`-mmacosx-version-min=`).
+    pub fn with_macos_min(mut self, version: Option<u32>) -> Self {
+        self.macos_min = version;
         self
     }
 
@@ -3184,6 +3193,9 @@ impl Compiler {
         // `-mcmodel` moves the `__code_model_*__` name the same way, and
         // `-fshort-wchar` the `wchar_t` pair.
         pp.set_unit_model(opts.elf_class, opts.code_model, opts.short_wchar);
+        if target == Target::MacOSAarch64 {
+            pp.set_macos_min(opts.macos_min);
+        }
         if opts.no_fp_regs {
             pp.drop_simd_macros();
         }

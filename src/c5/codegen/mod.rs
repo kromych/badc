@@ -5228,6 +5228,10 @@ pub struct MachOImageOptions {
     pub bundle: bool,
     pub flat_namespace: bool,
     pub sdk: Option<u32>,
+    /// The deployment target `LC_BUILD_VERSION` records as its minimum, in
+    /// the same nibbles; none, or one before 11.0, records 11.0, the first
+    /// macOS on arm64, as ld64 does.
+    pub min_os: Option<u32>,
     pub header_pad: u64,
     pub header_pad_max_install_names: bool,
 }

@@ -105,6 +105,8 @@ pub(crate) struct FrontEnd {
     pub(crate) gnu89_inline: Option<bool>,
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
+    /// The macOS deployment target, `xxxx.yy.zz` in nibbles.
+    pub(crate) macos_min: Option<u32>,
     /// The AArch64 extensions `-march=` / `-mcpu=` select, `None` for the
     /// target's default.
     pub(crate) aarch64_features: Option<badc::Aarch64Features>,
@@ -736,6 +738,9 @@ struct Parser {
     mcount_modifiers: Vec<String>,
     /// The last `-mbranch-protection=`, an AArch64 option.
     branch_protection_flag: Option<String>,
+    /// The last `-mmacosx-version-min=` or `-mmacos-version-min=`, a macOS
+    /// option.
+    macos_min_flag: Option<String>,
     /// The x86-64 mitigation flags seen, checked against the target.
     x86_mitigation_flags: Vec<String>,
     ssp_guard_kind: Option<&'static str>,
@@ -1626,6 +1631,20 @@ impl Parser {
             // on every target. It changes the layout of every object
             // holding a `wchar_t` or a wide literal, so it reaches the
             // front end rather than being dropped as a no-op.
+            // The deployment target: clang's predefines and the minimum
+            // `LC_BUILD_VERSION` records follow it.
+            s if s.starts_with("-mmacosx-version-min=")
+                || s.starts_with("-mmacos-version-min=") =>
+            {
+                let version = &s[s.find('=').unwrap_or(0) + 1..];
+                let Some(v) = super::paths::nibble_version(version) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: invalid version number in '{s}'"
+                    )));
+                };
+                front.macos_min = Some(v);
+                self.macos_min_flag = Some(s.to_string());
+            }
             "-fshort-wchar" => front.short_wchar = true,
             "-fno-short-wchar" => front.short_wchar = false,
             // `-ftrivial-auto-var-init=`: the front end supplies the
@@ -2866,6 +2885,14 @@ impl Parser {
         // A build asking for return-address signing or landing pads must
         // not get an image without them, so an x86-64 target refuses the
         // request.
+        if let Some(flag) = &self.macos_min_flag
+            && target != Target::MacOSAarch64
+        {
+            return Err(ParseError::diag(format!(
+                "badc: error: `{flag}` is a macOS option; {} has no deployment target",
+                target.id_str()
+            )));
+        }
         if let Some(flag) = &self.branch_protection_flag
             && !target.is_aarch64()
         {
@@ -3276,6 +3303,7 @@ impl FrontEnd {
             .with_gnu89_inline(self.gnu89_inline.unwrap_or(self.std.gnu89_inline()))
             .with_strict_flex_arrays(self.strict_flex_arrays)
             .with_short_wchar(self.short_wchar)
+            .with_macos_min(self.macos_min)
             .with_aarch64_features(self.aarch64_features)
             .with_prototypes(self.prototypes)
             .with_char_signed(self.char_signed)
@@ -4711,6 +4739,27 @@ mod tests {
             parse(&["--target=windows-arm64", flag, "-c", "a.c"]);
             parse(&["--target=macos-aarch64", flag, "-c", "a.c"]);
         }
+    }
+
+    #[test]
+    fn the_macos_deployment_target_is_a_version_on_macos() {
+        let mac = "--target=macos-aarch64";
+        for flag in ["-mmacosx-version-min=12.3.1", "-mmacos-version-min=12.3.1"] {
+            assert_eq!(
+                parse(&[mac, flag, "-c", "a.c"]).front.macos_min,
+                Some(0x000c_0301)
+            );
+            assert_eq!(
+                reject(&[X64, flag, "-c", "a.c"]).0,
+                format!(
+                    "badc: error: `{flag}` is a macOS option; linux-x64 has no deployment target"
+                )
+            );
+        }
+        assert_eq!(
+            reject(&[mac, "-mmacosx-version-min=12.x", "-c", "a.c"]).0,
+            "badc: error: invalid version number in '-mmacosx-version-min=12.x'"
+        );
     }
 
     #[test]

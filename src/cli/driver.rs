@@ -168,6 +168,21 @@ fn resolve_search_paths(cli: &mut Cli) {
     cli.sysroot = declared_sysroot(cli.sysroot.as_deref(), cli.target);
     if cli.target.binary_format() == badc::BinaryFormat::MachO {
         cli.link.mach_o.sdk = cli.sysroot.as_deref().and_then(sdk_version);
+        // The deployment target the option leaves unset comes from the
+        // environment, as clang and ld64 read it.
+        if cli.front.macos_min.is_none()
+            && let Ok(text) = std::env::var("MACOSX_DEPLOYMENT_TARGET")
+            && !text.is_empty()
+        {
+            let Some(v) = super::paths::nibble_version(&text) else {
+                eprintln!(
+                    "badc: error: invalid version number in 'MACOSX_DEPLOYMENT_TARGET={text}'"
+                );
+                std::process::exit(1);
+            };
+            cli.front.macos_min = Some(v);
+        }
+        cli.link.mach_o.min_os = cli.front.macos_min;
     }
     cli.front.system_include_paths = match &cli.sysroot {
         Some(root) => sysroot_include_paths(cli.target, root),

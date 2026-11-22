@@ -1110,10 +1110,10 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
         &[
             ("__APPLE__", "1"),
             ("__MACH__", "1"),
-            // Deployment target, decimal MMmmpp. Matches the 11.0
-            // minimum OS version stamped into LC_BUILD_VERSION;
-            // <AvailabilityMacros.h> derives its version gates from it.
+            // The default deployment target, 11.0, which
+            // `Preprocessor::set_macos_min` moves.
             ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__", "110000"),
+            ("__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__", "110000"),
         ],
     ),
     (
@@ -1395,6 +1395,27 @@ impl Preprocessor {
     pub fn set_unit_model(&mut self, class: ElfClass, model: CodeModel, short_wchar: bool) {
         self.wchar = self.target.wchar_type(short_wchar);
         install_data_model(&mut self.macros, self.target, class, model, short_wchar);
+    }
+
+    /// The macOS deployment target `version`, `xxxx.yy.zz` in nibbles, 11.0
+    /// for none: the `__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__` and
+    /// `__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__` the SDK's availability
+    /// macros read, spelled as clang spells them: `MMmmpp` from 10.10 on,
+    /// `MMmp` before, the patch capped at 9.
+    pub fn set_macos_min(&mut self, version: Option<u32>) {
+        let v = version.unwrap_or(11 << 16);
+        let (major, minor, patch) = (v >> 16, (v >> 8) & 0xff, v & 0xff);
+        let spelled = if major > 10 || (major == 10 && minor >= 10) {
+            major * 10000 + minor * 100 + patch
+        } else {
+            major * 100 + minor * 10 + patch.min(9)
+        };
+        for name in [
+            "__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__",
+            "__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__",
+        ] {
+            self.macros.insert(name.to_string(), spelled.to_string());
+        }
     }
 
     /// `-mno-sse` / `-mgeneral-regs-only`: the SSE feature macros go;

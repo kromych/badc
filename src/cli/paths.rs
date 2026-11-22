@@ -76,8 +76,13 @@ pub(crate) fn sdk_version(root: &Path) -> Option<u32> {
     let rest = &text[text.find("\"Version\"")? + "\"Version\"".len()..];
     let rest = rest.trim_start().strip_prefix(':')?.trim_start();
     let rest = rest.strip_prefix('"')?;
-    let version = &rest[..rest.find('"')?];
-    let mut parts = version.split('.').map(str::parse::<u32>);
+    nibble_version(&rest[..rest.find('"')?])
+}
+
+/// The version `text` spells, `major[.minor[.patch]]`, in the `xxxx.yy.zz`
+/// nibbles a Mach-O load command records.
+pub(crate) fn nibble_version(text: &str) -> Option<u32> {
+    let mut parts = text.split('.').map(str::parse::<u32>);
     let major = parts.next()?.ok().filter(|&m| m <= 0xffff)?;
     let mut field = |shift: u32| match parts.next() {
         None => Some(0),

@@ -931,7 +931,7 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
 }
 
 /// `LC_BUILD_VERSION` -- platform + min OS + SDK.
-fn build_version(sdk: u32) -> Vec<u8> {
+fn build_version(minos: u32, sdk: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(BUILD_VERSION_COMMAND_SIZE);
     write_struct(
         &mut out,
@@ -939,7 +939,7 @@ fn build_version(sdk: u32) -> Vec<u8> {
             cmd: LC_BUILD_VERSION,
             cmdsize: BUILD_VERSION_COMMAND_SIZE as u32,
             platform: PLATFORM_MACOS,
-            minos: MIN_MACOS,
+            minos,
             sdk,
             ntools: 0,
         },
@@ -2133,7 +2133,8 @@ impl<'a> MachOWriter<'a> {
                 crate::c5::codegen::ResolvedDylib::runtime_default(crate::c5::Target::MacOSAarch64);
             c.dylib_lcs.push(load_dylib(&runtime.path));
         }
-        c.build_version = build_version(build.mach_o.sdk.unwrap_or(SDK_MACOS));
+        let minos = build.mach_o.min_os.map_or(MIN_MACOS, |v| v.max(MIN_MACOS));
+        c.build_version = build_version(minos, build.mach_o.sdk.unwrap_or(SDK_MACOS));
         c.uuid = uuid_command(&build.text, &build.data, &build.rodata);
         // The install name is `@rpath/<name>`, so a consumer linking by
         // name resolves it through its rpath at runtime.

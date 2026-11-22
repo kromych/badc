@@ -5828,6 +5828,7 @@ fn target_predefines_are_locked() {
         ("__APPLE__", "1"),
         ("__MACH__", "1"),
         ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__", "110000"),
+        ("__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__", "110000"),
     ];
     const LINUX: &[(&str, &str)] = &[
         ("__linux__", "1"),
@@ -7035,4 +7036,30 @@ fn a_header_name_keeps_its_comment_delimiters() {
     assert!(out.contains("int from_b;"), "{out}");
     assert!(out.lines().any(|l| l.trim() == "yes"), "{out}");
     assert!(out.lines().any(|l| l.trim() == "90"), "{out}");
+}
+
+/// `-mmacosx-version-min=` spells the deployment target as clang does:
+/// `MMmmpp` from 10.10 on, `MMmp` before with the patch capped at 9.
+#[test]
+fn the_macos_deployment_target_is_spelled_as_clang_spells_it() {
+    for (version, spelled) in [
+        (None, "110000"),
+        (Some(10 << 16 | 15 << 8), "101500"),
+        (Some(12 << 16 | 3 << 8 | 1), "120301"),
+        (Some(10 << 16 | 4 << 8 | 12), "1049"),
+        (Some(11 << 16 | 15), "110015"),
+    ] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_macos_min(version);
+        for name in [
+            "__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__",
+            "__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__",
+        ] {
+            assert_eq!(
+                pp.macros.get(name).map(String::as_str),
+                Some(spelled),
+                "{version:?}"
+            );
+        }
+    }
 }

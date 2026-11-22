@@ -240,9 +240,15 @@ same image on every host. The sysroot's include directories supply the headers
 the bundled set lacks (`<zlib.h>`). They are searched after the bundled
 headers, so a standard header keeps the bundled copy. For a Mach-O target
 `$SDKROOT` is the default sysroot, as for Apple's tools; `--sysroot=` with no
-directory withdraws it. A Mach-O image records the macOS 11.0 deployment target
-and, in `LC_BUILD_VERSION`, the SDK version the sysroot's `SDKSettings.json`
-names, or 26.0 when no sysroot names one. libSystem selects its
+directory withdraws it. The deployment target is the version
+`-mmacosx-version-min=` (or `-mmacos-version-min=`) gives, else
+`$MACOSX_DEPLOYMENT_TARGET`, else 11.0. The
+`__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__` and
+`__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__` predefines spell it as clang's do
+(`10.15` is `101500`), and a Mach-O image records it in `LC_BUILD_VERSION`, 11.0
+at least, the first macOS on arm64, as ld64 records it. That command also
+records the SDK version the sysroot's `SDKSettings.json` names, or 26.0 when no
+sysroot names one. libSystem selects its
 linked-on-or-after behaviors, the small-block allocator among them, by that SDK
 version.
 

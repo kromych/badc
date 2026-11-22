@@ -32,7 +32,12 @@ fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
 fn run(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> std::process::Output {
     let mut cmd = Command::new(badc());
     cmd.args(args).current_dir(dir);
-    for var in ["SOURCE_DATE_EPOCH", "BADC_HOME", "SDKROOT"] {
+    for var in [
+        "SOURCE_DATE_EPOCH",
+        "BADC_HOME",
+        "SDKROOT",
+        "MACOSX_DEPLOYMENT_TARGET",
+    ] {
         cmd.env_remove(var);
     }
     for (k, v) in env {
@@ -327,8 +332,10 @@ fn sdkroot_is_the_mach_o_default_root() {
 
 // `LC_BUILD_VERSION` records the version the declared SDK's
 // `SDKSettings.json` names, by `--sysroot` or `$SDKROOT`; with none
-// declared, or none readable, the image claims SDK 26.0. The minimum OS
-// stays 11.0.
+// declared, or none readable, the image claims SDK 26.0. The minimum OS is
+// the deployment target `-mmacosx-version-min=` or, without it,
+// `$MACOSX_DEPLOYMENT_TARGET` gives, and 11.0, the first macOS on arm64,
+// for none or one before it, as ld64 records it.
 #[test]
 fn mach_o_build_version_records_the_declared_sdk() {
     const LC_BUILD_VERSION: u32 = 0x32;
@@ -377,6 +384,17 @@ fn mach_o_build_version_records_the_declared_sdk() {
         (11 << 16, 26 << 16)
     );
     assert_eq!(stamped(&[], &[("SDKROOT", &bad)]), (11 << 16, 26 << 16));
+    let target = |v| [("MACOSX_DEPLOYMENT_TARGET", v)];
+    assert_eq!(
+        stamped(&["-mmacosx-version-min=12.3.1"], &[]).0,
+        0x000c_0301
+    );
+    assert_eq!(
+        stamped(&["-mmacos-version-min=13"], &target("12.3")).0,
+        13 << 16
+    );
+    assert_eq!(stamped(&[], &target("12.3")).0, 0x000c_0300);
+    assert_eq!(stamped(&["-mmacosx-version-min=10.15"], &[]).0, 11 << 16);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

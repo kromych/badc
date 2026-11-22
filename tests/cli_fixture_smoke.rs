@@ -469,6 +469,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("file_scope_asm_section_placement.c", 42),
     ("file_scope_asm_rept_type_size.c", 42),
     ("file_scope_asm_incbin.c", 0),
+    ("file_scope_asm_incbin_skip_count.c", 0),
     ("file_scope_asm_weak_set.c", 0),
     ("inline_asm_section_label.c", 42),
     ("attribute_weak_alias.c", 0),

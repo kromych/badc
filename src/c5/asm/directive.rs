@@ -1578,9 +1578,11 @@ fn parse_size_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::Str
 }
 
 /// `.incbin "path"[, skip[, count]]`: splice the named file's raw bytes at
-/// this point in the section image. The path resolves as GNU as resolves it,
-/// against the assembler's working directory; badc compiles from the same
-/// directory, so a relative path reads relative to the compile cwd.
+/// this point in the section image, `count` of them (the rest of the file
+/// when omitted) from offset `skip`, as GNU as does. The path resolves as GNU
+/// as resolves it, against the assembler's working directory; badc compiles
+/// from the same directory, so a relative path reads relative to the compile
+/// cwd.
 fn parse_incbin_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
     let rest = rest.trim();
     let (path, args) = rest
@@ -1589,13 +1591,35 @@ fn parse_incbin_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::S
         .ok_or_else(|| {
             alloc::format!("inline asm: `.incbin` expects a quoted path, got `{rest}`")
         })?;
-    let args = args.trim().trim_start_matches(',').trim();
-    if !args.is_empty() {
-        // TODO `.incbin` skip / count arguments.
+    let args = args.trim();
+    let args = match args.strip_prefix(',') {
+        Some(a) => super::gas::split_top_commas(a),
+        None if args.is_empty() => alloc::vec::Vec::new(),
+        None => {
+            return Err(alloc::format!(
+                "inline asm: `.incbin`: junk after the path (`{rest}`)"
+            ));
+        }
+    };
+    if args.len() > 2 {
         return Err(alloc::format!(
-            "inline asm: `.incbin` skip/count arguments are not supported (`{rest}`)"
+            "inline asm: `.incbin` takes a path, a skip and a count (`{rest}`)"
         ));
     }
+    let arg = |k: usize, what: &str| -> Result<Option<usize>, alloc::string::String> {
+        let Some(expr) = args.get(k) else {
+            return Ok(None);
+        };
+        eval_asm_count(expr, &|_| None)
+            .and_then(|n| usize::try_from(n).ok())
+            .map(Some)
+            .ok_or_else(|| {
+                alloc::format!(
+                    "inline asm: `.incbin` {what} `{expr}` is not a non-negative constant"
+                )
+            })
+    };
+    let (skip, count) = (arg(0, "skip")?.unwrap_or(0), arg(1, "count")?);
     #[cfg(feature = "std")]
     {
         let bytes = std::fs::read(path).map_err(|e| {
@@ -1604,10 +1628,24 @@ fn parse_incbin_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::S
                 .unwrap_or_else(|_| alloc::string::String::from(path));
             alloc::format!("inline asm: `.incbin \"{path}\"`: cannot read `{resolved}`: {e}")
         })?;
-        Ok(AsmSectionItem::Bytes(bytes))
+        let end = count.map_or(Some(bytes.len()), |c| skip.checked_add(c));
+        match end {
+            Some(end) if skip <= bytes.len() && end <= bytes.len() => {
+                Ok(AsmSectionItem::Bytes(bytes[skip..end].to_vec()))
+            }
+            _ => Err(alloc::format!(
+                "inline asm: `.incbin \"{path}\"`: skip {skip} and count {} pass the end of \
+                 its {} bytes",
+                count.map_or(alloc::string::String::from("(rest)"), |c| alloc::format!(
+                    "{c}"
+                )),
+                bytes.len()
+            )),
+        }
     }
     #[cfg(not(feature = "std"))]
     {
+        let _ = (skip, count);
         Err(alloc::format!(
             "inline asm: `.incbin \"{path}\"` needs host filesystem access"
         ))

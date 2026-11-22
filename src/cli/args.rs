@@ -2677,6 +2677,7 @@ impl Parser {
                 target.id_str()
             )));
         }
+        self.front.diag.msvc_levels(self.front.msvc);
         self.check_jit_target(mode, target)?;
         if self.program_args_from.is_some() && !matches!(mode, Mode::Jit | Mode::Interp) {
             return Err(ParseError::diag(
@@ -4070,6 +4071,32 @@ mod tests {
             assert_eq!(level(&["-fpermissive", "a.c"], row), Warning, "{row}");
             let (off, on) = (format!("-Wno-{row}"), format!("-W{row}"));
             assert_eq!(level(&[off.as_str(), on.as_str(), "a.c"], row), Error);
+        }
+    }
+
+    /// cl compiles each row gcc 14's `-fpermissive` lowers with a warning, or
+    /// none, so `--msvc` reports them as warnings; `-fno-permissive` and
+    /// `-Werror=<sel>` make them errors again, before or after it.
+    #[test]
+    fn msvc_takes_cls_levels_for_the_permissive_rows() {
+        use badc::diag::Level::{Error, Warning};
+        const WIN: &str = "--target=windows-x64";
+        for row in [
+            "int-conversion",
+            "implicit-int",
+            "return-mismatch",
+            "incompatible-pointer-types",
+        ] {
+            let error = format!("-Werror={row}");
+            assert_eq!(level(&[WIN, "a.c"], row), Error, "{row}");
+            assert_eq!(level(&[WIN, "--msvc", "a.c"], row), Warning, "{row}");
+            for args in [
+                [WIN, "--msvc", "-fno-permissive", "a.c"],
+                [WIN, "-fno-permissive", "--msvc", "a.c"],
+                [WIN, "--msvc", error.as_str(), "a.c"],
+            ] {
+                assert_eq!(level(&args, row), Error, "{args:?}");
+            }
         }
     }
 

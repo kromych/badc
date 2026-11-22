@@ -54,8 +54,11 @@ pub struct Config {
     errors: bool,
     /// `-Werror=<sel>` (true) and `-Wno-error=<sel>` (false).
     per_code_errors: BTreeMap<u16, bool>,
-    /// `-fpermissive`.
-    permissive: bool,
+    /// `-fpermissive` (true) and `-fno-permissive` (false); without either,
+    /// `msvc` decides.
+    permissive: Option<bool>,
+    /// `--msvc`: cl's levels, under which each [`PERMISSIVE`] row warns.
+    msvc: bool,
     /// `-Wall`.
     all: bool,
     /// An edition before C99; see [`Self::pre_c99`].
@@ -81,7 +84,8 @@ impl Config {
             inhibit: false,
             errors: false,
             per_code_errors: BTreeMap::new(),
-            permissive: false,
+            permissive: None,
+            msvc: false,
             all: false,
             pre_c99: false,
         }
@@ -104,7 +108,13 @@ impl Config {
 
     /// `-fpermissive`.
     pub fn permissive(&mut self, on: bool) {
-        self.permissive = on;
+        self.permissive = Some(on);
+    }
+
+    /// `--msvc`: cl compiles each [`PERMISSIVE`] row's violation with a
+    /// warning, or none, so they warn unless `-fno-permissive` is given.
+    pub fn msvc_levels(&mut self, on: bool) {
+        self.msvc = on;
     }
 
     /// `-Wall` / `-Wextra` / `-Wpedantic`: every row in the group that
@@ -157,7 +167,8 @@ impl Config {
             return Level::Error;
         }
         let mut level = self.stated_level(code);
-        let lowered = pinned == Some(false) || self.permissive && PERMISSIVE.contains(&code);
+        let permissive = self.permissive.unwrap_or(self.msvc);
+        let lowered = pinned == Some(false) || permissive && PERMISSIVE.contains(&code);
         if lowered && level == Level::Error {
             level = Level::Warning;
         }

@@ -836,7 +836,10 @@ partial, `__ARM_FEATURE_SVE` stays undefined and `-march=` / `-mcpu=` refuse
   `__STDC_NO_VLA__` are `1`, as under cl's `/std:c17`. A quoted `#include` searches cl's way: the including file's directory, then those of the files that include it, innermost first, out to the primary source's, before the `-I` directories. A tag a parameter
   list declares takes the enclosing scope, as cl gives it (warning C4115),
   where C17 6.2.1p4 limits it to the list. Any two vector types of one size
-  convert implicitly. The Microsoft extensions above apply with or without
+  convert implicitly. The four constraint violations gcc 14 makes errors and
+  its `-fpermissive` lowers -- an incompatible pointer or integer-pointer
+  conversion, an implicit `int`, a `return` that disagrees with the function's
+  type -- are warnings, as cl reports them; `-fno-permissive` makes them errors. The Microsoft extensions above apply with or without
   it. `-include msvc_compat.h` adds the MinGW identity
   and the calling-convention and SAL no-ops.
 

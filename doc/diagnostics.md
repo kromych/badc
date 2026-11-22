@@ -45,7 +45,8 @@ A selector names one diagnostic or one group:
 | `-w` | report no warnings |
 | `-Wall`, `-Wextra`, `-Wpedantic` | turn on the group of that name |
 | `-pedantic`, `-pedantic-errors` | `-Wpedantic`, `-Werror=pedantic` |
-| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings |
+| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings; the default under `--msvc`, as cl reports each as a warning or not at all |
+| `-fno-permissive` | report them as errors, under `--msvc` too |
 
 Before C99, `implicit-int` is off unless `-Wall` or its own selector turns it
 on.

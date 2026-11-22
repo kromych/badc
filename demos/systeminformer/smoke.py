@@ -16,8 +16,12 @@ settings file, driver or plugins) and peview.exe (on a system DLL) must each
 still run after 10 s, when the smoke stops them. The driver loads only under
 test signing, so its images are checked as the loader reads them: the
 target's machine, the native subsystem, an entry, the kernel modules it
-imports from, a load-config directory, and ksi.dll's exports. Where no kit
-is installed the summary says the driver was not built, and why.
+imports from, a load-config directory, the integrity-check flag the kernel
+requires of a driver registering callbacks, and ksi.dll's exports; and the
+`.sig` files of the programs and of the dynamic configuration (`ksidyn.bin`)
+must verify with the public key the driver holds.
+Where no kit is installed the summary says the driver was not built, and
+why.
 
 Windows only: the build runs the SDK's and MSVC's tools. Elsewhere the smoke
 reports that and exits 0.
@@ -81,7 +85,7 @@ def pe_facts(image: bytes) -> dict:
     characteristics = struct.unpack_from("<H", image, pe + 22)[0]
     opt = pe + 24
     entry = struct.unpack_from("<I", image, opt + 16)[0]
-    subsystem = struct.unpack_from("<H", image, opt + 68)[0]
+    subsystem, dll_characteristics = struct.unpack_from("<HH", image, opt + 68)
     dirs = [struct.unpack_from("<II", image, opt + 112 + 8 * i) for i in range(16)]
     table = opt + struct.unpack_from("<H", image, pe + 20)[0]
     sections = [struct.unpack_from("<IIII", image, table + 40 * i + 8) for i in range(nsec)]
@@ -106,7 +110,8 @@ def pe_facts(image: bytes) -> dict:
         count, names = struct.unpack_from("<II", image, e + 24)[0], struct.unpack_from("<I", image, e + 32)[0]
         exports = {name(struct.unpack_from("<I", image, at(names) + 4 * i)[0]) for i in range(count)}
     return {"machine": machine, "dll": bool(characteristics & 0x2000), "entry": entry,
-            "subsystem": subsystem, "load_config": dirs[10][1], "imports": imports,
+            "subsystem": subsystem, "dll_characteristics": dll_characteristics,
+            "load_config": dirs[10][1], "imports": imports,
             "exports": exports}
 
 
@@ -123,10 +128,17 @@ def driver_checks(driver: Path, arch: str) -> str | None:
         # The kernel's loader seeds the image's stack cookie through it.
         if not f["load_config"]:
             wrong.append(f"{name} has no load-config directory")
+        # The kernel registers the driver's callbacks only with it.
+        if not f["dll_characteristics"] & 0x80:
+            wrong.append(f"{name} lacks IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY")
     if not DRIVER_IMPORTS <= sys_facts["imports"]:
         wrong.append(f"SystemInformer.sys imports {sorted(sys_facts['imports'])}")
     if not ksi["dll"] or "KsiInitialize" not in ksi["exports"]:
         wrong.append(f"ksi.dll exports {sorted(ksi['exports'])[:5]}")
+    # The driver serves a client whose image this signature verifies.
+    signed = [driver.parent / f"{t}.exe" for t in build.TARGETS] + [driver.parent / "ksidyn.bin"]
+    if bad := build.unverified(signed):
+        wrong.append(f"no `.sig` the driver's key verifies: {', '.join(p.name for p in bad)}")
     return "; ".join(wrong) or None
 
 

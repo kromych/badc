@@ -21,8 +21,8 @@ under `.cache\build-<arch>[-O0]`; `smoke.py` builds -O0 and -O and runs:
 - the driver's images, which load only under test signing, as the kernel's
   loader reads them: the target's machine, the native subsystem, an entry,
   the kernel modules the driver imports from (ntoskrnl.exe, HAL.dll,
-  FLTMGR.SYS, ksecdd.sys, ksi.dll), the load-config directory of each, and
-  ksi.dll's exports.
+  FLTMGR.SYS, ksecdd.sys, ksi.dll), the load-config directory and the
+  integrity-check flag of each, and ksi.dll's exports.
 
 The build runs on a Windows host with the Windows SDK and MSVC installed;
 `BADC_WINDOWS_KITS` and `BADC_MSVC_TOOLS` name others (`demos/_win_kits.py`).
@@ -63,7 +63,20 @@ props' switch for building without WPP tracing, whose `.tmh` headers tracewpp
 generates. The images link the WDK's default kernel libraries (ntoskrnl, hal,
 wmilib, BufferOverflowFastFailK); the driver enters at `GsDriverEntry`, as
 WDK drivers do, and ksi.dll, which defines no `DriverEntry`, at
-`DllInitialize`.
+`DllInitialize`. Both take the props' link option `/INTEGRITYCHECK`
+(badc's `--force-integrity`), without which the kernel refuses the driver's
+process, thread and object callbacks.
+
+The driver serves only a client whose image has a `.sig` from a key it holds,
+and SI's release keys are SI's own. The build follows the developer flow of
+`KSystemInformer/README.md`: it makes an RSA-4096 key pair once, under
+`.cache/kph-local-key`, gives the driver the public half after SI's keys --
+through an include of `kphlocalkey.h` that the build adds to a copy of
+`verify.c` -- and signs SystemInformer.exe, peview.exe and the dynamic
+configuration, `ksidyn.bin`, which it writes from kphlib's `KphDynConfig` as
+CustomBuildTool's `-dyndata` does. The key is of the Prod type: a Test key
+serves only in the developer mode an enabled kernel debugger turns on. The
+signing calls BCrypt, as CustomSignTool and the driver do.
 
 What the CMake lists alone do not give:
 
@@ -120,11 +133,15 @@ Found and fixed while bringing it up:
   WDK's `__security_init_cookie` stopped the system (bug check 0x139); and a
   CONST import's plain name -- `KdDebuggerEnabled`, `PsProcessType` -- was
   bound to the kernel's object rather than to its address slot, so
-  DriverEntry read a pointer from the object's bytes.
+  DriverEntry read a pointer from the object's bytes; and the linker could
+  not set the integrity-check flag `/INTEGRITYCHECK` sets, so DriverEntry
+  failed with STATUS_ACCESS_DENIED registering its callbacks.
 
 In a Windows Server 2025 VM (build 26100) under test signing, the driver
-loads and DriverEntry completes; SI's client is then refused, as the driver's
-README says of a client with no `.sig` from the key pair built into it.
+loads, SI connects to it, and the driver takes the signed dynamic
+configuration. SI then restarts itself, as a Release build does, under strict
+Control Flow Guard, which loads only images that claim CFG; the badc-built
+SystemInformer.exe does not (TODO(#2151)).
 
 TODO: the plugins (`SI_WITH_PLUGINS`), which need the plugin SDK headers
 CustomBuildTool generates and an import library of SystemInformer.exe.

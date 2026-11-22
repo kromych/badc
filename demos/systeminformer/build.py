@@ -38,11 +38,13 @@ images link the WDK's default kernel libraries and enter as its projects do.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -562,7 +564,23 @@ KERNEL_PROJECTS = [
 ]
 # The libraries a WDK driver project links by default.
 WDK_DEFAULT_LIBS = ["ntoskrnl", "hal", "wmilib", "BufferOverflowFastFailK"]
+# The driver serves a client whose image has a `.sig` from a key it holds
+# (KSystemInformer/README.md, "Development"). The build makes a key pair once,
+# under LOCAL_KEY, gives the driver its public half through a header the key
+# table includes, and signs the programs. The key is of the Prod type: a Test
+# key serves only in the developer mode an enabled kernel debugger turns on.
+LOCAL_KEY = DEMO / ".cache" / "kph-local-key"
+KEY_HEADER = "kphlocalkey.h"
+KEY_HOOK = f"#if __has_include(<{KEY_HEADER}>)\n#include <{KEY_HEADER}>\n#endif\n"
+# CustomSignTool's scheme, in BCrypt as it and the driver call it: RSA-4096
+# blobs, and a PSS signature (SHA-512, 64-byte salt) over the file's SHA-512,
+# written as `<stem>.sig`.
+PSS_SALT = 64
 MSBUILD_NS = "{http://schemas.microsoft.com/developer/msbuild/2003}"
+# link.exe options of the kernel projects badc's linker takes, by spelling:
+# `/INTEGRITYCHECK`, without which the kernel refuses the driver's process,
+# thread and object callbacks.
+LINK_OPTIONS = {"/INTEGRITYCHECK": "--force-integrity"}
 
 
 def msbuild_condition(text: str, props: dict) -> bool:
@@ -581,19 +599,22 @@ def kernel_project(rel: Path, props: dict) -> dict:
     """A kernel project's sources and what it and Common.Kernel.props state
     for a Release build in their property and item-definition groups:
     definitions, include directories in order, dependencies, module
-    definition file, `_NT_TARGET_VERSION` and the image's name."""
+    definition file, `_NT_TARGET_VERSION`, the image's name, and the link
+    options badc takes for link.exe's (LINK_OPTIONS)."""
     path = SRC / rel
     props = dict(props, ProjectDir=str(path.parent) + os.sep)
     out = {"defines": [], "includes": [], "libs": [], "def": None, "nt_target_version": None,
-           "target_name": path.stem}
+           "target_name": path.stem, "link": []}
 
     def expand(text: str) -> str:
         return re.sub(r"\$\((\w+)\)", lambda m: props.get(m.group(1), m.group(0)), text)
 
-    def walk(e) -> None:
+    def walk(e, parent: str = "") -> None:
         if not msbuild_condition(e.get("Condition", ""), props):
             return
         tag, text = e.tag.replace(MSBUILD_NS, ""), (e.text or "").strip()
+        if (parent, tag) == ("Link", "AdditionalOptions"):
+            out["link"] += [LINK_OPTIONS[o] for o in text.split() if o.upper() in LINK_OPTIONS]
         items = [x for x in expand(text).split(";") if x and not x.startswith("%(")]
         if tag == "PreprocessorDefinitions":
             out["defines"] += items
@@ -608,7 +629,7 @@ def kernel_project(rel: Path, props: dict) -> dict:
         elif tag == "TargetName":
             out["target_name"] = text
         for child in e:
-            walk(child)
+            walk(child, tag)
 
     for doc in (SRC / "Common.Kernel.props", path):
         for group in ET.parse(doc).getroot():
@@ -664,6 +685,110 @@ def run(cmd, env, cwd=None):
     r = subprocess.run([str(c) for c in cmd], capture_output=True, text=True,
                        errors="replace", env=env, cwd=cwd)
     return r.returncode, r.stdout + r.stderr
+
+
+class BCrypt:
+    """bcrypt.dll's RSA provider, which needs no key storage provider."""
+
+    def __init__(self):
+        import ctypes
+        self.c = ctypes
+        self.dll = ctypes.WinDLL("bcrypt")
+        self.alg = ctypes.c_void_p()
+        self.check(self.dll.BCryptOpenAlgorithmProvider(ctypes.byref(self.alg), "RSA", None, 0))
+
+        class Pss(ctypes.Structure):
+            _fields_ = [("alg", ctypes.c_wchar_p), ("salt", ctypes.c_ulong)]
+        self.pss = Pss("SHA512", PSS_SALT)
+
+    def check(self, status: int) -> None:
+        if status:
+            raise Error(f"BCrypt: NTSTATUS {status & 0xFFFFFFFF:#010x}")
+
+    def generate(self) -> tuple[bytes, bytes]:
+        """A new pair as (RSAPRIVATEBLOB, RSAPUBLICBLOB)."""
+        key = self.c.c_void_p()
+        self.check(self.dll.BCryptGenerateKeyPair(self.alg, self.c.byref(key), 4096, 0))
+        self.check(self.dll.BCryptFinalizeKeyPair(key, 0))
+        return self.export(key, "RSAPRIVATEBLOB"), self.export(key, "RSAPUBLICBLOB")
+
+    def export(self, key, kind: str) -> bytes:
+        size = self.c.c_ulong()
+        self.check(self.dll.BCryptExportKey(key, None, kind, None, 0, self.c.byref(size), 0))
+        buf = self.c.create_string_buffer(size.value)
+        self.check(self.dll.BCryptExportKey(key, None, kind, buf, size, self.c.byref(size), 0))
+        return buf.raw[:size.value]
+
+    def key(self, blob: bytes, kind: str):
+        key = self.c.c_void_p()
+        self.check(self.dll.BCryptImportKeyPair(self.alg, None, kind, self.c.byref(key),
+                                                blob, len(blob), 0))
+        return key
+
+    def sign(self, private: bytes, digest: bytes) -> bytes:
+        key, size, flags = self.key(private, "RSAPRIVATEBLOB"), self.c.c_ulong(), 8
+        pss = self.c.byref(self.pss)
+        self.check(self.dll.BCryptSignHash(key, pss, digest, len(digest), None, 0,
+                                           self.c.byref(size), flags))
+        buf = self.c.create_string_buffer(size.value)
+        self.check(self.dll.BCryptSignHash(key, pss, digest, len(digest), buf, size,
+                                           self.c.byref(size), flags))
+        return buf.raw[:size.value]
+
+    def verify(self, public: bytes, digest: bytes, sig: bytes) -> bool:
+        key = self.key(public, "RSAPUBLICBLOB")
+        return self.dll.BCryptVerifySignature(key, self.c.byref(self.pss), digest, len(digest),
+                                              sig, len(sig), 8) == 0
+
+
+def dyn_config() -> bytes:
+    """kphlib's embedded dynamic configuration, `KphDynConfig`: the bytes
+    CustomBuildTool's `-dyndata` also writes as `ksidyn.bin`, which the
+    client hands the driver with its `.sig`."""
+    text = (SRC / "kphlib" / "kphdyn.c").read_text(encoding="utf-8")
+    body = text[text.index("KphDynConfig[] =") :]
+    body = body[body.index("{") + 1 : body.index("};")]
+    return bytes(int(x, 16) for x in re.findall(r"0x([0-9a-fA-F]{2})", body))
+
+
+def sign(files: list[Path]) -> list[Path]:
+    """Write each file's `.sig` with LOCAL_KEY's private half."""
+    bc, private = BCrypt(), (LOCAL_KEY / "kph.key").read_bytes()
+    sigs = []
+    for f in files:
+        sig = f.with_suffix(".sig")
+        sig.write_bytes(bc.sign(private, hashlib.sha512(f.read_bytes()).digest()))
+        sigs.append(sig)
+    return sigs
+
+
+def unverified(files: list[Path]) -> list[Path]:
+    """The files whose `.sig` LOCAL_KEY's public half does not verify."""
+    bc, public = BCrypt(), (LOCAL_KEY / "public.key").read_bytes()
+    return [f for f in files if not f.with_suffix(".sig").is_file()
+            or not bc.verify(public, hashlib.sha512(f.read_bytes()).digest(),
+                             f.with_suffix(".sig").read_bytes())]
+
+
+def local_key() -> Path:
+    """The directory holding KEY_HEADER for LOCAL_KEY's pair, made on first use."""
+    public = LOCAL_KEY / "public.key"
+    if not public.is_file():
+        LOCAL_KEY.mkdir(parents=True, exist_ok=True)
+        private, blob = BCrypt().generate()
+        (LOCAL_KEY / "kph.key").write_bytes(private)
+        public.write_bytes(blob)
+    blob = public.read_bytes()
+    # BCRYPT_RSAKEY_BLOB: `RSA1`, 4096 bits, a 3-byte exponent, a 512-byte modulus.
+    if blob[:4] != b"RSA1" or struct.unpack_from("<4I", blob, 4)[:3] != (4096, 3, 512):
+        raise Error(f"{public} is no RSA-4096 public key blob")
+    rows = ",\n".join("        " + ", ".join(f"0x{b:02X}" for b in blob[i:i + 12])
+                      for i in range(0, len(blob), 12))
+    header = LOCAL_KEY / KEY_HEADER
+    text = f"    {{\n        KphKeyTypeProd, // {LOCAL_KEY.name}\n        {{\n{rows}\n        }}\n    }},\n"
+    if not header.is_file() or header.read_text() != text:
+        header.write_text(text)
+    return LOCAL_KEY
 
 
 def first_error(text: str) -> str:
@@ -781,7 +906,8 @@ class Build:
             for (kind, src, o, _, _), rc, text, _ in ex.map(one, jobs):
                 counts[kind] = counts.get(kind, 0) + 1
                 if rc or not o.exists():
-                    self.failures.append(f"{kind} {src.relative_to(SRC)}: {first_error(text)}")
+                    name = src.relative_to(SRC) if src.is_relative_to(SRC) else src
+                    self.failures.append(f"{kind} {name}: {first_error(text)}")
         self.log(f"compiled: {', '.join(f'{n} {k}' for k, n in sorted(counts.items()))}")
 
     def archive(self, name: str, objs: list[Path]) -> Path:
@@ -843,15 +969,27 @@ class Build:
         generated = sorted({str(Path(x).parent) for outs, _, _ in self.cm.custom for o in outs
                             for x in self.cm.genex(o, "C") if x.lower().endswith(".h")})
         drv = self.out / "obj" / "driver"
+        # The key table takes LOCAL_KEY's public half after SI's own.
+        verify = SRC / "KSystemInformer" / "verify.c"
+        table = verify.read_text(encoding="utf-8")
+        start = table.index("KphpPublicKeys[] =")
+        end = table.index("\n};", start) + 1
+        last = table[:end].rstrip()
+        hooked = drv / "local-key" / "verify.c"
+        hooked.parent.mkdir(parents=True, exist_ok=True)
+        hooked.write_text(last + ("" if last.endswith(",") else ",") + "\n" + KEY_HOOK + table[end:],
+                          encoding="utf-8")
+        key_dir = local_key()
         jobs = []
         for name, p in projects.items():
             defines = p["defines"] + ["_KERNEL_MODE", f"NTDDI_VERSION={ntddi:#010x}",
                                       f"_WIN32_WINNT={ntddi >> 16:#06x}",
                                       f"WINVER={ntddi >> 16:#06x}", "WINNT=1"]
             includes = [d for d in p["includes"] + generated
-                        if "$(" not in d and Path(d).is_dir()]
+                        if "$(" not in d and Path(d).is_dir()] + [str(key_dir)]
             for src in p["sources"]:
                 o = drv / name / (src.stem + ".o")
+                src = hooked if src.resolve() == verify.resolve() else src
                 cmd = [tools.badc, f"--target={target}", "-c", "--msvc", "-nostdlibinc", tools.opt]
                 cmd += [f for f in flags if f.startswith("-D")] + [f"-D{d}" for d in defines]
                 cmd += [f"-I{d}" for d in dict.fromkeys(includes)] + [str(src), "-o", str(o)]
@@ -867,7 +1005,8 @@ class Build:
         ksi = out / (projects["ksidll"]["target_name"] + ".dll")
         implib = self.out / "lib" / ksi.with_suffix(".lib").name
         # An export driver defines no DriverEntry; its entry is DllInitialize.
-        cmd = base + ["-shared", "--entry=DllInitialize", *objs["ksidll"], str(projects["ksidll"]["def"]),
+        cmd = base + projects["ksidll"]["link"]
+        cmd += ["-shared", "--entry=DllInitialize", *objs["ksidll"], str(projects["ksidll"]["def"]),
                       "--out-implib", str(implib)] + [f"-l{n}" for n in WDK_DEFAULT_LIBS]
         rc, text = run(cmd + ["-o", str(ksi)], tools.env)
         if rc or not ksi.exists():
@@ -877,7 +1016,8 @@ class Build:
         # SystemInformer.sys: SI loads the driver from its own name.
         sys_file = out / (projects["KSystemInformer"]["target_name"] + ".sys")
         libs = [n for n in projects["KSystemInformer"]["libs"] if n not in ("ksi", "kphlib_km")]
-        cmd = base + ["--entry=GsDriverEntry", *objs["KSystemInformer"], str(kphlib), str(implib)]
+        cmd = base + projects["KSystemInformer"]["link"]
+        cmd += ["--entry=GsDriverEntry", *objs["KSystemInformer"], str(kphlib), str(implib)]
         cmd += [f"-l{n}" for n in dict.fromkeys(libs + WDK_DEFAULT_LIBS)] + ["-o", str(sys_file)]
         rc, text = run(cmd, tools.env)
         if rc or not sys_file.exists():
@@ -945,7 +1085,12 @@ class Build:
             names = [n for n in dict.fromkeys(names) if n != "delayimp"]
             outputs.append(self.link(name, of(name, ("cc", "cxx", "asm")), res,
                                      [archives[x] for x in libs], names, delay, console, defs))
-        outputs += self.driver()
+        driver = self.driver()
+        if driver:
+            dyn = self.bin / "ksidyn.bin"
+            dyn.write_bytes(dyn_config())
+            outputs += [dyn] + sign([p for p in outputs if p.stem in TARGETS] + [dyn])
+        outputs += driver
         self.log(f"built {', '.join(p.name for p in outputs)} in {time.time() - t0:.0f} s")
         return outputs
 

@@ -3943,7 +3943,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         merged_dwarf: None,
         pdb_path: None,
         resources: alloc::vec::Vec::new(),
-        stack_size: None,
+        pe: Default::default(),
         mach_o: Default::default(),
         // Every import on this single-TU path gets a trampoline (data
         // imports ride `ResolvedImports::data_bindings`, not `imports`).

@@ -8565,6 +8565,34 @@ fn a_pe_link_takes_the_stack_size() {
     }
 }
 
+/// `--force-integrity`, link.exe's `/INTEGRITYCHECK`, sets
+/// `IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY`, which the kernel requires of a
+/// driver registering process, thread or object callbacks: without it
+/// `PsSetCreateProcessNotifyRoutineEx` and `ObRegisterCallbacks` return
+/// STATUS_ACCESS_DENIED. An image linked without the option does not carry it.
+#[test]
+fn a_pe_link_forces_integrity_checks_on_request() {
+    let dir = tempdir("pe-force-integrity");
+    write_source(&dir, "s.c", "int main(void) { return 0; }\n");
+    for target in ["windows-x64", "windows-arm64"] {
+        for (option, want) in [(None, 0), (Some("-Wl,--force-integrity"), 0x80)] {
+            let mut cmd = Command::new(badc());
+            cmd.arg(format!("--target={target}")).current_dir(&dir);
+            cmd.args(option).args(["s.c", "-o", "s.exe"]);
+            run(&mut cmd, &format!("{target}: {option:?}"));
+            let pe = std::fs::read(dir.join("s.exe")).expect("read image");
+            let opt = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize + 24;
+            let chars = u16::from_le_bytes(pe[opt + 70..opt + 72].try_into().unwrap());
+            assert_eq!(chars & 0x80, want, "{target}: {option:?}: {chars:#06x}");
+            assert_eq!(
+                chars & 0x0160,
+                0x0160,
+                "{target}: the ASLR and NX flags stay"
+            );
+        }
+    }
+}
+
 /// A DLL link resolves a function only against what the link supplies --
 /// an import library, or the C library the bundled headers bind a
 /// self-declared `puts` to -- and reports any other reference undefined,

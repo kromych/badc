@@ -52,6 +52,7 @@ fn subsystem_uses_passthrough_entry(subsystem: u16) -> bool {
 }
 const IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA: u16 = 0x0020;
 const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
+const IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY: u16 = 0x0080;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
 const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 
@@ -1682,7 +1683,8 @@ impl<'a> PeWriter<'a> {
                 export_table_size: l.edata_bytes.len() as u32,
                 resource_table_rva: l.rsrc_rva,
                 resource_table_size: l.rsrc_bytes.len() as u32,
-                stack: build.stack_size.unwrap_or(DEFAULT_STACK),
+                stack: build.pe.stack.unwrap_or(DEFAULT_STACK),
+                force_integrity: build.pe.force_integrity,
                 debug_rva: debug_dir.0,
                 debug_size: debug_dir.1,
                 subsystem: self.subsystem,
@@ -2498,6 +2500,7 @@ struct OptionalHeaderInputs {
     resource_table_size: u32,
     /// `SizeOfStackReserve` and `SizeOfStackCommit`.
     stack: (u64, u64),
+    force_integrity: bool,
     debug_rva: u32,
     debug_size: u32,
     subsystem: u16,
@@ -2508,10 +2511,16 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     // Bumping to 10.0 (which we tried first) caused CreateProcess to reject
     // our images with ERROR_BAD_EXE_FORMAT on real Windows, even though
     // wine on Linux tolerated it.
+    let integrity = if inp.force_integrity {
+        IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY
+    } else {
+        0
+    };
     let dll_chars = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
         | IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA
         | IMAGE_DLLCHARACTERISTICS_NX_COMPAT
-        | IMAGE_DLLCHARACTERISTICS_NO_SEH;
+        | IMAGE_DLLCHARACTERISTICS_NO_SEH
+        | integrity;
 
     let mut data_directory = [DataDirectoryEntry { rva: 0, size: 0 }; NUM_DATA_DIRS as usize];
     data_directory[DATA_DIRECTORY_IMPORT] = DataDirectoryEntry {

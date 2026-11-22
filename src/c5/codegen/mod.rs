@@ -2586,8 +2586,8 @@ pub(crate) struct Build {
     pub pdb_path: Option<String>,
     /// The compiled resource files (`.res`) a PE image carries in `.rsrc`.
     pub resources: Vec<Vec<u8>>,
-    /// A PE image's `--stack` reserve and commit; `None` keeps the default.
-    pub stack_size: Option<(u64, u64)>,
+    /// A PE image's form, see [`PeImageOptions`].
+    pub pe: PeImageOptions,
     /// A Mach-O image's form, see [`MachOImageOptions`].
     pub mach_o: MachOImageOptions,
     /// Byte offset within `Build::text` of each import's PLT
@@ -5201,6 +5201,17 @@ pub struct ElfImageOptions {
     pub no_apply_dynamic_relocs: bool,
     pub exec_stack: bool,
     pub symbolic: bool,
+}
+
+/// A PE image's form: `--stack` reserve and commit, link.exe's `/STACK`
+/// (`None` keeps the default), and `--force-integrity`, link.exe's
+/// `/INTEGRITYCHECK`, which sets `IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY`:
+/// the kernel registers a driver's process, thread and object callbacks only
+/// for an image carrying it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PeImageOptions {
+    pub stack: Option<(u64, u64)>,
+    pub force_integrity: bool,
 }
 
 /// The image forms ld64 selects with `-bundle`, a Mach-O image that only

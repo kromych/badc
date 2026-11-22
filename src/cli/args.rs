@@ -271,8 +271,8 @@ pub(crate) struct Link {
     pub(crate) markers: Vec<(usize, LinkMarker)>,
     /// `--out-implib`: where a PE DLL link writes its import library.
     pub(crate) out_implib: Option<PathBuf>,
-    /// `--stack reserve[,commit]`, link.exe's `/STACK`.
-    pub(crate) stack: Option<(u64, u64)>,
+    /// `--stack` and `--force-integrity`, see [`badc::PeImageOptions`].
+    pub(crate) pe: badc::PeImageOptions,
     /// `--delayload`, link.exe's `/DELAYLOAD`: DLLs loaded on first call.
     pub(crate) delay_load: Vec<String>,
     /// ld64's `-bundle` and `-flat_namespace`.
@@ -392,7 +392,7 @@ impl Default for Link {
         Self {
             markers: Vec::new(),
             out_implib: None,
-            stack: None,
+            pe: badc::PeImageOptions::default(),
             mach_o: badc::MachOImageOptions::default(),
             bundle_loader: None,
             library_paths: Vec::new(),
@@ -515,7 +515,7 @@ impl Cli {
             exec_form: self.exec_form(),
             strip_debug: link.strip_debug,
             discard_temporaries: link.discard_locals,
-            pe_stack: link.stack,
+            pe: link.pe,
             mach_o: link.mach_o,
             elf: badc::ElfImageOptions {
                 build_id: link.build_id,
@@ -2426,11 +2426,13 @@ impl Parser {
             // GNU ld's PE `--stack reserve[,commit]`, link.exe's `/STACK`.
             "--stack" => {
                 let value = operand(iter, "badc: error: --stack requires a size")?;
-                link.stack = Some(parse_stack(&value)?);
+                link.pe.stack = Some(parse_stack(&value)?);
             }
             s if s.starts_with("--stack=") => {
-                link.stack = Some(parse_stack(&s["--stack=".len()..])?)
+                link.pe.stack = Some(parse_stack(&s["--stack=".len()..])?)
             }
+            // GNU ld's PE `--force-integrity`, link.exe's `/INTEGRITYCHECK`.
+            "--force-integrity" => link.pe.force_integrity = true,
             // lld's MinGW `--delayload`, link.exe's `/DELAYLOAD`.
             "--delayload" | "-delayload" => link.delay_load.push(operand(
                 iter,

@@ -158,7 +158,10 @@ an archive holding a Mach-O object takes the BSD form Apple's `ar` writes, a
 `__.SYMDEF SORTED` index with each member name inline (`#1/<len>`), which
 ld64 reads.
 A PE link sizes the initial thread's stack under `--stack <reserve>[,<commit>]`,
-link.exe's `/STACK` (default 8 MiB reserved, one page committed).
+link.exe's `/STACK` (default 8 MiB reserved, one page committed), and sets
+`IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY` under `--force-integrity`,
+link.exe's `/INTEGRITYCHECK`, which a driver registering process, thread or
+object callbacks needs.
 A PE DLL link writes the DLL's import library under `--out-implib=<file>`,
 as link.exe writes one beside a DLL: an archive of short import members, a
 data export's naming only its `__imp_` slot.

@@ -52,6 +52,13 @@ struct __ubsan_implicit_conversion_data {
     unsigned int bitfield_bits;
 };
 
+struct __ubsan_vla_bound_data {
+    struct __ubsan_source_location loc;
+    const struct __ubsan_type_descriptor *type;
+};
+struct __ubsan_unreachable_data {
+    struct __ubsan_source_location loc;
+};
 // Whether the site at `loc` reports now: the first failure claims it.
 static int __ubsan_claim(struct __ubsan_source_location *loc, uint32_t *column) {
     *column = __atomic_exchange_n(&loc->column, 0xffffffffu, __ATOMIC_RELAXED);
@@ -280,5 +287,36 @@ void __ubsan_handle_implicit_conversion(struct __ubsan_implicit_conversion_data 
 _Noreturn void __ubsan_handle_implicit_conversion_abort(struct __ubsan_implicit_conversion_data *d,
                                                         uintptr_t src, uintptr_t dst) {
     __ubsan_implicit_conversion(d, src, dst);
+    abort();
+}
+
+_Noreturn void __ubsan_handle_builtin_unreachable(struct __ubsan_unreachable_data *d) {
+    uint32_t column;
+    if (__ubsan_claim(&d->loc, &column)) {
+        fprintf(stderr, "%s:%u:%u: runtime error: execution reached an unreachable program point\n",
+                d->loc.file, d->loc.line, column);
+        __ubsan_summary(&d->loc, column);
+    }
+    abort();
+}
+
+static void __ubsan_vla_bound(struct __ubsan_vla_bound_data *d, uintptr_t bound) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    fprintf(stderr, "%s:%u:%u: runtime error: variable length array bound evaluates to "
+            "non-positive value ", d->loc.file, d->loc.line, column);
+    __ubsan_print_int(d->type, bound);
+    fprintf(stderr, "\n");
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_vla_bound_not_positive(struct __ubsan_vla_bound_data *d, uintptr_t bound) {
+    __ubsan_vla_bound(d, bound);
+}
+
+_Noreturn void __ubsan_handle_vla_bound_not_positive_abort(struct __ubsan_vla_bound_data *d,
+                                                           uintptr_t bound) {
+    __ubsan_vla_bound(d, bound);
     abort();
 }

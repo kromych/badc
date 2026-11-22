@@ -396,6 +396,10 @@ impl<'a> Walker<'a> {
                 let one = b.imm(1);
                 b.binop(BinOp::Ugt, value, one)
             }
+            ValueTest::Positive { signed } => {
+                let zero = b.imm(0);
+                b.binop(if signed { BinOp::Le } else { BinOp::Eq }, value, zero)
+            }
             // The value as its own type reads it against the value the
             // narrower type keeps; the handler takes both.
             ValueTest::Truncation { from, to } => {
@@ -421,32 +425,40 @@ impl<'a> Walker<'a> {
         b.branch_zero(flag, join, failed);
         b.expect(None);
         b.switch_to(failed);
-        match check.handler {
-            None => b.unreachable(),
-            Some(sym) => {
-                let site = b.imm_data(check.data);
-                let mut args = alloc::vec![site];
-                args.extend_from_slice(values);
-                let n = args.len();
-                let conv = crate::c5::codegen::CallConv::Target;
-                let mask = crate::c5::ir::FpMask::EMPTY;
-                // The handler's import placeholder, as a library call's.
-                match crate::c5::irgen::live_fun_val(self.symbols, sym, 0) {
-                    0 => b.call_extern(sym, args, n, false, mask, conv),
-                    pc => b.call(pc as usize, args, n, false, mask, conv),
-                };
-                if self
-                    .symbols
-                    .get(sym as usize)
-                    .is_some_and(|s| s.is_noreturn)
-                {
-                    b.unreachable();
-                } else {
-                    b.jmp(join);
-                }
-            }
+        if self.fail_check(b, check, values) {
+            b.jmp(join);
         }
         b.switch_to(join);
+    }
+
+    /// Call `check`'s handler with its site data and `values`, or trap;
+    /// whether the handler returns, the block then left open.
+    pub(super) fn fail_check(
+        &self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        values: &[ValueId],
+    ) -> bool {
+        let Some(sym) = check.handler else {
+            b.unreachable();
+            return false;
+        };
+        let site = b.imm_data(check.data);
+        let mut args = alloc::vec![site];
+        args.extend_from_slice(values);
+        let n = args.len();
+        let conv = crate::c5::codegen::CallConv::Target;
+        let mask = crate::c5::ir::FpMask::EMPTY;
+        // The handler's import placeholder, as a library call's.
+        match crate::c5::irgen::live_fun_val(self.symbols, sym, 0) {
+            0 => b.call_extern(sym, args, n, false, mask, conv),
+            pc => b.call(pc as usize, args, n, false, mask, conv),
+        };
+        let returns = !(self.symbols.get(sym as usize)).is_some_and(|s| s.is_noreturn);
+        if !returns {
+            b.unreachable();
+        }
+        returns
     }
 
     /// 128-bit multiply, returning the product mod 2^128 and whether the

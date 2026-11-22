@@ -1100,6 +1100,8 @@ pub(crate) enum ValueTest {
     /// An integer of `from`'s width and signedness converted to `to`'s,
     /// narrower: the value it keeps there equal to the value it had.
     Truncation { from: (u8, bool), to: (u8, bool) },
+    /// A variable-length array bound: above 0, or not 0 for an unsigned one.
+    Positive { signed: bool },
 }
 
 /// A runtime check of the operation at a node (`-fsanitize=`): what it

@@ -230,7 +230,18 @@ impl<'a> Walker<'a> {
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
-            Expr::Intrinsic { kind, args, .. } => self.walk_intrinsic(b, *kind, args),
+            // A `__builtin_unreachable()` under `-fsanitize=unreachable`.
+            Expr::Intrinsic { kind, args, .. } => match self.ast.checks.get(&id) {
+                Some(&check) => {
+                    let after = b.new_block();
+                    if self.fail_check(b, check, &[]) {
+                        b.jmp(after);
+                    }
+                    b.switch_to(after);
+                    Ok(b.imm(0))
+                }
+                None => self.walk_intrinsic(b, *kind, args),
+            },
             Expr::MsIntrinsic { .. } => self.walk_ms_intrinsic(b, id),
             Expr::InlineAsm(idx) => self.walk_inline_asm(b, *idx),
             Expr::LabelAddr(label) => {

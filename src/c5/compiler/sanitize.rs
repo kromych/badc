@@ -41,6 +41,15 @@ pub enum Check {
     /// A load of a `_Bool` whose byte is neither 0 nor 1 (C17 6.2.6.1p5,
     /// a trap representation).
     Bool,
+    /// A variable-length array bound that is not positive (C17 6.7.6.2p5).
+    VlaBound,
+    /// A `__builtin_unreachable()` reached: its handler reports it and ends
+    /// the program.
+    Unreachable,
+    /// Flowing off the end of a value-returning function. gcc and clang check
+    /// it in C++ alone, where it is undefined; in C only a use of the value
+    /// is (C17 6.9.1p12), so the check inserts nothing, as theirs do.
+    Return,
     /// An unsigned `+`, `-`, `*` or negation whose value its type cannot
     /// represent: defined, reduced modulo (C17 6.2.5p9); clang's check.
     UnsignedIntegerOverflow,
@@ -55,7 +64,7 @@ pub enum Check {
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
     /// clang's checks of defined behavior.
-    pub const ALL: [Check; 11] = [
+    pub const ALL: [Check; 14] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -64,6 +73,9 @@ impl Check {
         Check::Bounds,
         Check::BoundsStrict,
         Check::Bool,
+        Check::VlaBound,
+        Check::Unreachable,
+        Check::Return,
         Check::UnsignedIntegerOverflow,
         Check::ImplicitUnsignedIntegerTruncation,
         Check::ImplicitSignedIntegerTruncation,
@@ -80,6 +92,9 @@ impl Check {
             Check::Bounds => "bounds",
             Check::BoundsStrict => "bounds-strict",
             Check::Bool => "bool",
+            Check::VlaBound => "vla-bound",
+            Check::Unreachable => "unreachable",
+            Check::Return => "return",
             Check::UnsignedIntegerOverflow => "unsigned-integer-overflow",
             Check::ImplicitUnsignedIntegerTruncation => "implicit-unsigned-integer-truncation",
             Check::ImplicitSignedIntegerTruncation => "implicit-signed-integer-truncation",
@@ -302,6 +317,55 @@ impl Compiler {
         let checks = self.ast.value_checks.entry(index).or_default();
         checks.push(ValueCheck { check, test });
         self.bounds_subscript = Some((subscript, index));
+    }
+
+    /// Check the variable-length array bound at node `dim`, of type `ty`, which
+    /// begins at `at`, under `-fsanitize=vla-bound`: above 0, or for an
+    /// unsigned bound not 0.
+    pub(super) fn sanitize_vla_bound(&mut self, dim: ExprId, ty: i64, at: (u32, u32)) {
+        let check = Check::VlaBound;
+        if !self.sanitize.runs(check) || !is_integer_scalar_ty(ty) {
+            return;
+        }
+        let types = [self.ubsan_type(ty)];
+        let data = self.ubsan_site_at(at, &types);
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_vla_bound_not_positive", 1);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        let test = ValueTest::Positive {
+            signed: !is_unsigned_ty(ty),
+        };
+        let checks = self.ast.value_checks.entry(dim).or_default();
+        checks.push(ValueCheck { check, test });
+    }
+
+    /// Report the `__builtin_unreachable()` call at node `id`, which begins
+    /// at `at`, where it is reached, under `-fsanitize=unreachable`. Its
+    /// handler ends the program, whatever the recovery: it has no form that
+    /// returns.
+    pub(super) fn sanitize_unreachable(&mut self, id: ExprId, at: (u32, u32)) {
+        let check = Check::Unreachable;
+        if !self.sanitize.runs(check) {
+            return;
+        }
+        let data = self.ubsan_site_at(at, &[]);
+        let handler = (self.sanitize.trap & check.bit() == 0).then(|| {
+            let name = "__ubsan_handle_builtin_unreachable";
+            let slot = self.resolve_symbol_named(&alloc::format!("{name}.libcall"));
+            self.ubsan_handlers
+                .insert(slot, (String::from(name), "_Noreturn void(void *)"));
+            slot as u32
+        });
+        let checks = check.bit();
+        let check = SanitizeCheck {
+            checks,
+            data,
+            handler,
+        };
+        self.ast.checks.insert(id, check);
     }
 
     /// Check the `_Bool` the node `id` of type `ty` loads wherever it is read

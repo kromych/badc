@@ -2526,6 +2526,7 @@ impl Compiler {
         use crate::c5::op::Intrinsic;
         let is = |k: Intrinsic| intrinsic_id == k as i64;
         let fn_name = self.symbols[id_idx].name.clone();
+        let call_at = self.lvalue_at;
         // `__builtin_trap()` and `__c5_establisher_frame()` are the
         // nullary intrinsics; every other one needs at least one argument.
         let nullary = is(Intrinsic::Trap) || is(Intrinsic::EstablisherFrame);
@@ -2572,6 +2573,9 @@ impl Compiler {
             pos,
         );
         self.ast_acc = Some(id);
+        if is(Intrinsic::Trap) && fn_name == "__builtin_unreachable" {
+            self.sanitize_unreachable(id, call_at);
+        }
         // `__builtin_va_arg` yields the argument as a value of `T`: the slot
         // address the intrinsic returns is read through a pointer to the type
         // the caller passed, then converted to `T`.

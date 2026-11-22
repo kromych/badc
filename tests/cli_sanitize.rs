@@ -283,6 +283,114 @@ fn unsigned_wraps_are_checked_under_unsigned_integer_overflow() {
     }
 }
 
+const UNREACHABLE: &str = "#include <stdio.h>
+int f(int x) { if (x > 0) return 1; __builtin_unreachable(); }
+int g(int x) { if (x > 0) return 2; }
+int main(int argc, char **argv) { (void)argv; printf(\"%d\\n\", g(argc)); fflush(stdout); return f(argc - 1); }
+";
+
+/// `__builtin_unreachable()` reached reports at the call under
+/// `-fsanitize=unreachable` and ends the program, whatever the recovery: its
+/// handler has no form that returns. `return` is accepted and, as gcc's and
+/// clang's in C, checks nothing: flowing off a function's end is undefined
+/// only where the value is used (C17 6.9.1p12). Trapped, the call reports
+/// nothing and still ends the program.
+#[test]
+fn a_reached_unreachable_is_reported_and_ends_the_program() {
+    let dir = TempDir::new("badc-sanitize-unreachable");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, UNREACHABLE).unwrap();
+    let report = "2:37: runtime error: execution reached an unreachable program point";
+    for (flags, want) in [
+        (&["-fsanitize=unreachable,return"][..], &[report][..]),
+        (
+            &["-fsanitize=unreachable", "-fno-sanitize-recover"][..],
+            &[report][..],
+        ),
+        (&["-fsanitize=unreachable", "-fsanitize-trap"][..], &[][..]),
+    ] {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!(
+                "unreachable{}{opt}",
+                flags.join("").replace('=', "_")
+            ));
+            let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+                .args(["-q", "-w", opt, "-fno-crash-report"])
+                .args(flags)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert!(
+                built.status.success(),
+                "{}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            let o = run(&exe, &[]);
+            assert!(!o.status.success(), "{flags:?} {opt}: {o:?}");
+            let out = String::from_utf8_lossy(&o.stdout).replace("\r\n", "\n");
+            assert_eq!(out, "2\n", "{flags:?} {opt}");
+            assert_eq!(reports(&o), want, "{flags:?} {opt}");
+        }
+    }
+}
+
+const VLA: &str = "#include <stdio.h>
+int main(int argc, char **argv) {
+    (void)argv;
+    int n = argc - 1;
+    int vla[n];
+    int m = -argc;
+    char vla2[m + 3];
+    long k = -argc;
+    int (*p)[k + 1] = 0;
+    unsigned u = argc - 1u;
+    short s[2][u];
+    printf(\"%zu %zu %zu %zu\\n\", sizeof vla, sizeof vla2, sizeof *p, sizeof s);
+    return 0;
+}
+";
+
+/// A variable-length array bound that is not positive reports at the bound
+/// under `-fsanitize=vla-bound` (C17 6.7.6.2p5): an object's outermost and
+/// inner bounds, an unsigned one at 0, and a pointer's to such an array, as
+/// clang evaluates its type.
+#[test]
+fn a_non_positive_vla_bound_is_reported() {
+    let dir = TempDir::new("badc-sanitize-vla");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, VLA).unwrap();
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("vla{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-w", opt, "-fsanitize=vla-bound", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        assert_eq!(
+            reports(&o),
+            [
+                "5:13: runtime error: variable length array bound evaluates to non-positive \
+                 value 0",
+                "9:14: runtime error: variable length array bound evaluates to non-positive \
+                 value 0",
+                "11:16: runtime error: variable length array bound evaluates to non-positive \
+                 value 0",
+            ],
+            "{opt}"
+        );
+    }
+}
+
 const SHIFTS: &str = "#include <limits.h>
 #include <stdio.h>
 __attribute__((noinline)) int big(int a, int b) { return a << b; }

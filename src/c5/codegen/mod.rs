@@ -3287,13 +3287,14 @@ pub(crate) enum TlsGotForm {
 }
 
 /// A site holding a link-defined base plus `offset`: the GOT base
-/// `_GLOBAL_OFFSET_TABLE_` names, or PE's `__ImageBase`. Same encoding
-/// shapes as [`DataFixup`]; the writer supplies the base's address.
+/// `_GLOBAL_OFFSET_TABLE_` names, PE's `__ImageBase`, or an import's slot.
+/// Same encoding shapes as [`DataFixup`]; the writer supplies the base's
+/// address.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BaseFixup {
     /// Byte offset within `Build::text` of the relocated instruction.
     pub instr_offset: usize,
-    /// [`ImageAddr::GotBase`] or [`ImageAddr::ImageBase`].
+    /// [`ImageAddr::GotBase`], [`ImageAddr::ImageBase`] or [`ImageAddr::ImportSlot`].
     pub base: ImageAddr,
     pub offset: i64,
     /// Fields of the reference this record covers.

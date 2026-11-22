@@ -7333,8 +7333,17 @@ fn grouped_sections_join_their_base_in_suffix_order() {
 /// An import library of short import members (PE/COFF specification), each
 /// `(machine, name, ordinal)` importing a function from `dll`.
 fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<u8> {
+    let typed: Vec<_> = (members.iter())
+        .map(|&(machine, name, ordinal)| (machine, name, ordinal, 0))
+        .collect();
+    short_import_members(dll, &typed)
+}
+
+/// [`short_import_library`] with each member's import type: 0 code, 1 data,
+/// 2 const.
+fn short_import_members(dll: &str, members: &[(u16, &str, Option<u16>, u8)]) -> Vec<u8> {
     let mut out = b"!<arch>\n".to_vec();
-    for &(machine, name, ordinal) in members {
+    for &(machine, name, ordinal, kind) in members {
         let payload = [name.as_bytes(), b"\0", dll.as_bytes(), b"\0"].concat();
         let mut member = [0u16.to_le_bytes(), 0xffffu16.to_le_bytes(), [0, 0]].concat();
         member.extend(machine.to_le_bytes());
@@ -7342,7 +7351,7 @@ fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<
         member.extend((payload.len() as u32).to_le_bytes());
         // The ordinal or hint, then the import type and the name type.
         member.extend(ordinal.unwrap_or(0).to_le_bytes());
-        member.extend([u8::from(ordinal.is_none()) << 2, 0]);
+        member.extend([kind | u8::from(ordinal.is_none()) << 2, 0]);
         member.extend(&payload);
         let header = format!(
             "{:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
@@ -7360,6 +7369,74 @@ fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<
         }
     }
     out
+}
+
+/// A CONST member of an import library binds its plain name to the import's
+/// address slot, as `__imp_` binds, the binding link.exe and lld give it: a
+/// header declares the DLL's object through a pointer, `extern int
+/// *lib_value;`, and the name's address is the slot's.
+#[test]
+fn a_const_import_names_its_address_slot() {
+    let dir = tempdir("pe-const-import");
+    write_source(
+        &dir,
+        "lib.c",
+        "__declspec(dllexport) int lib_value = 42;\n\
+         __declspec(dllexport) int lib_get(void) { return lib_value; }\n",
+    );
+    write_source(
+        &dir,
+        "user.c",
+        "extern int *lib_value;\n\
+         extern int *__imp_lib_value;\n\
+         int lib_get(void);\n\
+         int main(void) {\n\
+           int **volatile name = &lib_value, **volatile slot = &__imp_lib_value;\n\
+           if (*lib_value != 42 || name != slot) return 1;\n\
+           *lib_value = 7;\n\
+           return lib_get() == 7 ? 0 : 2;\n\
+         }\n",
+    );
+    let host = if cfg!(target_arch = "x86_64") {
+        "windows-x64"
+    } else {
+        "windows-arm64"
+    };
+    for (target, machine) in [("windows-x64", 0x8664u16), ("windows-arm64", 0xaa64)] {
+        let t = format!("--target={target}");
+        run(
+            Command::new(badc())
+                .args([&t, "--shared", "lib.c", "-o", "lib.dll"])
+                .current_dir(&dir),
+            &format!("{target}: DLL"),
+        );
+        let members = [
+            (machine, "lib_get", None, 0),
+            (machine, "lib_value", None, 2),
+        ];
+        std::fs::write(
+            dir.join("lib.lib"),
+            short_import_members("lib.dll", &members),
+        )
+        .unwrap();
+        for opt in ["-O0", "-O"] {
+            run(
+                Command::new(badc())
+                    .args([&t, opt, "user.c", "lib.lib", "-o", "user.exe"])
+                    .current_dir(&dir),
+                &format!("{target} {opt}: link"),
+            );
+            let imports = pe_imports(&std::fs::read(dir.join("user.exe")).expect("read image"));
+            assert!(
+                imports.contains(&("lib.dll".into(), "lib_value".into())),
+                "{target} {opt}: {imports:?}"
+            );
+            if cfg!(windows) && target == host {
+                let status = Command::new(dir.join("user.exe")).status().expect("run");
+                assert_eq!(status.code(), Some(0), "{target} {opt}");
+            }
+        }
+    }
 }
 
 /// `--out-implib` writes a DLL's import library, as link.exe writes one
@@ -12620,8 +12697,6 @@ fn a_load_config_structure_takes_the_guard_symbols_and_its_directory() {
     }
 }
 
-/// A PE image's preferred base, its sections as `(rva, file offset, raw
-/// size)`, and the RVAs its `IMAGE_REL_BASED_DIR64` entries cover.
 /// A library's `_load_config_used` joins a PE image though nothing names
 /// it, as link.exe takes it: the kernel's loader seeds a driver's stack
 /// cookie through the directory, and the WDK's `__security_init_cookie`

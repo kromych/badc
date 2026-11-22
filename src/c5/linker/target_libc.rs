@@ -92,6 +92,7 @@ fn no_exports(soname: &str, target: Target) -> SharedLibrary {
         soname: soname.to_string(),
         machine: target_machine(target),
         exports: BTreeSet::new(),
+        slot_exports: Default::default(),
         data_exports: BTreeSet::new(),
         tls_exports: BTreeSet::new(),
         object_sizes: Default::default(),

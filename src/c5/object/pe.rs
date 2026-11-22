@@ -1348,7 +1348,7 @@ impl<'a> PeWriter<'a> {
         if build
             .base_fixups
             .iter()
-            .any(|f| f.base != ImageAddr::ImageBase)
+            .any(|f| f.base == ImageAddr::GotBase)
             || build.image_rel_fields.iter().any(names_got)
         {
             return Err(C5Error::hard(
@@ -1356,10 +1356,21 @@ impl<'a> PeWriter<'a> {
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",
             ));
         }
-        // `__ImageBase` is at RVA 0.
         for f in &build.base_fixups {
             let instr_off = f.instr_offset as u32 + prologue;
-            patch_addr_load(machine, &mut text, instr_off, text_rva, f.offset, f.part)?;
+            // `__ImageBase` is at RVA 0.
+            let base = match f.base {
+                ImageAddr::ImportSlot(i) => i64::from(l.idata.iat_rva_for_import[i]),
+                _ => 0,
+            };
+            patch_addr_load(
+                machine,
+                &mut text,
+                instr_off,
+                text_rva,
+                base + f.offset,
+                f.part,
+            )?;
         }
         for f in &build.image_rel_fields {
             let site = f.site_text_offset as usize + prologue as usize;

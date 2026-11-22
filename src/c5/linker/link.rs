@@ -318,9 +318,9 @@ pub struct MergedNative {
     /// Indices into [`Self::imports`] whose call stub code takes as a value,
     /// not as a branch target; filled by the PLT pass.
     pub stub_address_imports: alloc::collections::BTreeSet<usize>,
-    /// The `.text` offsets of the sites that read an import-address slot by
-    /// its name (`__imp_X`): the slot keeps the import's address, which the
-    /// PE thunk does not replace.
+    /// The `.text` offsets of the sites that read an import-address slot or
+    /// take its address by its name (`__imp_X`, a CONST import's own): the
+    /// slot keeps the import's address, which the PE thunk does not replace.
     pub slot_reads: alloc::collections::BTreeSet<u64>,
     /// The link's warnings, for the driver to report.
     pub warnings: Vec<(Code, String)>,
@@ -1229,7 +1229,10 @@ pub fn link_native_objects_with<'a>(
         .and_then(|d| d.object.clone())
         .map(|o| objs.iter().cloned().chain([o]).collect());
     let objs = with_delayed.as_deref().unwrap_or(objs);
-    let slot_reads = super::import_slots::bind_slot_reads(objs)?;
+    let consts = (shared_libs.iter())
+        .flat_map(|l| l.slot_exports.iter().map(String::as_str))
+        .collect();
+    let slot_reads = super::import_slots::bind_slot_reads(objs, &consts)?;
     let objs = slot_reads.as_ref().map_or(objs, |s| &s.objs[..]);
     let routes = (opts.format == BinaryFormat::Pe)
         .then(|| super::import_routes::split_routes(objs))
@@ -3946,15 +3949,10 @@ impl<'a> Link<'a> {
             return None;
         }
         if reloc.rtype == R_AARCH64_ADR_GOT_PAGE || reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC {
-            if reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC && patch_offset + 4 <= self.text.len() {
-                let ldr = u32::from_le_bytes([
-                    self.text[patch_offset],
-                    self.text[patch_offset + 1],
-                    self.text[patch_offset + 2],
-                    self.text[patch_offset + 3],
-                ]);
-                let add = 0x9100_0000u32 | (ldr & 0x3ff); // add Xrd, Xrn, #0
-                self.text[patch_offset..patch_offset + 4].copy_from_slice(&add.to_le_bytes());
+            if reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC
+                && !got_relax::a64_ldr_to_add(&mut self.text, patch_offset)
+            {
+                return None;
             }
             return Some(NativeReloc {
                 rtype: if reloc.rtype == R_AARCH64_ADR_GOT_PAGE {
@@ -4159,6 +4157,7 @@ impl<'a> Link<'a> {
         // keeps its stub whatever the note says of the name.
         let slot_load = is_data_binding
             || is_got_reloc(self.machine, reloc.rtype)
+            || self.slot_reads.contains(&(patch_offset as u64))
             || (!is_branch_reloc(self.machine, reloc.rtype)
                 && self.extern_data_names.contains(name));
         if slot_load
@@ -6055,16 +6054,12 @@ fn relax_slot_load(
         }
         (NativeMachine::Aarch64, R_AARCH64_ADR_GOT_PAGE) => R_AARCH64_ADR_PREL_PG_HI21,
         (NativeMachine::Aarch64, _) => {
-            let word = u32::from_le_bytes(merged.text[at..at + 4].try_into().expect("4 bytes"));
-            // `ldr xT, [xN, #imm]` becomes `add xT, xN, #imm`.
-            if word & 0xFFC0_0000 != 0xF940_0000 {
+            if !got_relax::a64_ldr_to_add(&mut merged.text, at) {
                 return Err(internal_err(
                     MODULE,
-                    &format!("a GOT low-12 site at .text+{at:#x} is no 64-bit ldr: {word:#010x}"),
+                    &format!("a GOT low-12 site at .text+{at:#x} is no 64-bit ldr"),
                 ));
             }
-            let add = 0x9100_0000 | (word & 0x3FF);
-            merged.text[at..at + 4].copy_from_slice(&add.to_le_bytes());
             R_AARCH64_ADD_ABS_LO12_NC
         }
     };
@@ -7540,6 +7535,7 @@ mod tests {
             soname: alloc::string::String::from("libext.so.1"),
             machine: NativeMachine::Aarch64,
             exports: names("tbl"),
+            slot_exports: Default::default(),
             data_exports: names("tbl"),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -7686,6 +7682,7 @@ mod tests {
             soname: alloc::string::String::from("libext.so.1"),
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
+            slot_exports: Default::default(),
             data_exports: alloc::collections::BTreeSet::new(),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -7730,6 +7727,7 @@ mod tests {
             soname: alloc::string::String::from("libext.so.1"),
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
+            slot_exports: Default::default(),
             data_exports: alloc::collections::BTreeSet::new(),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -9341,6 +9339,7 @@ mod tests {
             soname: "libtl.so".to_string(),
             machine,
             exports: ext(),
+            slot_exports: Default::default(),
             data_exports: if tls { Default::default() } else { ext() },
             tls_exports: if tls { ext() } else { Default::default() },
             object_sizes: Default::default(),
@@ -9733,6 +9732,7 @@ mod tests {
             soname: "libcnt.so".to_string(),
             machine: NativeMachine::X86_64,
             exports: ["counter".to_string()].into_iter().collect(),
+            slot_exports: Default::default(),
             data_exports: ["counter".to_string()].into_iter().collect(),
             tls_exports: Default::default(),
             object_sizes: if sizes {
@@ -9841,6 +9841,7 @@ mod tests {
             soname: "libcnt.so".to_string(),
             machine: NativeMachine::X86_64,
             exports: ["counter".to_string()].into_iter().collect(),
+            slot_exports: Default::default(),
             data_exports: ["counter".to_string()].into_iter().collect(),
             tls_exports: Default::default(),
             object_sizes: [("counter".to_string(), (4, 4))].into_iter().collect(),

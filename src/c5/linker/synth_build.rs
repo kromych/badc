@@ -1405,6 +1405,19 @@ fn project_aarch64_pending(
     if got_slot && reloc.target_section != NativeSymSection::Undef {
         return Err(declined_reloc(merged, reloc, reloc.rtype, text_abs));
     }
+    // An `add` naming an import's slot by name takes the slot's address.
+    if !got_slot
+        && reloc.target_section == NativeSymSection::Undef
+        && merged.slot_reads.contains(&reloc.text_offset)
+    {
+        base_fixups.push(crate::c5::codegen::BaseFixup {
+            instr_offset: reloc.text_offset as usize,
+            base: crate::c5::codegen::ImageAddr::ImportSlot(reloc.import_index),
+            offset: reloc.addend,
+            part,
+        });
+        return Ok(());
+    }
     match reloc.target_section {
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {

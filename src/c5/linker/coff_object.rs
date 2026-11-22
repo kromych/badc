@@ -1570,8 +1570,10 @@ pub struct ImportMember {
     pub ordinal: Option<u16>,
     /// A name import's hint: the name's index in the DLL's export name table.
     pub hint: u16,
-    /// `IMPORT_OBJECT_DATA` / `_CONST`: reached through `__imp_<symbol>` only.
+    /// `IMPORT_OBJECT_DATA` / `_CONST`: no code, so no thunk.
     pub data: bool,
+    /// `IMPORT_OBJECT_CONST`: the symbol names the slot, as `__imp_<symbol>` does.
+    pub slot: bool,
 }
 
 /// True when `bytes` is a short-format import member (`IMPORT_OBJECT_HEADER`).
@@ -1633,11 +1635,12 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error
         ordinal,
         hint: ordinal_or_hint,
         data: kinds & 3 != 0,
+        slot: kinds & 3 == 2,
     }))
 }
 
 /// The DLLs an import library's members name, as shared libraries exporting each
-/// member's symbol and `__imp_` slot; a data import exports the slot only.
+/// member's symbol and `__imp_` slot; a CONST import's symbol names the slot.
 pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLibrary> {
     let mut libs: BTreeMap<&str, super::object::SharedLibrary> = BTreeMap::new();
     for m in members {
@@ -1647,6 +1650,7 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
                 soname: m.dll.clone(),
                 machine: m.machine,
                 exports: Default::default(),
+                slot_exports: Default::default(),
                 data_exports: Default::default(),
                 tls_exports: Default::default(),
                 object_sizes: Default::default(),
@@ -1663,6 +1667,9 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
         lib.exports.insert(format!("__imp_{}", m.symbol));
         if m.data {
             lib.data_exports.insert(m.symbol.clone());
+        }
+        if m.slot {
+            lib.slot_exports.insert(m.symbol.clone());
         }
         if let Some(ordinal) = m.ordinal {
             lib.export_ordinals.insert(m.symbol.clone(), ordinal);
@@ -1741,7 +1748,8 @@ impl Shallow<'_> {
     /// the descriptor, and the names it references: `__imp_<symbol>` is an
     /// 8-byte import address table slot in `.idata$5` holding the RVA of a
     /// hint/name entry or an ordinal with bit 63 set; a `<symbol>` defined
-    /// beside it is the call thunk of a code import.
+    /// beside it is the call thunk of a code import, or, in `.idata$5`, the
+    /// slot of a CONST one.
     fn traditional_import(&self) -> Option<(ImportMember, Vec<String>)> {
         let machine = match self.machine {
             IMAGE_FILE_MACHINE_AMD64 => NativeMachine::X86_64,
@@ -1769,6 +1777,7 @@ impl Shallow<'_> {
             .filter(|r| r.section == IMAGE_SYM_UNDEFINED)
             .map(|r| r.name.clone())
             .collect();
+        let defined = self.defined(symbol).map(|(_, s)| s.name == ".idata$5");
         let import = ImportMember {
             machine,
             symbol: symbol.to_string(),
@@ -1776,7 +1785,8 @@ impl Shallow<'_> {
             import_name,
             ordinal,
             hint,
-            data: self.defined(symbol).is_none(),
+            data: defined != Some(false),
+            slot: defined == Some(true),
         };
         Some((import, references))
     }
@@ -1913,6 +1923,7 @@ pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Erro
         soname: String::new(),
         machine,
         exports: Default::default(),
+        slot_exports: Default::default(),
         data_exports: Default::default(),
         tls_exports: Default::default(),
         object_sizes: Default::default(),
@@ -2522,6 +2533,12 @@ mod tests {
         assert!(libs[0].exports.contains("__imp_GetTickCount"));
         assert!(libs[1].data_exports.contains("_obj@4"));
         assert_eq!(libs[1].export_symbols["_obj@4"], "obj");
+        assert!(libs[1].slot_exports.is_empty());
+        // A CONST import's own name is its slot.
+        let k = parse_import_member(&member(2 | (1 << 2), b"KdDebuggerEnabled\0ntoskrnl.exe\0"));
+        let k = import_libraries(&[k.unwrap().unwrap()]);
+        assert!(k[0].data_exports.contains("KdDebuggerEnabled"));
+        assert!(k[0].slot_exports.contains("KdDebuggerEnabled"));
         let mut by_ordinal = member(0, b"f\0a.dll\0");
         by_ordinal[16] = 7;
         let o = parse_import_member(&by_ordinal).unwrap().unwrap();

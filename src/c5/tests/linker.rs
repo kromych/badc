@@ -4692,6 +4692,7 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
             soname: "libtl.so".to_string(),
             machine: reader.machine,
             exports: ["counter".to_string()].into_iter().collect(),
+            slot_exports: Default::default(),
             data_exports: Default::default(),
             tls_exports: ["counter".to_string()].into_iter().collect(),
             object_sizes: Default::default(),
@@ -5780,6 +5781,7 @@ fn an_import_only_addressed_keeps_its_function_type() {
             soname: "libfns.so".to_string(),
             machine,
             exports: core::iter::once("lib_fn".to_string()).collect(),
+            slot_exports: Default::default(),
             data_exports: Default::default(),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -7793,6 +7795,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         soname: "libhook.so.1".to_string(),
         machine: NativeMachine::X86_64,
         exports: core::iter::once("hook".to_string()).collect(),
+        slot_exports: Default::default(),
         data_exports: Default::default(),
         tls_exports: Default::default(),
         object_sizes: Default::default(),
@@ -15100,6 +15103,7 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
             exports: [alloc::string::String::from("host_fn")]
                 .into_iter()
                 .collect(),
+            slot_exports: Default::default(),
             data_exports: alloc::collections::BTreeSet::new(),
             tls_exports: Default::default(),
             object_sizes: Default::default(),

@@ -231,6 +231,10 @@ pub struct SharedLibrary {
     /// bytes are code, so reading the "object" through it returns
     /// instructions.
     pub data_exports: alloc::collections::BTreeSet<String>,
+    /// The subset of `data_exports` a PE import library declares CONST: the
+    /// name is the import's address slot, as `__imp_<name>` is, the binding
+    /// link.exe and lld give `IMPORT_OBJECT_CONST`.
+    pub slot_exports: alloc::collections::BTreeSet<String>,
     /// The subset of `exports` that are thread-locals (`STT_TLS`). The
     /// loader places the library's block, so an executable reaches one
     /// through a GOT slot holding its offset from the thread pointer.
@@ -285,6 +289,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         soname: image.soname,
         machine: elf_machine(image.machine)?,
         exports: image.exports,
+        slot_exports: Default::default(),
         data_exports: image.data_exports,
         tls_exports: image.tls_exports,
         object_sizes: image.object_sizes,

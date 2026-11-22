@@ -2879,6 +2879,16 @@ impl<'a> MachOWriter<'a> {
             l.data_vmaddr(),
             &build.got_fixups,
         )?;
+        let slot_base = |f: &crate::c5::codegen::BaseFixup| {
+            matches!(f.base, crate::c5::codegen::ImageAddr::ImportSlot(_))
+        };
+        if build.base_fixups.iter().any(slot_base) {
+            return Err(C5Error::hard(
+                Code::OBJECT_FORMAT,
+                "an `add` takes the address of an import's slot by its `__imp_` name, which \
+                 a Mach-O image does not place where a reference can name it",
+            ));
+        }
         if !build.base_fixups.is_empty() || !build.image_rel_fields.is_empty() {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,

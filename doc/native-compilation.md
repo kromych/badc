@@ -162,6 +162,10 @@ link.exe's `/STACK` (default 8 MiB reserved, one page committed).
 A PE DLL link writes the DLL's import library under `--out-implib=<file>`,
 as link.exe writes one beside a DLL: an archive of short import members, a
 data export's naming only its `__imp_` slot.
+An import library's CONST member names the import's address slot by the
+plain name as well as by `__imp_`, as link.exe binds it: a reference to the
+name reads the slot or takes its address, the declaration a pointer to the
+DLL's object (the WDK's `extern PBOOLEAN KdDebuggerEnabled;`).
 A PE link includes a library's `_load_config_used`, the load-config
 structure the image's directory names, whether or not an input refers to it,
 as link.exe does.

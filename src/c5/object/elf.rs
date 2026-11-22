@@ -4345,18 +4345,22 @@ impl<'a> ElfImageWriter<'a> {
             )?;
         }
         for fx in &build.base_fixups {
-            if fx.base != crate::c5::codegen::ImageAddr::GotBase {
-                return Err(C5Error::hard(
-                    Code::OBJECT_FORMAT,
-                    "`__ImageBase` names a PE construct; an ELF image has none",
-                ));
-            }
+            let base = match fx.base {
+                crate::c5::codegen::ImageAddr::ImportSlot(i) => got_vmaddr + (i as u64) * 8,
+                crate::c5::codegen::ImageAddr::GotBase => got_vmaddr,
+                _ => {
+                    return Err(C5Error::hard(
+                        Code::OBJECT_FORMAT,
+                        "`__ImageBase` names a PE construct; an ELF image has none",
+                    ));
+                }
+            };
             patch_addr_load(
                 machine,
                 &mut self.out,
                 code,
                 stub_len + fx.instr_offset as u64,
-                got_vmaddr.wrapping_add(fx.offset as u64),
+                base.wrapping_add(fx.offset as u64),
                 fx.part,
                 "GOT base fixup",
             )?;

@@ -592,6 +592,101 @@ fn a_bool_load_holds_0_or_1() {
     }
 }
 
+const TRUNCATIONS: &str = "#include <stdio.h>
+unsigned char ret(int v) { return v; }
+void take(unsigned char c) { printf(\"%d\\n\", c); }
+int main(int argc, char **argv) {
+    (void)argv;
+    int big = 300 + argc, neg = -argc;
+    unsigned ubig = 70000u + (unsigned)argc;
+    unsigned char a = big;
+    a = big;
+    a += big;
+    unsigned short s = 65535; ++s;
+    unsigned short t = 65535; t++;
+    take(big);
+    a = ret(big);
+    signed char sc = 200 + argc;
+    unsigned short us = ubig;
+    unsigned short us2 = 7; us2 += ubig;
+    unsigned char k = 300;
+    unsigned char e = (unsigned char)big;
+    unsigned char n = neg;
+    long long w = big; int narrow = w;
+    printf(\"%d %d %d %d %d %d %d %d %d %d\\n\", a, s, t, sc, us, us2, k, e, n, narrow);
+    return 0;
+}
+";
+
+/// clang's implicit truncation checks: an initializer, an assignment, a
+/// compound assignment and an increment computed in the promoted type, an
+/// argument, a returned value and a constant, each reported once with
+/// clang 21's text, at the converted expression or the compound operator.
+/// An explicit cast and a value that fits report nothing; `undefined`
+/// leaves the checks out, as clang's does.
+#[test]
+fn implicit_truncations_report_as_clang_does() {
+    let dir = TempDir::new("badc-sanitize-truncation");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, TRUNCATIONS).unwrap();
+    let build = |flag: &str, opt: &str| {
+        let exe = dir.join(format!("t{}{opt}", flag.len()));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-w", opt, flag, "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        exe
+    };
+    let int_to = |at: &str, v: &str, to: &str, kept: &str, bits: u32| {
+        format!(
+            "{at}: runtime error: implicit conversion from type 'int' of value {v} (32-bit, \
+             signed) to type '{to}' changed the value to {kept} ({bits}-bit, unsigned)"
+        )
+    };
+    let unsigned_to = |at: &str, v: &str, kept: &str| {
+        format!(
+            "{at}: runtime error: implicit conversion from type 'unsigned int' of value {v} \
+             (32-bit, unsigned) to type 'unsigned short' changed the value to {kept} (16-bit, \
+             unsigned)"
+        )
+    };
+    let want = [
+        int_to("8:23", "301", "unsigned char", "45", 8),
+        int_to("9:9", "301", "unsigned char", "45", 8),
+        int_to("10:7", "346", "unsigned char", "90", 8),
+        int_to("11:31", "65536", "unsigned short", "0", 16),
+        int_to("12:32", "65536", "unsigned short", "0", 16),
+        int_to("13:10", "301", "unsigned char", "45", 8),
+        int_to("2:35", "301", "unsigned char", "45", 8),
+        "15:22: runtime error: implicit conversion from type 'int' of value 201 (32-bit, signed) \
+         to type 'signed char' changed the value to -55 (8-bit, signed)"
+            .to_string(),
+        unsigned_to("16:25", "70001", "4465"),
+        unsigned_to("17:33", "70008", "4472"),
+        int_to("18:23", "300", "unsigned char", "44", 8),
+        int_to("20:23", "-1", "unsigned char", "255", 8),
+    ];
+    for opt in ["-O0", "-O"] {
+        let o = run(&build("-fsanitize=implicit-integer-truncation", opt), &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        assert_eq!(reports(&o), want, "{opt}");
+        assert_eq!(
+            String::from_utf8_lossy(&o.stdout).lines().last(),
+            Some("45 0 0 -55 4465 4472 44 45 255 301"),
+            "{opt}"
+        );
+        let o = run(&build("-fsanitize=undefined", opt), &[]);
+        assert!(o.status.success() && reports(&o).is_empty(), "{opt}: {o:?}");
+    }
+}
+
 const CRASH: &str = "#include <stdio.h>
 static __attribute__((noinline)) int deep(int *p) { return *p + 1; }
 __attribute__((noinline)) int middle(int *p) { return deep(p) * 2; }

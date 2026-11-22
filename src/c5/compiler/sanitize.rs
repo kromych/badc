@@ -41,11 +41,18 @@ pub enum Check {
     /// A load of a `_Bool` whose byte is neither 0 nor 1 (C17 6.2.6.1p5,
     /// a trap representation).
     Bool,
+    /// An implicit conversion of an unsigned integer to a narrower unsigned
+    /// type that changes the value (C17 6.3.1.3p2: defined, reduced modulo).
+    ImplicitUnsignedIntegerTruncation,
+    /// An implicit conversion to a narrower integer type, either one
+    /// signed, that changes the value (C17 6.3.1.3p2-p3).
+    ImplicitSignedIntegerTruncation,
 }
 
 impl Check {
-    /// Every check, in the order `-fsanitize=undefined` lists them.
-    pub const ALL: [Check; 8] = [
+    /// Every check: those `-fsanitize=undefined` lists, in its order, then
+    /// clang's implicit-conversion checks.
+    pub const ALL: [Check; 10] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -54,6 +61,8 @@ impl Check {
         Check::Bounds,
         Check::BoundsStrict,
         Check::Bool,
+        Check::ImplicitUnsignedIntegerTruncation,
+        Check::ImplicitSignedIntegerTruncation,
     ];
 
     /// The spelling `-fsanitize=` takes.
@@ -67,6 +76,8 @@ impl Check {
             Check::Bounds => "bounds",
             Check::BoundsStrict => "bounds-strict",
             Check::Bool => "bool",
+            Check::ImplicitUnsignedIntegerTruncation => "implicit-unsigned-integer-truncation",
+            Check::ImplicitSignedIntegerTruncation => "implicit-signed-integer-truncation",
         }
     }
 
@@ -75,16 +86,26 @@ impl Check {
     }
 
     /// The checks a `-fsanitize=` list item names: one check, clang's name
-    /// for one, the group `shift`, or the group `undefined`, which leaves
-    /// out `bounds-strict` as gcc's does; `None` for a name badc does not
-    /// implement.
+    /// for one, or a group: `shift`; `undefined`, which leaves out
+    /// `bounds-strict` as gcc's does and the implicit conversions, defined
+    /// behavior, as clang's does; and clang's implicit-conversion groups,
+    /// of which badc implements the truncations. `None` for a name badc does
+    /// not implement.
     pub fn named(name: &str) -> Option<u32> {
+        let truncation = Check::ImplicitUnsignedIntegerTruncation.bit()
+            | Check::ImplicitSignedIntegerTruncation.bit();
         match name {
             "undefined" => Some(
                 (Check::ALL.iter())
-                    .filter(|&&c| c != Check::BoundsStrict)
+                    .filter(|&&c| c != Check::BoundsStrict && c.bit() & truncation == 0)
                     .fold(0, |m, c| m | c.bit()),
             ),
+            "implicit-integer-truncation"
+            | "implicit-integer-conversion"
+            | "implicit-conversion" => Some(truncation),
+            "implicit-integer-arithmetic-value-change" => {
+                Some(Check::ImplicitSignedIntegerTruncation.bit())
+            }
             "shift" => Some(Check::ShiftBase.bit() | Check::ShiftExponent.bit()),
             "array-bounds" => Some(Check::Bounds.bit()),
             _ => (Check::ALL.iter())
@@ -262,9 +283,8 @@ impl Compiler {
             len,
             one_past: false,
         };
-        self.ast
-            .value_checks
-            .insert(index, ValueCheck { check, test });
+        let checks = self.ast.value_checks.entry(index).or_default();
+        checks.push(ValueCheck { check, test });
         self.bounds_subscript = Some((subscript, index));
     }
 
@@ -285,7 +305,85 @@ impl Compiler {
             handler,
         };
         let test = ValueTest::Bool;
-        self.ast.value_checks.insert(id, ValueCheck { check, test });
+        self.ast
+            .value_checks
+            .entry(id)
+            .or_default()
+            .push(ValueCheck { check, test });
+    }
+
+    /// Check the integer value of node `e`, of type `from`, where its
+    /// implicit conversion to the narrower `to` changes it, at the start of
+    /// `e` (`at`), under the implicit truncation checks.
+    pub(super) fn sanitize_conversion(&mut self, e: ExprId, from: i64, to: i64, at: (u32, u32)) {
+        let Some(test) = self.truncation_test(from, to) else {
+            return;
+        };
+        let check = self.conversion_check(test, from, to, at);
+        self.ast.value_checks.entry(e).or_default().push(check);
+    }
+
+    /// [`Self::sanitize_conversion`] of the value the compound assignment or
+    /// increment `id` computes in `from` and stores into its `to` lvalue,
+    /// at its operator.
+    pub(super) fn sanitize_stored_conversion(&mut self, id: ExprId, from: i64, to: i64) {
+        let Some(test) = self.truncation_test(from, to) else {
+            return;
+        };
+        let check = self.conversion_check(test, from, to, self.operator_at);
+        self.ast.store_checks.insert(id, check);
+    }
+
+    /// The test of an integer `from` converted to `to` where that can lose
+    /// bits and the check that applies runs: `to` narrower and not `_Bool`.
+    fn truncation_test(&self, from: i64, to: i64) -> Option<ValueTest> {
+        if !is_integer_scalar_ty(from) || !is_integer_scalar_ty(to) || is_bool_ty(to) {
+            return None;
+        }
+        let (fb, tb) = (8 * self.size_of_type(from), 8 * self.size_of_type(to));
+        let (fs, ts) = (!is_unsigned_ty(from), !is_unsigned_ty(to));
+        let check = match fs || ts {
+            true => Check::ImplicitSignedIntegerTruncation,
+            false => Check::ImplicitUnsignedIntegerTruncation,
+        };
+        (tb < fb && fb <= 64 && self.sanitize.runs(check)).then_some(ValueTest::Truncation {
+            from: (fb as u8, fs),
+            to: (tb as u8, ts),
+        })
+    }
+
+    /// The check of `test`: clang's `ImplicitConversionData`, the site and
+    /// the two types, then the kind -- 1 for an unsigned truncation, 2 for a
+    /// signed one -- and the bit-field width, 0.
+    fn conversion_check(
+        &mut self,
+        test: ValueTest,
+        from: i64,
+        to: i64,
+        at: (u32, u32),
+    ) -> ValueCheck {
+        let ValueTest::Truncation {
+            from: (_, fs),
+            to: (_, ts),
+        } = test
+        else {
+            unreachable!("a truncation test")
+        };
+        let check = match fs || ts {
+            true => Check::ImplicitSignedIntegerTruncation,
+            false => Check::ImplicitUnsignedIntegerTruncation,
+        };
+        let types = [self.ubsan_type(from), self.ubsan_type(to)];
+        let data = self.ubsan_site_at(at, &types);
+        self.data.resize(self.data.len() + 8, 0);
+        self.data[data as usize + 32] = if fs || ts { 2 } else { 1 };
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_implicit_conversion", 2);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        ValueCheck { check, test }
     }
 
     /// `&` of the node `operand`: a subscript checked last admits the
@@ -294,13 +392,13 @@ impl Compiler {
         let Some((subscript, index)) = self.bounds_subscript else {
             return;
         };
-        if subscript == operand
-            && let Some(ValueCheck {
-                test: ValueTest::Index { one_past, .. },
-                ..
-            }) = self.ast.value_checks.get_mut(&index)
-        {
-            *one_past = true;
+        if subscript != operand {
+            return;
+        }
+        for check in self.ast.value_checks.get_mut(&index).into_iter().flatten() {
+            if let ValueTest::Index { one_past, .. } = &mut check.test {
+                *one_past = true;
+            }
         }
     }
 

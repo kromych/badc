@@ -324,6 +324,15 @@ impl<'a> Walker<'a> {
                 let one = b.imm(1);
                 b.binop(BinOp::Ugt, value, one)
             }
+            // The value as its own type reads it against the value the
+            // narrower type keeps; the handler takes both.
+            ValueTest::Truncation { from, to } => {
+                let had = extend_from(b, value, from);
+                let kept = extend_from(b, value, to);
+                let flag = b.binop(BinOp::Ne, had, kept);
+                self.report_failed_check(b, check.check, flag, &[had, kept]);
+                return;
+            }
         };
         self.report_failed_check(b, check.check, flag, &[value]);
     }
@@ -756,4 +765,14 @@ fn signed_overflow64(
             b.binop(BinOp::Or, normal, neg1_ovf)
         }
     }
+}
+
+/// `value`'s low `bits` bits, sign-extended when `signed`, as a 64-bit value.
+fn extend_from(b: &mut SsaBuilder, value: ValueId, (bits, signed): (u8, bool)) -> ValueId {
+    if bits >= 64 {
+        return value;
+    }
+    let shift = b.imm(i64::from(64 - bits));
+    let high = b.binop(BinOp::Shl, value, shift);
+    b.binop(if signed { BinOp::Shr } else { BinOp::Shru }, high, shift)
 }

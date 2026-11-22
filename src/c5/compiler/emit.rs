@@ -1409,6 +1409,8 @@ impl Compiler {
         {
             *nsw = false;
         }
+        // A narrow lvalue's step is taken in its promoted type.
+        self.sanitize_stored_conversion(id, super::types::integer_promote(ty), ty);
     }
 
     /// Push `Expr::PostInc { lvalue, by, ty }`. Same shape as
@@ -1601,6 +1603,7 @@ impl Compiler {
         if checked && let Expr::CompoundAssign { nsw, .. } = self.ast.expr_mut(id) {
             *nsw = false;
         }
+        self.sanitize_stored_conversion(id, op_ty, ty);
         self.ast_acc = Some(id);
     }
 

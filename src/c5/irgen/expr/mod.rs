@@ -30,7 +30,7 @@ impl<'a> Walker<'a> {
         id: ExprId,
     ) -> Result<ValueId, WalkError> {
         let value = self.walk_expr_value(b, id)?;
-        if let Some(&check) = self.ast.value_checks.get(&id) {
+        for &check in self.ast.value_checks.get(&id).into_iter().flatten() {
             self.check_value(b, check, value);
         }
         Ok(value)
@@ -130,8 +130,11 @@ impl<'a> Walker<'a> {
                 op_ty,
                 nsw,
             } => {
-                let check = self.ast.checks.get(&id).copied();
-                self.walk_compound_assign(b, *op, (*lhs, *rhs), (*ty, *op_ty), *nsw, check)
+                let checks = (
+                    self.ast.checks.get(&id).copied(),
+                    self.ast.store_checks.get(&id).copied(),
+                );
+                self.walk_compound_assign(b, *op, (*lhs, *rhs), (*ty, *op_ty), *nsw, checks)
             }
             Expr::PreInc {
                 lvalue,
@@ -139,8 +142,11 @@ impl<'a> Walker<'a> {
                 ty,
                 nsw,
             } => {
-                let check = self.ast.checks.get(&id).copied();
-                self.walk_inc(b, *lvalue, *by, *ty, (Yields::New, *nsw), check)
+                let checks = (
+                    self.ast.checks.get(&id).copied(),
+                    self.ast.store_checks.get(&id).copied(),
+                );
+                self.walk_inc(b, *lvalue, *by, *ty, (Yields::New, *nsw), checks)
             }
             Expr::PostInc {
                 lvalue,
@@ -148,8 +154,11 @@ impl<'a> Walker<'a> {
                 ty,
                 nsw,
             } => {
-                let check = self.ast.checks.get(&id).copied();
-                self.walk_inc(b, *lvalue, *by, *ty, (Yields::Old, *nsw), check)
+                let checks = (
+                    self.ast.checks.get(&id).copied(),
+                    self.ast.store_checks.get(&id).copied(),
+                );
+                self.walk_inc(b, *lvalue, *by, *ty, (Yields::Old, *nsw), checks)
             }
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
             // C99 6.3.2.1p3: a VLA lvalue decays to a pointer to its

@@ -973,7 +973,10 @@ impl<'a> Walker<'a> {
         by: i64,
         ty: i64,
         (yields, nsw): (crate::c5::irgen::Yields, bool),
-        check: Option<crate::c5::ast::SanitizeCheck>,
+        (check, stored): (
+            Option<crate::c5::ast::SanitizeCheck>,
+            Option<crate::c5::ast::ValueCheck>,
+        ),
     ) -> Result<ValueId, WalkError> {
         let lvalue_ty = crate::c5::ast::expr_ty(self.ast.expr(lvalue)).unwrap_or(ty);
         if is_atomic_object_ty(lvalue_ty) {
@@ -998,6 +1001,10 @@ impl<'a> Walker<'a> {
             self.report_failed_check(b, check, flag, &[old, shown]);
         }
         let stepped = self.increment_value(b, old, by, ty);
+        // The step taken in the promoted type, before the store narrows it.
+        if let Some(stored) = stored {
+            self.check_value(b, stored, stepped);
+        }
         // C99 6.5.3.1p2: a bit-field's new value is the one it now holds.
         if let RmwPlace::Bitfield {
             addr,

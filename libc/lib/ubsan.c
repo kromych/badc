@@ -44,6 +44,14 @@ struct __ubsan_out_of_bounds_data {
     const struct __ubsan_type_descriptor *index_type;
 };
 
+struct __ubsan_implicit_conversion_data {
+    struct __ubsan_source_location loc;
+    const struct __ubsan_type_descriptor *from_type;
+    const struct __ubsan_type_descriptor *to_type;
+    unsigned char kind;
+    unsigned int bitfield_bits;
+};
+
 // Whether the site at `loc` reports now: the first failure claims it.
 static int __ubsan_claim(struct __ubsan_source_location *loc, uint32_t *column) {
     *column = __atomic_exchange_n(&loc->column, 0xffffffffu, __ATOMIC_RELAXED);
@@ -245,5 +253,32 @@ _Noreturn void __ubsan_handle_sub_overflow_abort(struct __ubsan_overflow_data *d
 _Noreturn void __ubsan_handle_mul_overflow_abort(struct __ubsan_overflow_data *d, uintptr_t l,
                                                  uintptr_t r) {
     __ubsan_overflow(d, l, r, "*");
+    abort();
+}
+
+static void __ubsan_implicit_conversion(struct __ubsan_implicit_conversion_data *d, uintptr_t src,
+                                        uintptr_t dst) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    const struct __ubsan_type_descriptor *from = d->from_type, *to = d->to_type;
+    fprintf(stderr, "%s:%u:%u: runtime error: implicit conversion from type %s of value ",
+            d->loc.file, d->loc.line, column, from->name);
+    __ubsan_print_int(from, src);
+    fprintf(stderr, " (%u-bit, %ssigned) to type %s changed the value to ", __ubsan_bits(from),
+            (from->info & 1) ? "" : "un", to->name);
+    __ubsan_print_int(to, dst);
+    fprintf(stderr, " (%u-bit, %ssigned)\n", __ubsan_bits(to), (to->info & 1) ? "" : "un");
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_implicit_conversion(struct __ubsan_implicit_conversion_data *d, uintptr_t src,
+                                        uintptr_t dst) {
+    __ubsan_implicit_conversion(d, src, dst);
+}
+
+_Noreturn void __ubsan_handle_implicit_conversion_abort(struct __ubsan_implicit_conversion_data *d,
+                                                        uintptr_t src, uintptr_t dst) {
+    __ubsan_implicit_conversion(d, src, dst);
     abort();
 }

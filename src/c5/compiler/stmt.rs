@@ -3804,6 +3804,7 @@ impl Compiler {
             let at = self.site();
             self.check_seh_exit("`return`", None)?;
             self.next()?;
+            let value_at = self.site();
             let ret_ty = self.current_func_return_ty;
             let returns_sve = self.sve_type_of(ret_ty).is_some();
             let returns_struct = is_struct_value_ty(ret_ty) && !returns_sve;
@@ -3929,7 +3930,7 @@ impl Compiler {
                         }
                         self.report_mismatch(&m, at, text)?;
                     }
-                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, at);
+                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, value_at);
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts
                     // through the int-to-float cast rather than landing

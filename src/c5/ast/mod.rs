@@ -1026,9 +1026,12 @@ pub(crate) struct Ast {
     /// The runtime check `-fsanitize=` attaches to an operation, keyed by
     /// its node.
     pub checks: alloc::collections::BTreeMap<ExprId, SanitizeCheck>,
-    /// The runtime check `-fsanitize=` attaches to the value a node yields
+    /// The runtime checks `-fsanitize=` attaches to the value a node yields
     /// wherever it is read as an rvalue, keyed by the node.
-    pub value_checks: alloc::collections::BTreeMap<ExprId, ValueCheck>,
+    pub value_checks: alloc::collections::BTreeMap<ExprId, alloc::vec::Vec<ValueCheck>>,
+    /// The runtime check of the value a compound assignment or an increment
+    /// computes, before its store converts it, keyed by the node.
+    pub store_checks: alloc::collections::BTreeMap<ExprId, ValueCheck>,
 }
 
 /// A runtime check of a node's value: the check, and what the value is
@@ -1047,6 +1050,9 @@ pub(crate) enum ValueTest {
     Index { len: u64, one_past: bool },
     /// A `_Bool` loaded: its byte 0 or 1.
     Bool,
+    /// An integer of `from`'s width and signedness converted to `to`'s,
+    /// narrower: the value it keeps there equal to the value it had.
+    Truncation { from: (u8, bool), to: (u8, bool) },
 }
 
 /// A runtime check of the operation at a node (`-fsanitize=`): what it
@@ -1209,7 +1215,10 @@ impl Ast {
         for check in self.checks.values_mut() {
             f(&mut check.data);
         }
-        for value in self.value_checks.values_mut() {
+        for value in self.value_checks.values_mut().flatten() {
+            f(&mut value.check.data);
+        }
+        for value in self.store_checks.values_mut() {
             f(&mut value.check.data);
         }
         visit_data_offsets!(&mut self.exprs, &mut self.decls, f);
@@ -1221,7 +1230,10 @@ impl Ast {
         for check in self.checks.values() {
             read(&check.data);
         }
-        for value in self.value_checks.values() {
+        for value in self.value_checks.values().flatten() {
+            read(&value.check.data);
+        }
+        for value in self.store_checks.values() {
             read(&value.check.data);
         }
         visit_data_offsets!(&self.exprs, &self.decls, read);

@@ -1442,6 +1442,15 @@ impl Compiler {
         if !as_is {
             self.check_enum_conversion(self.expr_enum(e), to, bits, at);
         }
+        if let Some(from) = crate::c5::ast::expr_ty(self.ast.expr(e))
+            && self.unevaluated == 0
+        {
+            let at = match at.offset {
+                Some(offset) => self.lex.position_at(offset as usize),
+                None => (at.line as u32, 0),
+            };
+            self.sanitize_conversion(e, from, to, at);
+        }
     }
 
     /// Warns when the integer constant `value` of type `from` changes value

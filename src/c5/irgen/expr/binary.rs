@@ -568,7 +568,10 @@ impl<'a> Walker<'a> {
         (lhs, rhs): (ExprId, ExprId),
         (ty, op_ty): (i64, i64),
         nsw: bool,
-        check: Option<crate::c5::ast::SanitizeCheck>,
+        (check, stored): (
+            Option<crate::c5::ast::SanitizeCheck>,
+            Option<crate::c5::ast::ValueCheck>,
+        ),
     ) -> Result<ValueId, WalkError> {
         let lhs_ty = expr_ty(self.ast.expr(lhs)).unwrap_or(ty);
         if is_atomic_object_ty(lhs_ty) {
@@ -609,6 +612,10 @@ impl<'a> Walker<'a> {
         } else {
             self.walk_int_binop(b, op, old, lhs, rhs, ty)?
         };
+        // The value computed in `op_ty`, before the store converts it.
+        if let Some(stored) = stored {
+            self.check_value(b, stored, new_val);
+        }
         // C99 6.5.16p3: a bit-field's value is the one it now holds.
         if let RmwPlace::Bitfield {
             addr,

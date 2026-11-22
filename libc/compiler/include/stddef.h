@@ -12,10 +12,10 @@
 // silently corrupts the `((size_t)-1) / N`-style allocation
 // caps that user code derives from `SIZE_MAX`.
 //
-// NULL is the canonical zero pointer literal. The offsetof
-// shape `&((T*)0)->m` is recognized by the constant-expression
-// evaluator (see parse_const_offsetof in the compiler); the
-// macro form below is the customary expansion.
+// NULL is the canonical zero pointer literal. `offsetof` is
+// `__builtin_offsetof`, as gcc's and clang's headers define it:
+// an integer constant expression (C17 7.19p3) that accesses no
+// object, where the `&((T*)0)->m` shape forms addresses.
 #pragma once
 
 #ifdef __BADC_WINDOWS__
@@ -54,5 +54,5 @@ typedef struct {
 #endif
 
 #ifndef offsetof
-#define offsetof(t, m) ((size_t)((char*)&((t*)0)->m - (char*)0))
+#define offsetof(t, m) __builtin_offsetof(t, m)
 #endif

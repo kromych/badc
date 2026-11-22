@@ -2783,7 +2783,7 @@ pub(crate) enum PrologueStep {
 /// An arm64 function's `[begin, end)` in `Build::text`, its prologue's
 /// steps as the emitter recorded them, one per instruction from `begin`,
 /// or from the frame path's start where an [`EarlyReturn`] precedes it,
-/// and its exits.
+/// its exits, and the callee saves past the steps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct A64Unwind {
     pub begin: u32,
@@ -2791,6 +2791,20 @@ pub(crate) struct A64Unwind {
     pub steps: Vec<A64Step>,
     /// Empty for a frameless function, which states no prologue.
     pub exits: Vec<A64Exit>,
+    pub saves: Vec<A64Save>,
+}
+
+/// A callee save the prologue makes at the frame bottom, after the steps
+/// end: `reg`, and `reg2` in the slot above it, x or (`fp`) d registers,
+/// `below_fp` bytes below x29, stored by the instruction ending at `at`
+/// bytes from [`A64Unwind::begin`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct A64Save {
+    pub at: u32,
+    pub fp: bool,
+    pub reg: u8,
+    pub reg2: Option<u8>,
+    pub below_fp: u32,
 }
 
 /// An arm64 epilogue: the offset of its first instruction from
@@ -2843,18 +2857,20 @@ pub(crate) enum UnwindSteps {
         leaf: bool,
         steps: Vec<(u32, PrologueStep)>,
     },
-    /// [`A64Unwind::steps`] and [`A64Unwind::exits`]; none for a frameless
-    /// function.
+    /// [`A64Unwind::steps`], [`A64Unwind::exits`] and [`A64Unwind::saves`];
+    /// none for a frameless function.
     A64 {
         steps: Vec<A64Step>,
         exits: Vec<A64Exit>,
+        saves: Vec<A64Save>,
     },
 }
 
 impl UnwindSteps {
-    /// Append the record: its kind, step count and (arm64) exit count, then
-    /// 12 bytes per step, `[offset u32, tag u8, a u8, b u8, flags u8, value
-    /// u32]`; an arm64 exit is its offset and step count, then its steps.
+    /// Append the record: its kind, step count and (arm64) exit and save
+    /// counts, then 12 bytes per step, `[offset u32, tag u8, a u8, b u8,
+    /// flags u8, value u32]`; an arm64 exit is its offset and step count,
+    /// then its steps; its saves follow, one field each.
     pub(crate) fn encode(&self, out: &mut Vec<u8>) {
         let mut step = |offset: u32, tag: u8, a: u8, b: u8, flags: u8, value: u32| {
             out.extend(offset.to_le_bytes());
@@ -2873,8 +2889,19 @@ impl UnwindSteps {
                     }
                 }
             }
-            UnwindSteps::A64 { steps, exits } => {
-                step(exits.len() as u32, 2, 0, 0, 0, steps.len() as u32);
+            UnwindSteps::A64 {
+                steps,
+                exits,
+                saves,
+            } => {
+                step(
+                    exits.len() as u32,
+                    2,
+                    saves.len() as u8,
+                    0,
+                    0,
+                    steps.len() as u32,
+                );
                 let exits = exits.iter().map(|e| (Some(e), &e.steps[..]));
                 for (exit, steps) in core::iter::once((None, &steps[..])).chain(exits) {
                     if let Some(e) = exit {
@@ -2904,6 +2931,10 @@ impl UnwindSteps {
                         step(0, tag, reg, reg2, flags, value);
                     }
                 }
+                for s in saves {
+                    let flags = u8::from(s.fp) | u8::from(s.reg2.is_some()) << 1;
+                    step(s.at, 9, s.reg, s.reg2.unwrap_or(0), flags, s.below_fp);
+                }
             }
         }
     }
@@ -2916,7 +2947,7 @@ impl UnwindSteps {
             let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
             Some((word(0), [b[4], b[5], b[6], b[7]], word(8)))
         };
-        let (exit_count, [kind, ..], count) = field(0)?;
+        let (exit_count, [kind, save_count, ..], count) = field(0)?;
         let records = (1..=count as usize).map(|i| field(12 * i));
         let mut len = 12 * (count as usize + 1);
         // `count` arm64 steps from record `first`.
@@ -2977,7 +3008,26 @@ impl UnwindSteps {
                     });
                     len += 12 * (n as usize + 1);
                 }
-                UnwindSteps::A64 { steps, exits }
+                let mut saves = Vec::with_capacity(save_count.into());
+                for _ in 0..save_count {
+                    let (at, [tag, reg, reg2, flags], below_fp) = field(len)?;
+                    if tag != 9 {
+                        return None;
+                    }
+                    saves.push(A64Save {
+                        at,
+                        fp: flags & 1 != 0,
+                        reg,
+                        reg2: (flags & 2 != 0).then_some(reg2),
+                        below_fp,
+                    });
+                    len += 12;
+                }
+                UnwindSteps::A64 {
+                    steps,
+                    exits,
+                    saves,
+                }
             }
             _ => return None,
         };

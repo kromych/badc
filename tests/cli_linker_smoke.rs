@@ -18810,6 +18810,115 @@ fn the_system_unwinder_reads_an_input_fde() {
     assert!(walked.contains("frames odd main"), "walked: {walked:?}");
 }
 
+/// libunwind steps from a badc function through badc callers to an
+/// assembly function that loaded x19-x28 and d8-d15, and reads there the
+/// values it loaded: each badc frame between restores the callee-saved
+/// registers it saved -- in a folded frame and at the bottom of a large
+/// one -- from the FDE badc writes for it.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn libunwind_restores_the_callee_saved_registers_of_badc_frames() {
+    let test = "libunwind_restores_the_callee_saved_registers_of_badc_frames";
+    let sdk = Command::new("xcrun").arg("--show-sdk-path").output();
+    let Some(sdk) = sdk.ok().filter(|o| o.status.success()) else {
+        eprintln!("skipping {test}: no SDK");
+        return;
+    };
+    let sdk = String::from_utf8_lossy(&sdk.stdout).trim().to_string();
+    let dir = tempdir(test);
+    write_source(
+        &dir,
+        "restore.c",
+        r#"#include <stdint.h>
+#include <stdio.h>
+typedef struct { uint64_t data[67]; } unw_context_t;
+typedef struct { uint64_t data[79]; } unw_cursor_t;
+int unw_getcontext(unw_context_t *);
+int unw_init_local(unw_cursor_t *, unw_context_t *);
+int unw_step(unw_cursor_t *);
+int unw_get_reg(unw_cursor_t *, int, uintptr_t *);
+int unw_get_fpreg(unw_cursor_t *, int, double *);
+long chain(long);
+long seed(long);
+extern char seed_return[];
+__asm__(".text\n.p2align 2\n.globl _seed\n_seed:\n"
+        "stp x29, x30, [sp, #-160]!\nmov x29, sp\n"
+        "stp x19, x20, [sp, #16]\nstp x21, x22, [sp, #32]\nstp x23, x24, [sp, #48]\n"
+        "stp x25, x26, [sp, #64]\nstp x27, x28, [sp, #80]\nstp d8, d9, [sp, #96]\n"
+        "stp d10, d11, [sp, #112]\nstp d12, d13, [sp, #128]\nstp d14, d15, [sp, #144]\n"
+        "mov x19, #0x1900\nmov x20, #0x2000\nmov x21, #0x2100\nmov x22, #0x2200\n"
+        "mov x23, #0x2300\nmov x24, #0x2400\nmov x25, #0x2500\nmov x26, #0x2600\n"
+        "mov x27, #0x2700\nmov x28, #0x2800\nfmov d8, #8.0\nfmov d9, #9.0\n"
+        "fmov d10, #10.0\nfmov d11, #11.0\nfmov d12, #12.0\nfmov d13, #13.0\n"
+        "fmov d14, #14.0\nfmov d15, #15.0\nbl _chain\n"
+        ".globl _seed_return\n_seed_return:\n"
+        "ldp x19, x20, [sp, #16]\nldp x21, x22, [sp, #32]\nldp x23, x24, [sp, #48]\n"
+        "ldp x25, x26, [sp, #64]\nldp x27, x28, [sp, #80]\nldp d8, d9, [sp, #96]\n"
+        "ldp d10, d11, [sp, #112]\nldp d12, d13, [sp, #128]\nldp d14, d15, [sp, #144]\n"
+        "ldp x29, x30, [sp], #160\nret\n");
+volatile long sink;
+__attribute__((noinline)) long walk(long x) {
+    unw_context_t c;
+    unw_cursor_t cur;
+    long keep[4] = {x * 3, x * 5, x ^ 9, x + 11};
+    unw_getcontext(&c);
+    unw_init_local(&cur, &c);
+    int frames = 0, bad = 0;
+    for (uintptr_t ip = 0; ip != (uintptr_t)seed_return; frames++) {
+        /* 0 past the last frame with unwind information. */
+        if (frames == 8 || unw_step(&cur) < 0)
+            return printf("no seed frame after %d steps\n", frames), 1000;
+        unw_get_reg(&cur, -1, &ip);
+    }
+    for (int r = 19; r <= 28; r++) {
+        uintptr_t v = 0;
+        unw_get_reg(&cur, r, &v);
+        if (v != (uintptr_t)(r == 19 ? 0x1900 : (r - 20) * 0x100 + 0x2000))
+            bad++, printf("x%d = %#lx\n", r, (unsigned long)v);
+    }
+    for (int d = 8; d <= 15; d++) {
+        double v = 0;
+        unw_get_fpreg(&cur, 64 + d, &v);
+        if (v != d)
+            bad++, printf("d%d = %g\n", d, v);
+    }
+    sink = keep[0] + keep[1] + keep[2] + keep[3];
+    return bad;
+}
+__attribute__((noinline)) double mid(long x) {
+    double a = x * 1.5, b = x * 2.5, c = x * 0.25;
+    long p = x * 3, q = x * 5, r = x ^ 7, s = x + 13;
+    long w = walk(x + 1);
+    return a + b + c + (double)(p + q + r + s) + (double)w * 1e6;
+}
+__attribute__((noinline)) long chain(long x) {
+    double m = mid(x * 11);
+    return (long)(m / 1e6);
+}
+int main(void) {
+    long bad = seed(3);
+    puts(bad ? "FAIL" : "ok");
+    return bad != 0;
+}
+"#,
+    );
+    for opt in ["-O0", "-O"] {
+        run(
+            Command::new(badc())
+                .args(["-q", opt, "restore.c"])
+                .arg(format!("-L{sdk}/usr/lib"))
+                .args(["-lSystem", "-o", "restore"])
+                .current_dir(&dir),
+            "link the image",
+        );
+        let out = Command::new(dir.join("restore"))
+            .output()
+            .expect("run the image");
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "{opt}: {text}");
+    }
+}
+
 /// A C++ exception thrown in clang++-built code runs a cleanup and lands
 /// in a catch-all of a badc-linked image: the personality routine and
 /// the LSDA reach `__unwind_info`, the routine through its import's slot.

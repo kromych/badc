@@ -710,15 +710,17 @@ fn aarch64_unwind(
     functions: &FunctionTable,
 ) -> Result<Vec<crate::c5::codegen::A64Unwind>, C5Error> {
     use crate::c5::codegen::{A64Unwind, UnwindSteps};
-    if target != Target::WindowsAarch64 {
+    if !target.is_aarch64() {
         return Ok(Vec::new());
     }
     let mut out = Vec::new();
     for (begin, end, steps) in recorded_unwind(merged, functions, true)? {
-        let (steps, exits) = match steps {
-            Some(UnwindSteps::A64 { steps, exits }) if !steps.is_empty() => {
-                (steps.clone(), exits.clone())
-            }
+        let (steps, exits, saves) = match steps {
+            Some(UnwindSteps::A64 {
+                steps,
+                exits,
+                saves,
+            }) if !steps.is_empty() => (steps.clone(), exits.clone(), saves.clone()),
             Some(UnwindSteps::X64 { .. }) => {
                 return Err(internal_err(MODULE, "x86-64 unwind steps in an arm64 link"));
             }
@@ -729,6 +731,7 @@ fn aarch64_unwind(
             end,
             steps,
             exits,
+            saves,
         });
     }
     Ok(out)

@@ -103,6 +103,8 @@ const OPCODE_BASE: u8 = 13;
 
 /// `DW_CFA_advance_loc` is encoded as an opcode-with-operand: the top two
 /// bits are `0b01` (= 0x40) and the low six bits carry the factored delta.
+use crate::c5::codegen::A64Unwind;
+use crate::c5::codegen::ssa::cfi;
 use crate::c5::codegen::ssa::cfi::{
     DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
     DW_CFA_DEF_CFA, DW_CFA_DEF_CFA_OFFSET, DW_CFA_DEF_CFA_REGISTER, DW_CFA_NEGATE_RA_STATE,
@@ -301,10 +303,21 @@ enum FrameRules {
     PostPrologue,
     Leaf,
     X86Frame(Vec<(u32, PrologueStep)>),
+    /// The FDE instructions of an arm64 function's recorded frame.
+    A64(Vec<u8>),
 }
 
 impl FrameRules {
     fn of(build: &Build, arch: CfiArch, ent_pc: usize, low_pc: usize) -> Self {
+        let a64 = (build.a64_unwind.iter()).find(|u| u.begin as usize == low_pc);
+        if let Some(u) = a64.filter(|u| !u.steps.is_empty()) {
+            // The rules name registers by number and advance by whole
+            // instructions, which the encoder accepts.
+            match cfi::fde_instructions(&a64_frame_ops(build, u), A64_CFI) {
+                Ok(bytes) => return FrameRules::A64(bytes),
+                Err(e) => debug_assert!(false, "arm64 frame rules: {e}"),
+            }
+        }
         match build.fn_unwind.iter().find(|u| u.begin as usize == low_pc) {
             None if arch == CfiArch::Aarch64 && a64_prologue_is_hints(build, ent_pc, low_pc) => {
                 FrameRules::Leaf
@@ -316,15 +329,14 @@ impl FrameRules {
     }
 }
 
-/// The rules a lowered function's `.debug_frame` record gives its body: a
-/// frame record at `CFA - 16`, the entry's rules throughout, or neither
-/// where the prologue stores a callee-saved register the record leaves
-/// out. TODO: the record describes no callee-saved register.
+/// The compact unwind mode that states a lowered function's body frame: a
+/// frame record at `CFA - 16` and nothing else saved, the entry's rules
+/// throughout, or neither, which the function's FDE describes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LoweredFrame {
     Record,
     Leaf,
-    UndescribedSaves,
+    Fde,
 }
 
 /// Each lowered function's text offset and rules.
@@ -334,43 +346,30 @@ pub(crate) fn lowered_frames(build: &Build, target: Target) -> Vec<(usize, Lower
         .filter(|pc| build.func_prologue_native.contains_key(pc))
         .filter_map(|&pc| {
             let lo = *build.pc_to_native.get(pc).filter(|&&n| n != usize::MAX)?;
-            let frame = if arch == CfiArch::Aarch64 && a64_prologue_saves(build, pc, lo) {
-                LoweredFrame::UndescribedSaves
-            } else if FrameRules::of(build, arch, pc, lo) == FrameRules::Leaf {
-                LoweredFrame::Leaf
-            } else {
-                LoweredFrame::Record
+            let a64 = (build.a64_unwind.iter()).find(|u| u.begin as usize == lo);
+            let frame = match a64.map(cfi::a64_body) {
+                Some(cfi::A64Body::Fde) => LoweredFrame::Fde,
+                Some(cfi::A64Body::Record) => LoweredFrame::Record,
+                Some(cfi::A64Body::Frameless) => LoweredFrame::Leaf,
+                None if FrameRules::of(build, arch, pc, lo) == FrameRules::Leaf => {
+                    LoweredFrame::Leaf
+                }
+                None => LoweredFrame::Record,
             };
             Some((lo, frame))
         })
         .collect()
 }
 
-/// Whether the prologue at `low_pc` stores x19-x28 or v8-v15, which
-/// AAPCS64 has the callee preserve and the a64 emitter saves with `stp`
-/// and `str`.
-fn a64_prologue_saves(build: &Build, ent_pc: usize, low_pc: usize) -> bool {
-    let Some(&body) = build.func_prologue_native.get(&ent_pc) else {
-        return false;
-    };
-    let preserved = |simd: bool, reg: u32| {
-        if simd {
-            (8..=15).contains(&reg)
-        } else {
-            (19..=28).contains(&reg)
-        }
-    };
-    let prologue = build.text.get(low_pc..body).unwrap_or_default();
-    prologue.as_chunks::<4>().0.iter().any(|w| {
-        let w = u32::from_le_bytes(*w);
-        let simd = w & (1 << 26) != 0;
-        // STP / STNP in every addressing form: bit 22 clear stores.
-        let pair = w & 0x3A40_0000 == 0x2800_0000;
-        // STR (unsigned offset), and STR (pre- / post-index) and STUR.
-        let single = w & 0x3B40_0000 == 0x3900_0000 || w & 0x3B60_0000 == 0x3800_0000;
-        (pair && (preserved(simd, w & 0x1F) || preserved(simd, (w >> 10) & 0x1F)))
-            || (single && preserved(simd, w & 0x1F))
-    })
+const A64_CFI: cfi::CfiTarget = cfi::CfiTarget {
+    arch: cfi::CfiArch::Aarch64,
+    addr_bytes: 8,
+};
+
+/// The CFI of the arm64 function `u` describes, at offsets from its start.
+pub(crate) fn a64_frame_ops(build: &Build, u: &A64Unwind) -> cfi::FrameOps {
+    let early = build.early_returns.iter().find(|e| e.begin == u.begin);
+    cfi::a64_frame_ops(u, early.map_or(0, |e| e.frame), early.map(|e| e.exit))
 }
 
 struct Subprog {
@@ -2166,6 +2165,11 @@ fn build_debug_frame(
         let mut fde_body: Vec<u8> = Vec::new();
         // Where the rules below end, and whether they sign the return address.
         let (ruled, signed) = match frame_rules {
+            // The rules cover an early return.
+            FrameRules::A64(bytes) => {
+                fde_body.extend_from_slice(bytes);
+                (0, false)
+            }
             // An aarch64 leaf under `pac-ret+leaf` signs at its `paciasp`.
             FrameRules::Leaf => match sub.ra_signed_at {
                 Some(at) => {
@@ -2192,7 +2196,10 @@ fn build_debug_frame(
                 (sub.prologue_size, signed)
             }
         };
-        if let Some(exit) = sub.early_return {
+        if let Some(exit) = sub
+            .early_return
+            .filter(|_| !matches!(frame_rules, FrameRules::A64(_)))
+        {
             write_advance_loc(&mut fde_body, arch, exit - ruled);
             write_entry_rules(&mut fde_body, arch, signed);
         }
@@ -3102,17 +3109,30 @@ mod tests {
             &[unit(frame + 4), DW_CFA_NEGATE_RA_STATE],
             "unsigned through the test"
         );
+        let u = (build.a64_unwind.iter()).find(|u| u.begin as usize == lo);
+        let ops = a64_frame_ops(&build, u.expect("fib's frame"));
+        assert_eq!(body, cfi::fde_instructions(&ops, A64_CFI).unwrap());
+        use cfi::{CfiOp, CfiReg};
+        let saved: Vec<_> = (ops.iter())
+            .filter_map(|(at, op)| match op {
+                CfiOp::Offset { reg, .. } if (*at as usize) < exit => Some(reg.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(saved.len() > 2, "fib saves a register past x29 and x30");
+        let mut entry = alloc::vec![
+            CfiOp::RestoreState,
+            CfiOp::DefCfa {
+                reg: CfiReg::Num(31),
+                off: 0,
+            },
+        ];
+        entry.extend(saved.into_iter().map(CfiOp::Restore));
+        entry.push(CfiOp::NegateRaState);
+        let at_exit = ops.iter().filter(|(at, _)| *at as usize == exit);
         assert_eq!(
-            &body[body.len() - 7..],
-            &[
-                unit(exit - fib.prologue_size as usize),
-                DW_CFA_DEF_CFA,
-                AARCH64_REG_SP,
-                0,
-                DW_CFA_RESTORE_HI | AARCH64_REG_X29,
-                DW_CFA_RESTORE_HI | AARCH64_REG_X30,
-                DW_CFA_NEGATE_RA_STATE,
-            ],
+            at_exit.map(|(_, op)| op.clone()).collect::<Vec<_>>(),
+            entry,
             "the entry's rules at the early return"
         );
     }

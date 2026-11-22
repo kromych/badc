@@ -1698,14 +1698,19 @@ struct UnwindTables {
     personalities: Vec<PointerSlot>,
     eh_frame: Vec<u8>,
     eh_frame_blocks: Vec<u32>,
+    /// The FDEs of the unit's own functions whose frame no compact encoding
+    /// states, after the inputs' blocks.
+    own: Option<crate::c5::codegen::EhFrameBlock>,
 }
 
 impl UnwindTables {
     fn of(build: &Build) -> Result<Self, C5Error> {
+        let frames = dwarf::lowered_frames(build, super::Target::MacOSAarch64);
+        let own = Self::own_fdes(build, &frames)?;
         let mut eh_frame = Vec::new();
-        let mut eh_frame_blocks = Vec::with_capacity(build.eh_frame.len());
+        let mut eh_frame_blocks = Vec::with_capacity(build.eh_frame.len() + 1);
         let mut fdes: BTreeMap<u64, u32> = BTreeMap::new();
-        for block in &build.eh_frame {
+        for block in build.eh_frame.iter().chain(&own) {
             let start = eh_frame.len();
             eh_frame_blocks.push(start as u32);
             for &(fde, text) in &block.fdes {
@@ -1733,11 +1738,12 @@ impl UnwindTables {
             .filter_map(|&pc| build.pc_to_native.get(pc).filter(|&&n| n != usize::MAX))
             .map(|&n| (n as u64, UnwindFunction::default()))
             .collect();
-        for (offset, frame) in dwarf::lowered_frames(build, super::Target::MacOSAarch64) {
+        for (offset, frame) in frames {
             let encoding = match frame {
                 LoweredFrame::Record => UNWIND_ARM64_MODE_FRAME,
                 LoweredFrame::Leaf => UNWIND_ARM64_MODE_FRAMELESS,
-                LoweredFrame::UndescribedSaves => 0,
+                // `own_fdes` describes it.
+                LoweredFrame::Fde => continue,
             };
             at.insert(
                 offset as u64,
@@ -1800,7 +1806,39 @@ impl UnwindTables {
             personalities,
             eh_frame,
             eh_frame_blocks,
+            own,
         })
+    }
+
+    /// FDEs for the functions whose frame no compact encoding states, from
+    /// the frame the emitter recorded; `None` when there are none.
+    fn own_fdes(
+        build: &Build,
+        frames: &[(usize, LoweredFrame)],
+    ) -> Result<Option<crate::c5::codegen::EhFrameBlock>, C5Error> {
+        use crate::c5::codegen::ssa::cfi;
+        let mut funcs = Vec::new();
+        for &(offset, frame) in frames {
+            if frame != LoweredFrame::Fde {
+                continue;
+            }
+            let Some(u) = build.a64_unwind.iter().find(|u| u.begin as usize == offset) else {
+                return Err(MachOWriter::internal(format!(
+                    "Mach-O writer: the function at {offset:#x} recorded no frame"
+                )));
+            };
+            funcs.push((u.begin, u.end, dwarf::a64_frame_ops(build, u)));
+        }
+        if funcs.is_empty() {
+            return Ok(None);
+        }
+        let t = cfi::CfiTarget {
+            arch: cfi::CfiArch::Aarch64,
+            addr_bytes: 8,
+        };
+        cfi::eh_frame_block(&funcs, t)
+            .map(Some)
+            .map_err(|e| MachOWriter::internal(format!("Mach-O writer: {e}")))
     }
 
     /// `__unwind_info`'s size; 0 for an image with no function.
@@ -1844,7 +1882,12 @@ impl UnwindTables {
     fn eh_frame_at(&self, l: &Layout, build: &Build) -> Result<Vec<u8>, C5Error> {
         let mut bytes = self.eh_frame.clone();
         let section = l.text_base() + l.eh_frame_fileoff;
-        for (block, &start) in build.eh_frame.iter().zip(&self.eh_frame_blocks) {
+        for (block, &start) in build
+            .eh_frame
+            .iter()
+            .chain(&self.own)
+            .zip(&self.eh_frame_blocks)
+        {
             for f in &block.fields {
                 let at = start as usize + f.offset as usize;
                 let target = match f.target {
@@ -3064,8 +3107,8 @@ mod tests {
     }
 
     /// Every function start takes an encoding: the frame form for a lowered
-    /// frame, an input's own entry, 0 where nothing describes the function
-    /// or its rules leave out a saved x19, frameless for the stubs.
+    /// frame record, an input's own entry, 0 where nothing describes the
+    /// function, an FDE where it saves x19 and x20, frameless for the stubs.
     #[test]
     fn the_unwind_table_covers_every_function() {
         let mut b = tiny_build();
@@ -3086,6 +3129,25 @@ mod tests {
             lsda: None,
         }];
         b.plt_trampoline_offsets = alloc::vec![Some(0x40)];
+        use crate::c5::codegen::{A64Step as S, A64Unwind};
+        let frame = |begin: u32, steps: Vec<S>| A64Unwind {
+            begin,
+            end: begin + 0x10,
+            steps,
+            exits: Vec::new(),
+            saves: Vec::new(),
+        };
+        let pair = S::SaveReg {
+            fp: false,
+            reg: 19,
+            reg2: Some(20),
+            pre: true,
+            bytes: 32,
+        };
+        b.a64_unwind = alloc::vec![
+            frame(0, alloc::vec![S::SaveFpLrX(16), S::SetFp]),
+            frame(0x30, alloc::vec![pair, S::SaveFpLr(16), S::AddFp(16)]),
+        ];
         let bytes = write(&tiny_program(), &b).unwrap().image;
         let (_, sect_off, _) = section_header(&bytes, "__TEXT", "__unwind_info");
         let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
@@ -3095,7 +3157,17 @@ mod tests {
         assert_eq!(encoding(0x4), Some(UNWIND_ARM64_MODE_FRAME));
         assert_eq!(encoding(0x14), Some(UNWIND_ARM64_MODE_FRAME | 0x10));
         assert_eq!(encoding(0x24), Some(0));
-        assert_eq!(encoding(0x34), Some(0), "x19 and x20 are saved");
+        let fde = encoding(0x34).expect("x19 and x20 are saved");
+        assert_eq!(fde & UNWIND_ARM64_MODE_MASK, UNWIND_ARM64_MODE_DWARF);
+        let (eh_addr, eh_off, _) = section_header(&bytes, "__TEXT", "__eh_frame");
+        let (text_addr, ..) = section_header(&bytes, "__TEXT", "__text");
+        // The FDE's PC-relative `pc_begin` follows its length and CIE pointer.
+        let at = (fde & UNWIND_ARM64_DWARF_SECTION_OFFSET) as usize + 8;
+        let pc_begin = read_u32(&bytes, eh_off + at) as i32;
+        assert_eq!(
+            (eh_addr as i64 + at as i64 + i64::from(pc_begin)) as u64,
+            text_addr + 0x30
+        );
         assert_eq!(encoding(0x44), Some(UNWIND_ARM64_MODE_FRAMELESS));
         assert_eq!(encoding(0x50), None, "the table ends with the text");
     }

@@ -731,7 +731,8 @@ pub(super) fn detect_tail_call<'a>(
 /// A tail call: `marshal_args`, the epilogue without the return, and `b` to
 /// the callee, whose own return reaches this function's caller. The
 /// epilogue restores only registers the convention preserves, none of
-/// which carries an argument, and its canary check takes x16 / x17.
+/// which carries an argument, and its canary check takes x16 / x17. Returns
+/// where the epilogue's steps, pushed to `uw`, start.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_tail_call(
     code: &mut CodeBuf,
@@ -741,7 +742,8 @@ pub(super) fn emit_tail_call(
     plt_call_fixups: &mut Vec<PltCallFixup>,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) -> Emit {
+    uw: Option<&mut Vec<super::A64Step>>,
+) -> Result<usize, Unsupported> {
     let FnCtx {
         func,
         alloc,
@@ -763,7 +765,7 @@ pub(super) fn emit_tail_call(
         func,
         abi,
     )?;
-    emit_frame_exit(
+    let start = emit_frame_exit(
         code,
         alloc,
         frame,
@@ -771,7 +773,7 @@ pub(super) fn emit_tail_call(
         abi,
         extern_sites,
         extern_data_refs,
-        None,
+        uw,
     );
     match tail.target {
         TailTarget::Local(target_pc) => fixups.push(Fixup {
@@ -787,7 +789,7 @@ pub(super) fn emit_tail_call(
         }),
     }
     emit(code, enc_b(0));
-    Ok(())
+    Ok(start)
 }
 
 pub(super) fn emit_call(

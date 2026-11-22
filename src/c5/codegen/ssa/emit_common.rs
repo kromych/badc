@@ -3883,8 +3883,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         param_frame_offsets: st.param_frame_offsets,
         region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
-        // The PE unwind tables are their only reader.
-        a64_unwind: if target == super::Target::WindowsAarch64 {
+        // The PE unwind tables and the frame descriptions read them.
+        a64_unwind: if target.is_aarch64() {
             st.a64_unwind
         } else {
             alloc::vec::Vec::new()

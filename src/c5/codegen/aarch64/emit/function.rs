@@ -166,9 +166,10 @@ struct FunctionEmitter<'a, 'b> {
     /// The prologue's unwind steps, one per instruction from where the
     /// function's unwind record starts; none for a frameless function.
     unwind: Vec<super::A64Step>,
-    /// The epilogues and their steps, for the target whose unwind records
-    /// describe them (Windows).
+    /// The epilogues and their steps.
     exits: Vec<super::A64Exit>,
+    /// The frame-bottom callee saves, `at` a code offset.
+    saves: Vec<super::A64Save>,
 }
 
 /// Lower one function. Returns `true` when every block, instruction and
@@ -392,6 +393,7 @@ pub(crate) fn emit_function(
         seh_body_end: 0,
         unwind: Vec::new(),
         exits: Vec::new(),
+        saves: Vec::new(),
     };
     em.emit_body()?;
     if func.has_seh() {
@@ -411,16 +413,22 @@ pub(crate) fn emit_function(
     );
     em.resolve_layout()?;
     let steps = core::mem::take(&mut em.unwind);
-    let exits = if steps.is_empty() {
-        Vec::new()
+    let begin = em.snapshot.code as u32;
+    let (exits, saves) = if steps.is_empty() {
+        (Vec::new(), Vec::new())
     } else {
-        core::mem::take(&mut em.exits)
+        let saves = em.saves.iter().map(|&s| super::A64Save {
+            at: s.at - begin,
+            ..s
+        });
+        (core::mem::take(&mut em.exits), saves.collect())
     };
     em.cx.a64_unwind.push(super::A64Unwind {
-        begin: em.snapshot.code as u32,
+        begin,
         end: em.cx.code.len() as u32,
         steps,
         exits,
+        saves,
     });
     Ok(())
 }
@@ -498,8 +506,8 @@ impl FunctionEmitter<'_, '_> {
         true
     }
 
-    /// Record the epilogue from `start` to the `ret` just emitted, one step
-    /// per instruction before it.
+    /// Record the epilogue from `start` to the `ret` or tail call's `b` just
+    /// emitted, one step per instruction before it.
     fn record_exit(&mut self, start: usize, steps: Vec<super::A64Step>) -> Emit {
         if (self.cx.code.len() - 4 - start) / 4 != steps.len() {
             return Err(Unsupported::new(
@@ -682,6 +690,7 @@ impl FunctionEmitter<'_, '_> {
         let signs = signs_return_address(func, frame, alloc, abi);
         self.unwind.clear();
         self.exits.clear();
+        self.saves.clear();
         if !func.is_naked {
             // The entry pays any realignment a preceding body left owing and
             // keeps the offset it was placed at, as a label does under GNU as.
@@ -750,7 +759,7 @@ impl FunctionEmitter<'_, '_> {
                 frame,
                 abi,
                 self.cx.user_extern_data_refs,
-                &mut self.unwind,
+                (&mut self.unwind, &mut self.saves),
             );
             described = framed.or(described);
         }
@@ -1261,9 +1270,13 @@ impl FunctionEmitter<'_, '_> {
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => {}
+            // TODO(#2148): Windows on ARM64 records no epilogue scope for a
+            // tail call.
             Terminator::Return(_) if self.tail_call.is_some() => {
                 let tail = self.tail_call.take().expect("tail call");
-                return emit_tail_call(
+                let mut steps = Vec::new();
+                let windows = self.fcx.target == Target::WindowsAarch64;
+                let start = emit_tail_call(
                     self.cx.code,
                     tail,
                     &self.fcx,
@@ -1271,11 +1284,15 @@ impl FunctionEmitter<'_, '_> {
                     self.cx.plt_call_fixups,
                     self.cx.asm_extern_call_sites,
                     self.cx.user_extern_data_refs,
-                );
+                    (!windows).then_some(&mut steps),
+                )?;
+                if !windows {
+                    return self.record_exit(start, steps);
+                }
+                return Ok(());
             }
             Terminator::Return(v) => {
                 let mut steps = Vec::new();
-                let windows = self.fcx.target == Target::WindowsAarch64;
                 let start = emit_return(
                     self.cx.code,
                     v,
@@ -1286,12 +1303,9 @@ impl FunctionEmitter<'_, '_> {
                     abi,
                     self.cx.asm_extern_call_sites,
                     self.cx.user_extern_data_refs,
-                    windows.then_some(&mut steps),
+                    Some(&mut steps),
                 )?;
-                if windows {
-                    return self.record_exit(start, steps);
-                }
-                return Ok(());
+                return self.record_exit(start, steps);
             }
             Terminator::Jmp(t) | Terminator::FallThrough(t) => {
                 return self.branch_unless_next(block_idx, t);
@@ -1760,7 +1774,8 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
 }
 
 /// Emit the function prologue, with the unwind step of each instruction up to
-/// where fp is set, which is where it returns; `None` for a full leaf.
+/// where fp is set, which is where it returns, and the saves after it;
+/// `None` for a full leaf.
 fn emit_prologue(
     code: &mut CodeBuf,
     func: &FunctionSsa,
@@ -1768,7 +1783,7 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-    uw: &mut Vec<super::A64Step>,
+    (uw, saves): (&mut Vec<super::A64Step>, &mut Vec<super::A64Save>),
 ) -> Option<usize> {
     // A host-ABI variadic callee spills every argument register (a variadic
     // argument that landed in one must reach the save area for `va_arg`)
@@ -1792,7 +1807,7 @@ fn emit_prologue(
     } else if is_full_leaf(frame, alloc) {
         return None;
     }
-    let described = emit_frame_and_saves(code, alloc, frame, uw);
+    let described = emit_frame_and_saves(code, alloc, frame, uw, saves);
     if frame.local_base {
         // x19 = the frame bottom: far locals and spills address from it
         // with a scaled offset, one instruction instead of the fp form's
@@ -2004,14 +2019,14 @@ fn emit_struct_param_scatter(
 /// allocation left free. With `pre != 0` the block starts at sp: the first
 /// save pre-indexes `pre` bytes, the folded frame (`frame_fold_bytes`) or
 /// the top block (`Frame::saves_top`) plus the fp/lr pair, in place of the
-/// prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`. With `uw`, each
-/// store's unwind step is pushed to it.
+/// prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`. `rec` takes each
+/// store's description.
 fn emit_prologue_saved_regs(
     code: &mut Vec<u8>,
     alloc: &Allocation,
     frame: Frame,
     pre: u32,
-    mut uw: Option<&mut Vec<super::A64Step>>,
+    mut rec: SaveRecord<'_>,
 ) {
     let plan = save_plan(alloc, frame);
     debug_assert!(
@@ -2023,15 +2038,6 @@ fn emit_prologue_saved_regs(
         let off = s.off + shift;
         let neg = -(pre as i32);
         let first = i == 0 && pre != 0;
-        if let Some(uw) = uw.as_deref_mut() {
-            uw.push(super::A64Step::SaveReg {
-                fp: s.fp,
-                reg: s.r,
-                reg2: s.r2,
-                pre: first,
-                bytes: if first { pre } else { off },
-            });
-        }
         let word = match (s.fp, s.r2, first) {
             (true, Some(r2), true) => enc_stp_d_pre(s.r, r2, Reg(31), neg),
             (true, None, true) => enc_str_d_pre(s.r, Reg(31), neg),
@@ -2043,7 +2049,31 @@ fn emit_prologue_saved_regs(
             (false, None, false) => enc_str_imm(Reg(s.r), sbase, off),
         };
         emit(code, word);
+        match &mut rec {
+            SaveRecord::Steps(uw) => uw.push(super::A64Step::SaveReg {
+                fp: s.fp,
+                reg: s.r,
+                reg2: s.r2,
+                pre: first,
+                bytes: if first { pre } else { off },
+            }),
+            // sp is `x29 - frame_bytes`, and the slot `out + s.off` above it.
+            SaveRecord::Bottom(saves) => saves.push(super::A64Save {
+                at: code.len() as u32,
+                fp: s.fp,
+                reg: s.r,
+                reg2: s.r2,
+                below_fp: frame.frame_bytes - frame.outgoing_bytes - s.off,
+            }),
+        }
     }
+}
+
+/// How the callee saves are described: one step each, in the steps up to
+/// where fp is set, or each after its store, at the frame bottom.
+enum SaveRecord<'a> {
+    Steps(&'a mut Vec<super::A64Step>),
+    Bottom(&'a mut Vec<super::A64Save>),
 }
 
 /// The register and offset the save block addresses from: sp itself for a
@@ -2288,10 +2318,11 @@ fn emit_frame_and_saves(
     alloc: &Allocation,
     frame: Frame,
     uw: &mut Vec<super::A64Step>,
+    saves: &mut Vec<super::A64Save>,
 ) -> usize {
     let block = frame_fold_bytes(alloc, frame).max(frame.saves_top);
     if block != 0 {
-        emit_prologue_saved_regs(code, alloc, frame, block + 16, Some(uw));
+        emit_prologue_saved_regs(code, alloc, frame, block + 16, SaveRecord::Steps(uw));
         emit(code, enc_stp_off(Reg(29), Reg(30), Reg(31), block as i32));
         emit(code, enc_add_imm(Reg(29), Reg(31), block));
         uw.extend([
@@ -2311,7 +2342,7 @@ fn emit_frame_and_saves(
     if frame.frame_bytes > 0 {
         emit_stack_alloc(code, frame.frame_bytes, Some(Reg(16)));
     }
-    emit_prologue_saved_regs(code, alloc, frame, 0, None);
+    emit_prologue_saved_regs(code, alloc, frame, 0, SaveRecord::Bottom(saves));
     described
 }
 
@@ -2479,7 +2510,7 @@ pub(super) fn emit_frame_exit(
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     super::sve::emit_pcs_saves(code, frame, false);
-    let start = code.len();
+    let mut start = code.len();
     // The folded shape restores fp/lr first (the lr load feeds `ret`) and
     // tears the frame down with the last restore's post-index.
     let fold = frame_fold_bytes(alloc, frame);
@@ -2500,8 +2531,8 @@ pub(super) fn emit_frame_exit(
         push_steps(&mut uw, &[S::SaveFpLr(fold)]);
         emit_epilogue_restore_regs(code, alloc, frame, fold + 16, uw.as_deref_mut());
     } else {
-        // Windows on ARM64 saves no register here (`compute_frame`), so the
-        // restores and the sp they address from take no step.
+        // The frame-bottom saves stay valid until sp rises past them, so the
+        // steps start after their restores and the sp those address from.
         if frame.dynamic_sp {
             // The teardown takes sp from fp; sp is re-established first only
             // for restores off sp, which a frame saving nothing or holding the
@@ -2510,10 +2541,12 @@ pub(super) fn emit_frame_exit(
                 restore_dynamic_sp(code, frame);
             }
             emit_epilogue_restore_regs(code, alloc, frame, 0, None);
+            start = code.len();
             emit(code, enc_add_imm(Reg(31), Reg(29), 0));
             push_steps(&mut uw, &[S::SetFp]);
         } else {
             emit_epilogue_restore_regs(code, alloc, frame, 0, None);
+            start = code.len();
             if frame.frame_bytes > 0 {
                 // x16 carries no result and is free for a frame size past the
                 // immediate reach. sp reaches x29.

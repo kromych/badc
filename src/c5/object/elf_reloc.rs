@@ -2633,6 +2633,7 @@ impl<'a> RelocWriter<'a> {
             let steps = UnwindSteps::A64 {
                 steps: u.steps.clone(),
                 exits: u.exits.clone(),
+                saves: u.saves.clone(),
             };
             (u.begin, steps)
         });

@@ -288,7 +288,15 @@ impl Builder {
                 at: A64_EPILOGUE_AT,
                 steps: vec![A64Step::SaveFpLrX(A64_FRAME)],
             }];
-            (self.o.unwind).push((at as u64, UnwindSteps::A64 { steps, exits }));
+            let saves = Vec::new();
+            (self.o.unwind).push((
+                at as u64,
+                UnwindSteps::A64 {
+                    steps,
+                    exits,
+                    saves,
+                },
+            ));
         }
     }
 

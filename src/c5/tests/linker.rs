@@ -7350,10 +7350,27 @@ fn unwind_step_records_round_trip() {
                     steps: alloc::vec![A64Step::SetFp, A64Step::SaveFpLrX(16)],
                 },
             ],
+            saves: alloc::vec![
+                crate::c5::codegen::A64Save {
+                    at: 24,
+                    fp: false,
+                    reg: 21,
+                    reg2: Some(22),
+                    below_fp: 48,
+                },
+                crate::c5::codegen::A64Save {
+                    at: 28,
+                    fp: true,
+                    reg: 9,
+                    reg2: None,
+                    below_fp: 32,
+                },
+            ],
         },
         UnwindSteps::A64 {
             steps: alloc::vec![A64Step::PacSignLr],
             exits: alloc::vec::Vec::new(),
+            saves: alloc::vec::Vec::new(),
         },
     ];
     for r in &records {
@@ -7396,7 +7413,7 @@ fn the_pe_link_takes_the_recorded_unwind_steps() {
             (UnwindSteps::X64 { leaf, steps }, crate::Target::WindowsX64) => {
                 assert!(!leaf && steps.len() >= 2, "{steps:?}")
             }
-            (UnwindSteps::A64 { steps, exits }, crate::Target::WindowsAarch64) => {
+            (UnwindSteps::A64 { steps, exits, .. }, crate::Target::WindowsAarch64) => {
                 assert!(steps.len() >= 2 && !exits.is_empty(), "{steps:?} {exits:?}")
             }
             other => panic!("{target:?}: {other:?}"),

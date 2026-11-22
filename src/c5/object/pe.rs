@@ -4622,6 +4622,7 @@ mod tests {
             end: 16,
             steps: alloc::vec![crate::c5::codegen::A64Step::SaveFpLr(512)],
             exits: Vec::new(),
+            saves: Vec::new(),
         };
         let arm64 =
             build_aarch64_pdata(0x1000, 16, 0, (0, 0, &[]), &[a64], &[], &[], seh).map(|_| ());

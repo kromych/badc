@@ -11932,6 +11932,58 @@ fn elf_dynamic_tags(bytes: &[u8]) -> (Vec<(u64, u64)>, usize) {
     (tags, rd64(sh(dynstr) + 0x18) as usize)
 }
 
+/// `-l:<file>` searches the library path for the file itself, with no `lib`
+/// prefix and no suffix added, as GNU ld's `-l namespec` does: an archive of
+/// any name, and a versioned shared object with no unversioned link. A file
+/// on no search path is reported by the name given.
+#[test]
+fn a_colon_library_names_its_file() {
+    let dir = tempdir("l-colon-file");
+    std::fs::create_dir_all(dir.join("lib")).unwrap();
+    write_source(&dir, "odd.c", "int odd(void) { return 7; }\n");
+    write_source(&dir, "ver.c", "int ver(void) { return 3; }\n");
+    write_source(
+        &dir,
+        "m.c",
+        "int odd(void); int ver(void);\nint main(void) { return odd() - 7 + ver() - 3; }\n",
+    );
+    let badc_for = || {
+        let mut c = Command::new(badc());
+        c.arg("--target=linux-x64").current_dir(&dir);
+        c
+    };
+    run(badc_for().args(["-c", "odd.c", "-o", "odd.o"]), "compile");
+    run(
+        Command::new(badc())
+            .args(["--ar", "rcs", "lib/odd-name.a", "odd.o"])
+            .current_dir(&dir),
+        "archive",
+    );
+    run(
+        badc_for().args(["-shared", "-fPIC", "ver.c", "-o", "lib/libver.so.1"]),
+        "shared object",
+    );
+    run(
+        badc_for().args(["m.c", "-Llib", "-l:odd-name.a", "-l:libver.so.1", "-o", "m"]),
+        "link",
+    );
+    let image = std::fs::read(dir.join("m")).expect("read image");
+    assert!(
+        elf_needed(&image).contains(&"libver.so.1".to_string()),
+        "{:?}",
+        elf_needed(&image)
+    );
+    let out = badc_for()
+        .args(["m.c", "-Llib", "-l:missing.a", "-o", "m"])
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("cannot find `missing.a` on any search path"),
+        "{err}"
+    );
+}
+
 /// The `DT_NEEDED` library names of an ELF64 image, in tag order.
 fn elf_needed(bytes: &[u8]) -> Vec<String> {
     let (tags, str_off) = elf_dynamic_tags(bytes);

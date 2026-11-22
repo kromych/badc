@@ -223,7 +223,8 @@ Named `ar` or `*-ar`, or run as `badc --ar <key>`, badc is a POSIX `ar`; named
 `ranlib` it indexes archives.
 
 `-l<name>` is searched in the `-L` directories, in order, then in the standard
-directories under `--sysroot=<dir>`:
+directories under `--sysroot=<dir>`; `-l:<file>` searches them for the file
+itself, with no `lib` prefix or suffix added, as GNU ld does:
 
 | image  | directories under the sysroot                                              |
 |--------|----------------------------------------------------------------------------|

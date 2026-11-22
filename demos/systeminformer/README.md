@@ -20,9 +20,9 @@ under `.cache\build-<arch>[-O0]`; `smoke.py` builds -O0 and -O and runs:
   `peview.exe` on a system DLL, each of which must still run after 10 s;
 - the driver's images, which load only under test signing, as the kernel's
   loader reads them: the target's machine, the native subsystem, an entry,
-  the kernel modules KSystemInformer.sys imports from (ntoskrnl.exe, HAL.dll,
-  FLTMGR.SYS, ksecdd.sys, ksi.dll), its load-config directory, and ksi.dll's
-  exports.
+  the kernel modules the driver imports from (ntoskrnl.exe, HAL.dll,
+  FLTMGR.SYS, ksecdd.sys, ksi.dll), the load-config directory of each, and
+  ksi.dll's exports.
 
 The build runs on a Windows host with the Windows SDK and MSVC installed;
 `BADC_WINDOWS_KITS` and `BADC_MSVC_TOOLS` name others (`demos/_win_kits.py`).
@@ -51,8 +51,9 @@ version's lists that need more say so.
 | resource scripts and manifests | rc.exe; a manifest becomes RT_MANIFEST resource 1, as link.exe embeds it |
 | archives and images | badc `--ar` and badc's linker, with the static VC runtime and the UCRT DLL (`-llibvcruntime -llibcmt -lucrt`) |
 
-The driver -- kphlib_km, the ksi.dll export driver and KSystemInformer.sys --
-has only MSBuild projects. `build.py` reads them and `Common.Kernel.props` for
+The driver -- kphlib_km, the ksi.dll export driver and KSystemInformer, which
+its project names SystemInformer.sys, the name SI loads it by -- has only
+MSBuild projects. `build.py` reads them and `Common.Kernel.props` for
 a Release build of the target's platform: the sources, the definitions, the
 include directories in the props' order (the WDK's crt, km and shared ahead of
 SI's, so the kit's `ntimage.h` wins over phnt's), the dependencies and
@@ -112,9 +113,18 @@ Found and fixed while bringing it up:
 - for the driver: `--msvc` refused, as gcc 14 does, a `struct X **` passed
   for `void **`, which cl compiles without a diagnostic; a PE link defined
   none of the control-flow-guard symbols the WDK's `_load_config_used` names,
-  nor the load-config directory, as link.exe does; and an entry in an archive
+  nor the load-config directory, as link.exe does; an entry in an archive
   member -- `GsDriverEntry` -- was not pulled, and was reported as an
-  internal error.
+  internal error; a library's `_load_config_used` no input names was left
+  out, so the kernel's loader did not seed ksi.dll's stack cookie and the
+  WDK's `__security_init_cookie` stopped the system (bug check 0x139); and a
+  CONST import's plain name -- `KdDebuggerEnabled`, `PsProcessType` -- was
+  bound to the kernel's object rather than to its address slot, so
+  DriverEntry read a pointer from the object's bytes.
+
+In a Windows Server 2025 VM (build 26100) under test signing, the driver
+loads and DriverEntry completes; SI's client is then refused, as the driver's
+README says of a client with no `.sig` from the key pair built into it.
 
 TODO: the plugins (`SI_WITH_PLUGINS`), which need the plugin SDK headers
 CustomBuildTool generates and an import library of SystemInformer.exe.

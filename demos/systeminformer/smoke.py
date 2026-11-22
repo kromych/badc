@@ -113,17 +113,18 @@ def pe_facts(image: bytes) -> dict:
 def driver_checks(driver: Path, arch: str) -> str | None:
     """None when the driver images are what the kernel's loader takes, else
     what is not."""
-    sys_facts = pe_facts((driver / "KSystemInformer.sys").read_bytes())
+    sys_facts = pe_facts((driver / "SystemInformer.sys").read_bytes())
     ksi = pe_facts((driver / "ksi.dll").read_bytes())
     wrong = []
-    for name, f in (("KSystemInformer.sys", sys_facts), ("ksi.dll", ksi)):
+    for name, f in (("SystemInformer.sys", sys_facts), ("ksi.dll", ksi)):
         if f["machine"] != MACHINE[arch] or f["subsystem"] != 1 or not f["entry"]:
             wrong.append(f"{name}: machine {f['machine']:#x}, subsystem {f['subsystem']}, "
                          f"entry {f['entry']:#x}")
+        # The kernel's loader seeds the image's stack cookie through it.
+        if not f["load_config"]:
+            wrong.append(f"{name} has no load-config directory")
     if not DRIVER_IMPORTS <= sys_facts["imports"]:
-        wrong.append(f"KSystemInformer.sys imports {sorted(sys_facts['imports'])}")
-    if not sys_facts["load_config"]:
-        wrong.append("KSystemInformer.sys has no load-config directory")
+        wrong.append(f"SystemInformer.sys imports {sorted(sys_facts['imports'])}")
     if not ksi["dll"] or "KsiInitialize" not in ksi["exports"]:
         wrong.append(f"ksi.dll exports {sorted(ksi['exports'])[:5]}")
     return "; ".join(wrong) or None

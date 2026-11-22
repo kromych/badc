@@ -28,7 +28,8 @@ project describes.
 The kernel driver, which only its MSBuild projects and ``Common.Kernel.props``
 describe, builds where the WDK's kernel-mode headers and libraries for the
 target are installed: kphlib_km, the ksi.dll export driver with its import
-library, and KSystemInformer.sys, under ``bin/driver``. The props' platform
+library, and the driver, which its project names SystemInformer.sys, under
+``bin/driver``. The props' platform
 definitions, ``_NT_TARGET_VERSION`` and include order apply, with
 ``KSI_NO_WPP``, the switch they give for building without WPP tracing; the
 images link the WDK's default kernel libraries and enter as its projects do.
@@ -580,10 +581,11 @@ def kernel_project(rel: Path, props: dict) -> dict:
     """A kernel project's sources and what it and Common.Kernel.props state
     for a Release build in their property and item-definition groups:
     definitions, include directories in order, dependencies, module
-    definition file and `_NT_TARGET_VERSION`."""
+    definition file, `_NT_TARGET_VERSION` and the image's name."""
     path = SRC / rel
     props = dict(props, ProjectDir=str(path.parent) + os.sep)
-    out = {"defines": [], "includes": [], "libs": [], "def": None, "nt_target_version": None}
+    out = {"defines": [], "includes": [], "libs": [], "def": None, "nt_target_version": None,
+           "target_name": path.stem}
 
     def expand(text: str) -> str:
         return re.sub(r"\$\((\w+)\)", lambda m: props.get(m.group(1), m.group(0)), text)
@@ -603,6 +605,8 @@ def kernel_project(rel: Path, props: dict) -> dict:
             out["def"] = path.parent / expand(text)
         elif tag == "_NT_TARGET_VERSION":
             out["nt_target_version"] = text
+        elif tag == "TargetName":
+            out["target_name"] = text
         for child in e:
             walk(child)
 
@@ -810,9 +814,9 @@ class Build:
         return exe
 
     def driver(self) -> list[Path]:
-        """kphlib_km, ksi.dll and KSystemInformer.sys for the target, under
-        `bin/driver`; none, with the reason logged, where the WDK has no
-        kernel-mode kit for it."""
+        """kphlib_km, ksi.dll and the driver, SystemInformer.sys as its project
+        names it, for the target, under `bin/driver`; none, with the reason
+        logged, where the WDK has no kernel-mode kit for it."""
         target, tools = self.target, self.tools
         found = _win_kits.wdk_flags(target, ["ntoskrnl"])
         if found is None:
@@ -860,22 +864,24 @@ class Build:
         out.mkdir(parents=True, exist_ok=True)
         kphlib = self.archive("kphlib_km", [Path(o) for o in objs["kphlib_km"]])
         base = [tools.badc, f"--target={target}", "--subsystem=driver", "-L", libdir]
-        ksi, implib = out / "ksi.dll", self.out / "lib" / "ksi.lib"
+        ksi = out / (projects["ksidll"]["target_name"] + ".dll")
+        implib = self.out / "lib" / ksi.with_suffix(".lib").name
         # An export driver defines no DriverEntry; its entry is DllInitialize.
         cmd = base + ["-shared", "--entry=DllInitialize", *objs["ksidll"], str(projects["ksidll"]["def"]),
                       "--out-implib", str(implib)] + [f"-l{n}" for n in WDK_DEFAULT_LIBS]
         rc, text = run(cmd + ["-o", str(ksi)], tools.env)
         if rc or not ksi.exists():
-            raise Error(f"link ksi.dll: {first_error(text)}")
+            raise Error(f"link {ksi.name}: {first_error(text)}")
         # The WDK enters a driver at GsDriverEntry, which seeds the stack
         # cookie and calls DriverEntry.
-        sys_file = out / "KSystemInformer.sys"
+        # SystemInformer.sys: SI loads the driver from its own name.
+        sys_file = out / (projects["KSystemInformer"]["target_name"] + ".sys")
         libs = [n for n in projects["KSystemInformer"]["libs"] if n not in ("ksi", "kphlib_km")]
         cmd = base + ["--entry=GsDriverEntry", *objs["KSystemInformer"], str(kphlib), str(implib)]
         cmd += [f"-l{n}" for n in dict.fromkeys(libs + WDK_DEFAULT_LIBS)] + ["-o", str(sys_file)]
         rc, text = run(cmd, tools.env)
         if rc or not sys_file.exists():
-            raise Error(f"link KSystemInformer.sys: {first_error(text)}")
+            raise Error(f"link {sys_file.name}: {first_error(text)}")
         self.log(f"driver: WDK {version}, NTDDI_VERSION {ntddi:#010x}")
         return [ksi, sys_file]
 

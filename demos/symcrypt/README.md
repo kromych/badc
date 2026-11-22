@@ -26,7 +26,6 @@ Every switch is one of SymCrypt's own options:
 | option | value | why |
 |---|---|---|
 | `SYMCRYPT_USE_ASM` | on for aarch64, off for x86_64 | badc assembles the aarch64 assembly SymCrypt generates in GNU syntax; the x86_64 form is Intel syntax, which badc's assembler does not take (#2141). Off selects the portable C code throughout. |
-| `SYMCRYPT_STACK_PROTECTION` | off | it adds `-fstack-clash-protection`, which badc does not implement (#2142) |
 | `SYMCRYPT_FIPS_BUILD` | off | needs the jitterentropy submodule, which the archive does not carry |
 | `SYMCRYPT_BUILD_MODULES`, `SYMCRYPT_SYMCRUST` | off | the unit test links the static library and the C ML-KEM |
 

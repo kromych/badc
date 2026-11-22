@@ -2151,6 +2151,9 @@ impl Parser {
             "-fstack-protector" => code.stack_protect.mode = badc::StackProtector::Basic,
             "-fstack-protector-strong" => code.stack_protect.mode = badc::StackProtector::Strong,
             "-fstack-protector-all" => code.stack_protect.mode = badc::StackProtector::All,
+            // Every stack allocation past a page probes each page it enters,
+            // so the protection is in place whatever the option says.
+            "-fstack-clash-protection" | "-fno-stack-clash-protection" => {}
             // gcc `--param <name>=<value>`, in both the separate-argument
             // and joined spellings. `ssp-buffer-size` is the only name
             // with an effect here; an unrecognized one is rejected rather
@@ -4707,6 +4710,14 @@ mod tests {
             }
             parse(&["--target=windows-arm64", flag, "-c", "a.c"]);
             parse(&["--target=macos-aarch64", flag, "-c", "a.c"]);
+        }
+    }
+
+    #[test]
+    fn stack_clash_protection_is_accepted_in_both_senses() {
+        for flag in ["-fstack-clash-protection", "-fno-stack-clash-protection"] {
+            parse(&[X64, flag, "-c", "a.c"]);
+            parse(&["--target=linux-aarch64", flag, "-c", "a.c"]);
         }
     }
 

@@ -16,8 +16,6 @@ The configuration is SymCrypt's own options:
     assembly badc assembles; off for x86_64, whose generated form is Intel
     syntax, which badc's assembler does not take (#2141). Off selects
     ``SYMCRYPT_IGNORE_PLATFORM``, the portable C code throughout.
-  - ``SYMCRYPT_STACK_PROTECTION=OFF``: it adds -fstack-clash-protection,
-    which badc does not implement (#2142).
   - ``SYMCRYPT_FIPS_BUILD=OFF``: the FIPS build needs the jitterentropy
     submodule, which the release archive does not carry.
   - ``SYMCRYPT_BUILD_MODULES=OFF``, ``SYMCRYPT_SYMCRUST=OFF``: the unit test
@@ -138,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     configure = ["cmake", "-S", str(src), "-B", str(build), *generator,
                  f"-DCMAKE_C_COMPILER={badc}", f"-DCMAKE_CXX_COMPILER={cxx}",
                  "-DCMAKE_BUILD_TYPE=Release", f"-DSYMCRYPT_USE_ASM={asm}",
-                 "-DSYMCRYPT_STACK_PROTECTION=OFF", "-DSYMCRYPT_FIPS_BUILD=OFF",
+                 "-DSYMCRYPT_FIPS_BUILD=OFF",
                  "-DSYMCRYPT_BUILD_MODULES=OFF", "-DSYMCRYPT_SYMCRUST=OFF",
                  "-DSYMCRYPT_UNIT_TESTS=ON", f"-DCMAKE_C_FLAGS={C_FLAGS}"]
     t0 = time.monotonic()

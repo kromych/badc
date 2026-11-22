@@ -26,6 +26,7 @@ code-generation options for kernel and firmware builds.
 - [Hardening and code-model knobs](#hardening-and-code-model-knobs)
   - [Reserved registers](#reserved-registers)
   - [Stack protector](#stack-protector)
+  - [Stack clash protection](#stack-clash-protection)
   - [Automatic variable initialization](#automatic-variable-initialization)
   - [Frame size](#frame-size)
   - [AArch64 branch protection](#aarch64-branch-protection)
@@ -682,6 +683,23 @@ with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=`, and
 The protector needs a linked image, since the failure path is a relocation
 against `__stack_chk_fail`. `--jit` and `--interp` refuse it, as do the
 Windows targets, whose C library exports neither symbol.
+
+### Stack clash protection
+
+Every stack allocation probes the pages it enters, on every target and
+whatever `-fstack-clash-protection` or `-fno-stack-clash-protection` says:
+
+- A fixed frame, a realignment, or an outgoing-argument area of more than a
+  page less 16 bytes descends a page at a time with a store through the stack
+  pointer after each step, unrolled up to four steps and a counted loop past
+  them.
+- `alloca` and a variable-length array take the same walk in a loop over the
+  requested size.
+- An allocation of at most a page less 16 bytes leaves the stack pointer within
+  the page the next store, or a callee's pushed return address, touches.
+
+That is gcc's x86-64 guarantee (a 4 KiB probe interval) and more than its
+AArch64 one, which assumes a 64 KiB guard region.
 
 ### Automatic variable initialization
 

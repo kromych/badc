@@ -664,6 +664,31 @@ fn a_pic_unit_names_its_interposable_definitions() {
 }
 
 #[test]
+fn a_c23_attribute_takes_the_operands_its_gnu_spelling_does() {
+    // C23 6.7.13.2: `[[gnu::name(...)]]` is the GNU attribute `name`, with
+    // its operands. `section`, `visibility` and `alias` were dropped in the
+    // `[[ ]]` spelling: the object went to `.data`, default visibility, and
+    // the alias was never defined.
+    let body = |a: &dyn Fn(&str) -> String| {
+        alloc::format!(
+            "{} int v = 1;\n{} int w = 2;\n{} extern int al;\n{} static int t;\n\
+             int *use(void) {{ return &t; }}\n",
+            a("section(\".mysec\")"),
+            a("visibility(\"hidden\")"),
+            a("alias(\"v\")"),
+            a("aligned(64)"),
+        )
+    };
+    let gnu = body(&|x| alloc::format!("__attribute__(({x}))"));
+    let c23 = body(&|x| alloc::format!("[[gnu::{x}]]"));
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let want = compile_bytes(&gnu, target);
+        assert!(want.windows(6).any(|w| w == b".mysec"), "{target:?}");
+        assert!(compile_bytes(&c23, target) == want, "{target:?}");
+    }
+}
+
+#[test]
 fn a_block_scope_extern_thread_local_is_referenced_as_one() {
     // C11 6.7.1p3: `_Thread_local` belongs to the object a block-scope
     // `extern` declaration names, which another unit defines. Its access

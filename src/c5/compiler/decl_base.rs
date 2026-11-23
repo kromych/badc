@@ -1188,6 +1188,180 @@ impl Compiler {
         r
     }
 
+    /// One attribute of a `__attribute__((...))` or `[[...]]` list, at its
+    /// name: its effect on the declaration and the operands this parser
+    /// models. Another attribute's operands are left to the caller, which
+    /// skips them as a balanced run.
+    fn parse_attribute_item(
+        &mut self,
+        attrs: &mut AttrFlags,
+        align: &mut i64,
+        vector_size: &mut i64,
+        init_priority: &mut Option<u32>,
+    ) -> Result<(), C5Error> {
+        // Read the name before the `&mut self` calls below
+        // release the symbol borrow.
+        let named = (self.lex.tk == Token::Id)
+            .then(|| crate::c5::attr::attribute(&self.symbols[self.lex.curr_id_idx].name))
+            .flatten();
+        use crate::c5::attr::Attr;
+        let is_vector_size = named == Some(Attr::VectorSize);
+        let is_mode = named == Some(Attr::Mode);
+        let is_cleanup = named == Some(Attr::Cleanup);
+        let is_section = named == Some(Attr::Section);
+        let is_alias = named == Some(Attr::Alias);
+        let is_visibility = named == Some(Attr::Visibility);
+        let is_patchable_entry = named == Some(Attr::PatchableFunctionEntry);
+        let call_diagnostic = (named == Some(Attr::CallDiagnostic))
+            .then(|| self.symbols[self.lex.curr_id_idx].name.trim_matches('_') == "error");
+        let mut seen = AttrFlags::default();
+        self.note_attribute_name(&mut seen);
+        attrs.merge_names(&seen);
+        self.next()?;
+        if seen.aligned {
+            if self.lex.tk == '(' {
+                self.next()?;
+                let n = self.parse_constant_int()?;
+                *align = (*align).max(n);
+                if self.lex.tk != ')' {
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`)` expected after `aligned` operand")
+                    );
+                }
+                self.next()?;
+            } else {
+                // Bare `aligned`: the target's largest
+                // alignment, `__BIGGEST_ALIGNMENT__`.
+                *align = (*align).max(self.biggest_align);
+            }
+        } else if seen.constructor || seen.destructor {
+            attrs.constructor |= seen.constructor;
+            attrs.destructor |= seen.destructor;
+            *init_priority = self.parse_init_priority(*init_priority)?;
+        } else if is_vector_size && self.lex.tk == '(' {
+            // `vector_size(N)`: the declared type becomes a
+            // vector N bytes wide. Captured here; the base-type
+            // parse rebuilds the element type into the vector.
+            self.next()?;
+            *vector_size = self.parse_constant_int()?;
+            if self.lex.tk != ')' {
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`)` expected after `vector_size` operand")
+                );
+            }
+            self.next()?;
+        } else if is_mode && self.lex.tk == '(' {
+            // `mode(M)`: the declared type becomes the
+            // integer or floating type of machine mode `M`.
+            self.next()?; // `(`
+            self.pending.attrs.mode = Some(self.parse_machine_mode()?);
+            if self.lex.tk != ')' {
+                return Err(self.compile_err(Code::SYNTAX, "`)` expected after `mode` operand"));
+            }
+            self.next()?;
+        } else if is_section && self.lex.tk == '(' {
+            // `section("name")`: place the declared symbol's
+            // bytes in the named object section.
+            self.next()?; // `(`
+            let name = self.parse_attribute_string_operand("section")?;
+            self.pending.attrs.section = Some(name);
+            if self.lex.tk != ')' {
+                return Err(self.compile_err(Code::SYNTAX, "`)` expected after `section` operand"));
+            }
+            self.next()?;
+        } else if let Some(error) = call_diagnostic
+            && self.lex.tk == '('
+        {
+            // `error("message")` / `warning("message")`.
+            self.next()?; // `(`
+            let what = if error { "error" } else { "warning" };
+            let message = self.parse_attribute_string_operand(what)?;
+            self.pending.attrs.call_diagnostic = Some((error, message));
+            if self.lex.tk != ')' {
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`)` expected after the attribute's message")
+                );
+            }
+            self.next()?;
+        } else if is_patchable_entry && self.lex.tk == '(' {
+            // `patchable_function_entry(N[, M])`: this
+            // function's NOP area, overriding the option's.
+            self.next()?; // `(`
+            let n = self.parse_constant_int()?;
+            let m = if self.lex.tk == ',' {
+                self.next()?;
+                self.parse_constant_int()?
+            } else {
+                0
+            };
+            if n < 0 || m < 0 || m > n || n > u32::MAX as i64 {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "`patchable_function_entry` takes N >= M >= 0",
+                ));
+            }
+            self.pending.attrs.patchable_entry = Some((n as u32, m as u32));
+            if self.lex.tk != ')' {
+                return Err(self.compile_err(
+                    Code::SYNTAX,
+                    "`)` expected after `patchable_function_entry` operands",
+                ));
+            }
+            self.next()?;
+        } else if is_alias && self.lex.tk == '(' {
+            // `alias("target")`: the declared name is an
+            // additional symbol for `target`, which must be
+            // defined in this unit.
+            self.next()?; // `(`
+            let name = self.parse_attribute_string_operand("alias")?;
+            self.pending.attrs.alias = Some(name);
+            if self.lex.tk != ')' {
+                return Err(self.compile_err(Code::SYNTAX, "`)` expected after `alias` operand"));
+            }
+            self.next()?;
+        } else if is_visibility && self.lex.tk == '(' {
+            // `visibility("hidden"|"internal"|"protected"
+            // |"default")`, overriding an enclosing
+            // `#pragma GCC visibility` extent.
+            self.next()?; // `(`
+            let vis = self.parse_attribute_string_operand("visibility")?;
+            let Some(vis) = crate::c5::program::SymVisibility::from_gcc_name(&vis) else {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!(
+                        "`visibility` operand `{vis}` is not one of \
+                         default, hidden, protected or internal"
+                    ),
+                ));
+            };
+            self.pending.attrs.visibility = Some(vis);
+            if self.lex.tk != ')' {
+                return Err(
+                    self.compile_err(Code::SYNTAX, "`)` expected after `visibility` operand")
+                );
+            }
+            self.next()?;
+        } else if is_cleanup && self.lex.tk == '(' {
+            // `cleanup(fn)`: name the function to call with
+            // the variable's address at scope exit. The operand
+            // is an identifier already in scope.
+            self.next()?; // `(`
+            if self.lex.tk != Token::Id {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "`cleanup` operand must be a function name",
+                ));
+            }
+            self.pending.attrs.cleanup = Some(self.lex.curr_id_idx);
+            self.next()?; // function name
+            if self.lex.tk != ')' {
+                return Err(self.compile_err(Code::SYNTAX, "`)` expected after `cleanup` operand"));
+            }
+            self.next()?;
+        }
+        Ok(())
+    }
+
     fn skip_attribute_specifiers_inner(&mut self) -> Result<bool, C5Error> {
         let mut attrs = AttrFlags::default();
         let mut align: i64 = 0;
@@ -1272,186 +1446,12 @@ impl Compiler {
                             }
                             listed = true;
                         }
-                        // Read the name before the `&mut self` calls below
-                        // release the symbol borrow.
-                        let named = (self.lex.tk == Token::Id)
-                            .then(|| {
-                                crate::c5::attr::attribute(&self.symbols[self.lex.curr_id_idx].name)
-                            })
-                            .flatten();
-                        use crate::c5::attr::Attr;
-                        let is_vector_size = named == Some(Attr::VectorSize);
-                        let is_mode = named == Some(Attr::Mode);
-                        let is_cleanup = named == Some(Attr::Cleanup);
-                        let is_section = named == Some(Attr::Section);
-                        let is_alias = named == Some(Attr::Alias);
-                        let is_visibility = named == Some(Attr::Visibility);
-                        let is_patchable_entry = named == Some(Attr::PatchableFunctionEntry);
-                        let call_diagnostic = (named == Some(Attr::CallDiagnostic)).then(|| {
-                            self.symbols[self.lex.curr_id_idx].name.trim_matches('_') == "error"
-                        });
-                        let mut seen = AttrFlags::default();
-                        self.note_attribute_name(&mut seen);
-                        attrs.merge_names(&seen);
-                        self.next()?;
-                        if seen.aligned {
-                            if self.lex.tk == '(' {
-                                self.next()?;
-                                let n = self.parse_constant_int()?;
-                                align = align.max(n);
-                                if self.lex.tk != ')' {
-                                    return Err(self.compile_err(
-                                        Code::SYNTAX,
-                                        "`)` expected after `aligned` operand",
-                                    ));
-                                }
-                                self.next()?;
-                            } else {
-                                // Bare `aligned`: the target's largest
-                                // alignment, `__BIGGEST_ALIGNMENT__`.
-                                align = align.max(self.biggest_align);
-                            }
-                        } else if seen.constructor || seen.destructor {
-                            attrs.constructor |= seen.constructor;
-                            attrs.destructor |= seen.destructor;
-                            init_priority = self.parse_init_priority(init_priority)?;
-                        } else if is_vector_size && self.lex.tk == '(' {
-                            // `vector_size(N)`: the declared type becomes a
-                            // vector N bytes wide. Captured here; the base-type
-                            // parse rebuilds the element type into the vector.
-                            self.next()?;
-                            vector_size = self.parse_constant_int()?;
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after `vector_size` operand",
-                                ));
-                            }
-                            self.next()?;
-                        } else if is_mode && self.lex.tk == '(' {
-                            // `mode(M)`: the declared type becomes the
-                            // integer or floating type of machine mode `M`.
-                            self.next()?; // `(`
-                            self.pending.attrs.mode = Some(self.parse_machine_mode()?);
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after `mode` operand",
-                                ));
-                            }
-                            self.next()?;
-                        } else if is_section && self.lex.tk == '(' {
-                            // `section("name")`: place the declared symbol's
-                            // bytes in the named object section.
-                            self.next()?; // `(`
-                            let name = self.parse_attribute_string_operand("section")?;
-                            self.pending.attrs.section = Some(name);
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after `section` operand",
-                                ));
-                            }
-                            self.next()?;
-                        } else if let Some(error) = call_diagnostic
-                            && self.lex.tk == '('
-                        {
-                            // `error("message")` / `warning("message")`.
-                            self.next()?; // `(`
-                            let what = if error { "error" } else { "warning" };
-                            let message = self.parse_attribute_string_operand(what)?;
-                            self.pending.attrs.call_diagnostic = Some((error, message));
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after the attribute's message",
-                                ));
-                            }
-                            self.next()?;
-                        } else if is_patchable_entry && self.lex.tk == '(' {
-                            // `patchable_function_entry(N[, M])`: this
-                            // function's NOP area, overriding the option's.
-                            self.next()?; // `(`
-                            let n = self.parse_constant_int()?;
-                            let m = if self.lex.tk == ',' {
-                                self.next()?;
-                                self.parse_constant_int()?
-                            } else {
-                                0
-                            };
-                            if n < 0 || m < 0 || m > n || n > u32::MAX as i64 {
-                                return Err(self.compile_err(
-                                    Code::INVALID_DECLARATION,
-                                    "`patchable_function_entry` takes N >= M >= 0",
-                                ));
-                            }
-                            self.pending.attrs.patchable_entry = Some((n as u32, m as u32));
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after `patchable_function_entry` operands",
-                                ));
-                            }
-                            self.next()?;
-                        } else if is_alias && self.lex.tk == '(' {
-                            // `alias("target")`: the declared name is an
-                            // additional symbol for `target`, which must be
-                            // defined in this unit.
-                            self.next()?; // `(`
-                            let name = self.parse_attribute_string_operand("alias")?;
-                            self.pending.attrs.alias = Some(name);
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after `alias` operand",
-                                ));
-                            }
-                            self.next()?;
-                        } else if is_visibility && self.lex.tk == '(' {
-                            // `visibility("hidden"|"internal"|"protected"
-                            // |"default")`, overriding an enclosing
-                            // `#pragma GCC visibility` extent.
-                            self.next()?; // `(`
-                            let vis = self.parse_attribute_string_operand("visibility")?;
-                            let Some(vis) = crate::c5::program::SymVisibility::from_gcc_name(&vis)
-                            else {
-                                return Err(self.compile_err(
-                                    Code::INVALID_DECLARATION,
-                                    format!(
-                                        "`visibility` operand `{vis}` is not one of \
-                                         default, hidden, protected or internal"
-                                    ),
-                                ));
-                            };
-                            self.pending.attrs.visibility = Some(vis);
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after `visibility` operand",
-                                ));
-                            }
-                            self.next()?;
-                        } else if is_cleanup && self.lex.tk == '(' {
-                            // `cleanup(fn)`: name the function to call with
-                            // the variable's address at scope exit. The operand
-                            // is an identifier already in scope.
-                            self.next()?; // `(`
-                            if self.lex.tk != Token::Id {
-                                return Err(self.compile_err(
-                                    Code::INVALID_DECLARATION,
-                                    "`cleanup` operand must be a function name",
-                                ));
-                            }
-                            self.pending.attrs.cleanup = Some(self.lex.curr_id_idx);
-                            self.next()?; // function name
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after `cleanup` operand",
-                                ));
-                            }
-                            self.next()?;
-                        }
+                        self.parse_attribute_item(
+                            &mut attrs,
+                            &mut align,
+                            &mut vector_size,
+                            &mut init_priority,
+                        )?;
                     }
                 }
             } else if self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'[') {
@@ -1494,26 +1494,12 @@ impl Compiler {
                             }
                             listed = true;
                         }
-                        let mut seen = AttrFlags::default();
-                        self.note_attribute_name(&mut seen);
-                        attrs.merge_names(&seen);
-                        self.next()?;
-                        if seen.aligned && self.lex.tk == '(' {
-                            self.next()?;
-                            let n = self.parse_constant_int()?;
-                            align = align.max(n);
-                            if self.lex.tk != ')' {
-                                return Err(self.compile_err(
-                                    Code::SYNTAX,
-                                    "`)` expected after `aligned` operand",
-                                ));
-                            }
-                            self.next()?;
-                        } else if seen.constructor || seen.destructor {
-                            attrs.constructor |= seen.constructor;
-                            attrs.destructor |= seen.destructor;
-                            init_priority = self.parse_init_priority(init_priority)?;
-                        }
+                        self.parse_attribute_item(
+                            &mut attrs,
+                            &mut align,
+                            &mut vector_size,
+                            &mut init_priority,
+                        )?;
                     }
                 }
             } else {

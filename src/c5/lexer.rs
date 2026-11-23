@@ -1879,7 +1879,7 @@ impl Lexer {
     ///
     /// Where `ms_int_suffixes` holds, `[u]i8`, `[u]i16`, `[u]i32` and
     /// `[u]i64` in place of the `l`s fix the width (MSVC's sized
-    /// suffixes, as clang reads them under `-fms-extensions`): the value
+    /// suffixes): the value
     /// must fit the width's bits and is read at the signedness the `u`
     /// gives, so `0x80000000i32` is negative.
     fn lex_int_suffix(&mut self, val: i64) -> Result<(), C5Error> {
@@ -2801,8 +2801,7 @@ fn add_keyword(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex, name: &str, t
 /// pointer extends) and `__unaligned` (an access that may be misaligned,
 /// which both PE targets' loads and stores allow) qualify without effect;
 /// `__builtin_alignof` is `_Alignof`; and `__try`, `__except`, `__finally`
-/// and `__leave` are the structured exception handling statements, which
-/// clang leaves identifiers off a windows-msvc triple.
+/// and `__leave` are the structured exception handling statements.
 /// TODO: `_Alignof` of an `__unaligned` type, which clang reports as 1.
 pub(crate) fn init_ms_keywords(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex) {
     for (name, token) in [

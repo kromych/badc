@@ -140,9 +140,9 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             .unwrap_or("__c5_entry")
             .to_string()
     });
-    // A named entry is a link root as well, as link.exe takes `/ENTRY` and
-    // GNU ld `-e`: a WDK driver enters at `GsDriverEntry`, an archive
-    // member of BufferOverflowFastFailK.lib.
+    // A named entry (`/ENTRY`, `-e`) is a link root as well: a WDK driver
+    // enters at `GsDriverEntry`, an archive member of
+    // BufferOverflowFastFailK.lib.
     let entry_root = freestanding_entry
         .clone()
         .or_else(|| entry_override.clone());
@@ -648,8 +648,8 @@ fn read_object_input(obj_path: &str, target: badc::Target) -> badc::NativeObject
 }
 
 /// An `.a` / `.lib` input's members, and the DLLs its import members name.
-/// A member is read when the link pulls it, as GNU ld and link.exe read one
-/// through the archive's symbol index; without an index each is read now.
+/// A member is read when the link pulls it through the archive's symbol
+/// index; without an index each is read now.
 fn read_archive_members(
     a_path: &str,
     target: badc::Target,
@@ -1114,7 +1114,7 @@ impl Selection {
 /// Pull the archive members the link needs and materialize the target C
 /// library over whatever stays undefined; the included objects come back
 /// in link order, each archive's members at its place in pull order. An
-/// ELF link resolves as GNU ld does: an archive answers the references
+/// ELF link resolves in command-line order: an archive answers the references
 /// made before it, rescanning itself (a group, its archives together)
 /// until it pulls nothing, and a shared library the names it exports
 /// from its place on. Mach-O and PE links search every archive until
@@ -1143,7 +1143,7 @@ fn select_archive_members(
     if embedded.cli.target.binary_format() == badc::BinaryFormat::Pe {
         (sel.undefined).insert(LOAD_CONFIG.to_string(), image_root.clone());
     }
-    // So is a name `-u` lists, as gcc and GNU ld have it.
+    // So is a name `-u` lists.
     for name in &embedded.cli.link.required {
         sel.undefined
             .insert(name.clone(), "<command line>".to_string());

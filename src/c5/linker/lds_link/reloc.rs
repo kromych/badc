@@ -176,8 +176,8 @@ impl<'a> LdsLinker<'a> {
     /// (undefined weak resolves to zero and still applies).
     /// `tolerant` marks a referring section that describes other
     /// sections rather than depending on them -- debug and unwind
-    /// tables -- where bfd resolves a dropped target to zero instead
-    /// of complaining.
+    /// tables -- where a dropped target resolves to zero instead of
+    /// an error.
     fn resolve_reloc_target(
         &self,
         oi: usize,
@@ -274,7 +274,7 @@ impl<'a> LdsLinker<'a> {
                 // The surviving copy of a deduplicated group need bear
                 // no relation to the dropped one, so a reference that
                 // name resolution above could not place has nowhere to
-                // go. GNU ld reports it rather than redirecting.
+                // go. It is reported rather than redirected.
                 if let Some(home) = self.dropped_home(oi, sym) {
                     if tolerant || (by_name && sym.binding() == STB_WEAK) {
                         return Some(r.addend as u64);

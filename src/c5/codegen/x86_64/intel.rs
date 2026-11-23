@@ -39,7 +39,7 @@ pub(crate) fn restate(text: &str, errors: &mut Vec<AsmError>) -> Option<String> 
 }
 
 /// The names `.set`, `.equ` and `=` give a value, which an operand spells
-/// as an immediate, as GNU as reads an absolute symbol.
+/// as an immediate, as for any absolute symbol.
 fn equated_names(text: &str) -> BTreeSet<&str> {
     let mut names = BTreeSet::new();
     for (_, piece) in split_asm_statement_lines(text) {
@@ -94,7 +94,7 @@ fn statement(piece: &str, intel: &mut bool, consts: &BTreeSet<&str>) -> Result<S
     Ok(out)
 }
 
-/// The instruction prefixes GNU as takes as words before the mnemonic.
+/// The instruction prefixes written as words before the mnemonic.
 const PREFIXES: &[&str] = &[
     "lock", "rep", "repe", "repz", "repne", "repnz", "notrack", "bnd", "xacquire", "xrelease",
     "data16", "data32", "addr32",

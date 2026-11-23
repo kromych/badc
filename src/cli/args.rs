@@ -48,7 +48,7 @@ impl ParseError {
     }
 }
 
-/// The highest `-g<level>` / `-ggdb<level>` badc takes, which is gcc's.
+/// The highest `-g<level>` / `-ggdb<level>` badc takes.
 /// Every level above 0 selects the same debug information.
 const DEBUG_LEVEL_MAX: u32 = 3;
 
@@ -174,7 +174,7 @@ pub(crate) struct Codegen {
     /// reported against; `None` reports nothing.
     pub(crate) frame_larger_than: Option<u64>,
     /// `-f[no-]asynchronous-unwind-tables` and `-f[no-]unwind-tables`: an
-    /// object carries `.eh_frame` when either is on, as with gcc.
+    /// object carries `.eh_frame` when either is on.
     pub(crate) async_unwind_tables: bool,
     pub(crate) unwind_tables: bool,
     pub(crate) dump_ssa: bool,
@@ -302,7 +302,7 @@ pub(crate) struct Link {
     /// `-Bsymbolic`: a shared library binds its references to its own
     /// definitions.
     pub(crate) symbolic: bool,
-    /// `-Bsymbolic-functions`; the later of it and `-Bsymbolic` holds, as in GNU ld.
+    /// `-Bsymbolic-functions`; the later of it and `-Bsymbolic` holds.
     pub(crate) symbolic_functions: bool,
     /// `--emit-relocs`: keep the resolved relocations in the image.
     pub(crate) emit_relocs: bool,
@@ -364,8 +364,8 @@ impl Link {
         })
     }
 
-    /// Group bounds pair up without nesting, as GNU ld requires of the
-    /// command line; a group a linker script opens may sit inside one.
+    /// Group bounds on the command line pair up without nesting; a group a
+    /// linker script opens may sit inside one.
     fn check_groups(&self) -> Result<(), ParseError> {
         let mut open = false;
         for (_, m) in &self.markers {
@@ -530,9 +530,8 @@ impl Cli {
         }
     }
 
-    /// Whether the image exports each default-visibility definition, as GNU ld
-    /// and ld64 do for an ELF or Mach-O shared library; link.exe exports a
-    /// DLL's `dllexport` ones.
+    /// Whether the image exports each default-visibility definition: an ELF
+    /// or Mach-O shared library does, a DLL only its `dllexport` ones.
     pub(crate) fn exports_definitions(&self) -> bool {
         self.mode == Mode::SharedLibrary
             && matches!(
@@ -561,8 +560,8 @@ impl Cli {
     /// [`badc::ZKeyword::in_hosted_link`]). The image without -T keeps
     /// every local symbol of its inputs (`--discard-none`).
     /// Whether a reference no input defines becomes a load-time import
-    /// rather than a link error: in an ELF shared library unless `-z defs`,
-    /// as GNU ld's default; in a Mach-O image under an `-undefined` other
+    /// rather than a link error: in an ELF shared library unless `-z defs`;
+    /// in a Mach-O image under an `-undefined` other
     /// than ld64's default `error`; never in a PE image.
     pub(crate) fn allows_undefined(&self) -> bool {
         match self.target.binary_format() {
@@ -1136,8 +1135,8 @@ impl Parser {
             "-w" => self.front.diag.inhibit_warnings(true),
             "-Werror" => self.front.diag.warnings_as_errors(true),
             "-Wno-error" => self.front.diag.warnings_as_errors(false),
-            // gcc 14 in C: the diagnostics that are errors by default for
-            // C99 constraint violations become warnings.
+            // The diagnostics that are errors by default for C99 constraint
+            // violations become warnings.
             "-fpermissive" => self.front.diag.permissive(true),
             "-fno-permissive" => self.front.diag.permissive(false),
             s if s.starts_with("-Werror=") => self.diag_error(&s["-Werror=".len()..], s, true)?,
@@ -1606,9 +1605,9 @@ impl Parser {
             // `-fgnu89-inline`: make the GNU89 inline linkage model the
             // unit default in place of C99's.
             "-fgnu89-inline" => front.gnu89_inline = Some(true),
-            // In C, gcc's Microsoft extensions are the unnamed members of a
-            // tagged or typedef'd structure or union type, which badc takes
-            // with or without the option.
+            // In C, the option enables the unnamed members of a tagged or
+            // typedef'd structure or union type, which badc takes with or
+            // without it.
             "-fms-extensions" => {}
             "-fno-gnu89-inline" => front.gnu89_inline = Some(false),
             // gcc `-fstrict-flex-arrays[=N]`: which trailing array members
@@ -1631,8 +1630,8 @@ impl Parser {
             // on every target. It changes the layout of every object
             // holding a `wchar_t` or a wide literal, so it reaches the
             // front end rather than being dropped as a no-op.
-            // The deployment target: clang's predefines and the minimum
-            // `LC_BUILD_VERSION` records follow it.
+            // The deployment target: the predefined version macros and the
+            // minimum `LC_BUILD_VERSION` records follow it.
             s if s.starts_with("-mmacosx-version-min=")
                 || s.starts_with("-mmacos-version-min=") =>
             {
@@ -1686,8 +1685,8 @@ impl Parser {
             // rather than being dropped.
             "-fsigned-char" | "-fno-unsigned-char" => front.char_signed = Some(true),
             "-funsigned-char" | "-fno-signed-char" => front.char_signed = Some(false),
-            // The signed-overflow pair, the last one given winning: gcc >= 8
-            // spells `-fno-strict-overflow` as `-fwrapv -fwrapv-pointer`, and
+            // The signed-overflow pair, the last one given winning:
+            // `-fno-strict-overflow` means `-fwrapv -fwrapv-pointer`, and
             // badc derives nothing from pointer overflow (C99 6.5p5).
             "-fwrapv" | "-fno-strict-overflow" => front.wrapv = true,
             "-fno-wrapv" | "-fstrict-overflow" => front.wrapv = false,
@@ -1786,7 +1785,7 @@ impl Parser {
             // `-std=<dialect>`: the edition, which sets `__STDC_VERSION__`
             // and the C23 keywords, and the GNU dialect, which suppresses
             // `__STRICT_ANSI__`; the GNU extensions stay available either
-            // way. A name gcc does not take is rejected, since a caller
+            // way. Any other name is rejected, since a caller
             // that misspells the dialect gets another one.
             s if s.starts_with("-std=") => {
                 let dialect = &s["-std=".len()..];
@@ -1840,9 +1839,8 @@ impl Parser {
                 self.target_spec = Some(s["--target=".len()..].to_string());
             }
             // The x86 code-mode selectors. `-m16` and `-m32` both put
-            // the object out as ELFCLASS32 / EM_386, matching the
-            // `as --32` gcc hands its assembler for either; the encoding
-            // mode itself comes from `.code16` / `.code32` in the source.
+            // the object out as ELFCLASS32 / EM_386; the encoding mode
+            // itself comes from `.code16` / `.code32` in the source.
             // `-m31` (s390) and `-mx32` name ABIs badc has no encoder or
             // container for.
             "-m64" => {}
@@ -1880,8 +1878,8 @@ impl Parser {
             // an alignment fault instead of being fixed up.
             "-mstrict-align" => code.strict_align = true,
             "-mno-strict-align" => code.strict_align = false,
-            // GNU as / clang: no jump or fused compare-and-jump crosses or
-            // ends on a 32-byte boundary.
+            // No jump or fused compare-and-jump crosses or ends on a
+            // 32-byte boundary.
             "-mbranches-within-32B-boundaries" => code.branches_within_32b = true,
             "-mno-branches-within-32B-boundaries" => code.branches_within_32b = false,
             // The x86 baseline, which every x86-64 unit already targets.
@@ -1965,9 +1963,9 @@ impl Parser {
                 };
             }
             // `-falign-functions=N[:M[:N2[:M2]]]`: function entries on the
-            // power of two at or above N. gcc may leave an entry unaligned
-            // when that pads past M - 1 bytes; badc always aligns, which a
-            // reader of the entry addresses (patch sites aligned for
+            // power of two at or above N. The option lets an entry stay
+            // unaligned when that pads past M - 1 bytes; badc always aligns,
+            // which a reader of the entry addresses (patch sites aligned for
             // `-fpatchable-function-entry`) relies on.
             s if s.starts_with("-falign-functions=") => {
                 let spec = &s["-falign-functions=".len()..];
@@ -2133,8 +2131,8 @@ impl Parser {
                     }
                 };
             }
-            // A `+`-joined AArch64 feature list. `standard` is gcc's
-            // alias for `bti+pac-ret`; `leaf` modifies the `pac-ret` before
+            // A `+`-joined AArch64 feature list. `standard` stands for
+            // `bti+pac-ret`; `leaf` modifies the `pac-ret` before
             // it. The `b-key` modifier and `gcs` are rejected: an
             // accepted-but-ignored spelling would build an object that
             // claims a protection it does not carry.
@@ -2167,8 +2165,7 @@ impl Parser {
                 }
             }
             // `-fstack-protector*`: which functions carry a stack
-            // canary. The per-function rule is gcc's, applied to the
-            // declared automatic objects.
+            // canary, judged by their declared automatic objects.
             "-fno-stack-protector" => code.stack_protect.mode = badc::StackProtector::Off,
             "-fstack-protector" => code.stack_protect.mode = badc::StackProtector::Basic,
             "-fstack-protector-strong" => code.stack_protect.mode = badc::StackProtector::Strong,
@@ -2294,8 +2291,8 @@ impl Parser {
     /// thing.
     fn linker_only_option(&mut self, arg: &str) -> bool {
         match arg {
-            // `-O<n>` sizes the hash tables of a shared object GNU ld
-            // writes; it changes no symbol binding.
+            // `-O<n>` sizes a shared object's hash tables; it changes no
+            // symbol binding.
             s if s.len() > 2
                 && s.starts_with("-O")
                 && s[2..].bytes().all(|b| b.is_ascii_digit()) => {}
@@ -2469,7 +2466,7 @@ impl Parser {
             "--export-all" => link.export_all = true,
             "--export-data" => link.export_data = true,
             "--strip-debug" | "-S" => link.strip_debug = true,
-            // The last of `-X` and `--discard-none` holds, as in GNU ld.
+            // The last of `-X` and `--discard-none` holds.
             "-X" | "--discard-locals" => (link.discard_locals, link.discard_none) = (true, false),
             "--discard-none" => (link.discard_locals, link.discard_none) = (false, true),
             "--warn-execstack" => link.warn_execstack = Some(true),
@@ -2658,7 +2655,7 @@ impl Parser {
         if let Some(text) = self.catalog_query(mode)? {
             return Ok(Parsed::Diagnostics(text));
         }
-        // `-v` with nothing to build reports the version, as gcc's does.
+        // `-v` with nothing to build reports the version.
         if (self.verbose || self.verbose_ld) && self.positional.len() <= 1 {
             return Ok(Parsed::Print(badc::BUILD_INFO));
         }
@@ -2956,7 +2953,7 @@ impl Parser {
     /// wrong place would leave the image claiming a protection it does
     /// not have.
     fn resolve_stack_guard(&mut self, target: Target) -> Result<(), ParseError> {
-        // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so a
+        // The x86 default for `-mstack-protector-guard=` is `tls`, so a
         // register, an offset or a symbol named alone selects it, as when
         // a build names only the register and the symbol.
         let kind = self.ssp_guard_kind.or_else(|| {
@@ -3143,7 +3140,7 @@ impl Parser {
     /// keeps the code off the vector registers it uses. `-mno-sse` and
     /// `-mgeneral-regs-only` withdraw the extensions that need SSE; `-msse`,
     /// `-msse2` and an extension that needs SSE bring the registers back, in
-    /// command-line order, as gcc reads them.
+    /// command-line order.
     fn apply_x86_isa(&mut self, target: Target) -> Result<(), ParseError> {
         if self.isa_args.is_empty() || !target.is_x86_64() {
             return Ok(());
@@ -4549,8 +4546,8 @@ mod tests {
     /// The x86 extension options combine in order: the last `-march=` is
     /// the base, each `-m<ext>` / `-mno-<ext>` applies on top in order,
     /// and `-mno-` drops the extensions implying the one named.
-    /// `-mno-sse`, `-msse`, `-msse2` and `-mgeneral-regs-only` apply in order,
-    /// as gcc 16 reads them: the last decides whether the code may use the SSE
+    /// `-mno-sse`, `-msse`, `-msse2` and `-mgeneral-regs-only` apply in order:
+    /// the last decides whether the code may use the SSE
     /// registers, `-mno-sse` withdraws the extensions that need them but the
     /// CPU's own POPCNT, an extension that needs them brings them back, and
     /// `-mgeneral-regs-only` withdraws MMX until `-mmmx`.

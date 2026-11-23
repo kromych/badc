@@ -230,28 +230,27 @@ pub struct Program {
     /// `.weak` symbol names from file-scope asm. The object writer
     /// binds the name STB_WEAK wherever it surfaces -- a definition
     /// (function, data, asm-section label, alias) or an undefined
-    /// reference. A name that surfaces nowhere else gets no entry, as
-    /// GNU as emits none for an unreferenced undefined weak.
+    /// reference. A name that surfaces nowhere else gets no entry.
     pub asm_weak_names: Vec<String>,
     /// `.globl` symbol names from file-scope asm. A name the unit neither
-    /// defines nor references still gets an undefined global entry, as
-    /// GNU as emits one; `ld -r` carries it into the next link stage.
+    /// defines nor references still gets an undefined global entry, which
+    /// `ld -r` carries into the next link stage.
     pub asm_global_names: Vec<String>,
     /// Symbol visibility named by `.hidden` / `.internal` / `.protected` in
     /// file-scope asm. The object writer sets `st_other` wherever the name
-    /// surfaces. A later directive on the same name wins, as in GNU as.
+    /// surfaces. A later directive on the same name wins.
     pub asm_visibility: Vec<(String, SymVisibility)>,
     /// Names whose `st_other` the object writer sets
     /// `STO_AARCH64_VARIANT_PCS` in: those `.variant_pcs` marks in
     /// file-scope asm, and the functions that follow the SVE PCS.
     pub variant_pcs: Vec<String>,
     /// The unit is assembler source (`.s` / `.S`). The object writer then
-    /// takes the GNU as shape: an STT_FILE symbol only per `.file` directive
-    /// and a `.comment` section only from `.ident` strings, where a compiled
-    /// unit names its source file and carries the producer fingerprint.
+    /// writes an STT_FILE symbol only per `.file` directive and a `.comment`
+    /// section only from `.ident` strings, where a compiled unit names its
+    /// source file and carries the producer fingerprint.
     pub asm_unit: bool,
     /// `.file "name"` operands from file-scope asm, in directive order; one
-    /// STT_FILE symbol each, as GNU as emits them.
+    /// STT_FILE symbol each.
     pub asm_file_names: Vec<String>,
     /// `.ident` strings from file-scope asm, in directive order; pooled
     /// NUL-terminated into `.comment`.

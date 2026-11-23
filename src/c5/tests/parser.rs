@@ -894,7 +894,7 @@ fn unresolved_goto_label() {
     expect_compile_error("int main() { goto nowhere; return 0; }", "unresolved label");
 }
 
-// GNU C local labels (`__label__`). The accept/reject split below follows
+// GNU C local labels (`__label__`). The accept/reject split below is
 // gcc's; clang differs on one case, noted at that test.
 
 #[test]
@@ -2024,10 +2024,10 @@ fn valid_numeric_literals_still_compile() {
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
 
-/// MSVC's sized integer suffixes on the PE targets, as clang 22 reads them
-/// for a windows-msvc triple: `[u]i8` ... `[u]i64` name `char` (unsigned
-/// `char`), `short`, `int` and `long long`, the value must fit the width
-/// and is read at the suffix's signedness, and `#if` takes them unchanged.
+/// MSVC's sized integer suffixes on the PE targets: `[u]i8` ... `[u]i64`
+/// name `char` (unsigned `char`), `short`, `int` and `long long`, the value
+/// must fit the width and is read at the suffix's signedness, and `#if`
+/// takes them unchanged.
 /// The four erroneous constants are rejected; the other targets reject the
 /// suffixes.
 #[test]
@@ -3104,8 +3104,8 @@ fn file_scope_asm_constraints() {
     ok("static int f(void) { return 0; }\n\
          asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\\n.globl f\");\n\
          int main(void) { return f(); }");
-    // A bare instruction at file scope assembles into `.text`, as GNU as does
-    // (`asm("nop")` emits a nop into the current section). File-scope
+    // A bare instruction at file scope assembles into the current section,
+    // `.text` (`asm("nop")` emits a nop there). File-scope
     // instruction assembly is x86-only, so pin the target rather than the host.
     Compiler::with_target(
         "asm(\"nop\"); int main(void) { return 0; }".to_string(),
@@ -4685,8 +4685,7 @@ fn a_string_longer_than_its_array_warns_and_is_truncated() {
 /// initialize -- past an array's, a row's, a struct's or a scalar's end, a
 /// union's second, an element after a braced string -- is reported once per
 /// list as `-Wexcess-initializers`, at file and block scope, in a compound
-/// literal, and dropped unevaluated, as gcc and clang do (clang alone for a
-/// `char[]` after its string, which gcc refuses).
+/// literal, and dropped unevaluated.
 #[test]
 fn a_surplus_initializer_element_warns_and_is_dropped() {
     let types = "struct S { int x, y; }; union U { int i; char c; };\n\
@@ -5074,7 +5073,7 @@ fn a_member_read_through_an_address_is_not_a_constant() {
 fn a_braced_scalar_initializer_holds_one_value() {
     // C99 6.7.8p11: the braces around a scalar initializer hold a single
     // expression, at file scope, at block scope and in a member; a further
-    // one is reported and dropped (6.7.8p2), as gcc and clang do.
+    // one is reported and dropped (6.7.8p2).
     for (decl, value) in [
         ("int x = {1, 2};", "x"),
         ("int f(void) { static int x = {1, 2}; return x; }", "f()"),
@@ -5636,8 +5635,8 @@ fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
 }
 
 /// A condition whose known operands decide it leaves the other branch
-/// dead for the fall-off analysis, as gcc 16.2.1 folds it for
-/// -Wreturn-type at -O0 and -O2: `x || 1`, `x | 1`, `!(x && 0)`,
+/// dead for the fall-off analysis (checked against gcc 16.2.1's
+/// -Wreturn-type at -O0 and -O2): `x || 1`, `x | 1`, `!(x && 0)`,
 /// `(x & 0) == 0`, `!(x * 0)`, `x | ~0u`, `(x ^ x) == 0`, `x - x + 1` and
 /// `(x, 1)` are true whatever `x`; `x && 0` and `x * 0` false; `x || 0`,
 /// `x | 0` and `!x` undecided.
@@ -6910,8 +6909,8 @@ fn implicit_fallthrough_reports_where_gcc_does() {
 }
 
 /// `-Wvla-larger-than=N` reports a variable-length array whose size the
-/// size expression does not bound by N bytes, under optimization, as gcc
-/// 16 -O2 reports the same declarations (measured). A signed size may be
+/// size expression does not bound by N bytes, under optimization; gcc 16
+/// -O2 reports the same declarations (measured). A signed size may be
 /// negative, so it bounds nothing.
 #[test]
 fn vla_larger_than_reports_the_arrays_gcc_does() {
@@ -7024,7 +7023,7 @@ fn a_static_initializers_diagnostic_is_reported_once() {
         [2, 3, 4, 5, 6]
     );
     // The arithmetic parse reports the compound literal's conversion as the
-    // undone one did, as clang 22 reports it (-Wconstant-conversion).
+    // undone one did.
     assert_eq!(lines(crate::c5::diag::Code::CONSTANT_CONVERSION), [7]);
 }
 

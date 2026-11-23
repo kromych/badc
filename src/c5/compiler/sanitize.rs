@@ -31,11 +31,10 @@ pub enum Check {
     IntegerDivideByZero,
     /// A load of an enumerated type outside its values. A C enumeration
     /// holds every value of its compatible integer type (C17 6.7.2.2p4), so
-    /// no C load is out of range and the check inserts nothing, as gcc's and
-    /// clang's do in C.
+    /// no C load is out of range and the check inserts nothing.
     Enum,
     /// A subscript of an array of known bound past it (C17 6.5.6p8), but
-    /// for a trailing member gcc lets extend past its bound; clang's
+    /// for a trailing member taken to extend past its bound; clang's
     /// `array-bounds`. An address one past the last element is in bounds.
     Bounds,
     /// [`Check::Bounds`] on those trailing members as well.
@@ -60,9 +59,9 @@ pub enum Check {
     /// A `__builtin_unreachable()` reached: its handler reports it and ends
     /// the program.
     Unreachable,
-    /// Flowing off the end of a value-returning function. gcc and clang check
-    /// it in C++ alone, where it is undefined; in C only a use of the value
-    /// is (C17 6.9.1p12), so the check inserts nothing, as theirs do.
+    /// Flowing off the end of a value-returning function, undefined in C++;
+    /// in C only a use of the value is (C17 6.9.1p12), so the check inserts
+    /// nothing.
     Return,
     /// An unsigned `+`, `-`, `*` or negation whose value its type cannot
     /// represent: defined, reduced modulo (C17 6.2.5p9); clang's check.
@@ -74,7 +73,7 @@ pub enum Check {
     /// signed, that changes the value (C17 6.3.1.3p2-p3).
     ImplicitSignedIntegerTruncation,
     /// `__builtin_clz` or `__builtin_ctz`, or a wider form, of 0, whose
-    /// count gcc and clang leave undefined.
+    /// count is undefined.
     Builtin,
     /// A null argument to a parameter `nonnull` names.
     NonnullAttribute,
@@ -189,8 +188,8 @@ impl Check {
 }
 
 /// The checks a unit runs, and of those, the ones that trap instead of
-/// calling a handler and the ones whose handler returns, as gcc and clang
-/// default it: every handler returns.
+/// calling a handler and the ones whose handler returns; by default every
+/// handler returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sanitize {
     pub enabled: u32,
@@ -359,7 +358,7 @@ impl Compiler {
     /// Check the pointer arithmetic at node `id` -- `+` or `-` of an integer,
     /// a subscript, `+=`, `-=`, `++` or `--` -- by the byte offset node
     /// `offset`, at `at`, under `-fsanitize=pointer-overflow`. An offset
-    /// that folds to 0 takes no check: clang's folds the step away.
+    /// that folds to 0 takes no check.
     pub(super) fn sanitize_pointer_step(
         &mut self,
         id: ExprId,
@@ -387,10 +386,10 @@ impl Compiler {
     /// Check the member access at node `member`, of the field `(ty, off)`
     /// of the structure type `record`, whose operand `obj` is the
     /// structure's address (`->`) or the structure (`.`): the structure's
-    /// address as clang checks it, at the member name `at` for `->` and
+    /// address, at the member name `at` for `->` and
     /// where the operand begins (`begin`) for `.` of a dereference, then the
-    /// member's. A `.` operand that is a named object takes no check, nor,
-    /// as clang's checks none, a structure address that is a constant.
+    /// member's. A `.` operand that is a named object takes no check, nor a
+    /// structure address that is a constant.
     pub(super) fn sanitize_member(
         &mut self,
         (obj, member): (ExprId, Option<ExprId>),
@@ -448,8 +447,7 @@ impl Compiler {
     /// The check of an access of a `ty` object aligned to `align` at `at`,
     /// by the node `node` where it names a pointer to a function: clang's
     /// `TypeMismatchDataV1`, the site, the type, the alignment's log2 and
-    /// the access `kind`. A volatile access is not checked, as clang checks
-    /// none.
+    /// the access `kind`. A volatile access is not checked.
     fn access_check(
         &mut self,
         (ty, node): (i64, Option<ExprId>),
@@ -1028,7 +1026,7 @@ impl Compiler {
     }
 
     /// The `TypeDescriptor` of an object of type `ty`, named as declared,
-    /// qualifiers and all, as clang names an accessed object; a pointer to
+    /// qualifiers and all; a pointer to
     /// a function by the function type the node `node` has.
     fn ubsan_object_type(&mut self, ty: i64, node: Option<ExprId>) -> i64 {
         let spelled = match node.and_then(|id| self.expr_fn(id)) {
@@ -1076,7 +1074,7 @@ impl Compiler {
     }
 }
 
-/// The type `text` spells as clang spells it in a report: a space before a
+/// The type `text` spells, in a report's form: a space before a
 /// pointer declarator that follows a name and none after a `*` (`int *`,
 /// `int *const *`, `int (*)[4]`).
 fn clang_spelling(text: &str) -> String {

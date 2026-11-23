@@ -3,7 +3,7 @@
 //! `-no-pie` and `--freestanding`). The dynamic tables are present when the
 //! loader has work in the image: a position-independent placement, or a
 //! shared-library binding; an executable among them also names the loader
-//! in `PT_INTERP`. An `ET_DYN` image is linked at 0, as GNU ld links it.
+//! in `PT_INTERP`. An `ET_DYN` image is linked at 0.
 
 use crate::c5::diag::Code;
 use alloc::format;
@@ -408,8 +408,7 @@ impl SectionPlan {
     }
 
     /// The header an address in `s` is placed against when `s` has none:
-    /// the nearest one before it outside the TLS template, as bfd moves a
-    /// symbol off an output section it removes.
+    /// the nearest one before it outside the TLS template.
     fn holder_of(&self, s: Sec) -> u16 {
         let at = SECTION_ORDER.iter().position(|&x| x == s).unwrap();
         let mut end = self.index_of(s);
@@ -2315,7 +2314,7 @@ impl<'a> ElfImageWriter<'a> {
     /// needs `PT_GNU_RELRO` to re-protect it, which a static image lacks.
     /// A position-independent image's relro region joins its read-only load
     /// on the same condition. Each load's `p_align` covers its strictest
-    /// content, as GNU ld sets it.
+    /// content.
     fn layout_data_segments(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let placed = self.placed();
@@ -2759,7 +2758,7 @@ impl<'a> ElfImageWriter<'a> {
     /// local `STT_FUNC` per PLT trampoline (so a debugger's `b malloc`
     /// resolves to the trampoline) and per defined function, the section
     /// symbols the relocation tables reference right after the sentinel,
-    /// `_GLOBAL_OFFSET_TABLE_` as bfd defines it, and the entry stub as
+    /// `_GLOBAL_OFFSET_TABLE_`, and the entry stub as
     /// `_start`, the name crt1's entry has, unless the program defines one.
     fn build_static_symtab(&mut self) {
         let build = self.build;
@@ -3065,7 +3064,7 @@ impl<'a> ElfImageWriter<'a> {
         e_ident[4] = ELFCLASS64;
         e_ident[5] = ELFDATA2LSB;
         e_ident[6] = EV_CURRENT;
-        // bfd marks an image defining an `STB_GNU_UNIQUE` symbol GNU.
+        // `STB_GNU_UNIQUE` is a GNU extension, so its image is ELFOSABI_GNU.
         e_ident[7] = match self.build.unique_symbols.is_empty() {
             true => ELFOSABI_SYSV,
             false => ELFOSABI_GNU,
@@ -4838,9 +4837,8 @@ mod tests {
         out
     }
 
-    /// `DF_1_PIE` marks a position-independent executable, as GNU ld and
-    /// lld mark a `-pie` link; a placed image and a shared object carry
-    /// no `DT_FLAGS_1`.
+    /// `DF_1_PIE` marks a position-independent executable (a `-pie` link);
+    /// a placed image and a shared object carry no `DT_FLAGS_1`.
     #[test]
     fn only_a_position_independent_executable_carries_df_1_pie() {
         use crate::Compiler;
@@ -5015,7 +5013,7 @@ mod tests {
     /// Walk the program-header table for the first phdr matching `p_type`.
     /// An `ET_DYN` image is linked at 0 and an `ET_EXEC` one at its
     /// placement; only an executable names the loader in `PT_INTERP`, and
-    /// `DT_RELA` appears with a non-empty `.rela.dyn`, as under GNU ld.
+    /// `DT_RELA` appears with a non-empty `.rela.dyn`.
     #[test]
     fn a_shared_object_is_linked_at_zero_and_names_no_loader() {
         use crate::Compiler;
@@ -5546,7 +5544,7 @@ mod tests {
     }
 
     /// `--build-id`: a note the loader maps, whose descriptor is the SHA-1
-    /// of the image with the descriptor zero, as GNU ld computes it.
+    /// of the image with the descriptor zero.
     #[test]
     fn a_build_id_note_holds_the_image_digest() {
         type Digest = fn(&[u8]) -> Vec<u8>;
@@ -6011,7 +6009,7 @@ mod tests {
 
     /// `DT_DEBUG` is the slot the loader writes its `r_debug` into, where a
     /// debugger finds the link map: an executable carries it in a load the
-    /// loader can write, a shared object carries none, as under GNU ld.
+    /// loader can write, a shared object carries none.
     #[test]
     fn an_executable_gives_the_loader_its_debug_slot() {
         let exe = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
@@ -6248,8 +6246,8 @@ mod tests {
     }
 
     /// A label past the last data byte of an image without `.bss` is
-    /// placed against `.data`, the section bfd moves a symbol of a removed
-    /// output section to, not against the header after it.
+    /// placed against `.data`, the nearest section before it, not against
+    /// the header after it.
     #[test]
     fn a_label_at_the_end_of_data_without_bss_is_placed_against_data() {
         use crate::Compiler;

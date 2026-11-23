@@ -547,12 +547,12 @@ impl Compiler {
         }
     }
 
-    /// gcc's rule for an array member reached through a pointer: it has
-    /// no bound the object can be held to when its type is incomplete,
-    /// or when `-fstrict-flex-arrays` admits its bound and it is the last
-    /// member of every container on the way, at most one of which is a
-    /// struct (`records` and `at_end` as `member_nesting` counts them,
-    /// accumulated over the chain).
+    /// An array member reached through a pointer has no bound the object
+    /// can be held to when its type is incomplete, or when
+    /// `-fstrict-flex-arrays` admits its bound and it is the last member of
+    /// every container on the way, at most one of which is a struct
+    /// (`records` and `at_end` as `member_nesting` counts them, accumulated
+    /// over the chain).
     pub(super) fn member_is_unbounded(&self, f: &StructField, records: u32, at_end: bool) -> bool {
         if f.array_size < 0 && !f.zero_len {
             return true;

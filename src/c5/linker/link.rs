@@ -1154,8 +1154,8 @@ pub(crate) enum Supplier {
 }
 
 /// A PE import names its DLL: an import library or DLL the link read that
-/// exports `name` supplies it ahead of a binding, as link.exe and GNU ld
-/// take the import from it. Otherwise a routed name keeps its routing and
+/// exports `name` supplies it ahead of a binding. Otherwise a routed name
+/// keeps its routing and
 /// an unrouted one binds against the first library exporting it, as a
 /// system linker resolves it; `usable` admits a library by index.
 pub(crate) fn supplier(
@@ -1407,8 +1407,8 @@ struct Link<'a> {
     objs: &'a [NativeObject],
     machine: NativeMachine,
     allow_undefined: bool,
-    /// A weak reference no input defines resolves to 0, as GNU ld and
-    /// link.exe resolve it; ld64 resolves it only through a dylib that
+    /// A weak reference no input defines resolves to 0 in an ELF or PE
+    /// image; ld64 resolves it only through a dylib that
     /// exports it, else it is undefined (a Mach-O image).
     weak_undefined_is_zero: bool,
     preemption: Preemption,
@@ -2023,7 +2023,7 @@ impl<'a> Link<'a> {
     /// variable. A shared library's thread-local sits where the loader places
     /// that library's block, so an initial-exec reference to it reads a GOT
     /// slot the loader fills, and a general-dynamic or descriptor sequence is
-    /// rewritten to that reference, as GNU ld rewrites it. A shared library
+    /// rewritten to that reference. A shared library
     /// needs the loader's dynamic TLS relocations, which this link does not
     /// make.
     fn apply_tls_reloc(
@@ -2117,8 +2117,8 @@ impl<'a> Link<'a> {
         Ok(())
     }
 
-    /// A shared library's thread-local access keeps its dynamic model, as
-    /// GNU ld keeps it: the loader places the library's block, so each model
+    /// A shared library's thread-local access keeps its dynamic model: the
+    /// loader places the library's block, so each model
     /// reads a GOT entry the TLS dynamic relocations fill, and only an
     /// offset into the module's block is known at link time.
     fn apply_shared_tls_reloc(
@@ -2298,8 +2298,8 @@ impl<'a> Link<'a> {
     }
 
     /// A reference other than a thread-local access to a name the binding
-    /// shared library exports as a thread-local is refused, as GNU ld
-    /// refuses it: the variable has an offset in each thread's block, not
+    /// shared library exports as a thread-local is refused: the variable
+    /// has an offset in each thread's block, not
     /// an address the loader could bind.
     fn refuse_library_thread_local(&self, name: &str) -> Result<(), C5Error> {
         match self.shared_libs.iter().find(|l| l.exports.contains(name)) {
@@ -2682,8 +2682,7 @@ impl<'a> Link<'a> {
     /// `_tls_used` directory a unit names follow them. Each 8-byte slot is
     /// a `.text` pointer, so a `DataAbsReloc` gives the PIE its load-time
     /// R_*_RELATIVE.
-    /// Point each entry naming another unit's function at its definition,
-    /// as GNU ld resolves an `.init_array` slot's relocation.
+    /// Point each entry naming another unit's function at its definition.
     fn resolve_named_init_entries(&mut self) -> Result<(), C5Error> {
         for (array, k, name) in core::mem::take(&mut self.named_init_entries) {
             let at = match self.defined.get(name) {
@@ -3099,7 +3098,7 @@ impl<'a> Link<'a> {
                 .find(|l| l.data_exports.contains(&name))
                 .expect("a candidate is a shared-library data object");
             // The library binds its own references to a protected object,
-            // which a copy would leave behind, as GNU ld refuses it.
+            // which a copy would leave behind, so the copy is refused.
             if lib.protected_exports.contains(&name) {
                 return Err(link_err(
                     Code::RELOCATION,
@@ -3150,8 +3149,8 @@ impl<'a> Link<'a> {
     /// The symbols the link itself defines: the init/fini array bounds
     /// (always, so the runtime's references never dangle; an empty
     /// array leaves start == end), the GOT base, and the `__start_` /
-    /// `__stop_` pair of each grouped section. bfd defines the latter
-    /// two only where nothing else does, so an object that already
+    /// `__stop_` pair of each grouped section. The latter two are
+    /// defined only where nothing else defines them, so an object that already
     /// defines the name keeps its definition -- `__start_tty` is an
     /// ordinary function in one such tree.
     fn define_link_symbols(&mut self) {
@@ -3168,7 +3167,7 @@ impl<'a> Link<'a> {
                     value: off,
                     size: 0,
                     // A boundary address, not an object: `STT_NOTYPE`, hidden
-                    // as GNU ld's default script provides it.
+                    // as the module's own.
                     kind: super::object::STT_NOTYPE,
                     visibility: super::object::STV_HIDDEN,
                     weak: false,
@@ -3259,7 +3258,7 @@ impl<'a> Link<'a> {
                 },
             );
         }
-        // Protected, GNU ld's `-z start-stop-visibility` default.
+        // Protected, the `-z start-stop-visibility` default.
         for (sym, section, value) in &self.start_stop_bounds {
             if self.defined.contains_key(sym.as_str()) {
                 continue;
@@ -3833,7 +3832,7 @@ impl<'a> Link<'a> {
             .or_insert_with(|| (order, site.to_string()));
     }
 
-    /// One diagnostic per undefined name, as GNU ld reports them all, then `err`.
+    /// One diagnostic per undefined name, then `err`.
     fn undefined_error(&mut self, err: Option<C5Error>) -> Option<C5Error> {
         let mut names: Vec<_> = core::mem::take(&mut self.undefined).into_iter().collect();
         names.sort_by_key(|(_, (order, _))| *order);
@@ -4005,8 +4004,8 @@ impl<'a> Link<'a> {
         patch_offset: usize,
         site: &RelocSite<'_>,
     ) -> Result<(), C5Error> {
-        // `GOT + A - P` names the GOT base whatever the symbol, as GNU ld
-        // resolves it; the assemblers emit it against the base's name.
+        // `GOT + A - P` (x86-64 psABI) names the GOT base whatever the
+        // symbol; the assemblers emit it against the base's name.
         if self.machine == NativeMachine::X86_64
             && matches!(reloc.rtype, R_X86_64_GOTPC32 | R_X86_64_GOTPC64)
         {
@@ -4211,7 +4210,7 @@ impl<'a> Link<'a> {
         }
         if unresolved_weak && self.weak_undefined_is_zero {
             // A distance from the GOT base takes address 0 for the
-            // symbol, as GNU ld resolves it; the site's guard skips it.
+            // symbol; the site's guard skips it.
             if is_x86_64_got_distance(self.machine, reloc.rtype) {
                 self.pending_imports.push(PendingImportReloc {
                     text_offset: patch_offset as u64,
@@ -6017,7 +6016,7 @@ fn plt_eligible(machine: NativeMachine, rtype: u32) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataImportSlots {
     /// The stub, which an ELF executable placed at its link address publishes
-    /// as the import's address (GNU ld's canonical PLT entry).
+    /// as the import's address (a canonical PLT entry).
     Stub,
     /// The symbol (Mach-O, ELF).
     Bind,
@@ -7268,7 +7267,7 @@ mod tests {
     }
 
     /// A section symbol has no name of its own; a diagnostic names the
-    /// input section it stands for, as GNU ld does.
+    /// input section it stands for.
     #[test]
     fn a_section_symbol_is_named_by_its_section_in_a_diagnostic() {
         use crate::c5::linker::object::{InputSection, NativeSymbol, STT_FUNC, STT_SECTION};
@@ -7328,7 +7327,7 @@ mod tests {
 
     /// An absolute form in a position-independent image is refused on
     /// the reference, not on a missing patcher, and names the output
-    /// kind the way GNU ld does.
+    /// kind.
     #[test]
     fn an_absolute_in_a_pie_names_the_constraint_and_the_output_kind() {
         let origin = RelocOrigin::in_named_section("t.o", ".text");
@@ -9018,7 +9017,7 @@ mod tests {
     }
 
     /// GOT references to a symbol the link defines: a load, a call and a
-    /// jump take the direct forms GNU ld gives them; any other instruction,
+    /// jump take their direct forms; any other instruction,
     /// and every reference to an absolute symbol, reads an 8-byte `.data`
     /// slot the link fills; an import's slot read stays with the writer.
     #[test]
@@ -9172,8 +9171,8 @@ mod tests {
         alloc::vec![a, b]
     }
 
-    /// Each x86-64 model's sequence becomes the local-exec one GNU ld and lld
-    /// make of it, without its `__tls_get_addr` call. The block, 0x2014 bytes
+    /// Each x86-64 model's sequence becomes its local-exec form, without its
+    /// `__tls_get_addr` call. The block, 0x2014 bytes
     /// rounded to 0x2018, ends at the thread pointer: `ext` at -8, `tl` -0x2014.
     #[test]
     fn foreign_x86_64_thread_local_sequences_become_local_exec() {
@@ -9437,8 +9436,8 @@ mod tests {
     }
 
     /// The general-dynamic and descriptor sequences reaching a shared
-    /// library's thread-local become the initial-exec ones GNU ld makes of
-    /// them, reading the GOT slot of the thread-local's import, without the
+    /// library's thread-local become initial-exec ones, reading the GOT
+    /// slot of the thread-local's import, without the
     /// `__tls_get_addr` call.
     #[test]
     fn a_library_thread_locals_dynamic_sequences_become_initial_exec() {
@@ -9593,7 +9592,7 @@ mod tests {
 
     /// A thread-local access binds no library's ordinary symbol, and no
     /// other reference binds a library's thread-local: neither names an
-    /// address the loader could give the other, and GNU ld refuses both.
+    /// address the loader could give the other, so both are refused.
     #[test]
     fn a_thread_local_and_an_ordinary_symbol_do_not_bind_to_each_other() {
         use crate::c5::object::elf_reloc_types::R_X86_64_GOTTPOFF;

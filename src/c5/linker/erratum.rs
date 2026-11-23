@@ -1,6 +1,6 @@
 //! Cortex-A53 erratum 843419 sequence detection and the encodings its
 //! workaround writes. The conditions follow the erratum notice
-//! (ARM-EPM-048406) as GNU ld and LLD implement them, with LLD's
+//! (ARM-EPM-048406), with LLD's
 //! classification masks: an ADRP at page offset 0xff8 or 0xffc writing
 //! Rn; a load/store (single register, STP/STNP, ST1, exclusive, or
 //! literal) that does not write Rn; optionally one non-branch

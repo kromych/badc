@@ -162,7 +162,7 @@ fn double_precision_and_ext_moves() {
 #[test]
 fn immediate_reduced_to_operation_width() {
     // An immediate wider than the operation is reduced to the operation
-    // width (GNU as warns "shortened to"). Form selection still sees the
+    // width. Form selection still sees the
     // value as written, so a short imm8 form is chosen only when the
     // untruncated value fits it. Every expected encoding below was taken
     // from the reference assemblers, GNU as and clang.
@@ -499,9 +499,9 @@ fn enc_in(mode: Mode, addr: u8, mnem: &str, w: Option<u8>, ops: &[Opnd]) -> Vec<
 
 /// A 16-bit operand against the accumulator is the one width where the
 /// `05 iw` accumulator form and the `83 /n ib` sign-extended form are the
-/// same length. GNU as picks the sign-extended one, and does so in every
-/// mode; an immediate outside the signed-byte range has no such form and
-/// takes the accumulator one in both assemblers.
+/// same length. The sign-extended one is taken, in every mode; an immediate
+/// outside the signed-byte range has no such form and takes the accumulator
+/// one.
 #[test]
 fn word_accumulator_alu_immediate_matches_gnu_as() {
     // Mnemonic, its `83 /n` ModRM byte for `%ax`, and its accumulator opcode.
@@ -1204,10 +1204,10 @@ mod differential {
     }
 
     /// Forms whose register-register operand order the reference toolchains
-    /// assign differently. GNU as, and badc with it, put the data register
-    /// in ModRM.rm and the MSR index in ModRM.reg for both directions of the
-    /// user MSR pair, as the immediate forms do in every toolchain; LLVM
-    /// exchanges the two for `urdmsr` alone. A case for such a form agrees
+    /// assign differently. badc puts the data register in ModRM.rm and the
+    /// MSR index in ModRM.reg for both directions of the user MSR pair, as
+    /// the immediate forms do; GNU as agrees, and LLVM exchanges the two for
+    /// `urdmsr` alone. A case for such a form agrees
     /// when the reference decodes the same instruction with its two
     /// operands exchanged; the tally counts it apart, so the divergence
     /// stays visible without turning the run red.
@@ -1248,7 +1248,7 @@ mod differential {
     /// accepts the instruction but the catalog has no form for it) is
     /// reported, not fatal; `skip` is a case the assembler itself rejects;
     /// `divergent` is a case the two reference toolchains would encode
-    /// differently, where badc follows GNU as ([`OPERAND_ORDER_DIVERGENT`]).
+    /// differently ([`OPERAND_ORDER_DIVERGENT`]).
     struct Tally {
         ok: usize,
         bad: usize,

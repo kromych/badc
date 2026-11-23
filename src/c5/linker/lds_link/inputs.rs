@@ -92,7 +92,7 @@ pub struct LdsObject {
 
 impl LdsObject {
     /// The name a diagnostic gives symbol `i`: its own, or for a section
-    /// symbol, which has none, its section's, as GNU ld reports it.
+    /// symbol, which has none, its section's.
     pub(super) fn symbol_name(&self, i: usize) -> String {
         let sym = &self.symbols[i];
         if !sym.name.is_empty() || sym.kind() != super::STT_SECTION {

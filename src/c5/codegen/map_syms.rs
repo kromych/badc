@@ -36,7 +36,7 @@ pub(crate) struct MapMark {
     pub class: MapClass,
     /// Opens a run whether or not the range has bytes. Alignment padding
     /// does: the directive fixes the class of the bytes it would write
-    /// even where it writes none, and GNU as records that.
+    /// even where it writes none.
     pub opens: bool,
 }
 

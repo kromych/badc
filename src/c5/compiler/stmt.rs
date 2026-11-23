@@ -2874,8 +2874,8 @@ impl Compiler {
         }
         // x86 `A`. On i386 this names the `edx:eax` pair; on x86-64 it is the
         // `a` or `d` register (a value wider than a register has no pair form
-        // here and is rejected at the operand). GCC and clang allocate
-        // `rax` for it, which `Fixed(0)` spells.
+        // here and is rejected at the operand). It allocates `rax`, which
+        // `Fixed(0)` spells.
         if is_x86 && body == "A" {
             return Some((AsmConstraint::Fixed(0), is_rw));
         }

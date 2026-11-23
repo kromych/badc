@@ -36,8 +36,8 @@ impl AlignNops {
         }
     }
 
-    /// Maximal-length no-ops GNU as lays in one gap before it jumps over the
-    /// padding instead.
+    /// Maximal-length no-ops laid in one gap before a jump over the padding
+    /// replaces them.
     fn x86_max_nops(self) -> usize {
         match self {
             AlignNops::X86Bits16 => X86_MAX_NOPS_16,
@@ -67,7 +67,7 @@ pub(crate) enum AlignKind {
 }
 
 /// The alignment directive family and the width of the fill unit its
-/// spelling selects. GNU as gives `.balign` and `.p2align` a `w` and an `l`
+/// spelling selects. `.balign` and `.p2align` have a `w` and an `l`
 /// spelling padding with a 2- or 4-byte value; `.align` has neither.
 pub(crate) fn align_directive(tok: &str) -> Option<(AlignKind, u8)> {
     let (base, width) = match tok.as_bytes().last() {
@@ -93,16 +93,16 @@ pub(crate) struct AlignFill {
 }
 
 impl AlignFill {
-    /// Whether this is the one-byte x86 NOP, which GNU as pads with its
-    /// NOP sequence rather than by repeating the byte.
+    /// Whether this is the one-byte x86 NOP, which pads with the NOP
+    /// sequence rather than by repeating the byte.
     fn is_x86_nop(&self) -> bool {
         self.width == 1 && self.value as u8 == X86_NOP_OPCODE
     }
 }
 
 /// An alignment directive's first operand: a byte count, or an expression
-/// over labels. GNU as requires the operand to reduce to a constant where
-/// the directive stands, so only definitions the layout has already placed
+/// over labels. The operand must reduce to a constant where the directive
+/// stands, so only definitions the layout has already placed
 /// resolve and a forward reference has no value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AlignSpec {
@@ -118,7 +118,7 @@ pub(crate) enum AlignSpec {
 
 /// The byte alignment a resolved operand denotes: a power-of-two byte count,
 /// or two raised to an exponent up to 12. A zero count is an alignment of
-/// one, as GNU as reads it. `None` when the operand is out of range.
+/// one. `None` when the operand is out of range.
 fn align_spec_value(v: i64, pow2: bool) -> Option<u32> {
     if pow2 {
         return (0..=12).contains(&v).then(|| 1u32 << v);
@@ -141,7 +141,7 @@ impl AlignSpec {
             AlignSpec::Expr { text, pow2 } => (text, *pow2),
         };
         // A numeric forward reference names a definition the layout has not
-        // placed yet, which GNU as has no value for here.
+        // placed yet, so it has no value here.
         let placed = |t: &str| {
             let fwd = t.ends_with('f') && numeric_label_digits(t).is_some();
             (!fwd).then(|| resolve(t)).flatten()
@@ -179,8 +179,8 @@ pub(crate) fn resolve_align_item(
 }
 
 /// Parse the operands of an alignment directive: `spec[, fill[, max]]`.
-/// GNU as allows an empty fill field (`.p2align e,,max`) to keep the default
-/// fill while giving a max skip. `fill_width` is the directive spelling's
+/// An empty fill field (`.p2align e,,max`) keeps the default fill while
+/// giving a max skip. `fill_width` is the directive spelling's
 /// fill unit width. Returns the alignment operand's text, the optional fill,
 /// and the optional maximum bytes to skip.
 pub(crate) fn parse_align_operands(
@@ -212,7 +212,7 @@ pub(crate) fn parse_align_operands(
 /// Parse an alignment directive to its section item. `kind` selects the
 /// operand's convention -- `.align`'s is the target's -- and `width` the
 /// fill unit. A non-literal operand is kept as an expression the layout
-/// resolves where the directive stands, as GNU as resolves one.
+/// resolves where the directive stands.
 pub(crate) fn parse_align_item(
     kind: AlignKind,
     width: u8,
@@ -243,7 +243,7 @@ pub(crate) fn parse_align_item(
 }
 
 /// Bytes needed to advance `at` to the next multiple of `align`, or zero when
-/// GNU as would drop the alignment because the gap exceeds the `max` skip.
+/// the gap exceeds the `max` skip and the alignment is dropped.
 pub(crate) fn align_gap(at: i64, align: i64, max: Option<u32>) -> i64 {
     let gap = (align - at.rem_euclid(align)).rem_euclid(align);
     match max {
@@ -253,8 +253,8 @@ pub(crate) fn align_gap(at: i64, align: i64, max: Option<u32>) -> i64 {
 }
 
 /// The byte pattern that fills an alignment gap. An explicit fill unit is
-/// repeated little-endian. With no explicit fill GNU as pads an executable
-/// section with the target NOP encoding (single-byte on x86, the 4-byte
+/// repeated little-endian. With no explicit fill an executable section pads
+/// with the target NOP encoding (single-byte on x86, the 4-byte
 /// instruction on AArch64) and a data section with zero. The pattern cycles
 /// by absolute section offset: an accepted gap starts on a multiple of the
 /// fill width, so that is also the gap-relative order, and the AArch64 NOP
@@ -278,7 +278,7 @@ pub(crate) fn align_fill_pattern(
 /// `after_insn` reports whether the byte before the gap came from an
 /// instruction, which the x86 NOP sequence depends on.
 ///
-/// GNU as requires the gap to be a whole number of fill units, so a `.balignl`
+/// The gap must be a whole number of fill units, so a `.balignl`
 /// or `.p2alignw` whose padding does not divide by its width is an error
 /// rather than a truncated unit.
 pub(crate) fn push_align_fill(
@@ -313,8 +313,8 @@ pub(crate) fn push_align_fill(
         out.push(pat[out.len() % plen]);
     }
     // The padding holds instructions where the fill is the target NOP, and on
-    // AArch64 also where it is explicit, which GNU as leaves in the
-    // instruction state.
+    // AArch64 also where it is explicit, which stays in the instruction
+    // mapping state.
     Ok((
         0,
         if exec && (aarch64 || nop_fill) {
@@ -329,8 +329,8 @@ pub(crate) fn push_align_fill(
 /// boundary code and alignment padding split on.
 pub(crate) const A64_NOP: [u8; 4] = [0x1f, 0x20, 0x03, 0xd5];
 
-/// Fill an AArch64 executable alignment gap as GNU as does: the gap's
-/// sub-word remainder as zeros, then whole NOPs. Returns the zero run's
+/// Fill an AArch64 executable alignment gap: the gap's sub-word
+/// remainder as zeros, then whole NOPs. Returns the zero run's
 /// length, which is data where the NOPs are code.
 pub(crate) fn push_a64_exec_align_fill(out: &mut alloc::vec::Vec<u8>, gap: usize) -> usize {
     let zeros = gap % A64_NOP.len();
@@ -341,9 +341,9 @@ pub(crate) fn push_a64_exec_align_fill(out: &mut alloc::vec::Vec<u8>, gap: usize
     zeros
 }
 
-/// Bytes before an instruction: GNU as brings an AArch64 executable
-/// section's counter to the instruction size only out of the data mapping
-/// state, so an instruction after an alignment directive or an odd `.org`
+/// Bytes before an instruction: an AArch64 executable section's counter
+/// comes to the instruction size only out of the data mapping state, so
+/// an instruction after an alignment directive or an odd `.org`
 /// stays where the counter is. The padding belongs to the data run, and
 /// the labels already placed keep their unaligned values. x86-64 never
 /// pads.
@@ -360,8 +360,8 @@ pub(crate) fn insn_align_gap(
     }
 }
 
-/// The x86-64 multi-byte NOP of each length GNU as pads executable
-/// alignment gaps with, lengths 1..=11.
+/// The x86-64 multi-byte NOP of each length that pads executable
+/// alignment gaps, lengths 1..=11.
 pub(crate) const X86_NOPS: [&[u8]; 11] = [
     &[0x90],
     &[0x66, 0x90],
@@ -378,8 +378,8 @@ pub(crate) const X86_NOPS: [&[u8]; 11] = [
     ],
 ];
 
-/// The 16-bit no-op of each length GNU as pads a `.code16` executable
-/// alignment gap with, lengths 1..=5.
+/// The 16-bit no-op of each length that pads a `.code16` executable
+/// alignment gap, lengths 1..=5.
 pub(crate) const X86_NOPS_16: [&[u8]; 5] = [
     &[0x90],
     &[0x89, 0xf6],
@@ -388,21 +388,21 @@ pub(crate) const X86_NOPS_16: [&[u8]; 5] = [
     &[0x2e, 0x8d, 0xb4, 0x00, 0x00],
 ];
 
-/// Maximal-length NOPs GNU as lays in one alignment gap before it jumps over
-/// the padding instead. The threshold is on the count, so the byte gap it
+/// Maximal-length NOPs laid in one alignment gap before a jump over the
+/// padding replaces them. The threshold is on the count, so the byte gap it
 /// falls at is this times the longest NOP of the mode's set.
 pub(crate) const X86_MAX_NOPS: usize = 7;
 
 /// The same count under the 16-bit no-op forms.
 pub(crate) const X86_MAX_NOPS_16: usize = 2;
 
-/// Fill an x86 executable alignment gap with multi-byte NOPs, as GNU as
-/// does: the sub-maximal remainder first, then maximal-length NOPs.
+/// Fill an x86 executable alignment gap with multi-byte NOPs: the
+/// sub-maximal remainder first, then maximal-length NOPs.
 ///
 /// `after_insn` reports whether the byte before the gap came from an
 /// instruction. When it did not -- the gap opens after a data directive,
 /// which the assembler cannot assume ends on an instruction boundary --
-/// GNU as leads with the one-byte NOP and fills the rest by the same
+/// the fill leads with the one-byte NOP and fills the rest by the same
 /// scheme. An alignment directive's own fill does not establish a
 /// boundary, so consecutive alignments after data each take the leading
 /// byte.
@@ -435,8 +435,8 @@ pub(crate) fn push_x86_exec_align_fill(
 }
 
 /// Lay a jump over the remaining `gap` bytes of alignment padding and report
-/// the bytes it took. GNU as takes the `rel8` form while the distance past it
-/// fits a signed byte and the 32-bit-displacement form otherwise; a distance
+/// the bytes it took. The jump takes the `rel8` form while the distance past
+/// it fits a signed byte and the 32-bit-displacement form otherwise; a distance
 /// neither reaches leaves the gap to the NOPs.
 fn push_x86_pad_jump(out: &mut alloc::vec::Vec<u8>, gap: usize, nops: AlignNops) -> usize {
     const JMP_REL8: u8 = 0xeb;
@@ -456,7 +456,7 @@ fn push_x86_pad_jump(out: &mut alloc::vec::Vec<u8>, gap: usize, nops: AlignNops)
     }
 }
 
-/// GNU as routes a code-section alignment whose explicit fill byte is the
-/// one-byte NOP through the NOP-sequence path rather than repeating the
-/// byte, so `.balign n, 0x90` pads like a fill-less `.balign n`.
+/// A code-section alignment whose explicit fill byte is the one-byte NOP
+/// takes the NOP-sequence path rather than repeating the byte, so
+/// `.balign n, 0x90` pads like a fill-less `.balign n`.
 pub(crate) const X86_NOP_OPCODE: u8 = 0x90;

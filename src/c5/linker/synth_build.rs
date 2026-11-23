@@ -750,8 +750,7 @@ fn aarch64_unwind(
 /// precedence over the binding, as on the paths with no link step. A
 /// zero-filled one in an ELF image is the slot a copy relocation fills with
 /// the library's object and binds every reference to (the runtime's
-/// `environ` and `tzname`), as GNU ld resolves a common symbol a shared
-/// library defines; a PE or Mach-O image reaches a library object only
+/// `environ` and `tzname`); a PE or Mach-O image reaches a library object only
 /// through a loader-filled slot, so there the definition would leave the
 /// binding naming a slot nothing fills, and is refused.
 fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRelocReq>, C5Error> {
@@ -793,8 +792,8 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
 /// `--export-all` adds functions, `--export-data` adds data globals.
 /// Both gate the export because it widens the global symbol scope. An
 /// ELF executable also exports each definition of a name a linked shared
-/// library defines or references, so the library binds to it, as GNU ld
-/// does; a copy-relocated one is exported by its copy relocation.
+/// library defines or references, so the library binds to it; a
+/// copy-relocated one is exported by its copy relocation.
 /// A shared library exports functions through `exports` and data here.
 fn synth_dynamic_exports(
     merged: &MergedNative,
@@ -1481,7 +1480,7 @@ enum TextAbsolute {
     Placed,
     /// ELF `ET_DYN` and Mach-O `MH_PIE`: the loader picks the base and
     /// neither format admits a relocation against an executable
-    /// section. `shared` picks the output kind GNU ld names.
+    /// section. `shared` picks the output kind the diagnostic names.
     RejectedInPie { shared: bool },
 }
 

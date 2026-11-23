@@ -306,8 +306,8 @@ fn asm_label_renames_every_emitted_symbol() {
 #[test]
 fn an_internal_linkage_data_alias_names_its_target() {
     // `static T a __attribute__((alias("t")))` is an additional local name
-    // for `t`'s storage: gcc emits the alias symbol with `t`'s section,
-    // value and size.
+    // for `t`'s storage: the alias symbol takes `t`'s section, value and
+    // size.
     const STB_LOCAL: u8 = 0;
     const STB_GLOBAL: u8 = 1;
     const STT_OBJECT: u8 = 1;
@@ -1032,8 +1032,7 @@ fn module_script_discard_and_gather() {
 
 /// A `.debug_info` reference to an object the script discarded
 /// resolves to null instead of failing the link: the section describes
-/// the image rather than taking part in it, which is how GNU ld treats
-/// the same reference.
+/// the image rather than taking part in it.
 #[test]
 fn debug_reference_to_a_discarded_object_resolves_to_null() {
     let script = parse_module_script("SECTIONS {\n /DISCARD/ : { *(.discard) *(.discard.*) }\n}\n")
@@ -1795,8 +1794,8 @@ fn a_comdat_group_survives_a_relocatable_merge_once() {
     );
 }
 
-/// `.gnu.linkonce.*` deduplicates by section name here too. GNU ld's
-/// `-r` keeps the first copy and drops the later one whole.
+/// `.gnu.linkonce.*` deduplicates by section name here too: the first
+/// copy stays and the later one is dropped whole.
 #[test]
 fn gnu_linkonce_deduplicates_in_a_relocatable_merge() {
     let unit = |source: &str, fill: u8, only: &str| {
@@ -1825,9 +1824,8 @@ fn gnu_linkonce_deduplicates_in_a_relocatable_merge() {
 }
 
 /// A local reference into a dropped member is reported rather than
-/// redirected onto the surviving copy, which is what GNU ld's `-r`
-/// does; the surviving group's contents need bear no relation to the
-/// dropped one's.
+/// redirected onto the surviving copy; the surviving group's contents
+/// need bear no relation to the dropped one's.
 #[test]
 fn a_local_reference_into_a_dropped_group_fails_the_merge() {
     let unit = |source: &str, fill: u8, refs: bool| {
@@ -1948,11 +1946,11 @@ impl<'a> Img<'a> {
     }
 }
 
-/// An output past `SHN_LORESERVE` sections numbers itself the way gas
-/// and GNU ld do: `e_shnum` 0 with the real count in section header
-/// 0's `sh_size`, `e_shstrndx` `SHN_XINDEX` with the real index in its
-/// `sh_link`, and every symbol in a high section reaching it through
-/// `SHT_SYMTAB_SHNDX`.
+/// An output past `SHN_LORESERVE` sections numbers itself by the gABI's
+/// extended section numbering: `e_shnum` 0 with the real count in
+/// section header 0's `sh_size`, `e_shstrndx` `SHN_XINDEX` with the
+/// real index in its `sh_link`, and every symbol in a high section
+/// reaching it through `SHT_SYMTAB_SHNDX`.
 #[test]
 fn extended_section_numbering_round_trips() {
     const N: usize = 0xff00 + 16;
@@ -2028,9 +2026,8 @@ fn extended_section_numbering_round_trips() {
     assert_eq!(reloc_syms, alloc::vec!["high"]);
 }
 
-/// The merged string tables share suffixes the way gas and GNU ld
-/// build theirs: a name that ends another name points into it and the
-/// tail is stored once.
+/// The merged string tables share suffixes: a name that ends another
+/// name points into it and the tail is stored once.
 #[test]
 fn merged_string_tables_share_suffixes() {
     let mut o = group_obj("a.o", &[(".text", SHF_AX, &[0u8; 8])]);
@@ -2299,10 +2296,10 @@ const char *const *through(void) { return &escaped; }\n";
     }
 }
 
-/// A relocatable link writes the map `-Map` asks for, as GNU ld does,
-/// attributing a section's bytes to the object that contributed them in
-/// rows of exactly four fields that begin with one space and carry a
-/// non-zero size. The row shape is what this pins.
+/// A relocatable link writes the map `-Map` asks for, attributing a
+/// section's bytes to the object that contributed them in rows of
+/// exactly four fields that begin with one space and carry a non-zero
+/// size. The row shape is what this pins.
 #[test]
 fn a_relocatable_link_renders_gnu_ld_map_rows() {
     use crate::c5::linker::relocatable::link_relocatable_with_map;
@@ -2340,8 +2337,8 @@ fn a_relocatable_link_renders_gnu_ld_map_rows() {
 /// spans its own size, and a negative initializer leaves the bytes past
 /// its object zero. The x86-64 psABI 3.1.2 puts an array variable of 16
 /// bytes or more on 16. The sections hold nothing else: `.data` the
-/// one-byte NULL guard and the initialized objects, `.bss` the rest, as
-/// gcc lays them out; the `const` object moved to `.rodata` leaves no gap.
+/// one-byte NULL guard and the initialized objects, `.bss` the rest; the
+/// `const` object moved to `.rodata` leaves no gap.
 #[test]
 fn file_scope_objects_take_their_own_size_and_boundary() {
     let src = "char c1 = -1; char c2; short s1; int i1; int i2; static int i3; int *p;\n\

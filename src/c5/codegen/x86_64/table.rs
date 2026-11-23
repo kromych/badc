@@ -271,12 +271,10 @@ fn memory_forms(name: &str) -> impl Iterator<Item = &'static Form> + '_ {
         .filter(|f| (f.ops.iter()).any(|p| matches!(p, OpPat::Rm(_) | OpPat::Mem(_))))
 }
 
-/// The width GNU as gives a memory operand of `name` that neither a suffix
-/// nor a register sizes: the stack and near-branch group's follows the
-/// mode; a sole width is that width; any other takes the mode's default
-/// operand size, the `l` form, of which GNU as warns ("no instruction
-/// mnemonic suffix given and no register operands"). `None` for an operand
-/// of no width.
+/// The width of a memory operand of `name` that neither a suffix nor a
+/// register sizes: the stack and near-branch group's follows the mode; a
+/// sole width is that width; any other takes the mode's default operand
+/// size, the `l` form. `None` for an operand of no width.
 pub(crate) fn unsized_memory_width(name: &str, mode: Mode) -> Option<u8> {
     let mask = memory_widths(name);
     if mask == 0 {
@@ -297,7 +295,7 @@ pub(crate) fn memory_width_of(name: &str, bytes: u32) -> bool {
 }
 
 /// The one width the catalog gives a memory operand of `name`, which an
-/// operand written without a size takes, as GNU as reads it. A sole 64-bit
+/// operand written without a size takes. A sole 64-bit
 /// width is the branches' and stack ops', whose operand follows the mode's
 /// default, so it is none here.
 pub(crate) fn sole_memory_width(name: &str) -> Option<u8> {
@@ -708,10 +706,9 @@ fn mode_pat(p: OpPat, f: &Form, opw: u8, mode: Mode) -> OpPat {
 /// Whether the register spelling of a 16-bit descriptor field selects the
 /// encoding. `Free`: `lldt` / `ltr` / `verr` / `verw` read `r/m16` and
 /// `lar` / `lsl` an `r32/m16` source, so the other operand picks the row and
-/// any general register at least 16 bits wide names the same field, as GNU as
-/// encodes it. `Sized`: `sldt` / `str` / `smsw` store into the operand, which
-/// has an `r/m16`, an `r32/m16` and an `r64/m16` row, and `lmsw` admits no
-/// wider spelling in GNU as.
+/// any general register at least 16 bits wide names the same field. `Sized`:
+/// `sldt` / `str` / `smsw` store into the operand, which has an `r/m16`, an
+/// `r32/m16` and an `r64/m16` row, and `lmsw` has only the `r/m16` row.
 #[derive(Clone, Copy, PartialEq)]
 enum FieldRm {
     Free,
@@ -733,7 +730,7 @@ fn field_rm(mnem: Mnem) -> Option<FieldRm> {
 /// `lgdt` / `lidt` address a 16-bit limit followed by a base whose width is
 /// the operation size -- `m16&16`, `m16&32`, `m16&64` -- and the suffix names
 /// that base. The base is 64-bit in long mode, where the SDM gives no other
-/// row, and 16- or 32-bit outside it; GNU as admits exactly that.
+/// row, and 16- or 32-bit outside it.
 fn pseudo_descriptor_widths(mnem: Mnem, mode: Mode) -> Option<&'static [u8]> {
     matches!(mnem, Mnem::Sgdt | Mnem::Sidt | Mnem::Lgdt | Mnem::Lidt).then(|| {
         if mode == Mode::Bits64 {
@@ -912,10 +909,10 @@ pub(crate) fn encode_into_disp32(
 /// catalog is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
 /// binary-searches on the integer discriminant to the mnemonic's run of forms.
 ///
-/// Forms of equal length are ranked by immediate field width, which is how
-/// GNU as orders its own templates: a 16-bit operand against the accumulator
-/// encodes `add $1, %ax` as either `05 iw` or `83 /0 ib`, both three bytes,
-/// and the sign-extended byte form is the one it picks.
+/// Forms of equal length are ranked by immediate field width, narrowest
+/// first: a 16-bit operand against the accumulator encodes `add $1, %ax` as
+/// either `05 iw` or `83 /0 ib`, both three bytes, and the sign-extended
+/// byte form is the one taken.
 fn encode_best(
     mnem: Mnem,
     width_override: Option<u8>,
@@ -962,7 +959,7 @@ fn encode_best(
 /// operandless spelling, so the explicit-`%rax` form the compilers emit
 /// (`vmsave %rax`) is supplemented, encoding identically since `rax` is not
 /// named in the opcode; `skinit` takes its SLB address in an implicit `eax`,
-/// and GNU as accepts `skinit %eax` the same way, as it accepts `umwait` and
+/// and `skinit %eax` is accepted the same way, as are `umwait` and
 /// `tpause` with their implicit `edx:eax` deadline spelled after the register
 /// (`umwait %ecx, %edx, %eax`, Intel-ordered `eax, edx, ecx` here).
 /// `invlpga` is the two-operand member of the same class:

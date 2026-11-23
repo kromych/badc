@@ -42,8 +42,7 @@ pub(crate) struct SectionGroups {
     pe: bool,
     merges: BTreeMap<String, String>,
     /// The data family each output section is placed in: the widest of its
-    /// contributions', so one output section is one region, as GNU ld and
-    /// link.exe make one section of a name.
+    /// contributions', so one output section is one region.
     placed: BTreeMap<String, SectionFamily>,
 }
 

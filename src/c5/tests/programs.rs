@@ -473,8 +473,8 @@ fn cpuid_xgetbv_output_width() {
 fn get_cpuid_leaf_checks() {
     // <cpuid.h> __get_cpuid / __get_cpuid_count range-check the leaf against
     // __get_cpuid_max, select the extended maximum for leaves with bit 31 set,
-    // and leave the outputs untouched when they reject one. gcc installs the
-    // header for x86 alone.
+    // and leave the outputs untouched when they reject one. The header
+    // exists for x86 alone.
     for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
         assert_eq!(
             run_fixture_for("get_cpuid_leaf_checks.c", target),
@@ -742,8 +742,8 @@ fn builtin_return_address() {
 
 #[test]
 fn frame_builtins_take_a_non_negative_constant_level() {
-    // GCC types the operand as the number of frames to walk up and
-    // rejects a non-constant one; a negative level names no frame.
+    // The operand is the number of frames to walk up and must be a
+    // constant; a negative level names no frame.
     use crate::c5::Compiler;
     for (src, want) in [
         (
@@ -1670,8 +1670,8 @@ fn msvc_va_start_lowers_as_the_builtin() {
 }
 
 /// arm64's `__va_start(&ap, &v, slot size, alignment, &v)` goes unevaluated
-/// and is checked as clang checks it: the named argument's address, a
-/// pointer, and the slot size, a `size_t`, both present.
+/// and is checked: the named argument's address, a pointer, and the slot
+/// size, a `size_t`, both present.
 #[test]
 fn arm64_msvc_va_start_checks_its_operands() {
     use crate::{CompileOptions, Target};
@@ -1816,11 +1816,10 @@ fn a_parameter_named_like_its_function_keeps_the_function_type() {
     assert!(text.contains(want), "{text}");
 }
 
-/// `-Wvarargs`, on by default as in gcc 16 and clang 22 (C99 7.15.1.1p2,
-/// 7.15.1.4p4): `va_start` naming other than the last named parameter (both
-/// compilers), one declared `register` (both) or one of a type the default
-/// argument promotions change (clang), and `va_arg` of such a type (clang;
-/// gcc warns with no flag). The lines are clang 22's for the same unit; an
+/// `-Wvarargs`, on by default (C99 7.15.1.1p2, 7.15.1.4p4): `va_start`
+/// naming other than the last named parameter, one declared `register` or
+/// one of a type the default argument promotions change, and `va_arg` of
+/// such a type. The lines are clang 22's for the same unit; an
 /// array parameter, a parenthesized one and the arm64 form of MSVC's
 /// `__va_start` draw nothing. Every target, in the `<stdarg.h>` and
 /// `__builtin_` spellings, and windows-x64 in its `__va_start` spelling;
@@ -2516,10 +2515,10 @@ fn attr_arg_keeps_declared_type() {
 
 #[test]
 fn case_label_const_object() {
-    // GCC (GNU mode, at -O) folds a const-qualified scalar arithmetic
-    // object with a constant initializer in case labels, static_assert,
-    // designator indices, and static initializers -- and never in type
-    // dimensions, so `int a[n]` stays a VLA.
+    // A const-qualified scalar arithmetic object with a constant
+    // initializer folds in case labels, static_assert, designator indices,
+    // and static initializers -- and never in type dimensions, so
+    // `int a[n]` stays a VLA.
     assert_eq!(run_fixture("case_label_const_object.c"), 0);
 }
 
@@ -4793,8 +4792,8 @@ fn const_pointer_object_fold() {
 #[test]
 fn const_object_member_fold() {
     // A static initializer folds a scalar that a `[i]` / `.field` chain
-    // reaches in a `const` object with static storage, as GCC does, instead
-    // of taking the element's address; a chain that stops at a row still
+    // reaches in a `const` object with static storage instead of taking
+    // the element's address; a chain that stops at a row still
     // decays to the row's address.
     assert_eq!(run_fixture("const_object_member_fold.c"), 0);
 }
@@ -6665,8 +6664,7 @@ fn typedef_aligned_array_element_rejected() {
     use crate::c5::Compiler;
     // An element type whose typedef-carried alignment exceeds its size
     // cannot tile an array; every declarator-added dimension over it is
-    // an error (gcc: "alignment of array elements is greater than element
-    // size"), while the array typedef itself stays legal.
+    // an error, while the array typedef itself stays legal.
     let cases = [
         "typedef int T __attribute__((aligned(16))); T a[3]; int main(void){return 0;}",
         "typedef int T __attribute__((aligned(16))); int main(void){T a[3]; a[0]=0; return a[0];}",
@@ -7771,9 +7769,9 @@ fn builtin_constant_p() {
 #[test]
 fn builtin_constant_p_value_kinds() {
     // An object or a symbol-relative address is not a constant value:
-    // an array, a struct, `&global` and a compound literal answer 0 as
-    // gcc does; literals, enum constants, `sizeof` and folded pointer
-    // comparisons answer 1.
+    // an array, a struct, `&global` and a compound literal answer 0;
+    // literals, enum constants, `sizeof` and folded pointer comparisons
+    // answer 1.
     assert_eq!(run_fixture("builtin_constant_p_value_kinds.c"), 0);
 }
 
@@ -9209,10 +9207,10 @@ fn value_builtins_take_preprocessed_input() {
 
 #[test]
 fn builtin_nan_reads_its_payload_as_gcc_does() {
-    // gcc 16 skips leading white space and a sign, reads a bare `0x` as 0
-    // and stops at the first NUL; clang calls `nan` for the signed form.
-    // clang also folds `__builtin_assume_aligned` of an address constant in
-    // a static initializer, which gcc rejects.
+    // The payload skips leading white space and a sign, reads a bare `0x`
+    // as 0 and stops at the first NUL (measured with gcc 16).
+    // `__builtin_assume_aligned` of an address constant folds in a static
+    // initializer.
     let src = "static unsigned long long bits(double d) {\n\
                  union { double d; unsigned long long u; } v = { d }; return v.u; }\n\
                static double minus = __builtin_nan(\"-5\");\n\

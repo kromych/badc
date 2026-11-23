@@ -425,8 +425,7 @@ impl Compiler {
     /// their parameters' unqualified types. A type without one agrees with
     /// another without one, and with a non-variadic prototype whose
     /// parameters the default argument promotions leave unchanged; an
-    /// old-style definition's parameter types take no part, as in gcc and
-    /// clang.
+    /// old-style definition's parameter types take no part.
     fn fn_params_compatible(&self, a: &FnParams, b: &FnParams) -> bool {
         let unpromoted =
             |p: &FnParams| !p.variadic && p.types.iter().all(|&t| promotes_unchanged(t));

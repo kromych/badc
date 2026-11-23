@@ -71,7 +71,8 @@ fn register_alternative_wins_over_memory() {
 fn register_or_immediate_alternatives_keep_the_immediate_arm() {
     // An input offering a general register and an immediate is decided at
     // the operand: a constant prints as the immediate, anything else takes
-    // a register. `g` carries the immediate arm, as GCC defines it.
+    // a register. `g` carries the immediate arm: any register, memory or
+    // immediate integer.
     for c in ["g", "ri", "rn", "gi", "rmi"] {
         assert_eq!(
             inp(c).map(|(k, _)| k),
@@ -1454,7 +1455,7 @@ fn aarch64_w_operands_take_gccs_widths_views_and_classes() {
 #[test]
 fn aarch64_bare_immediate_operand_encodes_like_gcc() {
     use crate::{NativeOptions, Target};
-    // GAS makes the `#` optional on an immediate: a trap written
+    // The `#` on an immediate is optional: a trap written
     // `brk 0x800` and a semihosting call written `hlt 0xf000` carry no
     // `#`. They must encode identically to the `#`-prefixed form:
     // brk #0x800 -> 0xD4210000, hlt #0xf000 -> 0xD45E0000.
@@ -1482,7 +1483,7 @@ fn aarch64_bare_immediate_operand_encodes_like_gcc() {
     assert!(has(0xD45E_0000), "expected `hlt 0xf000` (0xD45E0000)");
 }
 
-/// `#%N` is GAS's optional `#` before an `i` operand's constant:
+/// `#%N` is the optional `#` before an `i` operand's constant:
 /// `ushr v1.8h, v2.8h, #3` is 0x6F1D0441 and `ext v1.16b, v2.16b, v3.16b,
 /// #4` is 0x6E032041.
 #[cfg(feature = "native-emit")]
@@ -1609,7 +1610,7 @@ fn asm_emit(
 }
 
 /// An assembled `G` section joins the group its argument names (System V
-/// gABI, "Section Groups"), as GNU as 2.46.1 writes it: one `SHT_GROUP`
+/// gABI, "Section Groups"; checked against GNU as 2.46.1): one `SHT_GROUP`
 /// section per group ahead of its members, linked to `.symtab`,
 /// `GRP_COMDAT` under `comdat`; each member and its `.rela` flagged
 /// `SHF_GROUP` and listed; the signature the unit's symbol of the group's
@@ -2278,8 +2279,8 @@ fn aarch64_named_label_in_a_code_stream_defines_a_symbol() {
     use crate::c5::linker::object::NativeSymSection;
     use crate::c5::linker::parse_native_elf;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    // GNU as makes a named label in an asm code stream a definition of the
-    // unit: a `.text` NOTYPE symbol at the label's offset, local unless a
+    // A named label in an asm code stream defines a symbol of the unit: a
+    // `.text` NOTYPE symbol at the label's offset, local unless a
     // directive on the name rebinds it. A `.L`-prefixed name is
     // assembler-local and reaches no symbol table. Goldens from GNU as 2.46.1
     // (aarch64).
@@ -2336,8 +2337,8 @@ fn aarch64_branch_to_a_named_label_resolves_in_the_code_stream() {
     use crate::c5::linker::parse_native_elf;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     // A branch whose target the same template defines resolves to a
-    // displacement and carries no relocation, as GNU as does; `b` back one
-    // word encodes 0x17FFFFFF.
+    // displacement and carries no relocation; `b` back one word encodes
+    // 0x17FFFFFF.
     let src = "void f(void) { __asm__ volatile(\"lp:\\n\\tnop\\n\\tb lp\"); }\n";
     let program = crate::Compiler::with_options(
         src.to_string(),
@@ -2372,7 +2373,7 @@ fn aarch64_branch_to_a_named_label_resolves_in_the_code_stream() {
 #[test]
 fn a_duplicate_named_label_in_a_code_stream_is_rejected() {
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    // GNU as rejects a second definition of a name, within one template and
+    // A second definition of a name is an error, within one template and
     // across the unit's templates alike; both targets must agree.
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         for src in [
@@ -2511,9 +2512,9 @@ fn reloc_target_name(o: &crate::c5::linker::relocatable::EtRel, sym: u32) -> all
 #[test]
 fn aarch64_template_symbol_branches_type_bl_call26_and_b_jump26() {
     use crate::c5::object::elf_reloc_types::{R_AARCH64_CALL26, R_AARCH64_JUMP26};
-    // GNU as types the imm26 field by the instruction: `bl` takes CALL26,
-    // a plain `b` JUMP26. The branch to the template's own named label
-    // resolves without a reloc.
+    // The imm26 field's relocation follows the instruction (AAELF64): `bl`
+    // takes CALL26, a plain `b` JUMP26. The branch to the template's own
+    // named label resolves without a reloc.
     let src = "extern void helper(void);\nextern void other(void);\n\
                void probe(void) { __asm__ volatile(\
                \"bl helper\\n\\tb other\\n\\tb past\\npast:\\n\\tnop\" ::: \"x30\"); }\n";
@@ -2589,8 +2590,8 @@ fn aarch64_goto_branch_in_a_pushed_section_reaches_the_label_block() {
 fn aarch64_numeric_branch_into_a_pushed_section_relocates_to_it() {
     use crate::c5::object::elf_reloc_types::{R_AARCH64_CONDBR19, R_AARCH64_JUMP26};
     // A numeric forward reference whose definition sits in the statement's
-    // pushed section (the `jmp 6f` fixup shape). GNU as puts the two in
-    // different object sections, so each branch relocates against the
+    // pushed section (the `jmp 6f` fixup shape). The two sit in different
+    // object sections, so each branch relocates against the
     // section with the label's offset as addend.
     let src = "void probe(long x)\n\
                {\n\
@@ -2640,8 +2641,8 @@ fn aarch64_function_body_layout_directives_match_gnu_as() {
 #[test]
 fn aarch64_alignment_fill_max_skip_and_zero_match_gnu_as() {
     // An explicit fill byte, a max skip that drops the alignment, a sub-word
-    // gap after data, and the zero alignment GNU as reads as one. 2.46.1 for
-    // the same statements emits 28 bytes.
+    // gap after data, and a zero alignment, which reads as one. GNU as
+    // 2.46.1 for the same statements emits 28 bytes.
     let src = "__attribute__((naked)) void probe(void);\n\
                __attribute__((naked)) void probe(void) { __asm__ volatile(\
                \"nop\\n\\t.balign 16, 0\\n\\tnop\\n\\t.balign 16, , 2\\n\
@@ -2702,7 +2703,7 @@ fn alignment_directive_family_reads_one_grammar_everywhere() {
         ".align 0",
         ".align 2b-1b",
     ];
-    // GNU as has no `w` / `l` spelling of `.align`, rejects a non-power-of-two
+    // `.align` has no `w` / `l` spelling, rejects a non-power-of-two
     // byte count and an out-of-range exponent, and takes at most three
     // operands. A count past the section-offset width has no layout either.
     let bad = [
@@ -2793,7 +2794,7 @@ fn alignment_fill_width_family_matches_gnu_as() {
 #[cfg(feature = "native-emit")]
 #[test]
 fn alignment_fill_width_rejects_a_partial_unit() {
-    // GNU as errors when the padding is not a whole number of fill units.
+    // The padding must be a whole number of fill units.
     for (d, w) in [(".balignl 16, 0x12345678", 4), (".p2alignw 4, 0x1234", 2)] {
         let src = alloc::format!(
             "__asm__(\".section .t,\\\"a\\\"\\n\" \" .byte 0x11\\n {d}\\n .byte 0xbb\\n\");\n"
@@ -2891,7 +2892,7 @@ fn alignment_over_labels_settles_after_a_deferred_fill_count() {
 #[cfg(feature = "native-emit")]
 #[test]
 fn alignment_over_a_forward_label_difference_is_rejected() {
-    // GNU as reduces an alignment operand where the directive stands, so a
+    // An alignment operand reduces where the directive stands, so a
     // definition placed after it has no value there and the directive is an
     // error rather than a layout the assembler iterates towards.
     for d in [".balign 4f-3f", ".p2align 4f-3f", ".align 4f-3f"] {

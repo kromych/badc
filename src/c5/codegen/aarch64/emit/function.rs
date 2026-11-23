@@ -199,7 +199,7 @@ pub(crate) fn emit_function(
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     // The mapping state spans the section: a body ending in data leaves the
-    // padding to the next function's first instruction, as under GNU as.
+    // padding to the next function's first instruction.
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     no_fp_regs: bool,
     strict_align: bool,
@@ -693,7 +693,7 @@ impl FunctionEmitter<'_, '_> {
         self.saves.clear();
         if !func.is_naked {
             // The entry pays any realignment a preceding body left owing and
-            // keeps the offset it was placed at, as a label does under GNU as.
+            // keeps the offset it was placed at, as a label does.
             self.align_stream();
             // A function entry is reachable by `BLR` and by a `BR` through
             // x16/x17, so it takes a `BTI C`; `PACIASP` accepts both BTYPEs
@@ -1535,9 +1535,9 @@ impl FunctionEmitter<'_, '_> {
     }
 
     /// Append each `.subsection` replacement after the body, out of the
-    /// main sequence's fall-through path (GNU as puts it at the end of the
-    /// section); resolve the pushed-section fields, symbol branches and
-    /// `%l[...]` branches that point into or out of it.
+    /// main sequence's fall-through path; resolve the pushed-section
+    /// fields, symbol branches and `%l[...]` branches that point into or out
+    /// of it.
     fn append_deferred_regions(&mut self) -> Emit {
         let name2entpc = self.fcx.name2entpc;
         let regions = core::mem::take(&mut self.deferred_regions);

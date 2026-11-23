@@ -95,9 +95,9 @@ fn an_unbound_static_slot_in_a_single_image_is_reported() {
     assert!(err.contains("import address table"), "{err}");
 }
 
-/// A weak reference no input defines is 0 in an ELF single-file image, as
-/// GNU ld resolves it, and an undefined reference in a Mach-O one, as ld64
-/// reports it. Darwin's `weak_import` is `weak` there and ignored on ELF.
+/// A weak reference no input defines is 0 in an ELF single-file image (an
+/// unresolved weak symbol's gABI value) and an undefined reference in a
+/// Mach-O one. Darwin's `weak_import` is `weak` there and ignored on ELF.
 #[test]
 fn a_weak_reference_no_input_defines_is_undefined_in_a_mach_o_image() {
     use crate::{Compiler, NativeOptions, Target};
@@ -5822,9 +5822,9 @@ fn a_by_reference_argument_is_the_address_of_a_copy() {
 }
 
 /// An `_Atomic` aggregate, or one with an `_Atomic` member, is no
-/// homogeneous aggregate on macOS, as clang classifies it, and passes in
-/// the general registers; gcc takes `_Atomic` as a qualifier, so on Linux
-/// the floating-point members still form one.
+/// homogeneous aggregate to macOS's clang-compiled code and passes in the
+/// general registers; gcc-compiled Linux code takes `_Atomic` as a
+/// qualifier, so there the floating-point members still form one.
 #[test]
 fn an_atomic_member_ends_a_homogeneous_aggregate_on_macos() {
     use crate::Target;
@@ -5983,12 +5983,12 @@ fn a_variadic_hidden_pointer_callee_takes_named_arguments_by_class() {
     );
 }
 
-/// A floating-point vector of one element is System V MEMORY class, as gcc
-/// places it: on linux-x64 a function returning one, bare or as a struct's
-/// member, takes the result pointer in rdi, and one taking one finds it on
-/// the stack with the integers around it in rdi and rsi. A vector of two
-/// floats stays in xmm0, and linux-aarch64 passes the struct in x1 and the
-/// `double` vector in d0.
+/// A floating-point vector of one element is System V MEMORY class, where
+/// gcc-compiled code places it: on linux-x64 a function returning one,
+/// bare or as a struct's member, takes the result pointer in rdi, and one
+/// taking one finds it on the stack with the integers around it in rdi and
+/// rsi. A vector of two floats stays in xmm0, and linux-aarch64 passes the
+/// struct in x1 and the `double` vector in d0.
 #[test]
 fn a_single_fp_vector_is_memory_class_on_system_v() {
     use crate::Target;
@@ -7754,8 +7754,8 @@ fn local_label_jump_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     // Numeric local labels resolve within the block: `Nb` branches backward to
     // the nearest prior `N:`, `Nf` forward to the next. An in-reach target
-    // settles the branch on the rel8 form, as GNU as 2.46.1 settles the same
-    // stream. The windows below are self-relative, so they hold regardless of
+    // settles the branch on the rel8 form (checked against GNU as 2.46.1).
+    // The windows below are self-relative, so they hold regardless of
     // the block's position.
     let program = super::compile_str_bare(
         "void f(void){ __asm__ volatile(\n\
@@ -8575,11 +8575,11 @@ fn homogeneous_aggregate_elements_follow_the_members() {
 
 /// System V AMD64 3.2.3: an eightbyte no field overlaps takes no register,
 /// and a union's 16-byte vector beside a double or another vector takes one
-/// whole xmm register. An unnamed bit-field's bytes are INTEGER, as gcc
-/// classifies them, inside an anonymous member too; a zero-width one covers
-/// none in a structure and a union's first byte. The argument after each
-/// aggregate lands in the register past the ones the aggregate takes, and
-/// the result takes as many.
+/// whole xmm register. An unnamed bit-field's bytes are INTEGER, the class
+/// gcc-compiled code gives them, inside an anonymous member too; a
+/// zero-width one covers none in a structure and a union's first byte.
+/// The argument after each aggregate lands in the register past the ones
+/// the aggregate takes, and the result takes as many.
 #[test]
 fn sysv_eightbyte_classes_place_the_following_argument() {
     use crate::Target;
@@ -8719,9 +8719,10 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
 /// System V AMD64 3.2.3: a packed aggregate with a member off its natural
 /// alignment is MEMORY class, on the stack ahead of the argument after it,
 /// which takes the first integer register; a bit-field is exempt, and so is
-/// a packed aggregate whose members all lie aligned. As gcc classifies them,
-/// a union's bit-field binds the union's offset to its integer mode, a zero
-/// width to one byte, and past an array's first element nothing is bound.
+/// a packed aggregate whose members all lie aligned. In the classification
+/// gcc-compiled code uses, a union's bit-field binds the union's offset to
+/// its integer mode, a zero width to one byte, and past an array's first
+/// element nothing is bound.
 #[test]
 fn sysv_misaligned_members_send_the_aggregate_to_memory() {
     use crate::Target;
@@ -9233,8 +9234,8 @@ fn elf64_symbol_records(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u8,
 }
 
 /// For a RELA relocation the addend lives in `r_addend`; the target
-/// field in the section image carries no information and gas leaves it
-/// zero, and a loader may require it zero before applying the
+/// field in the section image carries no information and stays zero, and
+/// a loader may require it zero before applying the
 /// relocation. Pointer slots in static data used to leak the VM's baked
 /// values (the target's data offset for data pointers, the function's
 /// `ent_pc` for function pointers).
@@ -9423,9 +9424,9 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
 }
 
 /// An assembly-time assignment to a name defines an `SHN_ABS` symbol, and
-/// a `.size` naming a `.set` alias states the alias's own extent -- both as
-/// GNU as 2.46.1 records them. A name carrying the local-label prefix stays
-/// out of the table, as it does there.
+/// a `.size` naming a `.set` alias states the alias's own extent (checked
+/// against GNU as 2.46.1). A name carrying the local-label prefix stays out
+/// of the table.
 #[test]
 fn an_assembly_time_assignment_defines_an_absolute_symbol() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -9484,8 +9485,7 @@ fn an_assembly_time_assignment_defines_an_absolute_symbol() {
 /// A post-link reader pairs each relocation with the nearest label at or
 /// below its offset and requires the relocation's target to be the GLOBAL
 /// symbol named by the label suffix, so the byte layout, the label
-/// placement, and the relocation targets must all match what GNU as
-/// produces.
+/// placement, and the relocation targets must be what that reader expects.
 #[test]
 fn file_scope_export_records_take_the_gas_shape() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -11932,7 +11932,7 @@ fn aarch64_switch_table_lands_in_rodata_section_of_object() {
     // No named symbol covers the table: consumers that discover
     // compiler jump tables require the region symbol-free. The
     // section symbol and the `$d` mapping symbol are not names in
-    // that sense; gas emits the same `$d` over a jump table.
+    // that sense.
     for s in 0..elf.sym_count() {
         assert!(
             elf.sym_shndx(s) != tbl || elf.sym_type(s) == 3 || elf.sym_name(s).starts_with('$'),
@@ -12832,7 +12832,7 @@ fn size_bound_keeps_the_object_in_memory() {
 /// A frame object whose addresses only write it and that no load reads
 /// holds nothing anyone observes: the zero fill and the stores of the
 /// `vzipq_s8` pair's temporary go once the copy out reads the stored
-/// values, as with gcc. One whose address reaches a call keeps them, the
+/// values. One whose address reaches a call keeps them, the
 /// callee reading it.
 #[cfg(feature = "linker")]
 #[test]
@@ -15506,9 +15506,9 @@ fn a64_branch_protection_skips_a_naked_body() {
 
 #[test]
 fn a64_asm_template_ending_in_data_pads_only_ahead_of_an_instruction() {
-    // GNU as brings an executable section's counter to the instruction
-    // boundary when it assembles an instruction out of the data mapping
-    // state, not at the end of a data run. A naked function's body is its
+    // An executable section's counter reaches the instruction boundary
+    // when an instruction is assembled out of the data mapping state, not
+    // at the end of a data run. A naked function's body is its
     // inline asm, so a template ending in a data directive is the last
     // content of the section and takes no padding; an ordinary function's
     // epilogue follows, and the padding is the gap ahead of it. Every
@@ -18597,10 +18597,10 @@ fn apple_arm64_packs_narrow_stack_arguments() {
 }
 
 /// A `float` vector of 4 bytes, narrower than AAPCS64's Short Vectors
-/// (6.4.2), crosses a call as clang places it on every AArch64 target: as a
-/// 32-bit integer argument, in the next general register or an `int`'s stack
-/// slot (4 bytes on Apple arm64), and returned in s0. A struct holding it
-/// stays in the general registers.
+/// (6.4.2), crosses a call where clang-compiled code places it on every
+/// AArch64 target: as a 32-bit integer argument, in the next general
+/// register or an `int`'s stack slot (4 bytes on Apple arm64), and returned
+/// in s0. A struct holding it stays in the general registers.
 #[test]
 fn aarch64_narrow_float_vector_crosses_as_clang_places_it() {
     use crate::Target;
@@ -18685,11 +18685,11 @@ fn aarch64_narrow_float_vector_crosses_as_clang_places_it() {
     }
 }
 
-/// An integer vector narrower than 8 bytes returns as clang returns it on
-/// every AArch64 target: a single element as its bytes in the low bytes of
-/// v0 (`ldr s0`, `ldr h0`, `ldr b0`), several widened to equal lanes of d0
-/// (`ushll` from the bytes), which the caller narrows back (`xtn`) before it
-/// stores them.
+/// An integer vector narrower than 8 bytes returns where clang-compiled
+/// code reads it on every AArch64 target: a single element as its bytes in
+/// the low bytes of v0 (`ldr s0`, `ldr h0`, `ldr b0`), several widened to
+/// equal lanes of d0 (`ushll` from the bytes), which the caller narrows
+/// back (`xtn`) before it stores them.
 #[test]
 fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
     use crate::Target;

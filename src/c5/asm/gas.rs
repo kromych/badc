@@ -44,7 +44,7 @@ const GAS_MACRO_DEPTH_LIMIT: usize = 64;
 /// assembler, so an operand register is concrete before the `.equ`
 /// register-number table (`.L__gpr_num_x1 = 1`) resolves it. The macro and
 /// symbol tables are call-local, giving two expansions in one unit the
-/// independence GNU as gives a `.purgem`'d macro.
+/// independence of a `.purgem`'d macro.
 pub(crate) fn expand_asm_gas_macros(
     text: &str,
     inst_width: usize,
@@ -58,8 +58,8 @@ pub(crate) fn expand_asm_gas_macros(
 }
 
 /// As [`expand_asm_gas_macros`], over a unit's file-scope text. Every folded
-/// assignment stays in the stream there: GNU as records an assembly-time
-/// assignment as an `SHN_ABS` symbol of the object, and the section layer
+/// assignment stays in the stream there: an assembly-time assignment is
+/// an `SHN_ABS` symbol of the object, and the section layer
 /// defines it from the directive. A function body's template is an
 /// instruction stream with no carrier for such a symbol, so the entry point
 /// above keeps only the assignments a later read needs. The lines a macro
@@ -305,7 +305,7 @@ fn expand_gas_statements(
         {
             st.defined.insert(alloc::string::String::from(name.trim()));
         }
-        // GNU as ends a directive or macro name at the first character that
+        // A directive or macro name ends at the first character that
         // cannot be part of one, so no space is needed before a parenthesized
         // operand list: `.inst(expr)`, and a macro invoked in the C-macro
         // spelling (`STACK_FRAME_NON_STANDARD(func)`).
@@ -323,9 +323,9 @@ fn expand_gas_statements(
             ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle" => {
                 // A condition over names only the layout can value, guarding
                 // branches that emit no bytes: copy the region through so the
-                // section layer values it once the labels are placed. GNU as
-                // reads the same difference at the `.if`, which it can only
-                // do while the two labels sit in one fixed-size run.
+                // section layer values it once the labels are placed. The
+                // difference is fixed at the `.if` only while the two labels
+                // sit in one fixed-size run.
                 if emitting(&cond)
                     && gas_cond_reads_symbols(rest, &st.equ)
                     && let Some(next) = gas_cond_region_is_diagnostic_only(stmts, i)
@@ -367,7 +367,7 @@ fn expand_gas_statements(
             }
             // Defined test against what the expansion has defined so far
             // (`.ifdef .Lframe_regcount`, a label an earlier macro expansion
-            // placed). GNU as answers it one-pass, so a definition further
+            // placed). The test is one-pass, so a definition further
             // down the stream does not count.
             ".ifdef" | ".ifndef" | ".ifnotdef" => {
                 let defined = st.defined.contains(rest.trim());
@@ -564,7 +564,7 @@ fn expand_gas_statements(
                 st.aliases.remove(rest.trim());
             }
             _ => {
-                // `name = expr`: the GNU as assignment spelling of `.set`.
+                // `name = expr`: the assignment spelling of `.set`.
                 // A foldable value joins the symbol table; one over
                 // locations is rewritten to `.set` for the section parser.
                 let assign = if is_asm_symbol_name(tok) {
@@ -648,7 +648,7 @@ fn expand_gas_statements(
     Ok(())
 }
 
-/// Whether the text holds a `name = expr` assignment, the GNU as spelling of
+/// Whether the text holds a `name = expr` assignment, the spelling of
 /// `.set`. An `=` that is part of a comparison or a compound operator is not
 /// one, and neither is a macro parameter's `=default`, which the directives
 /// above already trigger on.
@@ -662,7 +662,7 @@ fn has_gas_assignment(text: &str) -> bool {
     })
 }
 
-/// `name = %reg` / `.set name, %reg`: the GNU as register equate, the same
+/// `name = %reg` / `.set name, %reg`: the register equate, the same
 /// binding `name .req reg` makes. Records the alias and reports that the
 /// assignment defined no symbol; a value that is neither a register name nor
 /// an established alias leaves the assignment for the section parser.
@@ -681,7 +681,7 @@ fn bind_register_equate(name: &str, expr: &str, st: &mut GasExpandState) -> bool
     true
 }
 
-/// Whether a GNU as `.if`-family directive takes its branch: evaluate the
+/// Whether an `.if`-family directive takes its branch: evaluate the
 /// condition expression against the current `.set` symbol table and apply the
 /// directive's relation to zero.
 fn gas_if_taken(
@@ -770,7 +770,7 @@ fn gas_cond_region_is_diagnostic_only(
     None
 }
 
-/// Whether a GNU as `.ifc` / `.ifnc` string-comparison takes its branch. The
+/// Whether an `.ifc` / `.ifnc` string-comparison takes its branch. The
 /// two arguments are separated by a comma and compared after trimming
 /// surrounding whitespace (`.ifc %eax, %eax`).
 fn gas_ifc_taken(tok: &str, rest: &str) -> bool {
@@ -782,7 +782,7 @@ fn gas_ifc_taken(tok: &str, rest: &str) -> bool {
 }
 
 /// Replace each character constant in a macro argument with its numeric
-/// value, as GNU as does when it binds one (`m 'r'` binds `114`).
+/// value (`m 'r'` binds `114`).
 fn fold_char_consts(a: &str) -> alloc::string::String {
     if !a.contains('\'') {
         return alloc::string::String::from(a);
@@ -806,14 +806,14 @@ fn fold_char_consts(a: &str) -> alloc::string::String {
 }
 
 /// Strip one level of enclosing double quotes from a macro / `.irp`
-/// argument, as GNU as does when binding it.
+/// argument.
 fn unquote_gas_arg(a: &str) -> &str {
     a.strip_prefix('"')
         .and_then(|r| r.strip_suffix('"'))
         .unwrap_or(a)
 }
 
-/// Bind a GNU as macro invocation's arguments to its parameters. A `key=value`
+/// Bind a macro invocation's arguments to its parameters. A `key=value`
 /// argument whose key names a parameter binds by keyword; the rest fill the
 /// still-unbound parameters positionally, in order. An enclosing quote pair
 /// is stripped from each bound value. An unsupplied parameter binds to its
@@ -865,9 +865,8 @@ fn bind_gas_macro_args(
             map.insert(p.name.clone(), text);
             break;
         }
-        // An argument supplied empty takes the parameter's default, as GNU as
-        // binds it; a parameter with no default takes the empty string either
-        // way.
+        // An argument supplied empty takes the parameter's default; a
+        // parameter with no default takes the empty string either way.
         match positional.next() {
             Some((_, a)) if !a.is_empty() => {
                 map.insert(p.name.clone(), value(a));
@@ -916,8 +915,8 @@ fn collect_gas_body(
     Err(alloc::format!("inline asm: `{open}` without `{close}`"))
 }
 
-/// Collect a `.rept` / `.irp` body up to its matching `.endr`. GNU as closes
-/// every repeat directive with `.endr`, so the nesting count spans the family
+/// Collect a `.rept` / `.irp` body up to its matching `.endr`. Every repeat
+/// directive closes with `.endr`, so the nesting count spans the family
 /// rather than one spelling: a `.rept` inside an `.irp` closes first.
 fn collect_gas_repeat_body(
     stmts: &[alloc::string::String],
@@ -959,9 +958,9 @@ fn parse_gas_macro_header(
     let name = it.next().ok_or("inline asm: `.macro` without a name")?;
     let params = it
         .map(|p| {
-            // GNU as scans the formal name, then the `=` / `:` separator and
-            // the text after it as separate tokens, so whitespace may border
-            // either (`regsize = 64`, `tsk : req`).
+            // The formal name, the `=` / `:` separator and the text after it
+            // are separate tokens, so whitespace may border either
+            // (`regsize = 64`, `tsk : req`).
             let (head, default) = match p.split_once('=') {
                 Some((h, d)) => (h.trim_end(), alloc::string::String::from(d.trim())),
                 None => (p, alloc::string::String::new()),
@@ -981,7 +980,7 @@ fn parse_gas_macro_header(
 }
 
 /// Parse a `.irp` header `VAR,v1,v2,...`; with no values the body expands once
-/// with the symbol empty (GNU as convention). `per_char` selects `.irpc`,
+/// with the symbol empty. `per_char` selects `.irpc`,
 /// whose values are the individual characters of the operands.
 fn parse_gas_irp_header(
     rest: &str,
@@ -1020,8 +1019,8 @@ fn parse_gas_irp_header(
 
 /// Substitute a macro / `.irp` body's parameters and re-split the result into
 /// statements, each on its body line. An argument may hold `;`-separated statements (a
-/// whole instruction sequence passed as one argument), and GNU as re-scans
-/// the expansion, so a separator that arrives through a parameter separates.
+/// whole instruction sequence passed as one argument), and the expansion is
+/// re-scanned, so a separator that arrives through a parameter separates.
 fn subst_gas_body(
     body: &[alloc::string::String],
     lines: &[u32],
@@ -1131,15 +1130,15 @@ fn subst_asm_operands(
     out
 }
 
-/// Split a macro invocation's arguments as GNU as scans them: commas
-/// separate; whitespace separates unless it borders an expression operator
+/// Split a macro invocation's arguments: commas separate; whitespace
+/// separates unless it borders an expression operator
 /// (`ldr_l x1, sym + 24` keeps `sym + 24` whole, `m 3 4` splits) or the
 /// argument began with `(` (`nops (662b-661b) / 4`). Quoted runs and
 /// bracketed groups are opaque. A comma with no argument before it supplies
 /// an empty one (`m 1,,3` binds three), so only whitespace runs collapse.
 fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
     let b = s.as_bytes();
-    // `%` is not one of them: GNU as splits `m 1 % 2` into three arguments,
+    // `%` is not one of them: `m 1 % 2` is three arguments,
     // and an AT&T register operand leads with it (`m %r8 %r9` is two).
     let is_op = |c: u8| {
         matches!(
@@ -1160,8 +1159,8 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
     let mut i = 0usize;
     while i < b.len() {
         let c = b[i];
-        // A character constant is one token, separators included: GNU as
-        // binds `m 'r', ' ', ':'` as three arguments.
+        // A character constant is one token, separators included:
+        // `m 'r', ' ', ':'` binds three arguments.
         if !quoted
             && c == b'\''
             && let Some((_, next)) = parse_asm_char_const(b, i)
@@ -1255,12 +1254,12 @@ pub(crate) fn split_top_commas(s: &str) -> alloc::vec::Vec<&str> {
 }
 
 /// Split an AArch64 inline-asm template into its main stream and the
-/// `.subsection` replacement code GNU as appends to the section after the
-/// main content. A replacement sequence in `.subsection 1` bracketed by
+/// `.subsection` replacement code that follows the main content in the
+/// section. A replacement sequence in `.subsection 1` bracketed by
 /// `.previous` stays out of the main sequence's fall-through path, and a
 /// template may chain several. Returns `(main,
 /// deferred)`: `deferred` holds every region, ordered by subsection number
-/// and then by position, as GNU as lays a section's subsections out. It is
+/// and then by position. It is
 /// empty (and `main` is `text` unchanged) when there is no `.subsection` or
 /// when a shape is one this pass does not lift: nested in a `.pushsection`,
 /// without a closing `.previous`, nested in another region, or a

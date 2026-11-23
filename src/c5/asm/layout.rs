@@ -24,8 +24,8 @@ pub(crate) struct SectionLabelOffsets {
     /// takes its short form; these offsets were measured under that choice,
     /// so the materializer has to encode from the same set.
     long: AsmRelaxSet,
-    /// Section name -> its identity key. GNU as gives every section a
-    /// symbol of the section's own name whose value is the section start,
+    /// Section name -> its identity key. Every section has a symbol of
+    /// the section's own name whose value is the section start,
     /// so a bare section name is usable in an expression.
     sections: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     /// Section-relative offset of each top-level item, by block and item
@@ -33,7 +33,7 @@ pub(crate) struct SectionLabelOffsets {
     /// offset per repetition, so the location counter has no value there.
     places: alloc::collections::BTreeMap<(usize, usize), i64>,
     /// `.set name, symbol` assignments. A reference to one reads the
-    /// location the chain ends at, as GNU as resolves it.
+    /// location the chain ends at.
     aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     /// Byte alignment of each alignment directive whose operand is an
     /// expression, by block and item index. Measured where the directive
@@ -143,9 +143,9 @@ impl SectionNames<'_> {
 /// Evaluate a `.set` value over section-local locations: `.` is the offset at
 /// the assignment, an identifier is a label, a symbol an earlier `.set`
 /// assigned, or an operand constant. Only an absolute result is admitted --
-/// same-space terms fold, anything symbolic is rejected. GNU as also gives a
-/// location-valued assignment a section-relative symbol, which a referencing
-/// field takes a relocation against. TODO location-valued section symbols.
+/// same-space terms fold, anything symbolic is rejected. TODO: a
+/// location-valued assignment as a section-relative symbol, which a
+/// referencing field takes a relocation against.
 /// Longest `.set name, symbol` chain followed when valuing an expression.
 const ASM_ALIAS_DEPTH_LIMIT: usize = 16;
 
@@ -235,7 +235,7 @@ enum SectionSetValue {
 }
 
 /// Fold an instruction operand expression, assembled into section `key`, to
-/// the absolute value GNU as requires there: an instruction field carries no
+/// the absolute value required there: an instruction field carries no
 /// relocation, so the expression has to reduce to a literal, an assigned
 /// symbol, or a difference of two labels of one section. `here` is the
 /// section offset the instruction is placed at, the value of the location
@@ -275,9 +275,9 @@ pub(crate) fn fold_asm_operand_expr(
 /// a template label of the enclosing statement, a section label of this
 /// call, or a label an earlier statement left in the sink. A name none of
 /// those define takes the value of the name its `.set name, symbol` chain
-/// ends at; its relocation still names what the source wrote, as GNU as
-/// resolves the chain for the value alone. `None` is an undefined symbol. A
-/// numeric reference binds only within this call, per GNU as label locality.
+/// ends at; its relocation still names what the source wrote, the chain
+/// resolving for the value alone. `None` is an undefined symbol. A
+/// numeric reference binds only within this call.
 fn section_expr_leaf(
     t: &str,
     key: &str,
@@ -390,8 +390,8 @@ fn section_start_leaf(sk: &str) -> AsmExprLeaf {
 /// an absolute value is a section offset, a location of this section is its
 /// offset. `resolve` answers labels; `.` is supplied here.
 ///
-/// A location of this section resolves to its offset, as GNU as does by
-/// deferring an `.org` target to final symbol resolution: operator order
+/// A location of this section resolves to its offset, as if the `.org`
+/// target were deferred to final symbol resolution: operator order
 /// then does not decide whether the target reduces.
 fn eval_org_target(
     expr: &str,
@@ -512,8 +512,8 @@ pub(crate) fn parse_stream_layout_item(
 
 /// Lay a layout directive into an AArch64 instruction stream at the end of
 /// `out`, whose length is a section offset. `data` collects the runs that are
-/// not instructions, for the mapping symbols; a `.org` records none, as in
-/// GNU as, so the surrounding run covers its gap. `resolve` values a label
+/// not instructions, for the mapping symbols; a `.org` records none, so
+/// the surrounding run covers its gap. `resolve` values a label
 /// reference in a count or an `.org` target and `const_of` an `i`-class
 /// operand. Returns the alignment the directive requests, which the caller
 /// raises the section's by.
@@ -540,7 +540,7 @@ pub(crate) fn push_a64_stream_layout(
         }
         Ok(n)
     }
-    // A `.org` target below the counter is an error in GNU as, not a rewind.
+    // A `.org` target below the counter is an error, not a rewind.
     fn org(
         out: &mut alloc::vec::Vec<u8>,
         target: i64,
@@ -593,8 +593,8 @@ pub(crate) fn push_a64_stream_layout(
     }
 }
 
-/// GNU as fixes a non-branch operand field's width when it parses the
-/// instruction: the expression narrows only when it is a constant at that
+/// A non-branch operand field's width is fixed when the instruction is
+/// parsed: the expression narrows only when it is a constant at that
 /// point, which a difference of already-defined labels is exactly when the
 /// items between them have parse-time fixed sizes. This context follows a
 /// statement's blocks in source order, numbering each run of fixed-size
@@ -602,15 +602,16 @@ pub(crate) fn push_a64_stream_layout(
 /// fold such an expression to its value before it chooses the encoding. A
 /// branch carrying a short alternative, an alignment, an `.org`, and a fill
 /// whose count does not fold end the run: a difference across one has a
-/// layout-dependent value, and GNU as keeps the wide field there even when
-/// the final layout would fit the narrow one.
+/// layout-dependent value, and the field stays wide there even when the
+/// final layout would fit the narrow one.
 ///
 /// The walk goes block by block, which within one chain is source order.
 /// Across chains the blocks do not record how the source interleaved them,
 /// so a reference to a label of another chain folds only when that chain
-/// was walked already; where GNU as saw the definition earlier in the
-/// source, the field stays wide. The value of every fold is exact -- a run
-/// has one size in every layout -- so the boundary costs width only.
+/// was walked already; where the definition is earlier in the source but
+/// its chain is not, the field stays wide. The value of every fold is
+/// exact -- a run has one size in every layout -- so the boundary costs
+/// width only.
 #[derive(Default)]
 pub(crate) struct AsmParseFold {
     /// `(section key, subsection)` -> the chain's current run and offset.
@@ -695,7 +696,7 @@ impl AsmParseFold {
     }
 
     /// The expression's value when it is a constant at this point of the
-    /// parse, which is when GNU as folds it into the operand.
+    /// parse, which is when it folds into the operand.
     pub(crate) fn fold(&self, expr: &str, const_of: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
         let ctx = AsmExprCtx {
             resolve: &|t| self.leaf(t),
@@ -840,8 +841,7 @@ pub(crate) fn measure_asm_section_offsets(
     // (an alignment, an `.org`, a label-counted fill) behind a branch of its
     // section lengthened in the same round: lengthening a branch moves what
     // follows it, and only such an item between a later branch and its
-    // target can bring that branch back within reach, as gas's in-order
-    // relaxation finds.
+    // target can bring that branch back within reach.
     let pliant: alloc::vec::Vec<((usize, usize), alloc::string::String)> = (blocks.iter())
         .enumerate()
         .flat_map(|(bi, b)| {
@@ -1139,8 +1139,8 @@ fn measure_round_inner(
         i64,
         u32,
     )> = alloc::vec::Vec::new();
-    // `.set name, symbol` aliases: an expression over one reads the target's
-    // location, as GNU as resolves the chain.
+    // `.set name, symbol` aliases: an expression over one reads the location
+    // the chain ends at.
     let mut aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> =
         alloc::collections::BTreeMap::new();
     let mut places: alloc::collections::BTreeMap<(usize, usize), i64> =
@@ -1499,7 +1499,7 @@ pub(crate) fn materialize_asm_sections(
     sink: &mut AsmSectionSink,
 ) -> Result<alloc::vec::Vec<MaterializedLabel>, AsmErrors> {
     let (const_of, operand_sym) = (operands.const_of, operands.symbol_of);
-    // GNU as numeric labels (`2:`, `14470:`) are local to one asm instance;
+    // Numeric labels (`2:`, `14470:`) are local to one asm instance;
     // the same digits recur across every expansion of a macro that emits a
     // table entry, so the accumulating sink would collide them. Rename each
     // definition to a per-instance-unique symbol. Built once for the whole
@@ -1542,7 +1542,7 @@ pub(crate) fn materialize_asm_sections(
     let weak_only = asm_weak_only_names(blocks, sink);
     let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
     let mut commons: alloc::vec::Vec<(alloc::string::String, u64, u64)> = alloc::vec::Vec::new();
-    // `.globl` is a unit-level declaration in GNU as: the name it binds
+    // `.globl` is a unit-level declaration: the name it binds
     // external may be defined in any section of the unit, before or after.
     let mut global_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
     // Sections this call merges into, with the label count each had on
@@ -1623,8 +1623,8 @@ pub(crate) fn materialize_asm_sections(
                 }
                 let map_at = sec.bytes.len();
                 match item {
-                    // An alignment of one moves nothing, and GNU as builds no
-                    // frag for it: no padding, no section alignment, no run.
+                    // An alignment of one moves nothing: no padding, no
+                    // section alignment, no run.
                     AsmSectionItem::Align {
                         spec: AlignSpec::Bytes(n),
                         ..
@@ -1637,8 +1637,8 @@ pub(crate) fn materialize_asm_sections(
                     } => {
                         let n = spec.bytes(&|_| None)?;
                         let gap = align_gap(sec.bytes.len() as i64, n as i64, None) as usize;
-                        // GNU as records the requested alignment on the section
-                        // even where a max skip drops the padding.
+                        // The section takes the requested alignment even where
+                        // a max skip drops the padding.
                         sec.align = sec.align.max(n);
                         let exec = b.flags.contains('x');
                         if max.is_none_or(|m| gap <= m as usize) {
@@ -1980,8 +1980,8 @@ pub(crate) fn materialize_asm_sections(
                     // section-local locations was valued during measurement.
                     AsmSectionItem::SymSet { .. } => {}
                     AsmSectionItem::SetExpr { .. } => {}
-                    // `.set name, <constant>` defines an absolute symbol, as in
-                    // GNU as. A later assignment to the same name wins.
+                    // `.set name, <constant>` defines an absolute symbol. A
+                    // later assignment to the same name wins.
                     AsmSectionItem::AbsSet { name, value } => {
                         match sec.labels.iter_mut().find(|l| l.name == *name) {
                             Some(l) => {
@@ -2226,7 +2226,7 @@ pub(crate) fn materialize_asm_sections(
                                 // A reference (`sym + 8`, `1b - .`) or a label
                                 // difference (`775f - 774f`) evaluates under the
                                 // location-value rules: a same-space result folds
-                                // (gas folds `a - .` with `a` in this section), a
+                                // (`a - .` with `a` in this section), a
                                 // symbolic one relocates.
                                 AsmSectionValue::Ref { .. } | AsmSectionValue::LabelDiff { .. } => {
                                     let key = section_key(b);
@@ -2379,7 +2379,7 @@ pub(crate) fn materialize_asm_sections(
                                             )?
                                         };
                                     // The operand's address minus a location: PC-relative
-                                    // when the location is in this section, as GNU as has it.
+                                    // when the location is in this section.
                                     let key = section_key(b);
                                     let here = sec.bytes.len() as i64;
                                     let mut val = AsmExprValue::from_term(AsmExprTerm {
@@ -2446,8 +2446,8 @@ pub(crate) fn materialize_asm_sections(
                         // its own bytes; rebase each to the section offset the
                         // instruction lands at, then append the machine bytes. A
                         // PC-relative reference to a label of this section
-                        // resolves here -- GNU as emits no relocation for it --
-                        // by patching the instruction field; other targets keep
+                        // resolves here, with no relocation, by patching the
+                        // instruction field; other targets keep
                         // their relocation (a numeric label's name rewritten to
                         // its per-instance symbol).
                         let base = sec.bytes.len() as u32;
@@ -2622,7 +2622,7 @@ pub(crate) fn materialize_asm_sections(
                 match item {
                     AsmSectionItem::CodeBytes { .. } => {
                         sec.after_insn = true;
-                        // gas gives a section holding instructions at least the
+                        // A section holding instructions takes at least the
                         // architecture's instruction alignment (4 on AArch64,
                         // where `align_is_p2` holds; 1 on x86).
                         if align_is_p2 {
@@ -2642,8 +2642,7 @@ pub(crate) fn materialize_asm_sections(
                 // Everything an item lays down other than an instruction is
                 // data. `.align` recorded its own class above and `.rept` each
                 // repetition's. A `.org` moves the location counter without
-                // recording a run, as in GNU as, so the surrounding run covers
-                // the gap.
+                // recording a run, so the surrounding run covers the gap.
                 let laid = sec.bytes.len().saturating_sub(map_at);
                 match item {
                     AsmSectionItem::CodeBytes { .. } => {
@@ -2724,10 +2723,10 @@ pub(crate) fn materialize_asm_sections(
     // A `.globl` naming no label in the section declares an external symbol,
     // not a definition here; it defines no section symbol. A `.type` / `.size`
     // still pending names a symbol another section, a `.set` or nothing
-    // defines: as in gas, the attributes go to that symbol, an undefined one
+    // defines: the attributes go to that symbol, an undefined one
     // when nothing defines it. Every call drops its own pending entries below.
     // A `.set` whose value reduced to a location defines the name as a
-    // label of the owning section, as GNU as does, so a field referencing
+    // label of the owning section, so a field referencing
     // it relocates against a definition.
     for name in blocks
         .iter()

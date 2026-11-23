@@ -68,9 +68,8 @@ struct Acc {
 
 impl Acc {
     /// Combine `data` into the accumulator. `within` folds one input's
-    /// repeats of the type, which union rather than intersect: bfd
-    /// unions them as it parses a note, so an input claims a bit it
-    /// states anywhere.
+    /// repeats of the type, which union rather than intersect, so an
+    /// input claims a bit it states anywhere.
     fn fold(&mut self, data: &[u8], within: bool) {
         let width = self.data.len().max(data.len());
         let (a, b) = (read_le(&self.data), read_le(data));

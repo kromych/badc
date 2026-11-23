@@ -1,5 +1,5 @@
-//! The import library of a DLL, as link.exe writes one beside a DLL it
-//! links (`/IMPLIB`) and GNU ld under `--out-implib`: an archive of the
+//! The import library of a DLL, written under `/IMPLIB` or
+//! `--out-implib`: an archive of the
 //! PE/COFF specification's short import members, one per export, whose
 //! symbol index names `__imp_<name>` for each and `<name>` for a function.
 //! A data export has no thunk, so its bare name is not defined.

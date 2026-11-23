@@ -101,8 +101,8 @@ enum Arg {
 
 /// The binary64 pattern of the quiet NaN of `ty` with the payload read
 /// from `spelling`: past white space and a sign, a decimal, octal or hex
-/// number in the significand's low bits. `None` for a spelling gcc leaves
-/// to the library. A `float` payload sits where binary32 narrowing keeps it.
+/// number in the significand's low bits. `None` for a spelling left to
+/// the library. A `float` payload sits where binary32 narrowing keeps it.
 fn nan_bits(spelling: &[u8], ty: i64) -> Option<u64> {
     let text = spelling.trim_ascii_start();
     let text = text

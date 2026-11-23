@@ -420,8 +420,8 @@ fn prefetch() {
     };
     assert_eq!(enc("prfm", &[Opnd::Imm(2), mr]), 0xF8A2_6822); // pldl2keep, [x1, x2]
     // An offset the scaled field cannot hold -- not a multiple of the access
-    // size, or negative -- takes the unscaled `prfum` sibling, as GNU as
-    // encodes it. Words from `as`.
+    // size, or negative -- takes the unscaled `prfum` sibling. Words from
+    // `as`.
     assert_eq!(enc("prfm", &[Opnd::Imm(0), mem(1, 4)]), 0xF880_4020);
     assert_eq!(enc("prfum", &[Opnd::Imm(0), mem(1, 4)]), 0xF880_4020);
     assert_eq!(enc("prfm", &[Opnd::Imm(9), mem(30, -8)]), 0xF89F_83C9); // plil1strm
@@ -911,9 +911,8 @@ fn fp_vector() {
 }
 
 /// The halving, rounding-halving, shift-by-register, absolute-difference
-/// accumulate and pairwise max/min three-same ops, as clang's assembler
-/// encodes them; the halving ops and the pairwise forms have no 64-bit
-/// lanes.
+/// accumulate and pairwise max/min three-same ops; the halving ops and the
+/// pairwise forms have no 64-bit lanes. Words from clang's assembler.
 #[test]
 fn vector_three_same_integer_families() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
@@ -993,8 +992,8 @@ fn vector_three_same_integer_families() {
     assert!(encode("smaxp", &[v(1, 3, true), v(2, 3, true), v(3, 3, true)]).is_err());
 }
 
-/// The scalar three-same forms over d (and s for the saturating ops), as
-/// clang's assembler encodes them; the compares and shifts have no s form.
+/// The scalar three-same forms over d (and s for the saturating ops); the
+/// compares and shifts have no s form. Words from clang's assembler.
 #[test]
 fn scalar_three_same() {
     let d = |n: u8| Opnd::VReg { num: n, is_d: true };
@@ -1028,7 +1027,7 @@ fn scalar_three_same() {
 }
 
 /// The leading-bit counts, the saturating sign ops and the FP estimates,
-/// vector and scalar, as clang's assembler encodes them.
+/// vector and scalar. Words from clang's assembler.
 #[test]
 fn vector_one_source_counts_and_estimates() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
@@ -1339,8 +1338,7 @@ fn fp_reciprocal_steps() {
 }
 
 /// The accumulating, rounding and saturating shifts by immediate, vector and
-/// d scalar, and the scalar shift-and-insert, as clang's assembler encodes
-/// them.
+/// d scalar, and the scalar shift-and-insert. Words from clang's assembler.
 #[test]
 fn vector_and_scalar_shift_immediate_families() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
@@ -1394,7 +1392,7 @@ fn vector_and_scalar_shift_immediate_families() {
 }
 
 /// The pairwise scalar sum, the long pairwise adds and the wide add and
-/// subtract, as clang's assembler encodes them.
+/// subtract. Words from clang's assembler.
 #[test]
 fn pairwise_long_and_wide() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
@@ -2028,7 +2026,7 @@ fn simd_ld_st_single_lane() {
         .is_err()
     );
     // The bare element operand `vN.T[i]` is the umov/ins lane, not a list:
-    // GNU as requires the braces here, and so does the encoder.
+    // the `ld1` lane form takes it braced, so the encoder rejects it.
     assert!(
         encode(
             "ld1",
@@ -2477,7 +2475,7 @@ fn sve_vector_length_and_element_count() {
     assert_eq!(enc("uqdech", &[x(5)]), 0x0470FFE5);
     assert_eq!(enc("uqdecw", &[w(6), pat(0), mul(2)]), 0x04A1FC06);
     assert_eq!(enc("uqdecd", &[x(7), pat(5)]), 0x04F0FCA7);
-    // What llvm-mc and GNU as reject: the unsigned 32-bit form's register
+    // Rejected: the unsigned 32-bit form's register
     // pair, a pair naming two registers, a W count, an out-of-range
     // immediate or multiplier, and a multiplier with no pattern before it.
     assert!(encode("uqincb", &[x(0), w(0)]).is_err());
@@ -2748,8 +2746,8 @@ fn bic_immediate_is_and_of_complement() {
     assert_eq!(enc("bic", &[x(0), x(1), Opnd::Imm(1 << 55)]), 0x9248F820);
     // bic w0, w1, #0xf == and w0, w1, #0xfffffff0
     assert_eq!(enc("bic", &[w(0), w(1), Opnd::Imm(0xF)]), 0x121C6C20);
-    // The complement of -1 is 0, which is not a valid bitmask (as GNU as also
-    // rejects `bic x0, x1, #-1`).
+    // The complement of -1 is 0, which is not a valid bitmask, so
+    // `bic x0, x1, #-1` is rejected.
     assert!(encode("bic", &[x(0), x(1), Opnd::Imm(-1)]).is_err());
 }
 
@@ -2890,7 +2888,7 @@ fn lsui_unprivileged_atomics() {
     assert_eq!(enc("casat", &[x(6), x(7), m(8)]), 0xC9C67D07);
     assert_eq!(enc("caslt", &[x(9), x(10), m(11)]), 0xC989FD6A);
     assert_eq!(enc("casalt", &[x(12), x(13), m(14)]), 0xC9CCFDCD);
-    // The compare-and-swap forms have no 32-bit variant, as in GNU as.
+    // The compare-and-swap forms have no 32-bit variant.
     assert!(encode("casalt", &[w(0), w(1), m(2)]).is_err());
     assert!(encode("ldteor", &[x(0), x(1), m(2)]).is_err());
 }

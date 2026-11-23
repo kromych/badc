@@ -299,10 +299,10 @@ int main(int argc, char **argv) { (void)argv; printf(\"%d\\n\", g(argc)); fflush
 
 /// `__builtin_unreachable()` reached reports at the call under
 /// `-fsanitize=unreachable` and ends the program, whatever the recovery: its
-/// handler has no form that returns. `return` is accepted and, as gcc's and
-/// clang's in C, checks nothing: flowing off a function's end is undefined
-/// only where the value is used (C17 6.9.1p12). Trapped, the call reports
-/// nothing and still ends the program.
+/// handler has no form that returns. `return` is accepted and checks
+/// nothing in C: flowing off a function's end is undefined only where the
+/// value is used (C17 6.9.1p12). Trapped, the call reports nothing and
+/// still ends the program.
 #[test]
 fn a_reached_unreachable_is_reported_and_ends_the_program() {
     let dir = TempDir::new("badc-sanitize-unreachable");
@@ -359,9 +359,8 @@ int main(int argc, char **argv) {
 ";
 
 /// `__builtin_clz` / `__builtin_ctz` and their wider forms of 0 report under
-/// `-fsanitize=builtin` at the operand, an operation's operator, as clang
-/// 21 reports them, naming the narrow builtin; a nonzero operand reports
-/// nothing.
+/// `-fsanitize=builtin` at the operand, an operation's operator, naming
+/// the narrow builtin; a nonzero operand reports nothing.
 #[test]
 fn a_zero_count_operand_is_reported() {
     let dir = TempDir::new("badc-sanitize-builtin");
@@ -464,8 +463,8 @@ int main(void) {
 /// and one an earlier declaration states -- and a null a `returns_nonnull`
 /// function returns report under `-fsanitize=nonnull-attribute` and
 /// `returns-nonnull-attribute` at the argument or the `return`, with the
-/// attribute's site as the note, as clang 21 reports them. An argument
-/// `sizeof` does not evaluate is not checked.
+/// attribute's site as the note. An argument `sizeof` does not evaluate is
+/// not checked.
 #[test]
 fn a_null_argument_or_return_against_nonnull_is_reported() {
     let dir = TempDir::new("badc-sanitize-nonnull");
@@ -605,8 +604,7 @@ int main(int argc, char **argv) {
 
 /// A variable-length array bound that is not positive reports at the bound
 /// under `-fsanitize=vla-bound` (C17 6.7.6.2p5): an object's outermost and
-/// inner bounds, an unsigned one at 0, and a pointer's to such an array, as
-/// clang evaluates its type.
+/// inner bounds, an unsigned one at 0, and a pointer's to such an array.
 #[test]
 fn a_non_positive_vla_bound_is_reported() {
     let dir = TempDir::new("badc-sanitize-vla");
@@ -666,9 +664,9 @@ int main(int argc, char **argv) {
 ";
 
 /// A floating value converted to an integer type it lies outside the range
-/// of reports under `-fsanitize=float-cast-overflow` (C17 6.3.1.4p1), as
-/// clang words it: an explicit cast at its `(`, an implicit conversion of an
-/// initializer, an assignment, an argument or a returned value at the value,
+/// of reports under `-fsanitize=float-cast-overflow` (C17 6.3.1.4p1): an
+/// explicit cast at its `(`, an implicit conversion of an initializer, an
+/// assignment, an argument or a returned value at the value,
 /// a compound assignment at its operator; a NaN and a `float` too. A value
 /// whose discarded fraction leaves it in range, -0.5 to `unsigned`, does not.
 #[test]
@@ -769,8 +767,8 @@ fn without_addresses(o: &Output) -> Vec<String> {
 }
 
 /// An access through a null or misaligned address reports under
-/// `-fsanitize=null` and `alignment` as clang reports it: the load or store
-/// at the `*`, the pointer operand of a subscript or the member name, a
+/// `-fsanitize=null` and `alignment`: the load or store at the `*`, the
+/// pointer operand of a subscript or the member name, a
 /// member access through the structure's address first, with the alignment
 /// the structure's and the offset's give. `&` accesses nothing (C17
 /// 6.5.3.2p3); a volatile access, a character access, a packed member and
@@ -898,8 +896,8 @@ int main(int argc, char **argv) {
 ";
 
 /// Pointer arithmetic that `-fsanitize=pointer-overflow` finds undefined
-/// (C17 6.5.6p8) reports as clang reports it in C: a step from or to a
-/// null pointer, a result on the wrong side of the base for the offset's
+/// (C17 6.5.6p8) reports in C: a step from or to a null pointer, a result
+/// on the wrong side of the base for the offset's
 /// sign or, for an unsigned index, past it, and an index whose scaling to
 /// bytes overflows -- `+`, `-`, a subscript, `+=`, `++` and `--`, at the
 /// operator or the subscript's pointer operand. A zero literal offset
@@ -1029,13 +1027,12 @@ fn division_faulted(o: &Output) -> bool {
     }
 }
 
-/// Each site of a shift and a division reports what clang's runtime does:
+/// Each site of a shift and a division reports its failure:
 /// the amount negative or past the width, a negative or overflowing base
 /// of a signed left shift (an unsigned one has none), `INT_MIN / -1`, and
 /// a zero divisor, signed or unsigned. The division still executes after
-/// the report, as gcc's and clang's instrumentation lets it, so each
-/// division site ends a run of its own: a zero divisor faults on x86-64
-/// and on Windows arm64, and `INT_MIN / -1` may on x86-64.
+/// the report, so each division site ends a run of its own: a zero divisor
+/// faults on x86-64 and on Windows arm64, and `INT_MIN / -1` may on x86-64.
 #[test]
 fn shifts_and_divisions_are_checked() {
     let dir = TempDir::new("badc-sanitize-shifts");
@@ -1204,7 +1201,7 @@ fn compound_shifts_and_divisions_are_checked() {
 
 /// `-fsanitize=enum` is taken and inserts nothing: a C enumeration holds
 /// every value of its compatible integer type (C17 6.7.2.2p4), so a load
-/// of one is never out of range, as gcc and clang have it in C.
+/// of one is never out of range.
 #[test]
 fn the_enum_check_inserts_nothing_in_c() {
     let dir = TempDir::new("badc-sanitize-enum");
@@ -1252,12 +1249,10 @@ int main(int argc, char **argv) {
 ";
 
 /// A subscript of an array of known bound is held to it under
-/// `-fsanitize=bounds`, reported where its array operand begins as clang's
-/// `array-bounds` reports it: an unsigned or negative index, the inner
-/// bound of a row, the order `i[a]`; the address one past the end is in
-/// bounds. A trailing member reached through a pointer is left alone, as
-/// gcc leaves it, and `bounds-strict` checks it too, as clang does under
-/// -fstrict-flex-arrays=3.
+/// `-fsanitize=bounds`, reported where its array operand begins: an
+/// unsigned or negative index, the inner bound of a row, the order `i[a]`;
+/// the address one past the end is in bounds. A trailing member reached
+/// through a pointer is left alone, and `bounds-strict` checks it too.
 #[test]
 fn subscripts_are_held_to_the_array_bound() {
     let dir = TempDir::new("badc-sanitize-bounds");
@@ -1322,9 +1317,8 @@ int main(int argc, char **argv) {
 ";
 
 /// A `_Bool` loaded whose byte is neither 0 nor 1 is reported under
-/// `-fsanitize=bool`, at the lvalue's designator as clang reports it: the
-/// member name, the `*`, the array operand; a pointer to `_Bool` and a
-/// `_Bool` holding 1 are not.
+/// `-fsanitize=bool`, at the lvalue's designator: the member name, the `*`,
+/// the array operand; a pointer to `_Bool` and a `_Bool` holding 1 are not.
 #[test]
 fn a_bool_load_holds_0_or_1() {
     let dir = TempDir::new("badc-sanitize-bool");
@@ -1389,7 +1383,7 @@ int main(int argc, char **argv) {
 /// argument, a returned value and a constant, each reported once with
 /// clang 21's text, at the converted expression or the compound operator.
 /// An explicit cast and a value that fits report nothing; `undefined`
-/// leaves the checks out, as clang's does.
+/// leaves the checks out.
 #[test]
 fn implicit_truncations_report_as_clang_does() {
     let dir = TempDir::new("badc-sanitize-truncation");

@@ -669,7 +669,7 @@ fn elf_class_selects_the_data_model_predefines() {
 
 /// The `__code_model_*__` name follows `-mcmodel` on the x86-64
 /// targets, `-m16` / `-m32` override it to the 32-bit model, and the
-/// aarch64 targets define none, all as gcc 16.1.1 does.
+/// aarch64 targets define none (measured with gcc 16.1.1).
 #[test]
 fn the_code_model_predefine_names_the_selected_model() {
     use crate::c5::{CodeModel, ElfClass};
@@ -1313,8 +1313,7 @@ fn push_macro_saves_a_definition_and_pop_macro_reinstates_it() {
 
 #[test]
 fn a_pop_macro_with_no_matching_push_is_reported_and_keeps_the_definition() {
-    // clang reports it under -Wignored-pragmas, MSVC as C4602; gcc is
-    // silent. None of them changes the definition.
+    // Nothing to pop: the pragma is reported and changes no definition.
     let src = "#define X 1\n\
                #pragma pop_macro(\"X\")\n\
                x = X;\n\
@@ -1341,8 +1340,7 @@ fn a_pop_macro_with_no_matching_push_is_reported_and_keeps_the_definition() {
 
 #[test]
 fn a_push_macro_operand_other_than_one_string_literal_is_an_error() {
-    // gcc: "invalid #pragma push_macro directive"; clang: "pragma
-    // push_macro requires a parenthesized string".
+    // The operand is one parenthesized string literal.
     for pragma in [
         "push_macro(X)",
         "push_macro",
@@ -2399,8 +2397,8 @@ fn a_defined_inside_a_macro_argument_takes_the_expanded_operand() {
 
 #[test]
 fn a_produced_defined_is_reported_under_wextra_outside_a_system_header() {
-    // gcc puts -Wexpansion-to-defined under -Wextra and -Wpedantic, and
-    // reports nothing of a system header.
+    // -Wexpansion-to-defined is under -Wextra and -Wpedantic, and nothing
+    // of a system header is reported.
     let text = "#define P(n) defined(D_ ## n)\n#if P(x)\n#endif\n#if defined(D_x)\n#endif\n";
     let dir = std::env::temp_dir().join(format!("badc_pp_produced_defined_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -7038,7 +7036,7 @@ fn a_header_name_keeps_its_comment_delimiters() {
     assert!(out.lines().any(|l| l.trim() == "90"), "{out}");
 }
 
-/// `-mmacosx-version-min=` spells the deployment target as clang does:
+/// `-mmacosx-version-min=` spells the deployment target as the SDK does:
 /// `MMmmpp` from 10.10 on, `MMmp` before with the patch capped at 9.
 #[test]
 fn the_macos_deployment_target_is_spelled_as_clang_spells_it() {

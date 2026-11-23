@@ -34,7 +34,7 @@ const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
 const IMAGE_FILE_MACHINE_ARM64EC: u16 = 0xA641;
 const FILE_HEADER_SIZE: usize = 20;
 const BIGOBJ_HEADER_SIZE: usize = 56;
-/// `ANON_OBJECT_HEADER_BIGOBJ::ClassID`, the GUID MSVC and GNU as write.
+/// `ANON_OBJECT_HEADER_BIGOBJ::ClassID`, the bigobj format's GUID.
 const BIGOBJ_CLASS_ID: [u8; 16] = [
     0xC7, 0xA1, 0xBA, 0xD1, 0xEE, 0xBA, 0xA9, 0x4B, 0xAF, 0x20, 0xFA, 0xF6, 0x6A, 0xA4, 0xDC, 0xB8,
 ];
@@ -566,8 +566,8 @@ fn is_tls(name: &str) -> bool {
 
 /// The merged stream a section joins. A relocated read-only section
 /// joins the relro stream, as the ELF reader places one. A section with
-/// no `CNT_*` flag takes its content from the name it groups under, as
-/// link.exe and GNU ld place it there: `.text` code, `.bss` zero fill,
+/// no `CNT_*` flag takes its content from the name it groups under:
+/// `.text` code, `.bss` zero fill,
 /// any other initialized data, which its `MEM_*` flags place.
 fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
     let f = s.flags;
@@ -1878,7 +1878,7 @@ pub fn is_pe_dll(bytes: &[u8]) -> bool {
     pe_dll_header(bytes).is_some()
 }
 
-/// A DLL's exports as GNU ld reads a DLL input: each name and its `__imp_`
+/// A DLL input's exports: each name and its `__imp_`
 /// slot, as data where the address lies in a section that is not executable.
 pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Error> {
     let pe = pe_dll_header(bytes).ok_or_else(|| bad("not a PE DLL"))?;

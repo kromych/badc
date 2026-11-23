@@ -768,10 +768,10 @@ int var_cmp(const char *a, const char *b, unsigned long n) { return memcmp(a, b,
 void idiom(char *p, unsigned long n) { for (unsigned long i = 0; i < n; i++) p[i] = 0; }
 ";
 
-/// `-finline-stringops` (gcc's, which Linux 7.3 passes to every vDSO):
-/// a call to a function it names becomes a loop whatever the length --
-/// the builtin, the library call and the loop-idiom's fill alike -- and a
-/// function it leaves out is still called.
+/// `-finline-stringops`: a call to a function it names becomes a loop
+/// whatever the length -- the builtin, the library call and the
+/// loop-idiom's fill alike -- and a function it leaves out is still
+/// called.
 #[test]
 fn inline_stringops_leaves_no_call_to_the_functions_it_names() {
     use crate::InlineStringOps;

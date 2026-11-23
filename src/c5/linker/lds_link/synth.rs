@@ -111,7 +111,7 @@ impl<'a> LdsLinker<'a> {
                 self.objects[synth].sections[relr].entsize = slot;
             }
         }
-        // bfd builds the GOT for every dynamic image, and on demand
+        // The GOT is built for every dynamic image, and on demand
         // wherever an input names its base, so a static link reading
         // `_GLOBAL_OFFSET_TABLE_` still has an address to give it.
         let got_refs = (self.objects.iter())
@@ -140,8 +140,8 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// The dynamic-linking tables. bfd builds these for every ET_DYN
-    /// image; a script that does not want them discards them.
+    /// The dynamic-linking tables, built for every ET_DYN image; a
+    /// script that does not want them discards them.
     fn synthesize_dynamic_sections(&mut self) {
         self.verdefs = self.script_verdefs();
         let mut secs: Vec<(&str, u32, u64, u64)> = Vec::new();
@@ -149,7 +149,7 @@ impl<'a> LdsLinker<'a> {
             secs.push((SYNTH_HASH, dynamic::SHT_HASH, SHF_ALLOC, 4));
         }
         if self.opts.hash_style.gnu() {
-            // bfd gives `.gnu.hash` a 4-byte entsize on ELF32 only:
+            // `.gnu.hash` takes a 4-byte entsize on ELF32 only:
             // the ELF64 table's Bloom words are wider than its words.
             let ent = if self.class.is32() { 4 } else { 0 };
             secs.push((SYNTH_GNU_HASH, dynamic::SHT_GNU_HASH, SHF_ALLOC, ent));
@@ -256,7 +256,7 @@ impl<'a> LdsLinker<'a> {
             let mut bytes: Vec<u8> = Vec::new();
             if name == rela_name {
                 // Reserved slots stay zeroed (R_*_NONE) ahead of the
-                // live entries, as bfd leaves them.
+                // live entries.
                 bytes.resize(self.dyn_nones.unwrap_or(0) as usize * rela_ent as usize, 0);
                 for d in &self.dyn_relas {
                     let sym = d.sym.as_deref().map_or(0, |n| self.dynsym_index(n));
@@ -293,8 +293,8 @@ impl<'a> LdsLinker<'a> {
                     }
                     SYNTH_GOT if self.objects[synth].sections[sec_idx].size == 0 => {}
                     SYNTH_GOT => {
-                        // The header slot holds the `.dynamic` address, as
-                        // bfd writes `_GLOBAL_OFFSET_TABLE_[0]`.
+                        // The header slot, `_GLOBAL_OFFSET_TABLE_[0]`,
+                        // holds the `.dynamic` address.
                         if self.got_reserved() != 0 {
                             bytes.extend_from_slice(
                                 &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],

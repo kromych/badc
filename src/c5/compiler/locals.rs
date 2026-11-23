@@ -2033,8 +2033,8 @@ impl Compiler {
     }
 
     /// Try to fold a `const` scalar arithmetic auto local's initializer
-    /// to a constant of the declared type, mirroring the value GCC's
-    /// case-label / `static_assert` fold reads. The lexer is at the `=`;
+    /// to a constant of the declared type, the value the case-label /
+    /// `static_assert` fold reads. The lexer is at the `=`;
     /// the parse is speculative and fully rolled back so the normal
     /// initializer path re-parses and emits the store. `None` when the
     /// initializer is not a constant arithmetic expression (a runtime

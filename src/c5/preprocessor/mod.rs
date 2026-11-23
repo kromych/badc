@@ -1106,8 +1106,8 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     // and attributes on it (`.type`, `.size`, `.symver`, `.hidden`,
     // `@progbits` section types, visibility).
     (PredefOn::Elf, &[("__ELF__", "1")]),
-    // clang's values there, with or without `-fPIC`; on ELF the driver
-    // derives them from the PIC flags.
+    // Off ELF, code is position-independent with or without `-fPIC`; on ELF
+    // the driver derives them from the PIC flags.
     (PredefOn::AlwaysPic, &[("__pic__", "2"), ("__PIC__", "2")]),
     (
         PredefOn::MacOS,
@@ -1405,8 +1405,8 @@ impl Preprocessor {
     /// The macOS deployment target `version`, `xxxx.yy.zz` in nibbles, 11.0
     /// for none: the `__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__` and
     /// `__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__` the SDK's availability
-    /// macros read, spelled as clang spells them: `MMmmpp` from 10.10 on,
-    /// `MMmp` before, the patch capped at 9.
+    /// macros read, in the SDK's version-constant form: `MMmmpp` from
+    /// 10.10 on, `MMmp` before, the patch capped at 9.
     pub fn set_macos_min(&mut self, version: Option<u32>) {
         let v = version.unwrap_or(11 << 16);
         let (major, minor, patch) = (v >> 16, (v >> 8) & 0xff, v & 0xff);

@@ -3,7 +3,7 @@
 //! at offsets it knows, and the general-dynamic and descriptor ones it
 //! rewrites to initial-exec for a shared library's thread-local, which sits
 //! where the loader places that library's block: the transitions of the
-//! x86-64 psABI TLS supplement and AAELF64, as GNU ld and lld make them. A
+//! x86-64 psABI TLS supplement and AAELF64. A
 //! rewritten local-dynamic sequence yields the thread pointer, so its
 //! offsets are taken from it. A site whose bytes are not the stated
 //! sequence is refused.

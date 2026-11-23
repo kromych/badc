@@ -1,6 +1,6 @@
 //! Source positions of an assembler unit and the errors reported at them.
-//! GNU as reports each error at `file:line` and goes on with the next
-//! statement; the passes collect [`AsmError`]s the same way.
+//! Each error is reported at `file:line` and assembly goes on with the
+//! next statement; the passes collect [`AsmError`]s for that.
 
 use crate::c5::diag::Loc;
 
@@ -42,7 +42,7 @@ impl AsmErrors {
 }
 
 /// Each prepared line's input line and the macro invocation that wrote it:
-/// gas reports a body line with a note for each invocation.
+/// an error in a body line carries a note for each invocation.
 pub(crate) struct AsmOrigin {
     lines: alloc::vec::Vec<(u32, u32)>,
     /// Each context's invoking line and enclosing context; 0 is the input.
@@ -149,7 +149,7 @@ pub(crate) fn source_message(text: &str) -> &str {
 }
 
 /// The file and line each line of a source stands for: a marker
-/// `# N "file" [flags]` makes the next line line N of `file`, as in gas.
+/// `# N "file" [flags]` makes the next line line N of `file`.
 pub(crate) struct AsmSourceMap {
     files: alloc::vec::Vec<alloc::string::String>,
     /// Each line's file in `files` and line there; empty with no marker.
@@ -157,7 +157,7 @@ pub(crate) struct AsmSourceMap {
 }
 
 impl AsmSourceMap {
-    /// Map `text`, named `file`, blanking its markers. gas takes a marker
+    /// Map `text`, named `file`, blanking its markers. A marker counts
     /// only when it names a file; gcc's `# 0 "" 2` after an inline-asm block
     /// returns to the physical position.
     pub(crate) fn read(text: &str, file: &str) -> (alloc::string::String, Self) {

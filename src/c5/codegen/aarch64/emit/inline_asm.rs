@@ -214,7 +214,7 @@ fn build_label_branch(
         },
         m => {
             // Both conditional spellings: `b.<cond>` and the bare `b<cond>`
-            // (`bne`, `beq`), which GNU as also accepts.
+            // (`bne`, `beq`).
             let cond = m
                 .strip_prefix("b.")
                 .and_then(super::asm::cond_code)
@@ -278,7 +278,7 @@ fn encode_deferred_asm_region(
             continue;
         }
         // `.org <expr>`: pad forward to the target; a backward move is the
-        // replacement-length assertion firing, an error as in GNU as.
+        // replacement-length assertion firing, an error.
         if let Some(rest) = stmt.strip_prefix(".org")
             && (rest.is_empty() || rest.starts_with(char::is_whitespace))
         {
@@ -405,7 +405,7 @@ fn encode_deferred_asm_region(
     // ending in data realigns here.
     a64_align_asm_stream(&mut bytes, &mut data_ranges, &mut map_state);
     // A forward reference binds the next definition after the branch, a
-    // backward one the most recent at or before it (GNU as `Nf` / `Nb`).
+    // backward one the most recent at or before it (`Nf` / `Nb`).
     for &(site, ref kind, num, forward) in &label_fixups {
         let target = if forward {
             labels.iter().find(|&&(n, off)| n == num && off > site)
@@ -457,9 +457,8 @@ fn template_expr_value(
 }
 
 /// Bring a stream to the instruction boundary out of the data mapping
-/// state, as GNU as does in an executable section, and leave `state` on
-/// instructions. The gap is under one instruction and is filled with
-/// zeros as part of the data run it follows.
+/// state and leave `state` on instructions. The gap is under one
+/// instruction and is filled with zeros as part of the data run it follows.
 pub(crate) fn a64_align_asm_stream(
     code: &mut Vec<u8>,
     text_data_ranges: &mut Vec<(usize, usize)>,
@@ -1672,7 +1671,7 @@ impl<'a> TemplateStream<'a> {
     }
 
     /// A layout directive moves the location counter; the unit's whole text
-    /// stream is the section GNU as resolves it against.
+    /// stream is the section it resolves against.
     fn encode_layout(
         &mut self,
         item: &crate::c5::asm::AsmSectionItem,
@@ -1927,7 +1926,7 @@ impl<'a> TemplateStream<'a> {
     }
 
     /// A named label defined in the main stream is a definition of the
-    /// unit, as under GNU as: the writers emit a `.text` symbol for it. `.L`
+    /// unit: the writers emit a `.text` symbol for it. `.L`
     /// names are assembler-local.
     fn record_named_labels(
         &self,
@@ -1945,7 +1944,7 @@ impl<'a> TemplateStream<'a> {
                 continue;
             }
             let symbol = crate::c5::asm::asm_symbol_name(format, name).into_owned();
-            // One definition per name across the unit, as in GNU as.
+            // One definition per name across the unit.
             if out.asm_text_labels.iter().any(|l| l.name == symbol) {
                 return Err(alloc::format!(
                     "inline asm: symbol `{name}` is already defined"
@@ -2885,7 +2884,7 @@ fn a64_insn_placeholder_len(i: &super::asm::AsmInsnA64) -> usize {
 }
 
 /// Replace each operand the section layout values with its constant, so
-/// the encoder selects the form from the value as GNU as does; `here` is
+/// the encoder selects the form from the value; `here` is
 /// the instruction's section offset.
 fn fold_a64_layout_operands(
     insn: &mut super::asm::AsmInsnA64,
@@ -2912,7 +2911,7 @@ fn fold_a64_layout_operands(
 
 /// The `movz` / `movk` word an `:abs_gN:` operand relocates: zero
 /// immediate, the group's shift. A 32-bit destination admits only the
-/// two groups that fit it, as GNU as does.
+/// two groups that fit it.
 fn a64_movw_placeholder(
     rd: u8,
     is64: bool,
@@ -3158,7 +3157,7 @@ fn a64_label_branch_reloc(
 /// `ldr Rt, =value` takes an entry of its section and subsection's
 /// pending pool (shared with an earlier request of the same width and
 /// value) and becomes a literal load of the entry's label; `.ltorg` and
-/// the end of the subsection's content flush, as under GNU as.
+/// the end of the subsection's content flush.
 fn assign_a64_literal_pools(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     errors: &mut Vec<crate::c5::asm::AsmError>,
@@ -3257,8 +3256,8 @@ fn a64_pool_request(
 }
 
 /// The value a `ldr Rt, =value` deposits: a constant truncated to the entry
-/// width, or a link-time address the entry relocates to. GNU as has no
-/// 16-byte relocation, so only the 4- and 8-byte entries take a symbol.
+/// width, or a link-time address the entry relocates to. AAELF64 has no
+/// 16-byte data relocation, so only the 4- and 8-byte entries take a symbol.
 fn a64_pool_value(
     expr: &str,
     size: u8,

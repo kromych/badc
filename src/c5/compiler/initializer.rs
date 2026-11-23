@@ -1034,8 +1034,8 @@ impl Compiler {
 
     /// Report the elements of a braced initializer from the current one to the
     /// list's `}`, which provide values for no object of the `what` it
-    /// initializes (C17 6.7.9p2), and drop them unevaluated, as gcc and
-    /// clang do; the cursor is left on the `}`.
+    /// initializes (C17 6.7.9p2), and drop them unevaluated; the cursor is
+    /// left on the `}`.
     pub(super) fn drop_excess_initializers(&mut self, what: &str) -> Result<(), C5Error> {
         let text = format!("excess elements in {what} initializer");
         self.warn_at(Code::EXCESS_INITIALIZERS, self.site(), text);

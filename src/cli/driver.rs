@@ -169,7 +169,7 @@ fn resolve_search_paths(cli: &mut Cli) {
     if cli.target.binary_format() == badc::BinaryFormat::MachO {
         cli.link.mach_o.sdk = cli.sysroot.as_deref().and_then(sdk_version);
         // The deployment target the option leaves unset comes from the
-        // environment, as clang and ld64 read it.
+        // environment.
         if cli.front.macos_min.is_none()
             && let Ok(text) = std::env::var("MACOSX_DEPLOYMENT_TARGET")
             && !text.is_empty()
@@ -320,9 +320,9 @@ fn dispatch(cli: Cli) {
             }
         }
     }
-    // One dependency file cannot describe several translation units.
-    // gcc truncates it per unit, leaving only the last; badc compiles
-    // units in parallel, where that would race, so it is refused.
+    // One dependency file cannot describe several translation units, and
+    // writing it per unit would race as units compile in parallel, so it
+    // is refused.
     if let Some(d) = &cli.deps
         && d.file.is_some()
         && inputs.sources.len() > 1

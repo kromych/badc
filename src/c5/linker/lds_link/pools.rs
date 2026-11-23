@@ -43,10 +43,9 @@ struct EhSurvey {
 }
 
 impl<'a> LdsLinker<'a> {
-    /// Deduplicate SHF_MERGE sections without relocations, following
-    /// bfd's merge pass (`bfd/merge.c`): a separate pool per output
-    /// section and (entsize, strings, alignment) class. A section
-    /// whose entsize/alignment relation fails bfd's sanity check, or
+    /// Deduplicate SHF_MERGE sections without relocations: a separate
+    /// pool per output section and (entsize, strings, alignment) class.
+    /// A section whose entsize/alignment relation fails the check below, or
     /// whose size is not an entsize multiple, stays unmerged. The
     /// pool replaces the first member's bytes; other members
     /// contribute nothing and their offsets remap.
@@ -78,7 +77,7 @@ impl<'a> LdsLinker<'a> {
                 continue;
             }
             let align = s.addralign.max(1);
-            // bfd: an entsize below the alignment must be a power of
+            // An entsize below the alignment must be a power of
             // two and marks strings; above it, an exact multiple.
             if !align.is_power_of_two()
                 || (entsize < align && (!entsize.is_power_of_two() || !strings))
@@ -118,7 +117,7 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Build one merge pool the way bfd does. Entries are recorded in
+    /// Build one merge pool. Entries are recorded in
     /// member/offset order and deduplicated on identity; an entry's
     /// required alignment is the largest power of two dividing any
     /// input offset it appears at (capped at the section alignment,
@@ -159,7 +158,7 @@ impl<'a> LdsLinker<'a> {
                 let len = if strings {
                     // Entry runs through its all-zero terminator
                     // unit; an unterminated tail gains a synthetic
-                    // one (bfd appends entsize zeros to the buffer).
+                    // one.
                     let mut k = pos;
                     loop {
                         if k >= data.len() {
@@ -197,7 +196,7 @@ impl<'a> LdsLinker<'a> {
             member_refs.push((m, starts, ids));
         }
         if strings && !entries.is_empty() {
-            // bfd merge_strings: sort by reversed content (lengths
+            // Sort by reversed content (lengths
             // without the terminator) and merge each entry into an
             // alignment-compatible neighbor it is a suffix of.
             let content_len = |e: &Entry| e.bytes.len() - es;
@@ -274,8 +273,7 @@ impl<'a> LdsLinker<'a> {
 
     /// Remap an offset into a merged input section to its pool
     /// offset: the covering entry's position plus the delta into it.
-    /// At or past the input's end the offset maps to the pool's end,
-    /// as bfd resolves end-of-section references.
+    /// At or past the input's end the offset maps to the pool's end.
     fn merge_remap(&self, insec: usize, off: u64) -> u64 {
         let pool = &self.pools[self.merge_of[&insec]];
         if off >= self.insec(insec).size {
@@ -290,8 +288,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// The offset of a section-symbol reference into a merge pool that
-    /// the input section does not cover, which bfd reports as `access
-    /// beyond end of merged section`. Such an addend names no entry and
+    /// the input section does not cover. Such an addend names no entry and
     /// resolves to the pool's end.
     pub(super) fn merge_offset_out_of_range(&self, oi: usize, r: &RawReloc) -> Option<i64> {
         if self.merge_of.is_empty() {
@@ -335,14 +332,13 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Rewrite the `.eh_frame` inputs of one output section the way
-    /// bfd's `elf-eh-frame.c` does: identical CIEs fold into the first
+    /// Rewrite the `.eh_frame` inputs of one output section: identical
+    /// CIEs fold into the first
     /// copy in output order, an FDE describing code that left the link
     /// goes, and a CIE no surviving FDE names goes with it. Two CIEs
     /// are one when the bytes after their length field and the
-    /// relocations covering them agree; bfd compares a CIE's parsed
-    /// fields and the symbol its personality resolves to, and those
-    /// follow from byte and relocation equality.
+    /// relocations covering them agree, which implies equal parsed
+    /// fields and an equal personality symbol.
     ///
     /// Which CIEs survive is settled over the whole output section
     /// before any input is rewritten: an FDE in a later input keeps a
@@ -458,7 +454,7 @@ impl<'a> LdsLinker<'a> {
                     owner.push(Some(c));
                 }
                 // An FDE describing code that left the link describes
-                // nothing; bfd drops the entry rather than relocate it.
+                // nothing; the entry is dropped rather than relocated.
                 Some(_) if self.covers_discarded(i, e.off, e.len) => owner.push(None),
                 Some(at) => {
                     let c = *local.get(&at)?;
@@ -517,8 +513,8 @@ impl<'a> LdsLinker<'a> {
         bytes.extend_from_slice(&data[tail..]);
         // An entry stream stopping short of the section's alignment
         // would leave the padding before the next input inside the
-        // linked stream, where a zero length ends it. bfd gives the
-        // padding to the last entry instead; so does this.
+        // linked stream, where a zero length ends it. The padding goes
+        // to the last entry instead.
         let align = self.insec(i).addralign.max(1) as usize;
         let padded = tail == data.len() && kept.len() > 1 && !bytes.len().is_multiple_of(align);
         if padded {

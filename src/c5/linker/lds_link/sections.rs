@@ -21,7 +21,7 @@ use super::{
 };
 use crate::c5::linker::link_err;
 
-/// bfd's orphan buckets, in layout order: code, read-only data,
+/// The orphan buckets, in layout order: code, read-only data,
 /// writable data, `.bss`, then everything unallocated.
 fn orphan_class(flags: u64, shtype: u32) -> u32 {
     if flags & SHF_ALLOC == 0 {
@@ -311,7 +311,7 @@ impl<'a> LdsLinker<'a> {
 
     /// `--gc-sections`: discard every allocatable input section no
     /// root reaches through a relocation, before the specs claim
-    /// anything. bfd's rule set -- a section carrying none of
+    /// anything. A section carrying none of
     /// `SEC_ALLOC` / `SEC_LOAD` / `SEC_RELOC` is kept, as is a debug
     /// section, `SHF_GNU_RETAIN`, and anything a `KEEP()` names.
     pub(super) fn gc_sections(&mut self) {
@@ -336,7 +336,7 @@ impl<'a> LdsLinker<'a> {
         // Sections GC never collects. Kept is not the same as
         // reaching: a debug or unwind section names every function it
         // describes, so following its relocations would keep the whole
-        // input. bfd keeps those sections and prunes their contents
+        // input. Those sections are kept and their contents pruned
         // instead, and their references to a dropped section resolve
         // to nothing rather than to a diagnostic.
         for (i, keep) in live.iter_mut().enumerate() {
@@ -601,8 +601,8 @@ impl<'a> LdsLinker<'a> {
             self.outs[oi].pieces.push(Piece::Inputs(alloc::vec![i]));
             return;
         }
-        // New output section named after the input. bfd anchors an
-        // orphan on the output section canonically named for its class
+        // New output section named after the input. An orphan anchors
+        // on the output section canonically named for its class
         // (`.text`, `.rodata`, `.data`, `.bss`), falling back to the
         // last section of a compatible class; further orphans of the
         // same class stack after the one already placed.

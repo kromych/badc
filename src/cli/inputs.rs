@@ -146,7 +146,7 @@ fn pe_library_spellings(name: &str) -> [String; 7] {
 /// ships only the stub, and where both exist they describe the same
 /// library. PE takes [`pe_library_spellings`].
 pub(crate) fn find_library(name: &str, search_paths: &[String], target: Target) -> Option<String> {
-    // `-l:<file>` names the file itself, as GNU ld takes it.
+    // `-l:<file>` names the file itself.
     if let Some(file) = name.strip_prefix(':') {
         return (search_paths.iter())
             .map(|d| std::path::Path::new(d).join(file))

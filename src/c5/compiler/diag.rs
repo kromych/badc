@@ -770,7 +770,7 @@ impl Compiler {
     /// pathological nesting gets a diagnostic instead of exhausting
     /// the native stack. C99 5.2.4.1 requires 63 nesting levels for
     /// expressions / declarators and 127 for blocks; 512 stays well
-    /// above any real source (and above Clang's default of 256) while
+    /// above any real source while
     /// capping the worst-case native stack the driver must reserve.
     pub(super) fn with_nesting<T>(
         &mut self,

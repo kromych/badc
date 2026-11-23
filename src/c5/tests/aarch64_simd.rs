@@ -634,8 +634,7 @@ fn the_polynomial_long_products_are_rows() {
 
 /// `poly128_t` is the 128-bit unsigned integer the ACLE specifies: code
 /// shifts, converts and compares it as one -- the high half of a product is
-/// `pmull` and `mov x0, v0.d[1]` -- and a subscript of it is an error, as
-/// with clang and gcc.
+/// `pmull` and `mov x0, v0.d[1]` -- and a subscript of it is an error.
 #[cfg(feature = "linker")]
 #[test]
 fn poly128_t_is_a_128_bit_integer() {
@@ -1380,10 +1379,10 @@ fn neon_keyed_code_takes_the_intrinsics() {
 }
 
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
-/// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
-/// between them and the operations that use them: `ldr q`, `str q`,
-/// `dup v0.4s, w0`, `ldrh` and `dup v0.8h`, and in a loop the loads, `fmla`
-/// and the store around a broadcast made before it.
+/// broadcast of their vector under `-O`, with no inline asm between them
+/// and the operations that use them: `ldr q`, `str q`, `dup v0.4s, w0`,
+/// `ldrh` and `dup v0.8h`, and in a loop the loads, `fmla` and the store
+/// around a broadcast made before it.
 #[cfg(feature = "linker")]
 #[test]
 fn the_loads_stores_and_broadcasts_are_their_instructions() {

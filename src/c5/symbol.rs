@@ -329,9 +329,9 @@ pub(crate) struct Symbol {
     pub h_is_const_qualified: bool,
 
     /// Folded initializer of a block-scope `const`-qualified scalar
-    /// arithmetic object with automatic storage. GCC (GNU mode, at -O)
-    /// folds a reference to such an object where a case label or
-    /// `static_assert` needs a constant; the value is recorded at the
+    /// arithmetic object with automatic storage. A reference to it folds
+    /// (GNU mode, at -O) where a case label or `static_assert` needs a
+    /// constant, as C17 6.6p10 permits; the value is recorded at the
     /// declaration, already converted to the declared type, and consumed
     /// by the constant-expression evaluator only in those contexts.
     /// `None` for every other object shape (non-const, volatile,

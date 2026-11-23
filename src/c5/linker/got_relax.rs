@@ -1,5 +1,5 @@
 //! x86-64 GOT references to a symbol the link defines (psABI B.2): the
-//! forms GNU ld relaxes reach the symbol directly, and any other
+//! relaxable forms reach the symbol directly, and any other
 //! instruction reads a slot the link allocates for it. The aarch64 GOT
 //! load's direct form is an `add`.
 
@@ -62,7 +62,7 @@ pub(crate) fn got_use(text: &[u8], field: usize, rtype: u32) -> GotUse {
 /// Rewrite a relaxable instruction to reach the symbol directly and
 /// return where its PC32 field now sits. `jmp rel32` is one byte shorter
 /// than the indirect form, so its field moves back by one and a `nop`
-/// follows it, as GNU ld places them.
+/// follows it.
 pub(crate) fn relax(text: &mut [u8], field: usize, how: GotUse) -> Option<usize> {
     match how {
         GotUse::Load => {

@@ -3040,9 +3040,9 @@ void step4(unsigned char *p, const unsigned char *d) {\n\
 
 /// Vector parameters and results travel in v registers (AAPCS64 6.4.2): a
 /// function taking and returning `uint32x4_t` is its instructions and
-/// `ret`, as with gcc 16, and a loop over parameters keeps them
-/// in registers. Stored to the frame on entry and returned through it, the
-/// loop below took 49 instructions.
+/// `ret`, and a loop over parameters keeps them in registers. Stored to
+/// the frame on entry and returned through it, the loop below took 49
+/// instructions.
 #[test]
 fn vector_parameters_and_results_stay_in_registers() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -3072,9 +3072,9 @@ uint32x4_t round4(uint32x4_t a, uint32x4_t b, uint32x4_t c, uint32x4_t d, int n)
 }
 
 /// GNU vector arithmetic on 16-byte vectors is one SIMD instruction per
-/// operator (`Inst::VecBinop`), as with gcc 16: `a * x + y` over
-/// `float` lanes is `fmul`, `fadd` and `ret` on AArch64 and `mulps`,
-/// `addps` and `ret` on x86-64. Lowered per lane, it took 59 instructions.
+/// operator (`Inst::VecBinop`): `a * x + y` over `float` lanes is `fmul`,
+/// `fadd` and `ret` on AArch64 and `mulps`, `addps` and `ret` on x86-64.
+/// Lowered per lane, it took 59 instructions.
 #[test]
 fn vector_arithmetic_is_one_instruction_per_operator() {
     const SRC: &str = "typedef float v4f __attribute__((vector_size(16)));\n\
@@ -3126,11 +3126,11 @@ __m64 mu(__m64 a, __m64 b) { return _mm_mul_su32(a, b); }\n";
 }
 
 /// A GNU vector wider than the SIMD registers takes each operator in
-/// register-wide parts, as with gcc 16: a 32-byte `int` sum on AArch64 is
-/// two `add v.4s` between the loads and the stores, a comparison, a shift
-/// and a negation two of their SIMD rows, and a 64-byte sum four `add
-/// v.4s`; on x86-64 without AVX-512 the 64-byte sum is two `vpaddd ymm`.
-/// Each took a load, an operation and a store per lane.
+/// register-wide parts: a 32-byte `int` sum on AArch64 is two `add v.4s`
+/// between the loads and the stores, a comparison, a shift and a negation
+/// two of their SIMD rows, and a 64-byte sum four `add v.4s`; on x86-64
+/// without AVX-512 the 64-byte sum is two `vpaddd ymm`. Each took a load,
+/// an operation and a store per lane.
 #[test]
 fn a_vector_wider_than_the_registers_takes_register_wide_parts() {
     const SRC: &str = "typedef int v8si __attribute__((vector_size(32)));\n\
@@ -3381,8 +3381,8 @@ v2du shr(v2du a, v2du c) { return a >> c; }\n";
     m.finish();
 }
 
-/// A 256-bit vector of four 64-bit lanes is built as clang builds it: each
-/// lane a load reads only for the vector goes straight into an xmm register
+/// A 256-bit vector of four 64-bit lanes is built in pairs: each lane a
+/// load reads only for the vector goes straight into an xmm register
 /// (`vmovq m64`), two pair up (`vunpcklpd`) and the pairs join
 /// (`vinserti128`), with no move of the low pair over itself; lanes in
 /// general registers take `vmovq` and `vpinsrq`. Each lane took a general
@@ -3440,8 +3440,8 @@ void axpy(float *y, const float *x, float a, int n) {\n\
 /// An object of a GNU vector type is a vector though no SIMD operation
 /// reads it: copied in from bytes and out through a pointer it is one load
 /// and one store, through an inlined function's result too, and one value
-/// in every lane is a broadcast and a store, as with gcc 16. Each took a
-/// frame copy, and the broadcast a store per lane.
+/// in every lane is a broadcast and a store. Each took a frame copy, and
+/// the broadcast a store per lane.
 #[test]
 fn a_vector_object_moves_whole_without_a_simd_operation() {
     const SRC: &str = "typedef signed char v8c __attribute__((vector_size(8)));\n\
@@ -3478,9 +3478,9 @@ void wrap(v16c *r, const signed char *p) { *r = load(p); }\n";
 
 /// A half of a 16-byte vector parameter taken through `memcpy` is a lane of
 /// its register, and two 8-byte halves stored side by side and read back
-/// whole are one insert, as with gcc 16: nothing for the low half,
-/// `mov d0, v0.d[1]` and `mov v0.d[1], v1.d[0]` on AArch64, each from a
-/// store to the frame and a reload.
+/// whole are one insert: nothing for the low half, `mov d0, v0.d[1]` and
+/// `mov v0.d[1], v1.d[0]` on AArch64, each from a store to the frame and a
+/// reload.
 #[test]
 fn vector_halves_move_in_registers() {
     const SRC: &str = "typedef signed char i8x16 __attribute__((vector_size(16)));\n\
@@ -3928,8 +3928,8 @@ d2 dz(double x) { return (d2){x}; }\n";
 }
 
 /// A 32-bit unsigned rotate by a constant is the 32-bit rotate
-/// instruction, as with gcc 16: `ror w0, w0, #2` and `rorl $2, %eax`; by
-/// a runtime count to the left, the rotate right by its negation.
+/// instruction: `ror w0, w0, #2` and `rorl $2, %eax`; by a runtime count
+/// to the left, the rotate right by its negation.
 #[test]
 fn a_32_bit_rotate_is_one_instruction() {
     const SRC: &str = "unsigned r(unsigned x) { return x << 30 | x >> 2; }\n\
@@ -4024,8 +4024,8 @@ v4 same(void) { int w = 5; return (v4){w, w + 1, w, w + 1}; }\n";
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`
-/// for all ones, as with gcc 16. Each was the operation on a vector built
-/// through a general register.
+/// for all ones. Each was the operation on a vector built through a
+/// general register.
 #[test]
 fn constant_vectors_and_their_identities() {
     const SRC: &str = "typedef int v4 __attribute__((vector_size(16)));\n\
@@ -4073,11 +4073,11 @@ v8c f(void) { signed char b = 1; return (v8c){b, 2, 3, 4, 5, 6, 7, (signed char)
     m.finish();
 }
 
-/// A GNU vector of one value in every lane is a broadcast of it, as with
-/// gcc 16: `dup` from a general register or from an FP register's lane 0
-/// and `ret` on AArch64; on x86-64 `vmovd` and `vpbroadcastd`, or one
-/// `vbroadcastss`, and `ret`, at 16 and 32 bytes, from an insert per lane.
-/// A lane read of one is the value.
+/// A GNU vector of one value in every lane is a broadcast of it: `dup`
+/// from a general register or from an FP register's lane 0 and `ret` on
+/// AArch64; on x86-64 `vmovd` and `vpbroadcastd`, or one `vbroadcastss`,
+/// and `ret`, at 16 and 32 bytes, from an insert per lane. A lane read of
+/// one is the value.
 #[test]
 fn a_vector_of_one_value_is_a_broadcast() {
     const SRC: &str = "typedef int v4si __attribute__((vector_size(16)));\n\
@@ -4179,10 +4179,10 @@ u8x16 ldv(const u8x16 *p) { return *p; }\n";
 
 /// GNU vector arithmetic on 32-byte vectors is one ymm instruction per
 /// operator on x86-64, whose x86-64-v3 baseline has AVX2, with the value in
-/// a ymm register: `*r = *a + *b` is gcc 16's two loads, `vpaddd`, the
-/// store, `vzeroupper` and `ret`, from 36 lane by lane; a sum over an array
-/// keeps its accumulator in a register across the loop, with no store
-/// before the one after it.
+/// a ymm register: `*r = *a + *b` is two loads, `vpaddd`, the store,
+/// `vzeroupper` and `ret`, from 36 lane by lane; a sum over an array keeps
+/// its accumulator in a register across the loop, with no store before the
+/// one after it.
 #[test]
 fn ymm_vector_arithmetic_stays_in_registers() {
     const SRC: &str = "typedef int v8i __attribute__((vector_size(32)));\n\
@@ -4204,12 +4204,12 @@ v8i acc(const v8i *p, int n) { v8i s = {0}; for (int i = 0; i < n; i++) s = s + 
 }
 
 /// A lane write or read of a GNU vector that is a value is an instruction on
-/// its register, as with gcc 16: `(v2l){a, b}` is two `vpinsrq` (`ins` on
-/// AArch64), `v[2] = x` of a float vector one `vpinsrd` (`mov v.s[2]`), and
-/// `v[3]` of a short vector `vpextrw` and the sign extension (`smov`), with
-/// no stack access; a lane of a ymm value is `vextracti128` and `vpextrd`.
-/// Each went through the vector's stack slot, the lane stored and the whole
-/// vector reloaded.
+/// its register: `(v2l){a, b}` is two `vpinsrq` (`ins` on AArch64),
+/// `v[2] = x` of a float vector one `vpinsrd` (`mov v.s[2]`), and `v[3]` of
+/// a short vector `vpextrw` and the sign extension (`smov`), with no stack
+/// access; a lane of a ymm value is `vextracti128` and `vpextrd`. Each went
+/// through the vector's stack slot, the lane stored and the whole vector
+/// reloaded.
 #[test]
 fn vector_lanes_stay_in_registers() {
     const SRC: &str = "typedef long long v2l __attribute__((vector_size(16)));\n\
@@ -4248,12 +4248,11 @@ long sx(v8s v) { return v[3]; }\n";
     m.finish();
 }
 
-/// Lane writes into a ymm value chain on its 128-bit halves, as with gcc
-/// 16: `{a, b, c, d}` of four `long long` is `vmovq` and `vpinsrq` per half
-/// and one `vinserti128`, writes into both halves of a loaded vector take
-/// each half out once and put it back once, and a read of the low half
-/// reads the register. Each lane access took its half out (and a write
-/// put it back).
+/// Lane writes into a ymm value chain on its 128-bit halves: `{a, b, c, d}`
+/// of four `long long` is `vmovq` and `vpinsrq` per half and one
+/// `vinserti128`, writes into both halves of a loaded vector take each half
+/// out once and put it back once, and a read of the low half reads the
+/// register. Each lane access took its half out (and a write put it back).
 #[test]
 fn ymm_lane_writes_chain_per_half() {
     const SRC: &str = "typedef long long v4l __attribute__((vector_size(32)));\n\
@@ -4321,10 +4320,10 @@ int main(void) { return mmx(); }\n";
     );
 }
 
-/// An 8-byte NEON vector parameter and result stay in their registers, as
-/// with gcc 16: `vadd_s32(a, b)` returned is `add v0.2s, v0.2s, v1.2s` and
-/// `ret`. The result went through the frame twice, once as a `double` and
-/// once as an integer word.
+/// An 8-byte NEON vector parameter and result stay in their registers:
+/// `vadd_s32(a, b)` returned is `add v0.2s, v0.2s, v1.2s` and `ret`. The
+/// result went through the frame twice, once as a `double` and once as an
+/// integer word.
 #[test]
 fn an_8_byte_neon_vector_crosses_calls_in_its_register() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -4338,11 +4337,10 @@ float32x4_t add4(float32x4_t a, float32x4_t b) { return vaddq_f32(a, b); }\n";
     m.finish();
 }
 
-/// A vector of constants an operation reads is one load of read-only data,
-/// as with gcc 16: `_mm256_setr_epi8` of 32 constants (a compound literal,
-/// as each of the set / setr constructors is) and a constant compound
-/// literal held in a local are a `vmovups` from their image, with no stack
-/// copy. The
+/// A vector of constants an operation reads is one load of read-only data:
+/// `_mm256_setr_epi8` of 32 constants (a compound literal, as each of the
+/// set / setr constructors is) and a constant compound literal held in a
+/// local are a `vmovups` from their image, with no stack copy. The
 /// constructor was a call building the vector byte by byte, and the local
 /// took two 16-byte copies to the stack and a 32-byte load from it.
 #[test]
@@ -4410,9 +4408,9 @@ int f(const v4l *p) { return hs(p[0]) + hs(p[1]); }\n";
     assert!(f.iter().all(|i| i.op != 0xE8), "x86-64 f: {f:x?}");
 }
 
-/// The AVX2 intrinsics are their VEX instructions on ymm registers, as with
-/// gcc 16: `_mm256_movemask_epi8(_mm256_shuffle_epi8(p[0], p[1]))` is the
-/// two loads, `vpshufb`, `vpmovmskb`, `vzeroupper` and `ret`, and a sum of
+/// The AVX2 intrinsics are their VEX instructions on ymm registers:
+/// `_mm256_movemask_epi8(_mm256_shuffle_epi8(p[0], p[1]))` is the two
+/// loads, `vpshufb`, `vpmovmskb`, `vzeroupper` and `ret`, and a sum of
 /// `_mm256_adds_epu8` over an array keeps its accumulator in a register,
 /// with no store in the loop. Each was the SSE instruction on each half,
 /// its operands split and joined through memory.
@@ -4440,9 +4438,9 @@ int mask(const __m256i *p) { return _mm256_movemask_epi8(_mm256_shuffle_epi8(p[0
 }
 
 /// SSE intrinsics keep their vectors in xmm registers (`SimdVal`): a
-/// round loop over four `__m128i` parameters makes no memory access, as
-/// with gcc 16. Each intrinsic read its operands from the frame and wrote
-/// its result back, 85 instructions where it is now 19.
+/// round loop over four `__m128i` parameters makes no memory access. Each
+/// intrinsic read its operands from the frame and wrote its result back,
+/// 85 instructions where it is now 19.
 #[test]
 fn sse_intrinsic_values_stay_in_registers() {
     const SRC: &str = "#include <emmintrin.h>\n\
@@ -4467,8 +4465,8 @@ __m128i round4(__m128i a, __m128i b, __m128i c, __m128i d, int n) {\n\
 }
 
 /// The 8-byte `<arm_neon.h>` forms and 4- and 8-byte `w` outputs pass their
-/// values in SIMD registers, as gcc 16 does: each function is its
-/// instructions and `ret`, with no frame.
+/// values in SIMD registers: each function is its instructions and `ret`,
+/// with no frame.
 #[test]
 fn eight_byte_simd_values_take_no_frame() {
     const SRC: &str = "#include <arm_neon.h>\n\

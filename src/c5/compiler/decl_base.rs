@@ -938,8 +938,7 @@ impl Compiler {
     /// A file-scope binding holds its register for the whole unit, so it
     /// takes only a register no function allocates: the stack and frame
     /// pointers, and x18 where the OS ABI reserves it. Every other register
-    /// is refused with the message below; gcc takes the register out of the
-    /// unit's allocation instead.
+    /// is refused with the message below.
     pub(super) fn resolve_asm_register(
         &self,
         name: &str,
@@ -1637,7 +1636,7 @@ impl Compiler {
                 self.pending.attrs.call_conv = self.add_conv(self.pending.attrs.call_conv, conv)?;
             }
         }
-        // `aarch64_sve_pcs` is inert off AArch64, as clang's is.
+        // `aarch64_sve_pcs` is inert off AArch64.
         if attrs.aarch64_sve_pcs && self.target.is_aarch64() {
             let conv = Some(CallConv::Sve);
             self.pending.attrs.call_conv = self.add_conv(self.pending.attrs.call_conv, conv)?;

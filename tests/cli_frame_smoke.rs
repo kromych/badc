@@ -1248,7 +1248,7 @@ int ints(void) { int a[8]; use((char *)a); return a[1]; }
 __attribute__((no_stack_protector)) void off(int n) { char b[n]; use(b); }
 ";
 
-/// `-Wstack-protector` notes what gcc 16 notes, by line: under
+/// `-Wstack-protector` notes, by line: under
 /// `-fstack-protector` a function whose character arrays are all shorter
 /// than `--param ssp-buffer-size=`, which it leaves unprotected, and in every
 /// mode a variable-length buffer, which lies below the other locals. A

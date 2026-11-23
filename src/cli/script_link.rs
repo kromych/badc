@@ -211,7 +211,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         },
         shared,
         entry_override: cli.link.entry.clone(),
-        // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
+        // The defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
         // on i386; `-z max-page-size=` replaces it below.
         max_page_size: match machine {
             183 => 0x10000,

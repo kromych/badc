@@ -5,10 +5,10 @@
 //! it opened, wrapped at 72 columns with ` \` line continuations,
 //! optionally followed by a phony target per prerequisite (`-MP`).
 //!
-//! It follows gcc's writer: the same files, in the same order, with the
-//! same escaping and the same wrap points, except that a prerequisite
-//! reached twice is emitted once. The rules are equivalent to `make`,
-//! which stats each prerequisite either way.
+//! The files, their order, the escaping and the wrap points are those of
+//! the depfiles gcc writes, except that a prerequisite reached twice is
+//! emitted once. The rules are equivalent to `make`, which stats each
+//! prerequisite either way.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;

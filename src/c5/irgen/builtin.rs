@@ -326,8 +326,8 @@ impl<'a> Walker<'a> {
     }
 
     /// `base` stepped by `offset`, back where `sub`, with `check` reporting
-    /// the step `-fsanitize=pointer-overflow` finds undefined, as clang does
-    /// in C: a null base or result, a result on the wrong side of the base
+    /// the step `-fsanitize=pointer-overflow` finds undefined in C: a null
+    /// base or result, a result on the wrong side of the base
     /// for the direction -- a signed offset's sign, an unsigned offset's
     /// operator -- or the offset's scaling overflowing. The handler takes
     /// the base and the result.

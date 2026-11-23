@@ -1495,8 +1495,8 @@ impl FnEmit<'_, '_> {
     }
 }
 
-/// Fill `n` bytes with the multi-byte NOPs GNU as pads executable gaps
-/// with, the longest form first.
+/// Fill `n` bytes with the multi-byte NOPs of `X86_NOPS`, the longest form
+/// first.
 fn push_x86_nops(code: &mut Vec<u8>, mut n: usize) {
     use crate::c5::asm::X86_NOPS;
     while n > 0 {
@@ -2498,7 +2498,7 @@ fn emit_mov_r_to_rsp_slot(code: &mut Vec<u8>, target: Reg) {
 /// The retpoline capture: `pause; lfence; jmp .-7`, then the slot
 /// overwrite and `ret`. Entered by a `call` whose displacement lands
 /// on the `mov`; the pushed return address keeps speculation in the
-/// loop. Mirrors gcc's `-mindirect-branch=thunk-inline` body.
+/// loop. The `-mindirect-branch=thunk-inline` body.
 fn emit_retpoline_capture(code: &mut Vec<u8>, target: Reg) {
     code.extend_from_slice(&[0xF3, 0x90]); // pause
     code.extend_from_slice(&[0x0F, 0xAE, 0xE8]); // lfence

@@ -89,11 +89,10 @@ impl<'a> LdsLinker<'a> {
         );
     }
 
-    /// Type a script-defined symbol takes from its expression. bfd
-    /// copies the source symbol's type when the expression names one
-    /// symbol and nothing else (ldexp.c's `expld.assign_src`, applied
-    /// through `bfd_copy_link_hash_symbol_type`); a compound
-    /// expression leaves the symbol untyped. An operator assignment
+    /// Type a script-defined symbol takes from its expression: the
+    /// source symbol's type when the expression names one symbol and
+    /// nothing else; a compound expression leaves the symbol untyped.
+    /// An operator assignment
     /// reads the destination, so it names that symbol too.
     pub(super) fn assigned_sym_type(&self, a: &Assignment) -> u8 {
         let mut names: HashSet<String> = HashSet::new();

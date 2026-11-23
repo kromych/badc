@@ -2623,17 +2623,14 @@ pub(crate) struct FunctionSsa {
     /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as
     /// opposed to the plain `inline` hint. Implies `is_inline`. No size
     /// or frame budget applies to it, and an unhonored request is
-    /// diagnosed rather than silently declined. gcc makes that an error
-    /// because its inliner admits nearly any callee shape; badc's
-    /// candidate filter is narrower, so it is a warning -- an error would
-    /// reject conforming programs over a coverage gap. A plain `inline`
+    /// diagnosed rather than silently declined, as a warning: the
+    /// candidate filter does not admit every callee shape, and an error
+    /// would reject conforming programs over a coverage gap. A plain `inline`
     /// that stays out of line is silent (it is only a hint).
     pub is_always_inline: bool,
-    /// True if the function carried `__attribute__((noinline))`. gcc's
-    /// documented way to hold a body out of line, and what its
-    /// `__builtin_return_address` wording directs a caller to when the
-    /// inlined result is not the wanted one. Suppresses every inline
-    /// request, mandatory or size-driven.
+    /// True if the function carried `__attribute__((noinline))`, which
+    /// holds the body out of line. Suppresses every inline request,
+    /// mandatory or size-driven.
     pub is_noinline: bool,
     /// True if the function carried `__attribute__((naked))`: emit no
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
@@ -2949,8 +2946,7 @@ pub(crate) fn place_region(mut blocks: Vec<Vec<RegionMember>>) -> (Vec<RegionMem
 }
 
 /// What a function's declared automatic objects say about its exposure to
-/// a stack buffer overflow. Mirrors gcc's `stack_protect_classify_type` /
-/// `stack_protect_decl_p`: the facts are source-level, so a function keeps
+/// a stack buffer overflow. The facts are source-level, so a function keeps
 /// the protection its declarations ask for whatever the optimizer later
 /// does with the storage.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

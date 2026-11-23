@@ -1596,8 +1596,8 @@ impl Compiler {
         );
         use super::super::ir::BinOp;
         let checked = match op {
-            // Named by the promoted type the shift is performed in, as gcc
-            // names it; clang names the lvalue's, though it checks the same.
+            // Named by the promoted type the shift is performed in (C17
+            // 6.5.7p3).
             BinOp::Shl | BinOp::Shr | BinOp::Shru => {
                 let amount =
                     expr_ty(self.ast.expr(rhs)).map_or(op_ty, super::types::integer_promote);

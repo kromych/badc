@@ -3,7 +3,7 @@
 //! and `.dynamic`.
 //!
 //! An ET_DYN image carries these whether or not a loader will search
-//! them; bfd builds them for every `-shared` link, and a script discards
+//! them; every `-shared` link builds them, and a script discards
 //! the ones it does not want. Table shapes follow
 //! bfd's: the bucket counts, the Bloom filter geometry and the
 //! symbol order are what a consumer reading `DT_GNU_HASH` expects.
@@ -81,8 +81,7 @@ pub const DF_1_NODEFLIB: u64 = 0x800;
 pub const DF_1_NODUMP: u64 = 0x1000;
 pub const DF_1_PIE: u64 = 0x0800_0000;
 
-/// The `DT_FLAGS` and `DT_FLAGS_1` bits GNU ld records for the `-z`
-/// keywords `z`.
+/// The `DT_FLAGS` and `DT_FLAGS_1` bits the `-z` keywords `z` record.
 pub fn z_keyword_flags(z: &super::zkeyword::ZKeywords) -> (u64, u64) {
     use super::zkeyword::ZKeyword;
     z.iter().fold((0, 0), |(flags, flags_1), kw| {
@@ -109,8 +108,7 @@ const VER_FLG_BASE: u16 = 1;
 pub const VER_NDX_LOCAL: u16 = 0;
 pub const VER_NDX_GLOBAL: u16 = 1;
 
-/// `--hash-style`. bfd's configured default on the reference boxes is
-/// `gnu`, which is what a link that names no style gets.
+/// `--hash-style`. A link that names no style gets `gnu`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HashStyle {
     Sysv,
@@ -223,7 +221,7 @@ pub fn bloom_params(nsyms: usize, class: ElfClass) -> (usize, u32) {
 }
 
 /// A string table in which a string that is a suffix of another shares
-/// the longer one's bytes, as bfd's `.dynstr` does. Sorting on the
+/// the longer one's bytes. Sorting on the
 /// reversed strings makes every such pair adjacent, so the sharing
 /// costs one comparison per entry rather than a scan of the table.
 #[derive(Default)]
@@ -309,8 +307,8 @@ pub fn build_tables(
     class: ElfClass,
 ) -> DynTables {
     // Symbols a loader can find go in bucket order after the ones it
-    // cannot (the null entry and any undefined). bfd records the first
-    // hashed index as `symndx` and hashes nothing below it. An undefined
+    // cannot (the null entry and any undefined). `symndx` is the first
+    // hashed index, and nothing below it is hashed. An undefined
     // symbol with a value, the PLT entry an executable gives a function
     // as its address, is one the loader finds.
     let (imports, defined): (Vec<usize>, Vec<usize>) =
@@ -380,7 +378,7 @@ pub fn build_tables(
     };
 
     // Versions exist only where the script defined them; without a
-    // VERSION command bfd emits neither table.
+    // VERSION command neither table is emitted.
     let (versym, verdef) = if versions.is_empty() {
         (Vec::new(), Vec::new())
     } else {
@@ -395,8 +393,8 @@ pub fn build_tables(
         versym,
         verdef,
         verdef_count: versions.len() as u16,
-        // Only the null entry is local; bfd emits every dynamic symbol
-        // it keeps as global or weak.
+        // Only the null entry is local; every kept dynamic symbol is
+        // global or weak.
         first_global: 1,
         index: (symbols.iter().enumerate().skip(1))
             .rev()
@@ -520,7 +518,7 @@ pub struct DynAddrs {
     pub versym: Option<u64>,
     pub soname: Option<u32>,
     /// `.dynstr` offsets of the sonames this image depends on, in link
-    /// order. bfd emits them ahead of every other tag.
+    /// order. They precede every other tag.
     pub needed: Vec<u32>,
     /// `.dynstr` offset of the `-rpath` search path, and whether it
     /// takes `DT_RUNPATH` rather than `DT_RPATH`.
@@ -548,7 +546,7 @@ pub struct DynAddrs {
     pub fini_array: Option<(u64, u64)>,
 }
 
-/// `.dynamic` contents in bfd's tag order. `DT_NULL` terminates.
+/// `.dynamic` contents. `DT_NULL` terminates.
 pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     let mut tags: Vec<(u64, u64)> = Vec::new();
     let mut flags: u64 = 0;
@@ -597,7 +595,7 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     tags.push((DT_STRSZ, a.strsz));
     tags.push((DT_SYMENT, class.sym_size()));
     // The loader publishes its `r_debug` here, where a debugger finds the
-    // link map; bfd writes the slot into every executable.
+    // link map; every executable carries the slot.
     if a.executable {
         tags.push((DT_DEBUG, 0));
     }
@@ -632,7 +630,7 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
         tags.push((DT_TEXTREL, 0));
         flags |= DF_TEXTREL;
     }
-    // bfd adds the processor tags after the generic ones.
+    // The processor tags follow the generic ones.
     if a.variant_pcs {
         tags.push((DT_AARCH64_VARIANT_PCS, 0));
     }
@@ -640,8 +638,8 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     if flags != 0 {
         tags.push((DT_FLAGS, flags));
     }
-    // bfd drops the bits only a shared object can carry from an
-    // executable's set.
+    // An executable's set drops the bits only a shared object can
+    // carry.
     let mut flags_1 = a.flags_1;
     if a.executable {
         flags_1 &= !(DF_1_INITFIRST | DF_1_NODELETE | DF_1_NOOPEN);
@@ -674,7 +672,7 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
 mod tests {
     use super::*;
 
-    /// GNU ld's bits for the keywords that record a loader policy: each
+    /// The bits for the keywords that record a loader policy: each
     /// loader keyword a `DT_FLAGS_1` bit of its own, `now` and `origin` a
     /// `DT_FLAGS` bit as well.
     #[test]

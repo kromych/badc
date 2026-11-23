@@ -228,8 +228,8 @@ pub(crate) fn movw_word(word: u32, group: u8, signed: bool, value: i64) -> u32 {
 }
 
 /// `movw_word` over a value that folded to a constant, under the range
-/// check the specifier names. GNU as rejects such a value where it does
-/// not fit rather than narrowing it, and names the sign in the message.
+/// check the specifier names. A value that does not fit is rejected rather
+/// than narrowed, and the message names the sign.
 pub(crate) fn movw_const_word(
     word: u32,
     group: u8,
@@ -550,7 +550,7 @@ mod tests {
     }
 
     /// A signed 48-bit absolute address load -- `movz :abs_g2_s:` then `movk`
-    /// `:abs_g1_nc:` / `:abs_g0_nc:` over `x5` -- as GNU ld resolves it.
+    /// `:abs_g1_nc:` / `:abs_g0_nc:` over `x5`.
     /// Words taken from `ld --defsym` over each value; the negative ones
     /// come out `movn` over the complement, which is what sets the groups
     /// the sequence never writes.
@@ -588,7 +588,7 @@ mod tests {
         assert_eq!(movw_word(movk, 0, false, -1), 0xf29f_ffe5);
     }
 
-    /// The ranges GNU ld admits: the ABI checks group `n` over
+    /// The link ranges: the ABI checks group `n` over
     /// `16 * (n + 1)` bits, and the signed forms over one bit more.
     /// Boundaries confirmed against `ld --defsym` in both directions.
     #[test]
@@ -612,7 +612,7 @@ mod tests {
         assert!(movw_fits(i64::MIN, 64, true));
     }
 
-    /// The narrower ranges GNU as admits when the expression folds at
+    /// The narrower ranges admitted when the expression folds at
     /// assembly: group `n` over `16 * (n + 1)` bits for both signs, which
     /// for a signed group is one bit tighter than the link's rule.
     #[test]

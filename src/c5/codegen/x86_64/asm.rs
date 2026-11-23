@@ -214,7 +214,7 @@ pub(crate) enum Mnemonic {
     /// A narrowing packed convert (`vcvtpd2ps`, `vcvtpd2dq`, `vcvttpd2dq`,
     /// 0F map): the destination is xmm at either vector length, which the
     /// source sets -- a register's own width, or for a memory source the
-    /// AT&T `x` / `y` suffix (`l`, 0 or 1), as GNU as reads it.
+    /// AT&T `x` / `y` suffix (`l`, 0 or 1).
     VexNarrow {
         pp: u8,
         opcode: u8,
@@ -307,7 +307,7 @@ pub(crate) enum Mnemonic {
     /// `vextractps`): VEX.128 with the xmm in ModRM.reg and a general register
     /// or memory in r/m, which the instruction writes. `w` selects the quadword
     /// element forms. `reg_form`, where the element has one, is the 0F-map
-    /// opcode GNU as prefers for a register destination; that form reverses the
+    /// opcode used for a register destination; that form reverses the
     /// roles, putting the general register in ModRM.reg.
     VexElemExtract {
         map: u8,
@@ -850,8 +850,8 @@ pub(crate) fn resolve_high_ref(
 const BAD_VMOV_OPND: &str = "inline asm: `vmovd`/`vmovq` operand must be a \
 register or memory";
 
-/// A register name as the tables spell it: GNU as reads register names
-/// without regard to case, so an upper-case spelling folds to lower.
+/// A register name as the tables spell it: register names match without
+/// regard to case, so an upper-case spelling folds to lower.
 fn fold_reg_case(name: &str) -> alloc::borrow::Cow<'_, str> {
     if name.bytes().any(|c| c.is_ascii_uppercase()) {
         alloc::borrow::Cow::Owned(name.to_ascii_lowercase())
@@ -935,8 +935,7 @@ pub(crate) fn reg_by_name(name: &str) -> Option<(u8, AsmRegSize)> {
     // bases below so they never collide with the GPRs. Only `mov` reads /
     // writes them, masking the mark back to the 0..16 ModRM.reg field. They
     // are inherently 64-bit in long mode. AT&T syntax spells the debug
-    // registers `db0..db7` (the GAS canonical form) or `dr0..dr7`; both name
-    // DR0..DR7.
+    // registers `db0..db7` or `dr0..dr7`; both name DR0..DR7.
     if let Some(rest) = n.strip_prefix("cr")
         && let Ok(i) = rest.parse::<u8>()
         && i < 16
@@ -1320,8 +1319,7 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
 }
 
 /// The REX byte of the `rex[.WRXB]` prefix spelling. The letters name the
-/// bits of `0100WRXB` and appear in that order, each at most once, as GNU as
-/// spells them.
+/// bits of `0100WRXB` and appear in that order, each at most once.
 fn rex_prefix_byte(name: &str) -> Option<u8> {
     let rest = name.strip_prefix("rex")?;
     if rest.is_empty() {
@@ -1342,7 +1340,7 @@ fn rex_prefix_byte(name: &str) -> Option<u8> {
 
 /// Merge an explicit REX prefix into the instruction encoded from `at`: the
 /// bits join the instruction's own REX byte, which follows the legacy
-/// prefixes and precedes the opcode, as GNU as merges them. A VEX / EVEX
+/// prefixes and immediately precedes the opcode. A VEX / EVEX
 /// encoding carries the same bits in its own prefix and admits no REX byte.
 pub(crate) fn splice_rex(code: &mut Vec<u8>, at: usize, rex: u8) -> Result<(), String> {
     let mut i = at;
@@ -2291,8 +2289,8 @@ fn table_mnemonic(name: &str) -> Option<&'static str> {
 }
 
 /// The lower-case spelling of a mnemonic token, or `None` when the token is
-/// already the spelling to resolve. GNU as matches mnemonics without regard to
-/// case; symbol names are case-sensitive, so a token is folded only when it is
+/// already the spelling to resolve. Mnemonics match without regard to case;
+/// symbol names are case-sensitive, so a token is folded only when it is
 /// not a mnemonic as written and the folded spelling is one.
 pub(crate) fn fold_mnemonic_case(tok: &str) -> Option<alloc::string::String> {
     if !tok.bytes().any(|c| c.is_ascii_uppercase()) || split_mnemonic_exact(tok).is_some() {
@@ -2320,7 +2318,7 @@ pub(crate) fn catalog_mnemonic(mnem: &str) -> bool {
 }
 
 /// Whether `sized`, `mnem` with an AT&T size letter, names `mnem` at that
-/// size, as GNU as reads the letter on it.
+/// size.
 pub(crate) fn accepts_size_suffix(mnem: &str, sized: &str) -> bool {
     match (split_mnemonic(mnem), split_mnemonic(sized)) {
         (Some((a, None)), Some((b, Some(_)))) => a == b,
@@ -2331,7 +2329,7 @@ pub(crate) fn accepts_size_suffix(mnem: &str, sized: &str) -> bool {
 }
 
 /// Resolve a mnemonic token to its base form plus any AT&T size suffix,
-/// folding case as GNU as does.
+/// folding case.
 fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     match split_mnemonic_exact(tok) {
         Some(m) => Some(m),
@@ -2661,8 +2659,8 @@ fn split_seg_prefix(tok: &str) -> Option<(u8, &str)> {
 }
 
 /// Strip the register sigil from a memory-operand register token: the
-/// extended-asm `%%` or the basic-asm `%`, with the whitespace GNU as allows
-/// between the sigil and the name (`x (% rip)`) removed.
+/// extended-asm `%%` or the basic-asm `%`, with any whitespace between the
+/// sigil and the name (`x (% rip)`) removed.
 fn strip_reg_sigil(tok: &str) -> Option<&str> {
     let t = tok.trim();
     Some(
@@ -3176,10 +3174,10 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // (`repe; cmpsb`). Emit each leading prefix as its own entry and
         // carry on with the rest of the statement. A REX prefix is the
         // exception: leading an instruction it merges into that
-        // instruction's own REX byte, as GNU as merges it, and only a
-        // statement of its own deposits a byte.
-        // gas's `{vex}` asks for the VEX form of an instruction it would
-        // otherwise encode with EVEX: AVX-IFMA's, which takes only this way.
+        // instruction's own REX byte, and only a statement of its own
+        // deposits a byte.
+        // The `{vex}` pseudo-prefix asks for the VEX form of an instruction
+        // otherwise encoded with EVEX: AVX-IFMA's, which takes only this way.
         let force_vex = mnem_tok == "{vex}" && !rest.is_empty();
         if force_vex {
             (mnem_tok, rest) = match rest.find(char::is_whitespace) {
@@ -3907,7 +3905,7 @@ fn to_table(
         | M::Monitor
         | M::Mwait
         | M::Hlt => Vec::new(),
-        // An operand selects the multi-byte NOP, 0F 1F /0, as GNU as encodes it.
+        // An operand selects the multi-byte NOP, 0F 1F /0.
         M::Nop => match ops {
             [] => Vec::new(),
             [rm] => alloc::vec![cvt(rm)],
@@ -4087,8 +4085,8 @@ pub(crate) fn encode(
 }
 
 /// `mov` between the accumulator and an absolute address: the `A0`..`A3`
-/// moffs forms, one byte shorter than the ModRM ones, which is what GNU as
-/// selects outside long mode. In long mode the moffs address is 64 bits, a
+/// moffs forms, one byte shorter than the ModRM ones, selected outside long
+/// mode. In long mode the moffs address is 64 bits, a
 /// width only the `movabs` spelling reaches, so a plain `mov` there keeps the
 /// ModRM form. Returns whether the instruction was encoded.
 fn mov_moffs(
@@ -4256,8 +4254,8 @@ fn encode_bespoke(
             // source is a byte. A register source names its own width; the
             // size suffix supplies it for a memory source and must not
             // contradict a register one. The 0x66 prefix for a 16-bit source
-            // and REX precede the F2 mandatory prefix in the order GNU as
-            // emits.
+            // precedes the F2 mandatory prefix; REX follows it, immediately
+            // before the opcode.
             let [src, dst] = two(ops)?;
             let (acc, acc_size) = as_reg(dst)?;
             if acc >= MMX_BASE || !matches!(acc_size, AsmRegSize::Long | AsmRegSize::Quad) {
@@ -4399,7 +4397,7 @@ fn encode_bespoke(
                     ));
                 }
                 // The offset must fit the field either signed or unsigned; the
-                // selector is truncated, as GNU as does.
+                // selector is truncated.
                 let bits = u32::from(w) * 8;
                 if off >> bits != 0 && off >> bits != -1 {
                     return Err(format!(
@@ -4476,8 +4474,7 @@ fn encode_bespoke(
             };
             let (reg, size) = as_reg(*op)?;
             // Long mode addresses at 64 or 32 bits, the other modes at 32 or
-            // 16; the 0x67 prefix precedes the mandatory one, as GNU as
-            // places it.
+            // 16; the 0x67 prefix precedes the mandatory one.
             let width = size.bytes();
             let other = if mode == super::table::Mode::Bits32 {
                 2
@@ -4718,7 +4715,7 @@ fn encode_bespoke(
                         ));
                     }
                 },
-                // GNU as takes a memory integer without a suffix as 32 bits.
+                // A memory integer without a suffix is 32 bits.
                 (None, None) => false,
             };
             code.push(prefix);
@@ -5161,8 +5158,8 @@ fn encode_bespoke(
                 _ => None,
             };
             // A general-register transfer's width is the register's, whichever
-            // of the two spellings names it: GNU as takes `vmovd %rcx, %xmm0`
-            // as the 64-bit transfer.
+            // of the two spellings names it: `vmovd %rcx, %xmm0` is the 64-bit
+            // transfer.
             let gpr = |c: &Concrete| match c {
                 Concrete::Reg { reg, size } if *reg < MMX_BASE => {
                     Some((*reg, w || *size == AsmRegSize::Quad))
@@ -5244,7 +5241,7 @@ fn encode_bespoke(
                         // Between registers the two directions encode the same
                         // move, and only VEX.B forces the 3-byte prefix, so a
                         // high source into a low destination takes the store
-                        // opcode. GNU as makes the same choice.
+                        // opcode.
                         let (op, r, m) = if s >= 8 && d < 8 {
                             (store_op, s, d)
                         } else {
@@ -6037,7 +6034,7 @@ mod tests {
 
     /// Parse a template of explicit-operand instructions (no `%N` refs),
     /// resolve them the way the emitter does (memory width from the suffix,
-    /// else a GP register operand, else the width GNU as gives an unsized
+    /// else a GP register operand, else the default width of an unsized
     /// operand), and encode. For templates whose expected bytes are byte-verified against
     /// clang.
     pub(super) fn asm_bytes(tmpl: &[u8]) -> Vec<u8> {
@@ -6286,7 +6283,7 @@ mod tests {
                 core::str::from_utf8(tmpl).unwrap()
             );
         }
-        // The 16-bit immediate field bounds the value, as GNU as enforces;
+        // The 16-bit immediate field bounds the value;
         // the other sized-nullary forms take no operands at all.
         for (mode, tmpl) in [
             (Bits64, b"ret $65536".as_slice()),
@@ -6337,8 +6334,8 @@ mod tests {
                 core::str::from_utf8(tmpl).unwrap()
             );
         }
-        // GNU as: "16-bit addressing unavailable for `umonitor'"; a 64-bit
-        // address needs long mode.
+        // Long mode has no 16-bit addressing, and a 64-bit address needs
+        // long mode.
         for (mode, tmpl) in [
             (Bits64, b"umonitor %%ax".as_slice()),
             (Bits32, b"umonitor %%rax"),
@@ -6827,8 +6824,8 @@ mod tests {
                 ..
             })
         ));
-        // A non-power-of-two byte count is rejected, and GNU as has no
-        // `.alignw` / `.alignl`.
+        // A non-power-of-two byte count is rejected, and `.alignw` /
+        // `.alignl` are not directives.
         for t in [
             b".align 3".as_slice(),
             b".alignl 8".as_slice(),
@@ -8963,8 +8960,8 @@ mod tests {
 
     /// The conversions between the integer and floating forms, register and
     /// memory sources, 32- and 64-bit integers, and the float-width and
-    /// packed ones. A memory integer without a suffix is 32 bits, as GNU as
-    /// takes it. Bytes from llvm-mc 18, equal to GNU as 2.42's.
+    /// packed ones. A memory integer without a suffix is 32 bits. Bytes from
+    /// llvm-mc 18, equal to GNU as 2.42's.
     #[test]
     fn scalar_and_packed_conversion_rows() {
         #[rustfmt::skip]
@@ -9036,7 +9033,7 @@ mod tests {
         }
     }
 
-    /// GNU as matches mnemonics without regard to case. A token that is not
+    /// Mnemonics match without regard to case. A token that is not
     /// a mnemonic in either case stays unresolved.
     #[test]
     fn mnemonic_case_is_folded() {

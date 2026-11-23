@@ -39,9 +39,7 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "inline_asm_x64_riprel_param.c",
     // x86-64 asm: aarch64 rejects the `sym(,%reg,8)` operand. On
     // x86-64 the absolute `R_X86_64_32S` displacement has no link-time
-    // value in the position-independent image badc emits -- GNU ld rejects
-    // the same object with "relocation R_X86_64_32S ...
-    // can not be used when making a PIE object". The object-path
+    // value in the position-independent image badc emits. The object-path
     // relocation shape is locked by a linker test.
     "file_scope_asm_sym_mem.c",
     // `-mcmodel=kernel` relocatable-object fixture: its externs have no
@@ -622,7 +620,7 @@ fn linked_image_fixtures_run_on_the_native_target() {
 // Compiling `sub/main.c` from the parent directory must still find
 // `sub/helper.h`; a CWD-relative-only search would miss it.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-/// `-fsyntax-only` as gcc 16 runs it: each unit through the front end (an
+/// `-fsyntax-only`: each unit through the front end (an
 /// assembler unit through the assembler) with its diagnostics and status,
 /// no output written whatever `-o` or `-c` asks for, and `-E` taking
 /// precedence.
@@ -918,7 +916,7 @@ fn inline_stringops_loops_compute_what_the_calls_do() {
 /// Under `--msvc` a quoted include searches cl's way: the including file's
 /// directory, then those of the files including it, innermost first, before
 /// the `-I` directories. Without it the search stops at the including file's
-/// directory, as gcc's and clang's does.
+/// directory.
 #[test]
 fn msvc_quoted_include_searches_the_including_files_directories() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -3625,8 +3623,8 @@ fn auto_var_init_and_padding_flags_are_validated_by_name() {
 }
 
 /// A build may name the guard's register and symbol without naming the
-/// form, because gcc's x86 default for `-mstack-protector-guard=` is
-/// `tls`. aarch64 has no such default and still requires it.
+/// form, which on x86 defaults to `-mstack-protector-guard=tls`. aarch64
+/// has no such default and still requires it.
 #[test]
 fn the_x86_guard_form_defaults_the_way_gcc_does() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -4439,7 +4437,7 @@ fn mcpu_extensions_gate_the_feature_macros() {
     }
 }
 
-/// The profiling options are refused where gcc has none, by name.
+/// The profiling options a target does not implement are refused by name.
 #[test]
 fn profiling_options_are_refused_by_name_where_gcc_has_none() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -4791,7 +4789,7 @@ fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
 }
 
 /// A `return` that does not fit the function's return type is an error
-/// the user can lower, as gcc 14's `-Wreturn-mismatch` is.
+/// the user can lower (`-Wreturn-mismatch`).
 #[test]
 fn a_return_mismatch_is_an_error_the_user_can_lower() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -5525,7 +5523,7 @@ fn no_instruction_follows_a_trap_unreached() {
 
 /// `-mno-sse` and `-mgeneral-regs-only` keep a unit off the SIMD register
 /// file, and the SSE feature macros go with it; `__MMX__` stays under
-/// `-mno-sse` and goes with `-mgeneral-regs-only`, as gcc 16 defines them.
+/// `-mno-sse` and goes with `-mgeneral-regs-only`.
 #[test]
 fn no_sse_drops_the_sse_feature_macros() {
     let badc = env!("CARGO_BIN_EXE_badc");

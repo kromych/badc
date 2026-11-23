@@ -309,7 +309,7 @@ impl X86Features {
 
     /// `-mno-sse` / `-mgeneral-regs-only` over the extensions of `cpu`, the
     /// `-march=` set: the extensions that need the SSE registers go, with
-    /// what they implied, as gcc withdraws them; the CPU's own POPCNT stays,
+    /// what they implied; the CPU's own POPCNT stays,
     /// as do the other scalar extensions.
     pub fn without_sse(self, cpu: Self) -> Self {
         let mut f = self;
@@ -320,7 +320,7 @@ impl X86Features {
     }
 
     /// Whether `-m<name>` enables an extension that needs the SSE registers,
-    /// which brings them back after `-mno-sse`, as gcc's options do.
+    /// which brings them back after `-mno-sse`.
     pub fn needs_sse(name: &str) -> bool {
         let mut f = Self::NONE;
         f.enable(name);

@@ -283,7 +283,7 @@ impl<'a> Folder<'a> {
 
 /// The constant of an `i`-class inline-asm operand, reached through the
 /// shapes [`Folder`] folds; `None` for a non-constant operand, which is
-/// refused as GNU as refuses it.
+/// refused.
 pub(crate) fn asm_operand_const(func: &FunctionSsa, arg: u32) -> Option<i64> {
     match Folder::new(func).fold(arg) {
         Fold::Value(Folded::Int(c)) => Some(c),

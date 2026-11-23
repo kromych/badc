@@ -51,7 +51,7 @@ pub(crate) struct FlatField {
     pub offset: u32,
     pub size: u32,
     pub kind: ScalarKind,
-    /// The boundary gcc's System V classification requires of `offset`:
+    /// The boundary the System V classification requires of `offset`:
     /// the scalar's size, or for a union's bit-field the narrowest integer
     /// mode holding its width. 1 for a structure's bit-field, whose bytes
     /// no alignment binds, and past an array's first element, which the
@@ -234,8 +234,8 @@ pub(crate) fn is_abi_vector_width(width: u32) -> bool {
 }
 
 /// A GNU vector narrower than the 8- and 16-byte Short Vectors, for which
-/// AAPCS64 6.4.2 has no rule. badc passes it as clang does on every
-/// AArch64 target, as a 32-bit integer argument, and returns it in v0.
+/// AAPCS64 6.4.2 has no rule. It passes as a 32-bit integer argument, the
+/// form clang-compiled callers use on every AArch64 target, and returns in v0.
 pub(crate) fn is_narrow_vector(desc: &AggDesc) -> bool {
     desc.vector && desc.size < 8
 }
@@ -291,9 +291,9 @@ fn classify_win64(size: u32, is_return: bool) -> AggClass {
 }
 
 /// System V AMD64 (3.2.3): aggregates larger than 16 bytes, or with a field
-/// off the alignment its `align` names, are MEMORY class, and
-/// so is one holding a floating-point vector of one element, which the
-/// psABI gives no class and gcc passes in memory. Otherwise each of the one
+/// off the alignment its `align` names, are MEMORY class, and so is one
+/// holding a floating-point vector of one element, which the psABI gives no
+/// class and gcc-compiled code passes in memory. Otherwise each of the one
 /// or two eightbytes starts NO_CLASS and merges the classes of the fields
 /// overlapping it, the high half of a 16-byte vector being SSEUP and of an
 /// x87 value X87UP. SSE followed by SSEUP is one vector register, X87

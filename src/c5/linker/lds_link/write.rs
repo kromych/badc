@@ -227,7 +227,7 @@ const ELFOSABI_GNU: u8 = 3;
 
 impl<'a> LdsLinker<'a> {
     /// Whether the image defines an `STB_GNU_UNIQUE` or `STT_GNU_IFUNC`
-    /// symbol, for which bfd marks the output `ELFOSABI_GNU`.
+    /// symbol, GNU extensions that mark the output `ELFOSABI_GNU`.
     fn uses_gnu_osabi(&self) -> bool {
         const STB_GNU_UNIQUE: u8 = 10;
         const STT_GNU_IFUNC: u8 = 10;
@@ -238,8 +238,8 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// `sh_link` of an `SHF_LINK_ORDER` output section: the output
-    /// section holding what its inputs are ordered against, as bfd
-    /// records in `assign_section_numbers`. Zero when the target went
+    /// section holding what its inputs are ordered against. Zero when
+    /// the target went
     /// away with its section.
     fn link_order_target(&self, oi: usize, shndx_of_out: &HashMap<usize, u16>) -> u32 {
         let Some(i) = self.first_input(oi) else {
@@ -521,8 +521,7 @@ impl<'a> LdsLinker<'a> {
         let phnum = phdrs.len();
         let defs = self.script.phdrs().unwrap_or(&[]).to_owned();
         // Absent a `PHDRS` command the first PT_LOAD covers them, which
-        // is what bfd's default segment map does and what leaves the
-        // headers mapped for a loader to read.
+        // leaves the headers mapped for a loader to read.
         let default_first_load = defs.is_empty().then(|| {
             phdrs
                 .iter()
@@ -602,8 +601,8 @@ impl<'a> LdsLinker<'a> {
         };
         let (dynsym_ndx, dynstr_ndx) = (out_index(SYNTH_DYNSYM), out_index(SYNTH_DYNSTR));
         let dyn_rel_name = self.dyn_reloc_name();
-        // The PLT's table names the `.got.plt` it relocates, as bfd's
-        // `SHF_INFO_LINK` one does.
+        // The PLT's table names the `.got.plt` it relocates
+        // (`SHF_INFO_LINK`).
         let plt_rel_name = self.plt_reloc_name();
         for (k, &oi) in emit_order.iter().enumerate() {
             let o = &self.outs[oi];
@@ -669,7 +668,7 @@ impl<'a> LdsLinker<'a> {
 
     pub(super) fn render_map(&self, emit_order: &[usize]) -> String {
         use core::fmt::Write as _;
-        // bfd prints a vma at the target's address width.
+        // A vma prints at the target's address width.
         let w = self.class.addr_size() as usize * 2;
         let mut s = String::new();
         let _ = writeln!(s, "Memory Configuration\n");

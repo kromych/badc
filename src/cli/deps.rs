@@ -26,8 +26,8 @@ pub(crate) struct DepOptions {
     pub(crate) targets: Vec<String>,
     /// `-MP`: give every prerequisite an empty rule of its own.
     pub(crate) phony: bool,
-    /// Set by the `-MD` / `-MMD` spellings, where gcc's driver names
-    /// the rule after `-o`.
+    /// Set by the `-MD` / `-MMD` spellings, which name the rule after
+    /// `-o`.
     pub(crate) target_from_output: bool,
 }
 

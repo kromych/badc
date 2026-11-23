@@ -416,7 +416,7 @@ pub struct ObjectRef {
     /// whatever the offset: the bound `-fsanitize=bounds` holds a subscript
     /// to. `None` for a pointer's target and an array of no known bound.
     pub bound: Option<i64>,
-    /// The array is a trailing member gcc lets extend past its bound
+    /// The array is a trailing member taken to extend past its bound
     /// ([`Compiler::member_is_unbounded`] through a pointer):
     /// `-fsanitize=bounds` leaves its subscripts alone, `bounds-strict`
     /// checks them.
@@ -614,7 +614,7 @@ pub struct Preprocessed {
 /// `CompileOptions::default().with_defines(d).with_include_paths(p)`.
 /// Which vector types of one size convert implicitly, as
 /// The string functions `-finline-stringops[=fn,...]` expands inline
-/// whatever their length, as gcc's option names them: a call it would
+/// whatever their length: a call it would
 /// make to one of them becomes a loop.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InlineStringOps(u8);
@@ -804,8 +804,7 @@ pub struct CompileOptions {
     /// takes its standard-C path for the GNU features badc lacks.
     pub gnu_dialect: bool,
     /// Assembler-with-cpp input (a `.S` unit). The preprocessor then
-    /// passes a `#` line naming no directive through as text, as GNU
-    /// cpp does for assembler input.
+    /// passes a `#` line naming no directive through as text.
     pub asm_source: bool,
     /// Mirror of [`crate::NativeOptions::elf_class`]. The assembler's
     /// starting code mode follows it, the way `as --32` starts in
@@ -932,7 +931,7 @@ pub enum FpContract {
     #[default]
     On,
     /// Wherever the product has no other use, across statements and the
-    /// pragma aside, gcc's GNU-mode default.
+    /// pragma aside.
     Fast,
 }
 
@@ -957,10 +956,9 @@ pub enum AutoVarInit {
     Pattern,
 }
 
-/// The byte `AutoVarInit::Pattern` repeats over the object. gcc 16
-/// stores `0xFE` for every type on both x86-64 and AArch64; the value
-/// is unlikely to be a valid pointer or a small count and reads back as
-/// a negative integer.
+/// The byte `AutoVarInit::Pattern` repeats over the object, for every
+/// type and target: the value is unlikely to be a valid pointer or a
+/// small count and reads back as a negative integer.
 pub const AUTO_VAR_INIT_PATTERN_BYTE: u8 = 0xFE;
 
 impl AutoVarInit {
@@ -2317,9 +2315,9 @@ pub struct Compiler {
 
     /// Nesting depth of constant-expression contexts where a reference
     /// to a `const`-qualified scalar object folds to its recorded
-    /// initializer value (`Symbol::const_object_value`). GCC (GNU mode,
-    /// at -O) applies that fold to case labels (including GNU ranges)
-    /// and `static_assert`, and not to array bounds, enum values,
+    /// initializer value (`Symbol::const_object_value`). The fold applies
+    /// to case labels (including GNU ranges) and `static_assert`, and not
+    /// to array bounds, enum values,
     /// bitfield widths, or alignment specifiers; the entry points for
     /// the folding contexts raise this depth.
     const_object_fold: u32,
@@ -2882,7 +2880,7 @@ pub struct Compiler {
     /// preprocessor's `"<source>"` placeholder then stands in.
     source_label: String,
     /// The unit is assembler source (`.s` / `.S`), carried to
-    /// `Program::asm_unit` for the object writer's GNU as shape.
+    /// `Program::asm_unit` for the object writer's assembled-unit shape.
     asm_unit: bool,
     /// Per-function locals + parameters captured at body close,
     /// before the c5 shadow-symbol restore unwinds the binding.
@@ -3155,7 +3153,7 @@ impl Compiler {
     /// object writers consume. The unit routes through the same
     /// section-directive engine as a file-scope `asm("...")`, so the two
     /// accept the same constructs and diagnose the rest identically, each
-    /// error at its source line as gas reports it.
+    /// error at its source line.
     pub fn assemble(text: &str, target: Target, opts: CompileOptions) -> Result<Program, C5Error> {
         let label = opts.source_label.clone();
         let (text, lines) = crate::c5::asm::AsmSourceMap::read(text, &label);
@@ -3184,7 +3182,7 @@ impl Compiler {
         // The reserved `.data` prefix keeps a c5 global's address away from
         // the null pointer. An assembled unit has no C source and so no c5
         // global; every byte it defines lives in an asm section, leaving the
-        // prefix as eight bytes of `.data` GNU as does not emit.
+        // prefix as eight bytes of `.data` the source does not define.
         program.data.clear();
         Ok(program)
     }
@@ -4357,7 +4355,7 @@ impl Compiler {
                 };
             }
             // An object alias keeps its declared type; its symbol takes
-            // the aliased object's size, as GNU as gives a `.set` alias.
+            // the aliased object's size.
             for &(alias, target) in &self.object_aliases {
                 self.symbols[alias].data_byte_size = self.symbols[target].data_byte_size;
             }

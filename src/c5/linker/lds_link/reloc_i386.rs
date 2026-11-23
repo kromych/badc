@@ -1,5 +1,5 @@
 //! Relocation application; the i386 arm, and the `R_386_GOT32X`
-//! relaxations GNU ld applies to a load through the GOT.
+//! relaxations of a load through the GOT.
 
 use crate::c5::object::elf_reloc_types as rt;
 use alloc::format;
@@ -9,8 +9,7 @@ use alloc::vec::Vec;
 use super::inputs::RawReloc;
 use super::{LdsEmit, LdsLinker, SHN_ABS, STB_LOCAL, STB_WEAK, STT_GNU_IFUNC};
 
-/// What a relaxed `R_386_GOT32X` site becomes, as bfd's
-/// `elf_i386_convert_load_reloc` rewrites it.
+/// What a relaxed `R_386_GOT32X` site becomes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum GotRelax {
     /// `mov`, `test`, an ALU op or `push` takes `S` as an immediate.
@@ -34,8 +33,8 @@ fn baseless(modrm: u8) -> bool {
 
 impl<'a> LdsLinker<'a> {
     /// How the `R_386_GOT32X` site `r` in section `si` of object `oi`
-    /// relaxes, or `None` where it keeps its GOT slot. Following GNU ld
-    /// 2.46: only a zero addend relaxes; a position-independent image
+    /// relaxes, or `None` where it keeps its GOT slot. Only a zero
+    /// addend relaxes; a position-independent image
     /// turns a load of a locally resolved symbol into `lea` and keeps
     /// every other form on the slot, except a load of an absolute
     /// symbol or of an undefined weak one, which takes the value; a
@@ -116,8 +115,8 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Intel386 psABI: every type is `S + A`, `S + A - P` or a GOT-base
-    /// form, written at the field's own width. bfd complains on
-    /// overflow only where the field is narrower than an address. For
+    /// form, written at the field's own width. Overflow is an error
+    /// only where the field is narrower than an address. For
     /// the GOT forms `sa` is the slot plus the addend, or `S` where the
     /// site relaxes.
     #[allow(clippy::too_many_arguments)]
@@ -177,8 +176,8 @@ impl<'a> LdsLinker<'a> {
         let Some(width) = rt::i386_field_width(r.rtype) else {
             return;
         };
-        // bfd's `complain_overflow_bitfield` accepts a value that fits
-        // the field read either as signed or as unsigned. A 32-bit
+        // A value fits when the field holds it read either as signed
+        // or as unsigned. A 32-bit
         // field holds every address of an ELF32 image.
         let sv = v as i64;
         let fits = match width {
@@ -202,8 +201,8 @@ impl<'a> LdsLinker<'a> {
     /// `G + A` of a GOT reference kept on its slot, `slot` being the
     /// slot's address plus the addend: its offset from the GOT base, or
     /// with no base register in a position-dependent image its address.
-    /// A position-independent image has no address to give; there bfd
-    /// still accepts `lea foo@GOT, %reg`, whose value is the offset.
+    /// A position-independent image has no address to give; there
+    /// `lea foo@GOT, %reg` is still accepted, its value the offset.
     fn got32_field(
         &self,
         slot: u64,
@@ -231,7 +230,7 @@ impl<'a> LdsLinker<'a> {
 }
 
 /// Rewrite the instruction ahead of the GOT field at `site` (address `p`)
-/// as `how` directs, the way bfd does. Returns where the field now
+/// as `how` directs. Returns where the field now
 /// starts and the value it takes for the target `s`, less the GOT base
 /// for [`GotRelax::Lea`].
 fn relax_got32x(buf: &mut [u8], site: usize, p: u64, s: u64, how: GotRelax) -> (usize, u64) {

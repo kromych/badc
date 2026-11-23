@@ -1744,15 +1744,15 @@ mod code_mode_tests {
 
     /// Bytes plus the relocations left after the sections materialize --
     /// what the object writer receives, so a reference the layout resolves
-    /// is folded away here as GNU as folds it. Offsets are within the
+    /// is folded away here. Offsets are within the
     /// concatenated sections, in section order.
     fn assemble_relocs(text: &str) -> (Vec<u8>, Vec<Reloc>) {
         use crate::c5::asm::AsmComments;
         use crate::c5::asm::AsmSectionSink;
         use crate::c5::asm::AsmSectionTarget;
         use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
-        // The driver prepares the template (comment stripping, GNU as macro
-        // and equate expansion) before the section parse reads it.
+        // The driver prepares the template (comment stripping, `.macro` and
+        // equate expansion) before the section parse reads it.
         let text = prepare_file_asm_text(text, AsmComments::X86)
             .checked()
             .expect("prepares");
@@ -1806,7 +1806,7 @@ mod code_mode_tests {
     }
 
     /// A label difference is an absolute value in an immediate and in a
-    /// memory displacement. GNU as fixes the field when the instruction is
+    /// memory displacement. The field is fixed when the instruction is
     /// assembled, so a backward difference takes the narrow field and a
     /// forward one keeps the wide one. Bytes from GNU as 2.46.1.
     #[test]
@@ -2144,8 +2144,8 @@ mod code_mode_tests {
         }
     }
 
-    /// GNU as orders the prefixes segment, address size, operand size, then
-    /// repeat / lock, whatever the mode.
+    /// The prefixes go in the order segment, address size, operand size,
+    /// then repeat / lock, whatever the mode.
     #[test]
     fn prefix_order_matches_gnu_as() {
         assert_eq!(assemble(".code16\nrep movsl\n"), [0x66, 0xf3, 0xa5]);
@@ -2236,7 +2236,7 @@ mod code_mode_tests {
         ] {
             assert_eq!(assemble(src), bytes, "{src}");
         }
-        // 64-bit mode has no direct far branch, as GNU as reports.
+        // 64-bit mode has no direct far branch.
         for src in [
             "ljmp $1, $2\n",
             "ljmpl $1, $2\n",
@@ -2338,7 +2338,7 @@ mod code_mode_tests {
         for (src, want) in cases {
             assert_eq!(assemble(src), *want, "{src}");
         }
-        // Long mode has no 16-bit addressing, as GNU as also reports.
+        // Long mode has no 16-bit addressing.
         assert!(assemble_err("jmp *(%bx)\n").contains("address size 2"));
     }
 
@@ -2656,8 +2656,8 @@ mod code_mode_tests {
 
     /// The encoding mode is assembler state over the linear input, not a
     /// property of a section: a `.code64` written in one section is still in
-    /// effect when the stream returns to an earlier one. GNU as encodes the
-    /// `lea` below 64-bit (`48 8d 3d`), not 32-bit.
+    /// effect when the stream returns to an earlier one: the `lea` below
+    /// encodes 64-bit (`48 8d 3d`), not 32-bit.
     #[test]
     fn code_mode_carries_across_section_switches_like_gnu_as() {
         let (bytes, relocs) = assemble_relocs(
@@ -2702,8 +2702,8 @@ mod code_mode_tests {
         assert!(names("je glob\n").is_empty());
         assert_eq!(names("jmp wk\n"), ["wk"]);
         assert_eq!(names("je wk\n"), ["wk"]);
-        // A difference of two symbols folds whatever the binding, as GNU as
-        // folds it: `.long glob - .` deposits a constant.
+        // A difference of two symbols folds whatever the binding:
+        // `.long glob - .` deposits a constant.
         assert!(names(".long glob - .\n").is_empty());
         assert!(names(".long wk - .\n").is_empty());
     }
@@ -2720,7 +2720,7 @@ mod code_mode_tests {
             assemble("base:\n.byte 1\n.set ., base + 4\n.byte 2\n"),
             [1, 0, 0, 0, 2]
         );
-        // Moving backwards is rejected, as GNU as rejects it.
+        // Moving backwards is rejected.
         assert!(
             assemble_err("base:\n.byte 1, 2, 3\n. = base + 1\n").contains("backwards"),
             "a backward move must be diagnosed"
@@ -2729,7 +2729,7 @@ mod code_mode_tests {
 
     /// The count- and rcx-conditional branches take a rel8 field only. A
     /// same-section target resolves to the byte displacement with no
-    /// relocation, as GNU as emits it.
+    /// relocation.
     #[test]
     fn short_branches_match_gnu_as() {
         assert_eq!(
@@ -2778,7 +2778,7 @@ mod code_mode_tests {
         );
     }
 
-    /// A `.set` / `=` assignment to a register is the GNU as register equate:
+    /// A `.set` / `=` assignment to a register is a register equate:
     /// every later use of the name assembles as that register. `$name` splits
     /// at the AT&T immediate sigil, so a constant equate resolves there too.
     #[test]

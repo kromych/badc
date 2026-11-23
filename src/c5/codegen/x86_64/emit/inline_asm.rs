@@ -359,7 +359,7 @@ pub(crate) fn short_branch_opcode(mnem: &str) -> Option<u8> {
 /// Address-size prefix of an `E3 rel8` branch. The counter the name spells is
 /// the instruction's address size: the mode's default takes no prefix, the
 /// mode's other address size takes `67`, and a width the mode cannot address
-/// has no encoding, as GNU as rejects it.
+/// has no encoding.
 fn e3_branch_prefix(
     mnem: &str,
     mode: super::table::Mode,
@@ -398,8 +398,8 @@ fn branch_section_target(text: &str) -> crate::c5::asm::AsmSectionTarget {
 }
 
 /// The `rel8` encoding of a direct branch: `EB` for `jmp`, `70+cc` for a
-/// `jcc`. GNU as takes it whenever the target is a label of the branch's own
-/// section within a signed-byte displacement, in every code-size mode; the
+/// `jcc`, taken whenever the target is a label of the branch's own section
+/// within a signed-byte displacement, in every code-size mode; the
 /// layout makes that choice, so both forms are handed to it. A `call` has no
 /// short form.
 fn short_branch_form(
@@ -422,7 +422,7 @@ fn short_branch_form(
     }
 }
 
-/// Legacy prefixes in GNU as order: segment, address size, operand size, then
+/// Legacy prefixes in the order segment, address size, operand size, then
 /// repeat / lock. `body` carries the size prefixes at its front and `pending`
 /// the bytes prefix statements deposited. Returns the count of `body` bytes
 /// taken; the rest is the caller's to append.
@@ -476,7 +476,7 @@ struct SectionOperandRefs<'a> {
     /// The value an operand expression already has at this point of the
     /// stream, when the walk's [`AsmParseFold`] can prove it is a constant.
     /// A folded immediate or displacement encodes as a literal, taking the
-    /// narrow field GNU as picks at the same point.
+    /// narrow field.
     fold: &'a dyn Fn(&str) -> Option<i64>,
     /// File-scope / `.S`-unit text is basic asm, where `%kN` is an opmask
     /// register; an extended-asm statement's section text keeps the
@@ -548,7 +548,7 @@ fn encode_one_x86_section_insn(
         refs,
     };
     // REX is a 64-bit-mode prefix; the other modes read the byte as an
-    // instruction, so GNU as rejects it there.
+    // instruction, so it is refused there.
     if mode != super::table::Mode::Bits64
         && (insn.rex.is_some()
             || matches!(insn.mnemonic, Mnemonic::Prefix(b) if (0x40..=0x4F).contains(&b)))
@@ -615,7 +615,7 @@ impl SectionInsn<'_> {
     /// A jmp / jcc to an `asm goto` label (`%lK`), as `jmp %l[t_no]` in a
     /// pushed executable section: the rel32 form with a `PC32` relocation
     /// deferred as `TextBlock` and rewritten to the block's text offset after
-    /// layout, the GNU as cross-section branch (addend -4).
+    /// layout, as a cross-section branch (addend -4).
     fn goto_branch(
         &self,
         goto_block: &dyn Fn(u8) -> Option<u32>,
@@ -688,9 +688,9 @@ impl SectionInsn<'_> {
                 relocs: alloc::vec![AsmSectionReloc {
                     offset: bytes.len() as u32 - 1,
                     width: 1,
-                    // Not `JumpRel`: these have no wider form, so GNU as
-                    // fixes them up rather than relaxing them, and a global
-                    // target keeps its relocation as it does for `call`.
+                    // Not `JumpRel`: these have no wider form, so they are
+                    // fixed up rather than relaxed, and a global target keeps
+                    // its relocation as for `call`.
                     kind: AsmRelocKind::Data,
                     pcrel: true,
                     branch: false,
@@ -1289,7 +1289,7 @@ impl SectionInsn<'_> {
 
     /// Encode the body behind its prefixes and locate the symbolic fields: a
     /// `$symbol` immediate settles its width and signedness first, the widest
-    /// probe that encodes winning as under GNU as; a symbolic displacement is
+    /// probe that encodes winning; a symbolic displacement is
     /// found by re-encoding with a distinct displacement, exactly those bytes
     /// differing.
     fn encode(
@@ -1427,7 +1427,7 @@ impl SectionInsn<'_> {
     }
 }
 
-/// gas's test for a relaxable GOT load: `mov` (8B), `test` (85), the binary
+/// The psABI's relaxable GOT loads: `mov` (8B), `test` (85), the binary
 /// operations' loads, and `call` / `jmp` through `FF /2`, `FF /4`.
 fn got_relax(bytes: &[u8]) -> crate::c5::asm::AsmGotRelax {
     use crate::c5::asm::AsmGotRelax;
@@ -1501,7 +1501,7 @@ struct SymImmField {
 /// Probe pairs for locating a symbol immediate's field, widest first; the
 /// members of a pair differ in every byte and stay inside the signed range
 /// of their width. The 8-byte pair comes last, so a form with a 4-byte
-/// variant takes it, as under GNU as, and only `movabsq` falls through.
+/// variant takes it and only `movabsq` falls through.
 const IMM_PROBE: [(u8, i64, i64); 4] = [
     (4, 0x5B3D_71A7, 0x24C2_8E58),
     (2, 0x5B3D, 0x24C2),
@@ -1572,7 +1572,7 @@ fn template_expr_value(
     measure: &crate::c5::asm::SectionLabelOffsets,
 ) -> Option<i64> {
     let resolve = |name: &str| -> Option<i64> {
-        // A bare decimal is an integer literal; a GNU as numeric label is
+        // A bare decimal is an integer literal; a numeric label is
         // referenced only as `Nb` / `Nf`. Leave literals for the evaluator.
         if name.bytes().all(|c| c.is_ascii_digit()) {
             return None;
@@ -1734,8 +1734,8 @@ struct AsmTemplate {
 
 /// Expand `%=` once so the code text and any `.pushsection` content share
 /// one instance number, rename multiply defined numeric labels, print the
-/// `%zN` size suffixes, assign the operand registers, expand the GNU as
-/// macro directives, split off the section blocks and encode their
+/// `%zN` size suffixes, assign the operand registers, expand the macro
+/// directives, split off the section blocks and encode their
 /// replacement instructions, then parse the code text.
 fn prepare_template(
     stmt: &AsmStmt,
@@ -1845,7 +1845,7 @@ fn prepare_template(
     })
 }
 
-/// The text a template operand reference substitutes to in a GNU as macro
+/// The text a template operand reference substitutes to in a macro
 /// directive: a register operand's assigned AT&T name, so the macro's
 /// register-name comparisons resolve, or an `i`-class constant.
 fn gas_operand_subst(
@@ -2703,10 +2703,10 @@ impl AsmPass<'_> {
             return Some(Ok(()));
         }
         // `.align` / `.p2align` / `.balign` pad the unit's text stream to the
-        // boundary as GNU as does section-relative, raising the section
-        // alignment above the default when needed; the default fill is the GNU
-        // as multi-byte NOP sequence. A label operand resolves against the
-        // definitions already emitted.
+        // boundary section-relative, raising the section alignment above the
+        // default when needed; the default fill is the multi-byte NOP
+        // sequence. A label operand resolves against the definitions already
+        // emitted.
         if let Some(crate::c5::asm::AsmSectionItem::Align {
             spec,
             fill,
@@ -2920,7 +2920,7 @@ impl AsmPass<'_> {
         // it; a target outside the stream keeps rel32 for the section pass.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
             // A `call` to a local label is the rel32 near call, which has no
-            // shorter form (GNU as: any code-address operand takes a label).
+            // shorter form.
             if matches!(insn.mnemonic, Mnemonic::Table("call" | "callq")) {
                 code.push(0xE8);
                 code.extend_from_slice(&[0u8; 4]);
@@ -3678,8 +3678,7 @@ impl AsmPass<'_> {
 
     /// The main-stream definition a label reference at `at` binds to: a
     /// named label has one definition; a forward `Nf` takes the nearest
-    /// after `at`, a backward `Nb` the nearest at or before it (the GNU as
-    /// local-label rule).
+    /// after `at`, a backward `Nb` the nearest at or before it.
     fn resolve_label(
         &self,
         layout: &AsmLayout,
@@ -3764,9 +3763,9 @@ impl AsmPass<'_> {
         Ok(deferred)
     }
 
-    /// A named label defined in the main stream is a definition of the unit,
-    /// as for GNU as: the writers emit a local `.text` symbol and bind a
-    /// same-name C reference to it. `.L`-prefixed names are assembler-local
+    /// A named label defined in the main stream is a definition of the unit:
+    /// the writers emit a local `.text` symbol and bind a same-name C
+    /// reference to it. `.L`-prefixed names are assembler-local
     /// (the renames of multiply defined numeric labels carry that prefix).
     fn record_text_labels(
         &self,

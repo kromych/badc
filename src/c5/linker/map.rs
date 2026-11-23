@@ -41,7 +41,7 @@ pub struct ArchiveInclusion {
     pub symbol: String,
 }
 
-/// GNU ld pads section names to this column before the address.
+/// The map pads section names to this column before the address.
 const NAME_COL: usize = 16;
 
 struct OutSec {
@@ -244,7 +244,7 @@ fn render_section(out: &mut String, sec: &OutSec, rows: Vec<Row>, syms: &[(u64, 
     flush_syms(out, &mut next_sym, u64::MAX);
 }
 
-/// The three-column `name address size` layout GNU ld uses: the name
+/// The three-column `name address size` layout: the name
 /// padded to column 16 (wrapping long names onto their own line), an
 /// `0x%016x` address, the size right-aligned in 11 columns.
 /// One input section placed into an output section by a relocatable
@@ -257,7 +257,7 @@ pub struct RelocRow {
     pub source: String,
 }
 
-/// Render the map GNU ld writes for `-Map` on a relocatable link.
+/// Render the `-Map` map of a relocatable link.
 ///
 /// `-r` resolves no addresses, so the output section headers carry the
 /// image's own `sh_addr` (zero) and `sh_size`, and each row sits at its

@@ -1,8 +1,8 @@
 //! What an executable's own code reaches of a shared library directly,
 //! by an address the link fixes: a copy of a data object, filled by
 //! `R_*_COPY`, and for a function its PLT entry as the function's
-//! address (System V gABI, dynamic linking; GNU ld's copy relocations
-//! and canonical PLT entries).
+//! address (System V gABI, dynamic linking: copy relocations and
+//! canonical PLT entries).
 
 use crate::c5::object::elf_reloc_types as rt;
 use alloc::string::String;
@@ -43,9 +43,9 @@ impl<'a> LdsLinker<'a> {
     /// address-width field in writable data, which a dynamic relocation
     /// carries -- a word, or for a data object a PC-relative one. A
     /// narrower PC-relative field keeps the copy: the loader cannot fill
-    /// it with a library's address more than 2 GiB away, where bfd's
+    /// it with a library's address more than 2 GiB away, where the
     /// relocation fails to load. x86 reads a PC-relative field in code
-    /// naming a function as a call, as bfd does.
+    /// naming a function as a call.
     pub(super) fn direct_reference(&self, r: &RawReloc, flags: u64, function: bool) -> bool {
         let pc_call = function && flags & SHF_EXECINSTR != 0;
         let call = match self.machine {
@@ -64,7 +64,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// The data imports an executable's references need a copy of, laid
-    /// out in name order at bfd's alignment; their sections' sizes and
+    /// out in name order at their copy alignment; their sections' sizes and
     /// alignments.
     pub(super) fn plan_copies(&mut self) -> [(u64, u64); 2] {
         let mut wanted: alloc::collections::BTreeMap<&str, (u64, u64, bool)> = Default::default();
@@ -136,7 +136,7 @@ impl<'a> LdsLinker<'a> {
 
     /// Whether an address-width word naming the import `name` binds at
     /// link time: a position-dependent executable's word naming a copy.
-    /// A PIE leaves it to a relocation against the symbol, as bfd does.
+    /// A PIE leaves it to a relocation against the symbol.
     pub(super) fn word_binds_copy(&self, name: &str) -> bool {
         self.opts.emit == LdsEmit::Exec && self.copy_of.contains_key(name)
     }

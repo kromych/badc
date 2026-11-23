@@ -16,8 +16,8 @@ pub(crate) struct AsmExprTerm {
     pub target: AsmSectionTarget,
 }
 
-/// An assembler expression value, as GNU as models it: a constant plus at
-/// most one added and one subtracted symbolic base. Same-space bases cancel
+/// An assembler expression value: a constant plus at most one added and
+/// one subtracted symbolic base. Same-space bases cancel
 /// into the constant; any richer combination is rejected.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmExprValue {
@@ -153,8 +153,8 @@ impl AsmExprValue {
         place(&mut self.neg, rneg)?;
         // A positive and a negative location in one space are a constant
         // distance; fold them so the bases free up. Two references to one
-        // undefined symbol cancel outright (GNU as folds `x - x`, which is
-        // what lets `.if \base == %rsp` compare register text).
+        // undefined symbol cancel outright (`x - x` folds, which is what
+        // lets `.if \base == %rsp` compare register text).
         if let (Some(p), Some(n)) = (&self.pos, &self.neg)
             && let Some(delta) = term_distance(p, n)
         {
@@ -209,7 +209,7 @@ pub(crate) fn resolve_asm_value(
 
 /// Resolve an instruction field's expression target at `place` in `space`:
 /// the expression plus the encoding's own addend, made PC-relative where the
-/// field measures from itself. GNU as folds a difference of symbols whatever
+/// field measures from itself. A difference of symbols folds whatever
 /// their binding, but a lone symbol the link binds keeps its relocation, so
 /// naming it leaves the encoding's PC-relativity in place.
 pub(crate) fn resolve_asm_field_expr(
@@ -343,7 +343,7 @@ fn skip_ws(b: &[u8], i: &mut usize) {
 }
 
 /// Evaluate an assembler expression over the location-value domain. The
-/// operator grouping is GNU as's: `* / % << >>` bind tightest, then
+/// operator grouping: `* / % << >>` bind tightest, then
 /// `| & ^`, then `+ -`, then the comparisons (yielding -1/0), then `&&`
 /// and `||` (yielding 1/0). Only `+` and `-` operate on symbolic terms;
 /// every other operator requires absolute operands.
@@ -430,12 +430,12 @@ fn val_relational(
         );
         *i += len;
         let rhs = val_add(b, s, i, ctx)?;
-        // GNU as yields -1 (all bits set) for a true comparison, 0 for false;
+        // A true comparison yields -1 (all bits set), a false one 0;
         // the replacement `.skip` padding `-((rlen-slen) > 0) * (rlen-slen)`
         // relies on the -1 to recover a positive count. The comparison is of
         // the difference against zero, so same-space terms cancel first. An
         // equality between two undefined symbols compares the symbols, which
-        // GNU as reads as unequal (`.if \base == %rsp` with two register
+        // reads as unequal (`.if \base == %rsp` with two register
         // names); a residual term that is a location in this unit is a
         // distance the comparison cannot take before the layout gives it one.
         let d = v.combine(rhs, true)?;
@@ -473,7 +473,7 @@ fn val_add(
     }
 }
 
-/// `| & ^` share one precedence level in GNU as, associating left.
+/// `| & ^` share one precedence level, associating left.
 fn val_bitgroup(
     b: &[u8],
     s: &str,
@@ -500,7 +500,7 @@ fn val_bitgroup(
     }
 }
 
-/// `* / % << >>` share the tightest binary level in GNU as.
+/// `* / % << >>` share the tightest binary level.
 fn val_mul(
     b: &[u8],
     s: &str,
@@ -541,8 +541,8 @@ fn val_mul(
                 if !(0..64).contains(&c) {
                     return Err(alloc::format!("shift count {c} out of range"));
                 }
-                // GNU as shifts the 64-bit value, so `>>` does not replicate
-                // the sign bit: `~0 >> 63` is 1, not -1.
+                // `>>` is a logical shift of the 64-bit value, so it does not
+                // replicate the sign bit: `~0 >> 63` is 1, not -1.
                 if op == b'l' {
                     a << c
                 } else {
@@ -593,8 +593,8 @@ fn val_unary(
             Ok(v)
         }
         // `%N` / `%cN` / `%PN`: an operand's compile-time constant. Any
-        // other `%name` is a symbol, as GNU as reads it in an expression
-        // (`.if \base == %rsp` compares two references to one symbol).
+        // other `%name` in an expression is a symbol (`.if \base == %rsp`
+        // compares two references to one symbol).
         Some(b'%') => {
             let pct = *i;
             *i += 1;
@@ -698,9 +698,9 @@ fn val_leaf(
     leaf_of(tok)
 }
 
-/// Parse a GNU as character constant `'c'` at `at`, returning its value and
-/// the index past it. The escapes are C's plus GNU as's octal and hex forms.
-/// GNU as also accepts the unterminated `'c` spelling.
+/// Parse an assembler character constant `'c'` at `at`, returning its value
+/// and the index past it. The escapes are C's plus the octal and hex forms;
+/// the unterminated `'c` spelling is also accepted.
 pub(crate) fn parse_asm_char_const(b: &[u8], at: usize) -> Option<(i64, usize)> {
     if b.get(at) != Some(&b'\'') {
         return None;
@@ -758,7 +758,7 @@ pub(crate) fn parse_asm_char_const(b: &[u8], at: usize) -> Option<(i64, usize)> 
 
 /// Parse an assembler integer literal: decimal, `0x` hex, `0b` binary, or
 /// `0`-prefixed octal, with the C suffixes accepted and ignored. The value
-/// wraps at 64 bits, as GNU as computes.
+/// wraps at 64 bits.
 pub(crate) fn parse_asm_number(t: &str) -> Option<i64> {
     let t = t.trim_end_matches(['u', 'U', 'l', 'L']);
     let (radix, digits) = if let Some(h) = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
@@ -777,9 +777,9 @@ pub(crate) fn parse_asm_number(t: &str) -> Option<i64> {
 }
 
 /// Evaluate a data-directive value as a 128-bit constant. A literal too wide
-/// for 64 bits parses directly (GNU as accepts a bignum wherever the
-/// directive's field can hold it); anything else falls back to the 64-bit
-/// expression evaluator and sign-extends, as GNU as does for `.octa -1`.
+/// for 64 bits parses directly (a bignum is valid wherever the directive's
+/// field can hold it); anything else falls back to the 64-bit expression
+/// evaluator and sign-extends (`.octa -1`).
 pub(crate) fn eval_const_expr_wide(s: &str) -> Option<i128> {
     let t = s.trim();
     let digits = t.trim_end_matches(['u', 'U', 'l', 'L']);
@@ -833,7 +833,7 @@ mod const_expr_tests {
         assert_eq!(eval_const_expr("17/5"), Some(3));
         assert_eq!(eval_const_expr("1<<3|2"), Some(10));
         assert_eq!(eval_const_expr("64>>2"), Some(16));
-        // C-style integer suffixes, as GNU as accepts (`mov $(1U << 8)`);
+        // C-style integer suffixes are accepted (`mov $(1U << 8)`);
         // a numeric label reference (`1b` / `2f`) stays a non-constant.
         assert_eq!(eval_const_expr("(1U << 8)"), Some(256));
         assert_eq!(eval_const_expr("2UL"), Some(2));

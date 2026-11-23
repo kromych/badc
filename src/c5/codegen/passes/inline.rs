@@ -101,9 +101,8 @@ const CALLER_INST_BUDGET: usize = 2048;
 
 /// Body-size bound for a function only one call site reaches. Its
 /// out-of-line copy is dead once that site is spliced, so the unit shrinks
-/// by it. The bound keeps the kernel's count of functions over 4 KiB at
-/// gcc's for the same configuration (`demos/linux/verify.py`'s
-/// TEXT_BUDGETS).
+/// by it; the bound limits how far a caller grows by absorbing such
+/// callees.
 const CALLED_ONCE_CAP: u32 = 512;
 
 /// Local-slot count past which a *self-recursive* caller stops absorbing

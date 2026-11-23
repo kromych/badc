@@ -1143,12 +1143,11 @@ pub(crate) fn is_char_value_ty(ty: i64) -> bool {
 /// elements when that is non-zero, `multi_dim` when the declaration had
 /// more than one dimension -- contributes to the function's stack-protector
 /// classification. `elem_size` gives the byte size of `ty`; the caller owns
-/// the target-dependent sizing. Mirrors gcc's `stack_protect_classify_type`:
-/// an array whose element type is a character type counts by its byte
-/// extent, an array of anything else counts as an array, and an aggregate
-/// contributes whatever its members do. A multidimensional array's element
-/// type is the inner array, not the character type, so it counts as an
-/// array only.
+/// the target-dependent sizing. An array whose element type is a character
+/// type counts by its byte extent, an array of anything else counts as an
+/// array, and an aggregate contributes whatever its members do. A
+/// multidimensional array's element type is the inner array, not the
+/// character type, so it counts as an array only.
 pub(crate) fn ssp_classify(
     structs: &[super::StructDef],
     ty: i64,

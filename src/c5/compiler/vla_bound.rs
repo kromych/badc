@@ -1,6 +1,5 @@
 //! gcc's `-Wvla-larger-than=N`: a variable-length array whose size is not
-//! known to be at most N bytes. gcc runs the check when optimizing and takes
-//! the bound from value ranges; badc takes it from the size expression: the
+//! known to be at most N bytes. The bound comes from the size expression: the
 //! operand types, constants, casts, `&`, `%`, `/`, `>>`, `+`, `*`, and `?:`
 //! whose condition compares the selected operand with a constant.
 //! TODO: a bound only a dominating condition proves (`if (n > 50) return;`).

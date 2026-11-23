@@ -121,8 +121,7 @@ impl ZKeyword {
     }
 }
 
-/// The `-z` keywords a link takes: the last one of each kind given, as
-/// GNU ld applies them.
+/// The `-z` keywords a link takes: the last one of each kind given.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZKeywords(alloc::vec::Vec<ZKeyword>);
 
@@ -228,7 +227,7 @@ pub fn parse_z_keyword(kw: &str) -> Result<ZKeyword, String> {
     })
 }
 
-/// Whether an image's stack is executable, and the warning bfd gives with
+/// Whether an image's stack is executable, and the warning that goes with
 /// it. `requested` is the last of `-z execstack` / `noexecstack`; without
 /// one, an input whose `.note.GNU-stack` is executable (`asked_by`, the
 /// first) makes the stack executable. `warn` is the last of
@@ -305,7 +304,7 @@ mod tests {
         );
     }
 
-    /// bfd's rule: `-z execstack` / `noexecstack` decide; without one an
+    /// `-z execstack` / `noexecstack` decide; without one an
     /// input's executable note does, with a warning `--no-warn-execstack`
     /// withholds and `--warn-execstack` extends to `-z execstack`.
     #[test]
@@ -380,8 +379,8 @@ mod tests {
         assert_eq!(code(large.in_hosted_link(false, true)), 'R');
     }
 
-    /// The last keyword of a kind stands, as GNU ld applies them; each
-    /// loader flag is a kind of its own.
+    /// The last keyword of a kind stands; each loader flag is a kind of
+    /// its own.
     #[test]
     fn the_last_keyword_of_a_kind_stands() {
         let mut z = ZKeywords::default();

@@ -2438,7 +2438,7 @@ struct Aarch64Lower {
     /// [`crate::c5::layout::data_start_aligns`] over the unit's data.
     data_aligns: Vec<(i64, i64)>,
     /// The mapping state spans the section: a body ending in data leaves the
-    /// padding to the next function's first instruction, as under GNU as.
+    /// padding to the next function's first instruction.
     text_map_state: Option<super::map_syms::MapClass>,
     /// Callee entry pc -> return type tag, for the tail-call contract.
     ret_tags: alloc::collections::BTreeMap<usize, i64>,

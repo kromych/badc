@@ -140,10 +140,10 @@ fn two_sources_compile_separately_then_link() {
     assert_eq!(out.status.code(), Some(42), "exit code mismatch");
 }
 
-/// Two objects carrying the same `GRP_COMDAT` group, as GNU as writes one
-/// for `.section ...,"axG",@progbits,<sig>,comdat`, link as GNU ld links
-/// them: the first group of each signature is kept and the second's
-/// definitions are not duplicates. The program reads the kept copies.
+/// Two objects carrying the same `GRP_COMDAT` group, which
+/// `.section ...,"axG",@progbits,<sig>,comdat` assembles to, link with the
+/// first group of each signature kept and the second's definitions not
+/// duplicates. The program reads the kept copies.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_comdat_group_in_two_objects_links_once() {
@@ -197,7 +197,7 @@ fn a_comdat_group_in_two_objects_links_once() {
 
 /// A header's `selectany` object and, on Windows, its inline function with a
 /// non-`inline` prototype (C99 6.7.4p7) link to one definition from two units;
-/// elsewhere GNU ld reports the function twice defined.
+/// elsewhere the link reports the function twice defined.
 #[test]
 fn a_headers_selectany_object_and_inline_function_link_once_per_program() {
     let dir = tempdir("pick-any");
@@ -674,7 +674,7 @@ int main(void) {
 
 // Inline asm loading or storing a C library object in place reaches the
 // object's own bytes in an ELF executable, which holds a copy bound to the
-// library's by a copy relocation, as GNU ld gives it. Mach-O has no copy
+// library's by a copy relocation. Mach-O has no copy
 // relocation, so the link refuses the use. Taking the address loads the
 // object's GOT slot on both.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1220,8 +1220,8 @@ __attribute__((destructor)) static void dtor(void) { seq = seq * 10 + 4; }\n\
 void fini_check(void) { _exit(seq == 1234 ? 7 : 9); }\n\
 int main(void) { return seq == 123 ? 0 : 1; }\n";
 
-// `.init` and `.fini` fragments run as crti.o and crtn.o bracket them under
-// GNU ld: in input order, before the constructors and after the
+// `.init` and `.fini` fragments run as crti.o and crtn.o bracket them: in
+// input order, before the constructors and after the
 // destructors. The first fragment's section is named without flags.
 #[cfg(target_os = "linux")]
 #[test]
@@ -1561,7 +1561,7 @@ fn inputs_enter_the_link_in_command_line_order() {
     }
 }
 
-// An ELF link takes archives as GNU ld does: an archive answers only the
+// An ELF link takes archives in order: an archive answers only the
 // references made ahead of it, a group's archives rescan together, and a
 // shared library answers the names it exports from its place on. A
 // Mach-O link searches every archive, as ld64 does.
@@ -2358,7 +2358,7 @@ fn a_shared_library_exports_its_default_visibility_definitions() {
 /// default `-undefined error`. `-undefined warning`, `suppress` and
 /// `dynamic_lookup`, given with `-Wl,` or to the driver, leave it for a
 /// flat-namespace lookup at load time, `warning` naming it. An ELF shared
-/// library keeps GNU ld's default and links it; `-undefined` is ld64's and
+/// library allows the undefined name and links; `-undefined` is ld64's and
 /// refused for an ELF or PE image.
 #[test]
 fn a_dylib_reference_no_input_defines_fails_as_under_ld64() {
@@ -2656,7 +2656,8 @@ fn a_mach_o_library_starts_at_zero_without_pagezero_or_a_dynamic_linker() {
 /// A weak reference no input defines fails a Mach-O link, an executable's
 /// or a dylib's, as ld64 reports it; under `-undefined dynamic_lookup` it
 /// is a flat-namespace weak import, which dyld sets to 0 when no loaded
-/// image defines it. An ELF link resolves it to 0, as GNU ld does.
+/// image defines it. An ELF link resolves it to 0, the gABI's value for an
+/// unresolved weak symbol.
 #[test]
 fn a_weak_reference_no_input_defines_fails_a_mach_o_link() {
     let dir = tempdir("macho-weak-undefined");
@@ -2999,8 +3000,8 @@ fn gcc_driver_options_from_build_systems_take_effect() {
 }
 
 /// A link reports every name it finds undefined, once each and in the
-/// order of their first references, before it fails, as GNU ld does,
-/// whether the units are compiled in the link or given as objects.
+/// order of their first references, before it fails, whether the units
+/// are compiled in the link or given as objects.
 #[test]
 fn a_link_reports_every_undefined_name_once() {
     let dir = tempdir("undefined-every-name");
@@ -6412,8 +6413,8 @@ fn a_native_image_refuses_a_name_its_system_module_does_not_export() {
 }
 
 /// An import library on the command line that supplies a name the bundled
-/// headers bind to the C runtime outranks the binding, as with link.exe and
-/// GNU ld: the image imports the name from the library's DLL.
+/// headers bind to the C runtime outranks the binding: the image imports
+/// the name from the library's DLL.
 #[test]
 fn an_import_library_outranks_a_header_binding() {
     for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
@@ -9163,7 +9164,7 @@ fn indexed_archive(members: &[(&str, Vec<u8>, &[&str])]) -> Vec<u8> {
 }
 
 /// A link reads an archive member once the archive's symbol index lists a
-/// name the link still needs, as GNU ld and link.exe do: a member that is
+/// name the link still needs: a member that is
 /// no object fails the link only when a reference reaches it. An archive
 /// without an index has every member read.
 #[test]
@@ -9214,7 +9215,7 @@ fn an_archive_member_is_read_when_the_link_pulls_it() {
     }
 }
 
-/// A driver links against GNU dlltool's import library as GNU ld links it:
+/// A driver links against GNU dlltool's import library:
 /// a call through the thunk, a dllimport call, a data import and an import
 /// by ordinal each import from the DLL the descriptor names, and an import
 /// nothing references is not imported.
@@ -9719,9 +9720,8 @@ void start_c(void) {
 // switch table, a label table and an indexed object are addressed by their
 // link-time address (`R_X86_64_32S`). A placed image, freestanding or a
 // hosted `-no-pie` one, resolves the field and runs; a position-independent
-// image has no load-time form for it, and the hosted link refuses it as
-// GNU ld does, while the default `-c` object of the same unit keeps
-// linking there.
+// image has no load-time form for it, and the hosted link refuses it,
+// while the default `-c` object of the same unit keeps linking there.
 #[test]
 fn static_link_objects_address_tables_absolutely() {
     const PT_INTERP: u32 = 3;
@@ -9952,8 +9952,8 @@ fn linker_arguments_pass_through_wl_and_xlinker() {
     );
 }
 
-// A script link writes `ET_EXEC`, as GNU ld does; `-pie` makes it the
-// position-independent `ET_DYN` form, as it does for `ld`.
+// A script link writes `ET_EXEC`; `-pie` makes it the
+// position-independent `ET_DYN` form.
 #[test]
 fn a_script_link_takes_the_executable_form_the_flags_pick() {
     let dir = tempdir("script-link-pie");
@@ -10264,7 +10264,7 @@ fn undefined_references_and_text_relocations_follow_the_z_keywords() {
     );
 }
 
-/// GNU ld's stack rule in each link: an input whose `.note.GNU-stack` is
+/// The executable-stack rule in each link: an input whose `.note.GNU-stack` is
 /// executable makes the stack executable and is named in a warning; `-z
 /// noexecstack` overrides it, `-z execstack` forces the stack (the last of
 /// the two holds), `--no-warn-execstack` withholds the warning and
@@ -10509,7 +10509,7 @@ fn a_links_warnings_follow_dash_w_and_not_dash_q() {
 /// One table answers the `-z` keywords for the `--ld` persona and for the
 /// driver's -T link, so a keyword cannot be taken by one and refused by
 /// the other; a refusal names the keyword. A relocatable link takes every
-/// keyword, as GNU ld does.
+/// keyword.
 #[test]
 fn the_ld_persona_and_the_script_link_answer_every_z_keyword_alike() {
     let dir = tempdir("z-keywords-alike");
@@ -10595,8 +10595,8 @@ fn the_ld_persona_and_the_script_link_answer_every_z_keyword_alike() {
     }
 }
 
-/// The `--ld` persona's options besides `-z`, each taken as GNU ld takes
-/// it or refused by name: `--no-dynamic-linker` withdraws an interpreter
+/// The `--ld` persona's options besides `-z`, each implemented or refused
+/// by name: `--no-dynamic-linker` withdraws an interpreter
 /// asked for before it, `-Bsymbolic-functions` records no `DT_SYMBOLIC`,
 /// `-x` drops every local symbol of the inputs where `-X` drops only the
 /// temporaries, `--as-needed` withholds the dependency record of a library
@@ -10728,7 +10728,7 @@ fn the_ld_personas_other_options_take_effect_or_are_refused() {
 }
 
 /// Both front ends of the script engine report a segment the image loads
-/// readable, writable and executable, as GNU ld does, naming the output;
+/// readable, writable and executable, naming the output;
 /// `--no-warn-rwx-segments` withholds the warning.
 #[test]
 fn an_rwx_segment_is_reported_unless_the_warning_is_withdrawn() {
@@ -10787,7 +10787,7 @@ fn an_rwx_segment_is_reported_unless_the_warning_is_withdrawn() {
 
 /// The link without -T keeps every local symbol of its inputs, which is
 /// what `--discard-none` asks for; `-X` drops the assembler temporaries
-/// (`.L*`) among them. The last of the two holds, as in GNU ld.
+/// (`.L*`) among them. The last of the two holds.
 #[test]
 fn a_hosted_link_drops_the_assembler_temporaries_under_dash_x() {
     let dir = tempdir("discard-temporaries");
@@ -11822,7 +11822,7 @@ fn mach_o_assembly_reaches_c_names_through_the_underscore() {
 }
 
 /// An image with no import and no emitted relocation still lists its
-/// definitions in `.symtab`, as GNU ld writes one for every image.
+/// definitions in `.symtab`.
 #[test]
 fn an_image_without_imports_lists_its_definitions() {
     let dir = tempdir("symtab-no-imports");
@@ -11858,7 +11858,7 @@ fn an_image_without_imports_lists_its_definitions() {
 
 /// A definition the assembler binds `STB_GNU_UNIQUE` keeps the binding in
 /// the image's symbol tables, `.dynsym` included, and the image is marked
-/// `ELFOSABI_GNU`, as GNU ld 2.46.1 writes both; through either link.
+/// `ELFOSABI_GNU`, the OS ABI that defines the binding; through either link.
 #[test]
 fn a_unique_definition_keeps_its_binding_in_the_image() {
     const STB_GNU_UNIQUE: u8 = 10;
@@ -11980,8 +11980,8 @@ fn elf_dynamic_tags(bytes: &[u8]) -> (Vec<(u64, u64)>, usize) {
 }
 
 /// `-l:<file>` searches the library path for the file itself, with no `lib`
-/// prefix and no suffix added, as GNU ld's `-l namespec` does: an archive of
-/// any name, and a versioned shared object with no unversioned link. A file
+/// prefix and no suffix added: an archive of any name, and a versioned
+/// shared object with no unversioned link. A file
 /// on no search path is reported by the name given.
 #[test]
 fn a_colon_library_names_its_file() {
@@ -12578,7 +12578,7 @@ fn unknown_asm_section_flag_is_diagnosed() {
 }
 
 /// Two assembler statements that give one section different types are
-/// refused as gas refuses them within one source, not as an internal error.
+/// refused as a changed section type, not as an internal error.
 #[test]
 fn a_section_type_changed_across_asm_statements_is_diagnosed() {
     let dir = tempdir("asm-section-type");
@@ -12608,9 +12608,7 @@ fn a_section_type_changed_across_asm_statements_is_diagnosed() {
 /// position-independent image cannot promise. The `-c` object carries
 /// the relocation (its shape is locked in the linker tests); linking it
 /// into an executable names the constraint rather than reporting a
-/// missing patcher. GNU ld rejects the same object with
-/// "relocation R_X86_64_32S ... can not be used when making a PIE
-/// object".
+/// missing patcher.
 #[test]
 fn absolute_text_reloc_is_rejected_for_a_pie() {
     let dir = tempdir("abs-text-reloc-pie");
@@ -12645,7 +12643,7 @@ fn absolute_text_reloc_is_rejected_for_a_pie() {
             && err.contains("position-independent"),
         "diagnostic should name the relocation, the symbol and the constraint: {err}",
     );
-    // Same constraint, different output kind: GNU ld says "shared
+    // Same constraint, different output kind: the diagnostic says "shared
     // object" here, and the reason it gives is the reference's, not a
     // missing patcher's.
     let out = Command::new(badc())
@@ -13612,8 +13610,8 @@ fn empty_records_cross_the_system_compiler_boundary() {
     }
 }
 
-// On System V x86-64 the bytes of an unnamed bit-field classify INTEGER, as
-// gcc's classification counts them: an eightbyte one holds alone, beside a
+// On System V x86-64 the bytes of an unnamed bit-field classify INTEGER, the
+// class gcc-compiled code gives them: an eightbyte one holds alone, beside a
 // `float` or inside an anonymous member, and a union's first one under a
 // zero-width one, take a general register on both sides of a call between
 // badc and a gcc system compiler, named or variadic.
@@ -16682,7 +16680,7 @@ fn a_protected_definition_is_exported_and_binds_its_library() {
             .collect()
     );
     // An object the system compiler built for a placed image reads the
-    // object directly, which would take a copy of it; GNU ld and lld refuse.
+    // object directly, which would take a copy of it; the link refuses it.
     let Some(cc) = host_cc() else {
         return;
     };
@@ -16776,8 +16774,8 @@ fn an_exported_object_is_interposed_by_the_executables_definition() {
 
 // An executable exports its definition of a name a linked shared library
 // references and does not define, so the loader binds the library's
-// reference to it (GNU ld's `ref_dynamic`), with no option asking for the
-// export: a callback the library calls and an object it reads.
+// reference to it, with no option asking for the export: a callback the
+// library calls and an object it reads.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_librarys_reference_binds_to_the_executables_definition() {
@@ -16908,7 +16906,7 @@ fn an_executables_definitions_preempt_a_shared_librarys_own() {
          }\n",
     );
     // The executable exports its definitions of the names the library
-    // defines with no option asking for it, as GNU ld does.
+    // defines with no option asking for it.
     let exe = dir.join("prog");
     run(
         Command::new(badc())
@@ -17099,9 +17097,9 @@ fn a_script_linked_shared_librarys_references_are_preemptible() {
     }
 }
 
-// GNU ld refuses a shared library built for another machine than the
-// link's: "error adding symbols: file in wrong format". The link's machine
-// is the emulation's, or without -m the first object's.
+// A shared library built for another machine than the link's is refused in
+// GNU ld's words: "error adding symbols: file in wrong format". The link's
+// machine is the emulation's, or without -m the first object's.
 #[test]
 fn the_ld_persona_refuses_a_library_built_for_another_machine() {
     let dir = tempdir("lib-machine");
@@ -17152,8 +17150,8 @@ fn the_ld_persona_refuses_a_library_built_for_another_machine() {
     }
 }
 
-// GNU ld's -l search skips a library built for another machine than the
-// link's, with "skipping incompatible <path> when searching for -l<name>",
+// The -l search skips a library built for another machine than the link's,
+// in GNU ld's words "skipping incompatible <path> when searching for -l<name>",
 // and searches on: to the archive in the same directory, then to the next
 // directory. An archive is judged by its first object.
 #[test]
@@ -17267,7 +17265,7 @@ fn elf32_dynamic_relocs(path: &Path) -> Vec<(u32, String)> {
 }
 
 // An i386 library and the executables calling it, linked by the GNU ld
-// persona with and without a script, bind as GNU ld binds them: the library
+// persona with and without a script, bind as follows: the library
 // reaches its own default-visibility definitions through the PLT, the GOT
 // and relocations naming them unless -Bsymbolic or -Bsymbolic-functions
 // binds them in place, and a PIE and a position-dependent executable
@@ -18031,8 +18029,7 @@ fn a_text_relocation_warns_unless_z_text_or_z_notext_says_otherwise() {
 
 // The GNU ld persona reads an entry no symbol names as an address in C's
 // bases, runs the `-dT` / `--default-script` script where no `-T` names
-// one, and searches the -L directories for the file `-l:<file>` names, as
-// GNU ld does.
+// one, and searches the -L directories for the file `-l:<file>` names.
 #[test]
 fn the_ld_persona_takes_a_numeric_entry_a_default_script_and_a_named_library_file() {
     let dir = tempdir("ld-options");
@@ -20065,8 +20062,8 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
-// An eightbyte an unnamed bit-field covers is INTEGER, as gcc classes it
-// (System V AMD64 3.2.3): `struct { int :32; int :32; double d; }` passes the
+// An eightbyte an unnamed bit-field covers is INTEGER (System V AMD64
+// 3.2.3): `struct { int :32; int :32; double d; }` passes the
 // first eightbyte in rdi, `d` in xmm0 and the next integer in rsi, and
 // `struct { float a; int :8; float b; }` an INTEGER and an SSE eightbyte.
 // clang gives an unnamed bit-field no class, a recorded divergence: against
@@ -20133,8 +20130,8 @@ fn unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary() {
     );
 }
 
-// A floating-point vector of one element has no System V AMD64 class; gcc
-// passes it in memory, bare or as a member, as badc does. clang passes the
+// A floating-point vector of one element has no System V AMD64 class and
+// passes in memory, bare or as a member, under badc and gcc. clang passes the
 // `float` one in a general-purpose register and returns the bare `double` one
 // in xmm0, a recorded divergence: against clang on x86_64 only the `double`
 // vector's argument and struct cross. AAPCS64 passes the structs holding the
@@ -20248,9 +20245,9 @@ fn single_fp_vectors_cross_the_system_compiler_boundary() {
     }
 }
 
-// An integer vector narrower than 8 bytes crosses an AArch64 call as clang
-// places it, both ways: passed as a 32-bit integer and returned in v0, one
-// element in the low bytes, several widened to equal lanes of d0. gcc
+// An integer vector narrower than 8 bytes crosses an AArch64 call in the
+// clang-compiled layout, both ways: passed as a 32-bit integer and returned
+// in v0, one element in the low bytes, several widened to equal lanes of d0. gcc
 // returns it in w0 instead, a recorded divergence, so only a clang peer is
 // driven.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -21968,10 +21965,9 @@ fn unwind_tables_cost_their_bytes_not_a_page() {
     }
 }
 
-/// Every function badc compiles for Linux takes an FDE, which the image's
-/// `.eh_frame_hdr` indexes by the function's address, as gcc's default
-/// `-fasynchronous-unwind-tables` gives it; without the tables the image
-/// has none.
+/// Every function badc compiles for Linux takes an FDE under the default
+/// `-fasynchronous-unwind-tables`, which the image's `.eh_frame_hdr` indexes
+/// by the function's address; without the tables the image has none.
 #[test]
 fn every_lowered_function_has_an_fde_in_the_image() {
     let dir = tempdir("every_lowered_function_has_an_fde_in_the_image");
@@ -22342,8 +22338,8 @@ fn pe_section_rvas(bytes: &[u8]) -> Vec<u32> {
         .collect()
 }
 
-/// A unit defining `__start_<name>` itself keeps that definition: bfd
-/// synthesizes the pair only where nothing else does, and
+/// A unit defining `__start_<name>` itself keeps that definition: the
+/// pair is synthesized only where nothing else defines it, and
 /// `__start_tty` is an ordinary function in at least one real tree.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
@@ -22547,10 +22543,10 @@ mod aarch64_link {
                            isle64:\n\
                            	.quad 5\n";
 
-    /// Each input text section keeps the alignment it claims once the
-    /// image is laid out, which is the guarantee GNU ld gives: with
-    /// the same three islands `ld` places them at 16-, 32- and
-    /// 64-aligned addresses, and `.text` reports the widest of them.
+    /// Each input text section keeps the alignment it claims
+    /// (`sh_addralign`) once the image is laid out: the three islands
+    /// land at 16-, 32- and 64-aligned addresses, and `.text` reports the
+    /// widest of them.
     #[test]
     fn merged_text_keeps_each_input_section_alignment() {
         let dir = tempdir("a64-text-align");
@@ -22706,9 +22702,8 @@ mod aarch64_link {
         }
     }
 
-    /// An image the loader places refuses the group, since no dynamic
-    /// form carries an instruction field -- the refusal GNU ld gives for
-    /// the same input in a `-shared` link.
+    /// An image the loader places refuses the group in a `-shared` link,
+    /// since no dynamic form carries an instruction field.
     #[test]
     fn movw_against_a_placed_symbol_is_refused_in_a_shared_object() {
         let dir = tempdir("a64-movw-shared");
@@ -23006,9 +23001,9 @@ mod aarch64_link {
 
 /// A shared object's default-visibility definitions may be preempted
 /// (System V gABI, symbol visibility), so read-only code reaches one
-/// through the GOT or the PLT. A PC-relative address of one is refused,
-/// as GNU ld and lld refuse it, rather than bound to the object's own
-/// definition; a branch, a GOT load and a hidden definition's address link.
+/// through the GOT or the PLT. A PC-relative address of one is refused
+/// rather than bound to the object's own definition; a branch, a GOT load
+/// and a hidden definition's address link.
 #[test]
 fn a_pc_relative_address_of_a_preemptible_definition_is_refused_in_a_shared_object() {
     let dir = tempdir("preempt-pcrel");
@@ -24069,7 +24064,7 @@ fn script_links_read_only_the_members_the_index_pulls() {
 }
 
 /// An `.init_array` entry may name a function another unit defines, which
-/// the link resolves as GNU ld resolves the slot's relocation; one naming
+/// the link resolves through the slot's relocation; one naming
 /// a function nothing defines is refused.
 #[test]
 fn an_init_array_entry_may_name_another_units_function() {

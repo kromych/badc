@@ -18,7 +18,7 @@ fn block_of(blocks: &[AsmSectionBlock], label: &str) -> alloc::string::String {
         .unwrap_or_else(|| alloc::string::String::from("<none>"))
 }
 
-/// GNU as keeps the previous section beside the `.pushsection` stack, so
+/// The previous section is kept beside the `.pushsection` stack, so
 /// a `.section` / `.previous` pair nested in a pushed region returns to
 /// the pushed section and leaves the stack depth alone: a macro that
 /// emits a table entry through `.section` / `.previous` inside a
@@ -35,7 +35,7 @@ fn previous_returns_to_the_section_a_section_directive_left() {
 }
 
 /// `.previous` toggles: a second one returns to where the first came
-/// from, as GNU as does with its single previous-section slot.
+/// from, through a single previous-section slot.
 #[test]
 fn previous_toggles_between_two_sections() {
     let text = ".section \"a\",\"a\"\nin_a:\n.section \"b\",\"a\"\nin_b:\n\
@@ -73,7 +73,7 @@ fn globl_binds_a_label_defined_in_another_section() {
 
 /// A `.set` to a constant folds into the expressions that read it, and
 /// additionally defines an absolute symbol when the unit gave the name
-/// external linkage -- what GNU as puts in `.symtab` as `SHN_ABS`.
+/// external linkage -- an `SHN_ABS` entry in `.symtab`.
 #[test]
 fn an_exported_constant_assignment_defines_an_absolute_symbol() {
     let text = ".globl len\n.section .rodata,\"a\"\nlen = 12345\nblob:\n.long len\n";
@@ -108,8 +108,8 @@ fn an_exported_constant_assignment_defines_an_absolute_symbol() {
 
 #[test]
 fn value_is_an_x86_two_byte_element() {
-    // GNU as defines `.value` on x86 alone, as `.word` there; the AArch64
-    // assembler reports an unknown pseudo-op.
+    // `.value` is x86's alone, a `.word` there; on AArch64 it is an unknown
+    // pseudo-op.
     match parse_section_item(".value", "0x1234, 7", false) {
         Ok(AsmSectionItem::Data { width: 2, values }) => assert_eq!(values.len(), 2),
         other => panic!("{other:?}"),
@@ -286,7 +286,7 @@ fn align_fill_and_max_skip() {
         false,
     );
     assert_eq!(exec.len(), 9);
-    // x86 executable default fill is the GNU as multi-byte NOP run. The
+    // x86 executable default fill is the multi-byte NOP run. The
     // gap opens after a data directive, so it leads with the one-byte NOP
     // and the remaining six take the 6-byte NOP.
     assert_eq!(exec[1..8], [0x90, 0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00]);
@@ -317,7 +317,7 @@ fn align_fill_and_max_skip() {
 
 #[test]
 fn a64_exec_align_fill_matches_gnu_as() {
-    // GNU as splits an AArch64 code-section alignment gap: the gap's
+    // An AArch64 code-section alignment gap splits into the gap's
     // sub-word remainder as zeros, then whole NOPs. The split is by the
     // gap, not by the offset, so a `.balign 2` over one byte writes one
     // zero. Each row is `(gap, zeros, nops)` read off `as` 2.46.
@@ -366,9 +366,9 @@ fn insn_align_gap_follows_the_mapping_state() {
 
 #[test]
 fn an_alignment_of_one_leaves_the_mapping_state_alone() {
-    // GNU as builds no frag for an alignment of one, so it neither
-    // opens a run nor suppresses the padding before a later
-    // instruction. A wider one leaves the section in the instruction
+    // An alignment of one neither opens a run nor suppresses the
+    // padding before a later instruction. A wider one leaves the
+    // section in the instruction
     // state where the section is executable.
     let item = |n: u32| AsmSectionItem::Align {
         spec: AlignSpec::Bytes(n),
@@ -866,10 +866,10 @@ fn operand_reloc_subtracts_a_location() {
 
 #[test]
 fn shift_right_is_logical_like_gnu_as() {
-    // GNU as shifts the 64-bit value, so `>>` never replicates the sign
-    // bit. Verified against `as` (`.quad` of each expression): the bit-mask
-    // expression below reduces to 1, not -1, which is what makes it a valid
-    // AArch64 logical immediate.
+    // `>>` is a logical shift of the 64-bit value, so it never replicates
+    // the sign bit. Verified against `as` (`.quad` of each expression): the
+    // bit-mask expression below reduces to 1, not -1, which is what makes it
+    // a valid AArch64 logical immediate.
     assert_eq!(eval_const_expr("~0 >> 63"), Some(1));
     assert_eq!(eval_const_expr("-8 >> 1"), Some(0x7fff_ffff_ffff_fffc));
     assert_eq!(eval_const_expr("1 << 63 >> 60"), Some(8));
@@ -1227,7 +1227,7 @@ fn section_parenthesised_label_reference() {
 #[test]
 fn asm_conditionals_keep_the_taken_branch() {
     // `.if <expr>` compares with the relational operators; a non-zero
-    // result keeps the branch. A true comparison is -1, as in GNU as.
+    // result keeps the branch. A true comparison is -1.
     // `.else` / `.elseif` select the live arm, and a dropped branch takes
     // its `.pushsection` with it.
     let reduce = |t: &str| expand_asm_gas_macros(t, 4, &|_| None).unwrap().unwrap();
@@ -1272,7 +1272,7 @@ fn asm_conditionals_keep_the_taken_branch() {
 
 #[test]
 fn word_directive_width_is_target_dependent() {
-    // GNU as `.word` is 2 bytes on x86 ELF, 4 on AArch64. A label reference
+    // `.word` is 2 bytes on x86 ELF, 4 on AArch64. A label reference
     // stored with `.word` needs a 4- or 8-byte field, so it resolves only
     // under the AArch64 width.
     let width = |is_a64: bool| -> u8 {
@@ -1341,7 +1341,7 @@ fn section_label_difference_bytes() {
 fn cross_section_label_difference_folds_to_replacement_length() {
     // A table entry's `.byte 775f - 774f` measures a distance between two
     // labels in a later section, while the field itself sits in the table's
-    // section. GNU as folds it to the replacement length (3 here). A
+    // section. It folds to the replacement length (3 here). A
     // difference across sections is rejected.
     let text = ".pushsection .altinstructions,\"a\"\n.byte 775f - 774f\n.popsection\n\
                 .pushsection .altinstr_replacement,\"ax\"\n\
@@ -1397,7 +1397,7 @@ fn cross_section_label_difference_across_sections_is_rejected() {
 #[test]
 fn skip_count_expression_matches_gnu_as() {
     // The replacement-padding `.skip` count `-(((rlen)-(slen)) > 0) * ((rlen)-(slen))`
-    // pads by `max(0, rlen - slen)`: a relational is -1 for true (GNU as),
+    // pads by `max(0, rlen - slen)`: a relational is -1 for true,
     // so a longer replacement yields a positive count and a shorter one
     // zero. Labels resolve through the passed closure.
     let expr = "-(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b))";
@@ -1489,7 +1489,7 @@ fn split_asm_subsections_lifts_supported_shape() {
     assert!(deferred.contains("tpidr_el2") && deferred.contains("663:"));
     assert!(!deferred.contains("tpidr_el1"));
     // Chained regions all lift, ordered by subsection number and then by
-    // position, as GNU as lays the subsections of a section out.
+    // position.
     let chained = "nop\n.subsection 2\nisb\n.previous\nmov x0, x1\n.subsection 1\n\
                    dmb osh\n.previous\n.subsection 1\nldar x0, [x1]\n.previous\n";
     let (main, deferred) = split_asm_subsections(chained);
@@ -1516,7 +1516,7 @@ fn split_asm_subsections_lifts_supported_shape() {
 #[test]
 fn repeated_numeric_labels_are_numbered_apart_by_position() {
     // Two chained replacement sequences define 661..664 twice. Each reference takes
-    // the definition GNU as binds it to -- `Nb` the nearest before it, `Nf`
+    // the definition it binds to -- `Nb` the nearest before it, `Nf`
     // the nearest after -- under a number above every one the text names.
     let text = "661:\n\tnop\n662:\n.word 661b - .\n.word 663f - .\n.byte 662b-661b\n\
                 .subsection 1\n663:\n\tdmb osh\n664:\n.previous\n\
@@ -1594,7 +1594,7 @@ fn replacement_instruction_kept_as_code_for_executable_section() {
         "instruction kept as Code: {:?}",
         repl.items
     );
-    // GNU as assembles instructions into any section; the flags set the
+    // Instructions assemble into any section; the flags set the
     // object section's attributes, not whether code is admitted. An
     // instruction in a section flagged `"a"` (not executable) is likewise
     // kept as a `Code` item for the backend to encode.
@@ -1613,8 +1613,8 @@ fn replacement_instruction_kept_as_code_for_executable_section() {
 
 #[test]
 fn label_without_whitespace_peels_from_following_instruction() {
-    // GNU as terminates a label at the colon and requires no whitespace
-    // before the statement that follows, so `name:insn` in a named section
+    // A label ends at the colon and needs no whitespace before the
+    // statement that follows, so `name:insn` in a named section
     // is a label plus an instruction. Both must reach the block as separate
     // items -- a `Label` and a single-instruction `Code` -- not one glued
     // `Code("name:insn")` the arch encoder then rejects.
@@ -1649,7 +1649,7 @@ fn label_without_whitespace_peels_from_following_instruction() {
 
 #[test]
 fn data_field_fit_boundaries() {
-    // Signed-or-unsigned fit per width, matching GNU as's accept set.
+    // Signed-or-unsigned fit per width.
     assert!(value_fits_width(255, 1) && value_fits_width(-128, 1));
     assert!(!value_fits_width(256, 1) && !value_fits_width(-129, 1));
     assert!(value_fits_width(65535, 2) && value_fits_width(-32768, 2));
@@ -1835,7 +1835,7 @@ fn section_type_object_and_bad_forms_rejected() {
     )
     .expect_err("unknown .type must be rejected");
     assert!(err.contains("unsupported `.type`"), "{err}");
-    // `.type` on a name no section defines is the unit's, as in gas.
+    // `.type` on a name no section defines is the unit's.
     let sink = materialize(".pushsection .t,\"a\"\n.type ext, @function\n.popsection\n").unwrap();
     let (sections, decls) = sink.into_parts(crate::c5::codegen::BinaryFormat::Elf);
     assert!(sections[0].labels.is_empty());
@@ -1921,8 +1921,8 @@ fn gas_macro_sysreg_read_folds_to_inst_word() {
 
 /// A comma with no argument before it supplies an empty one, so the
 /// arguments after it keep their positions; a parameter supplied empty
-/// still takes its `=default`. Both are what GNU as binds, at every level
-/// of a macro that passes its arguments on (`m \rq, ..., 8b,, sh1, ...`).
+/// still takes its `=default`. Both hold at every level of a macro that
+/// passes its arguments on (`m \rq, ..., 8b,, sh1, ...`).
 #[test]
 fn gas_macro_empty_arguments_bind_like_gnu_as() {
     let expand = |invocation: &str, params: &str| {
@@ -2092,8 +2092,8 @@ fn gas_macro_malformed_forms_are_rejected() {
 
 #[test]
 fn gas_macro_spaced_qualifiers_bind_like_gnu_as() {
-    // GNU as scans a formal's `=` / `:` separator as its own token, so
-    // whitespace may border either. Verified against `as`: `m1 x5` binds
+    // A formal's `=` / `:` separator is its own token, so whitespace may
+    // border either. Verified against `as`: `m1 x5` binds
     // `a`, `m2` takes the default x7 and `m2 x9` overrides it.
     let none = |_: &str| None;
     let text = ".macro m1, a : req\nadd x0, x0, \\a\n.endm\n\
@@ -2207,7 +2207,7 @@ fn altmacro_percent_arguments_evaluate_like_gnu_as() {
     assert!(out.contains("%1+2"), "{out}");
 }
 
-/// `name = expr` is the GNU as spelling of `.set`, so a unit that uses no
+/// `name = expr` spells `.set`, so a unit that uses no
 /// other directive still resolves its symbols. A value naming a register
 /// is a register equate -- the binding `.req` makes -- and defines no
 /// symbol; every later use of the name substitutes the register. `$name`
@@ -2251,8 +2251,8 @@ fn rept(text: &str) -> Result<alloc::string::String, alloc::string::String> {
     Ok(expand_asm_gas_macros(text, 4, &|_| None)?.expect("`.rept` triggers the pass"))
 }
 
-/// GNU as spells the repeat directive `.rept` or `.rep`, and iterates the
-/// characters of an operand with `.irpc`. Bytes measured with GNU as
+/// The repeat directive is `.rept` or `.rep`, and `.irpc` iterates the
+/// characters of an operand. Bytes measured with GNU as
 /// 2.46.1: `.rep 3 / .byte 0xaa / .endr` deposits `aa aa aa`;
 /// `.irpc l, 0123 / .byte \l / .endr` deposits `00 01 02 03`; an empty
 /// `.irpc` operand still expands the body once.
@@ -2285,8 +2285,8 @@ fn rep_and_irpc_match_gnu_as() {
     );
 }
 
-/// GNU as separates a macro invocation's arguments by commas or by
-/// whitespace, and `%` is not one of the operators that keeps whitespace
+/// A macro invocation's arguments separate by commas or by whitespace,
+/// and `%` is not one of the operators that keeps whitespace
 /// from separating: measured, `m 1 % 2` binds three arguments and
 /// `m %r8 %r9` binds two, while `m sym + 24` stays one.
 #[test]
@@ -2323,7 +2323,7 @@ fn a_set_referenced_before_its_assignment_stays_in_the_stream() {
 /// A macro body is re-scanned after substitution, so a `;` that arrives
 /// through an argument separates statements -- a whole instruction
 /// sequence passed as one argument, and the macros it names have to be
-/// recognized inside it. GNU as also ends a macro name
+/// recognized inside it. A macro name also ends
 /// at the first character that cannot be part of one, so the C-macro
 /// invocation spelling works.
 #[test]
@@ -2394,7 +2394,7 @@ fn rept_nests_with_macros_and_irp() {
     assert_eq!(out.matches("nop").count(), 4, "{out}");
     let out = rept(".rept 2\n.irp r,1,2,3\nnop\n.endr\n.endr\n").unwrap();
     assert_eq!(out.matches("nop").count(), 6, "{out}");
-    // The count is an expression over the `.set` table, as in GNU as.
+    // The count is an expression over the `.set` table.
     let out = rept(".set n, 2\n.rept n + 1\nnop\n.endr\n").unwrap();
     assert_eq!(out.matches("nop").count(), 3, "{out}");
     // A `.rept` in a dead conditional branch consumes its body.
@@ -2680,7 +2680,7 @@ fn previous_after_a_push_pop_pair_returns_to_the_code_stream() {
 
 /// The `M` flag's entry size and the `o` flag's ordering section are part
 /// of the section's identity and reach the materialized section. `M`
-/// without an entry size is dropped, as GNU as drops it.
+/// without an entry size is dropped.
 #[test]
 fn section_arguments_carry_the_entry_size_and_the_link() {
     let text = ".pushsection .discard.annotate_insn,\"M\",@progbits,8\n.long 1\n.popsection\n\
@@ -2726,8 +2726,8 @@ fn section_arguments_carry_the_entry_size_and_the_link() {
 
 /// The `G` flag's group name follows the entry size and the ordering
 /// section, with an optional `comdat` linkage; a `.gnu.linkonce` name makes
-/// the group COMDAT without one, and `G` without a group name is dropped,
-/// as GNU as reads them. Members of distinct groups are distinct sections.
+/// the group COMDAT without one, and `G` without a group name is dropped.
+/// Members of distinct groups are distinct sections.
 #[test]
 fn section_arguments_carry_the_group() {
     let text = ".section .text.t,\"axG\",@progbits,t,comdat\n.byte 0\n\

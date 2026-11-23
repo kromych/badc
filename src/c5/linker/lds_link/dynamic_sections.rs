@@ -75,7 +75,7 @@ impl<'a> LdsLinker<'a> {
 
     /// Relocation types the dynamic tables are built from: the
     /// address-width absolute form the input uses, and the load-time
-    /// forms bfd rewrites it to.
+    /// forms it becomes.
     pub(super) fn dyn_reloc_types(&self) -> (u32, u32, u32) {
         match self.machine {
             EM_AARCH64 => (
@@ -107,8 +107,8 @@ impl<'a> LdsLinker<'a> {
         // GOT slot set stays stable across passes (driven by reloc
         // types alone), so compute it once.
         if self.got_slots.is_empty() && self.got_map.is_empty() {
-            // A slot is taken by a reference through the GOT alone, as
-            // GNU ld allocates them: to an import, to a preemptible
+            // A slot is taken by a reference through the GOT alone: to an
+            // import, to a preemptible
             // definition, or one no relaxation removes. A call reaches
             // its target through the PLT's own slot.
             let mut slots: Vec<GotKey> = Vec::new();
@@ -140,7 +140,7 @@ impl<'a> LdsLinker<'a> {
             self.got_map = map;
         }
         // Collect absolute-64 sites in allocated output sections; each
-        // becomes a RELATIVE entry. bfd packs a site into RELR when
+        // becomes a RELATIVE entry. A site packs into RELR when
         // its input offset is even and the input section's alignment
         // is above one (the output address parity then follows);
         // other sites keep RELA entries.
@@ -178,12 +178,12 @@ impl<'a> LdsLinker<'a> {
                 // Only a load-address (section-relative) target needs a
                 // load-time RELATIVE fixup; an absolute constant does
                 // not. An unresolved default-visibility weak reference
-                // keeps a symbol-based entry, as bfd leaves its
-                // resolution to load time.
+                // keeps a symbol-based entry, leaving its resolution to
+                // load time.
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
                     let name = &self.objects[id.obj].symbols[r.sym as usize].name;
                     // A position-dependent executable's word naming an
-                    // undefined weak import holds 0, as bfd writes it.
+                    // undefined weak import holds 0.
                     let pde_weak =
                         self.opts.emit == LdsEmit::Exec && self.undefined_weak_import(name);
                     if self.import_of.contains_key(name)
@@ -282,7 +282,7 @@ impl<'a> LdsLinker<'a> {
         };
         self.build_dyn_tables(&|_| 1);
         let dyn_sizes = self.dyn_table_sizes();
-        // bfd reserves `_GLOBAL_OFFSET_TABLE_[0]` once the link either
+        // `_GLOBAL_OFFSET_TABLE_[0]` is reserved once the link either
         // needs a GOT slot or creates a `.dynamic` for the header to
         // point at; a link with neither leaves `.got` empty, which
         // scripts assert on. Where the header sits on `.got.plt`,
@@ -325,11 +325,11 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// A static image's GOT, as GNU ld lays it out: after the header it
-    /// reserves, a slot per symbol a GOT reference that keeps one names,
-    /// which the link fills with the symbol's address. On x86 bfd drops
-    /// `.got.plt` from an image with no slot and no stub that does not
-    /// name `_GLOBAL_OFFSET_TABLE_`.
+    /// A static image's GOT: after the header it reserves, a slot per
+    /// symbol a GOT reference that keeps one names, which the link fills
+    /// with the symbol's address. On x86 `.got.plt` is dropped from an
+    /// image with no slot and no stub that does not name
+    /// `_GLOBAL_OFFSET_TABLE_`.
     fn size_static_got(&mut self) {
         if self.got_slots.is_empty() {
             let mut slots: Vec<GotKey> = Vec::new();
@@ -355,7 +355,7 @@ impl<'a> LdsLinker<'a> {
             self.got_map = map;
         }
         let slot = self.class.addr_size();
-        // bfd reserves the header for a slot or a reference to the GOT base.
+        // The header is reserved for a slot or a reference to the GOT base.
         let reserve = !self.got_slots.is_empty() || self.referenced.contains(GOT_SYMBOL);
         let header = if self.got_reserved() != 0 && reserve {
             slot
@@ -410,7 +410,7 @@ impl<'a> LdsLinker<'a> {
 
     /// The version index the script assigns `name`, or `None` when the
     /// script makes it local. Exact patterns are consulted before
-    /// wildcards, as bfd matches them.
+    /// wildcards.
     pub(super) fn version_of(&self, name: &str) -> Option<u16> {
         let nodes = self.script.versions().unwrap_or(&[]);
         if nodes.is_empty() {
@@ -440,8 +440,8 @@ impl<'a> LdsLinker<'a> {
         wildcard.unwrap_or(Some(dynamic::VER_NDX_GLOBAL))
     }
 
-    /// Defined symbols a loader may resolve against, as bfd selects
-    /// them: global or weak, neither hidden nor internal by any input's
+    /// Defined symbols a loader may resolve against: global or weak,
+    /// neither hidden nor internal by any input's
     /// entry, and kept by the version script. A protected one carries
     /// its visibility. Each version definition also contributes a
     /// symbol naming itself.
@@ -585,9 +585,9 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Sonames this image depends on, in link order and once each. A
-    /// library the link took nothing from is recorded anyway, as bfd
-    /// does without `--as-needed`; one named only under `AS_NEEDED` is
-    /// recorded only where an import bound to it.
+    /// library the link took nothing from is recorded anyway; one named
+    /// under `--as-needed` or `AS_NEEDED` is recorded only where an
+    /// import bound to it.
     fn needed_sonames(&self) -> impl Iterator<Item = &str> {
         let mut seen: HashSet<&str> = HashSet::new();
         self.opts
@@ -627,8 +627,7 @@ impl<'a> LdsLinker<'a> {
     /// the previous pass's layout and settle with it.
     pub(super) fn dyn_addrs(&self) -> dynamic::DynAddrs {
         let addr = |name: &str| self.synth_addr(name);
-        // A relocation table the link did not fill gets no tags, as
-        // bfd leaves them off an empty section.
+        // A relocation table the link did not fill gets no tags.
         let sized = |name: &str| -> Option<(u64, u64)> {
             let sec = self.objects[self.synth_obj]
                 .sections
@@ -700,7 +699,7 @@ impl<'a> LdsLinker<'a> {
             .map(|o| (o.addr, o.size))
     }
 
-    /// GNU ld's line for each input section a dynamic relocation writes
+    /// The warning line for each input section a dynamic relocation writes
     /// into read-only memory: one per symbol a relocation names, at the
     /// first such section, and one per section a load-address fixup
     /// writes into.

@@ -4,8 +4,8 @@
 //! Unlike `object.rs`, which classifies sections into the fixed
 //! text/rodata/data/bss families the final-image writers consume, this
 //! reader keeps every section verbatim (name, type, flags, alignment,
-//! entsize, bytes) so arbitrary named sections survive the merge the
-//! way GNU ld preserves them. Same-name input sections concatenate
+//! entsize, bytes) so arbitrary named sections survive the merge.
+//! Same-name input sections concatenate
 //! with alignment padding, COMDAT groups dedup by signature, the
 //! symbol tables merge (locals kept per object, globals resolved
 //! without requiring definitions), and every relocation is rewritten:
@@ -705,7 +705,7 @@ pub fn glob_match(pat: &str, name: &str) -> bool {
 /// literals, and `. = ALIGN(n)` inside a section body, which sets the
 /// offset of what follows. Everything an address would be needed for
 /// -- output-section addresses, `AT`, `:phdr`, top-level assignments,
-/// `ASSERT` -- is dropped, as GNU ld drops it under `-r`.
+/// `ASSERT` -- is dropped: a relocatable link assigns no addresses.
 pub fn lower_script(script: &LinkerScript) -> LdScript {
     let mut out = LdScript::default();
     for item in script.all_sections() {
@@ -805,7 +805,7 @@ pub fn parse_module_script(text: &str) -> Result<LdScript, C5Error> {
 
 /// Which local symbols survive the merge. A relocation against a
 /// discarded local retargets the containing section's symbol with the
-/// local's value folded into the addend, as GNU ld converts them.
+/// local's value folded into the addend.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DiscardLocals {
     /// Keep every local (`--discard-none`, the default).
@@ -826,7 +826,7 @@ pub struct RelinkOptions {
     pub build_id: BuildId,
     /// `-z noexecstack` (`Some(false)`) / `-z execstack`
     /// (`Some(true)`): ensure a `.note.GNU-stack` marker section with
-    /// the requested execute flag, as GNU ld does.
+    /// the requested execute flag.
     pub gnu_stack: Option<bool>,
     /// `-z muldefs`: the first of two definitions of a symbol stands.
     pub allow_multiple_definition: bool,
@@ -900,10 +900,9 @@ impl OutSec {
             return;
         }
         let n = (self.bytes.len() as u64).next_multiple_of(align) as usize;
-        // Executable-section padding is NOP fill with the same
-        // instruction boundaries GNU ld emits (binutils nop_fill:
-        // maximal multi-byte NOPs, then one sized remainder), so a
-        // decoder sees the same instruction stream.
+        // Executable-section padding is NOP fill: maximal multi-byte
+        // NOPs, then one sized remainder, so the padding decodes as
+        // whole instructions.
         const SHF_EXECINSTR: u64 = 0x4;
         if self.flags & SHF_EXECINSTR != 0 && self.exec_fill != ExecFill::Zero {
             let mut gap = n - self.bytes.len();
@@ -1012,8 +1011,8 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
 }
 
 /// `-r` merge that also renders the link map for `-Map` / `--print-map`.
-/// GNU ld writes one for a relocatable link, attributing each section's
-/// bytes to the object that contributed them.
+/// The map attributes each section's bytes to the object that
+/// contributed them.
 pub fn link_relocatable_with_map(
     objs: &[EtRel],
     opts: &RelinkOptions,
@@ -1356,8 +1355,7 @@ struct Globals {
     states: HashMap<String, GState>,
     /// A definite symbol type from any occurrence, adopted when the
     /// winning entry is STT_NOTYPE (an assembler definition typed by an
-    /// explicit `.type` on a reference in another unit), as GNU ld
-    /// does.
+    /// explicit `.type` on a reference in another unit).
     kind_hint: HashMap<String, u8>,
     /// Script-defined symbols: (name, outsec, offset).
     script_syms: Vec<(String, usize, u64)>,
@@ -1559,9 +1557,9 @@ fn build_symtab<'g>(
             size: 0,
         });
     }
-    // An object that keeps locals but carries no STT_FILE symbol gets
-    // one synthesized from its basename, as GNU ld does for assembler
-    // objects without a `.file` directive.
+    // An object that keeps locals but carries no STT_FILE symbol (an
+    // assembler object without a `.file` directive) gets one synthesized
+    // from its basename.
     let mut local_map: HashMap<(usize, u32), u32> = HashMap::new();
     for (oi, o) in objs.iter().enumerate() {
         let has_file = o.symbols.iter().any(|s| s.kind == STT_FILE);
@@ -1721,8 +1719,8 @@ fn build_symtab<'g>(
 
 /// The output symbol index and addend for one input relocation. A
 /// non-allocated section -- `.debug_*` above all -- may reference a
-/// symbol the script discarded; GNU ld resolves such a slot to null
-/// rather than failing the link, because the section describes the
+/// symbol the script discarded; such a slot resolves to null rather
+/// than failing the link, because the section describes the
 /// image instead of taking part in it.
 fn map_reloc_symbol(
     objs: &[EtRel],

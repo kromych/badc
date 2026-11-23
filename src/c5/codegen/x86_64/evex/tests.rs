@@ -174,7 +174,7 @@ fn vex_and_evex_forms_of_one_operation() {
         "vpclmulqdq $0x11,%zmm7,%zmm1,%zmm1",
         &[0x62, 0xF3, 0x75, 0x48, 0x44, 0xCF, 0x11],
     );
-    // The same op below 512 bits stays on VEX, as GNU as encodes it.
+    // The same op below 512 bits stays on VEX.
     gas(
         "vpclmulqdq $0x00,%ymm7,%ymm0,%ymm0",
         &[0xC4, 0xE3, 0x7D, 0x44, 0xC7, 0x00],
@@ -215,7 +215,7 @@ fn vex_and_evex_forms_of_one_operation() {
 /// or with a high register, VEX otherwise.
 #[test]
 fn ifma_masked_blends_valign_and_sign_masks() {
-    // AVX512-IFMA, its AVX-IFMA VEX form under gas's `{vex}`, the masked
+    // AVX512-IFMA, its AVX-IFMA VEX form under `{vex}`, the masked
     // blends, `valign`, the VEX sign-mask extracts, `vblendp*`,
     // `vmovs{h,l}dup` and the register-only `movhlps` / `movlhps`.
     let cases: &[(&str, &[u8])] = &[
@@ -1133,7 +1133,7 @@ fn shift_rotate_by_immediate() {
 }
 
 /// Between two registers a VEX move encodes the same transfer either way
-/// round, and GNU as picks the direction that fits the 2-byte prefix.
+/// round, and the direction that fits the 2-byte prefix is taken.
 #[test]
 fn vex_move_direction() {
     gas("vmovdqa %xmm14,%xmm2", &[0xC5, 0x79, 0x7F, 0xF2]);
@@ -1241,7 +1241,7 @@ fn non_temporal_moves() {
     refused("vmovntdqa %zmm1,%zmm2", "memory source");
 }
 
-/// GNU as reads register names without regard to case.
+/// Register names match without regard to case.
 #[test]
 fn register_names_fold_case() {
     gas(
@@ -1500,7 +1500,7 @@ fn refusals() {
     // the address parse having refused it.
     refused("vpaddd (%rsi,%zmm2,8),%zmm1,%zmm0", "unsupported operand");
     refused("vpaddd (%rsi,%xmm2,8),%zmm1,%zmm0", "unsupported operand");
-    // A sub-vector broadcast reads memory only, as GNU as also requires.
+    // A sub-vector broadcast reads memory only.
     refused("vbroadcasti32x4 %xmm1,%zmm0", "memory source");
     // `vmovd` has no vector-register pair form.
     refused("vmovd %xmm16,%xmm17", "general register or memory");
@@ -1671,7 +1671,7 @@ fn lane_permutes() {
         "vpermpd %ymm2,%ymm1,%ymm16",
         &[0x62, 0xE2, 0xF5, 0x28, 0x16, 0xC2],
     );
-    // GNU as refuses every 128-bit spelling of both members.
+    // Neither member has a 128-bit form.
     refused("vpermq $0x2,%xmm19,%xmm3", "`vpermq` has no 128-bit form");
     refused(
         "vpermpd $0x1b,%xmm2,%xmm19",
@@ -1686,7 +1686,7 @@ fn lane_permutes() {
 
 /// The element broadcasts read a general register under a second opcode, whose
 /// width EVEX.W fixes: `vpbroadcastq` takes a 64-bit register and the narrower
-/// three a 32-bit one, as GNU as accepts them.
+/// three a 32-bit one.
 #[test]
 fn broadcast_from_general_register() {
     gas(
@@ -1758,7 +1758,7 @@ fn broadcast_from_general_register() {
         "vpbroadcastd (%rax),%zmm9",
         &[0x62, 0x72, 0x7D, 0x48, 0x58, 0x08],
     );
-    // The widths GNU as refuses.
+    // The other widths are refused.
     refused("vpbroadcastq %eax,%zmm0", "64-bit general register");
     refused("vpbroadcastd %rax,%zmm0", "32-bit general register");
     refused("vpbroadcastw %ax,%zmm0", "32-bit general register");
@@ -2289,7 +2289,7 @@ fn vex_integer_forms_match_gas() {
 /// The AVX512BW byte and word arithmetic, the AVX512F unsigned and dword
 /// forms of it, AVX512CD's counts, AVX512-VNNI's dot products and the FMA
 /// family at 512 bits, a masked and zeroing memory form and a broadcast
-/// one included: each as GNU as 2.46.1 encodes it.
+/// one included. Bytes from GNU as 2.46.1.
 #[test]
 fn avx512_integer_vnni_cd_and_fma_forms() {
     let forms: &[(&str, &[u8])] = &[

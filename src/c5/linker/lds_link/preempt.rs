@@ -1,7 +1,7 @@
 //! A shared object's exported default-visibility definitions bind at load
 //! time, so one the loader finds first preempts them (System V gABI, symbol
-//! visibility). GNU ld reaches such a definition through the PLT, the GOT or
-//! a dynamic relocation naming it, unless `-Bsymbolic` (or, for all but
+//! visibility). A reference reaches such a definition through the PLT, the
+//! GOT or a dynamic relocation naming it, unless `-Bsymbolic` (or, for all but
 //! objects, `-Bsymbolic-functions`) binds it to the object's own.
 
 use crate::c5::codegen::aarch64::patch;
@@ -34,8 +34,8 @@ pub(crate) enum Reach {
     Refused,
 }
 
-/// How a field of `rtype` reaches a preemptible definition, as GNU ld
-/// 2.46 links one; `writable` is the referring section's `SHF_WRITE`.
+/// How a field of `rtype` reaches a preemptible definition; `writable`
+/// is the referring section's `SHF_WRITE`.
 pub(crate) fn reach(machine: u16, rtype: u32, writable: bool, noted: bool, addend: i64) -> Reach {
     // i386 takes a dynamic relocation for a PC-relative field in any
     // section, and binds a GOT-relative or narrower one directly.

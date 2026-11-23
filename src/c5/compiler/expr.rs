@@ -19,9 +19,9 @@ use super::Compiler;
 use super::declarator::Derivation;
 use super::diag::{Category, Operand, Site};
 
-/// Largest byte count `__builtin_memcpy` is expanded inline for; gcc's
-/// threshold on both supported targets. The copy rides `Inst::Mcpy`,
-/// which streams, so the bound is on bytes rather than accesses.
+/// Largest byte count `__builtin_memcpy` is expanded inline for. The copy
+/// rides `Inst::Mcpy`, which streams, so the bound is on bytes rather than
+/// accesses.
 const MAX_MEM_TRANSFER_BYTES: i64 = 256;
 /// Largest number of stores the `__builtin_memset` expansion emits.
 const MAX_MEM_FILL_ACCESSES: i64 = super::super::ast::MAX_MEM_FILL_ACCESSES;
@@ -466,7 +466,7 @@ impl Compiler {
                     format!("`{name}` last argument must be an integer constant expression"),
                 ));
             };
-            // gcc's PALIGNR builtin counts bits.
+            // The PALIGNR builtin's shift counts bits.
             let n = if row.sem == Sem::AlignR { n / 8 } else { n };
             imm = Some(n as u8);
             args.truncate(last);
@@ -1278,8 +1278,7 @@ impl Compiler {
         let callable = self.callable_symbol(name);
         let idx = match callable {
             Some(i) => i,
-            // The `__builtin_` spelling stays callable in every mode
-            // (gcc documents the fallback call for freestanding units).
+            // The `__builtin_` spelling stays callable in every mode.
             // Where the auto-include retry cannot declare the name, it is
             // declared here with the builtin's prototype and the
             // environment defines it at link time; otherwise the error
@@ -1400,7 +1399,7 @@ impl Compiler {
         // `__atomic_is_lock_free(size, ptr)` / `__atomic_always_lock_free`
         // (C11 7.17.5): a compile-time predicate, true for the widths that
         // lower to a lock-free instruction, 16 through the paired
-        // compare-exchange as clang reports it. A size that is not a
+        // compare-exchange. A size that is not a
         // constant, or one with no such form, reports false -- the caller
         // then takes its locked path, which is correct for every width.
         if matches!(name, "__atomic_is_lock_free" | "__atomic_always_lock_free") {
@@ -1634,7 +1633,7 @@ impl Compiler {
             // `(p, expected, desired, weak, success, failure)`; a weak
             // exchange is lowered as a strong one, which C11 7.17.7.4p4
             // permits.
-            // gcc's generic forms pass the value through a pointer and
+            // The generic forms pass the value through a pointer and
             // otherwise act as the `_n` forms do.
             "__atomic_compare_exchange" => {
                 let exp = self.require_gcc_arg(val1, name)?;
@@ -2718,7 +2717,7 @@ impl Compiler {
                 _ => None,
             };
             if let (Some(clz), Some(&arg)) = (clz, ast_intrinsic_args.last()) {
-                // clang's location of the operand: an operator's for an
+                // The operand's location: an operator's for an
                 // operation, else where it begins.
                 let operation = match self.ast.expr(arg) {
                     super::super::ast::Expr::Cast { child, .. } => matches!(
@@ -2804,8 +2803,8 @@ impl Compiler {
                 ast_intrinsic_args.push(a);
             }
         } else if is(Intrinsic::FrameAddress) || is(Intrinsic::ReturnAddress) {
-            // GCC defines the operand as the number of frames to walk up: level
-            // 0 reads this function's own frame record.
+            // The operand is the number of frames to walk up: level 0 reads
+            // this function's own frame record.
             let level = self.parse_frame_level(fn_name)?;
             if level > 0 {
                 frame_walk_levels = level;
@@ -2955,7 +2954,7 @@ impl Compiler {
     }
 
     /// `-Wvarargs` on `va_start`'s second operand, read through casts and
-    /// parentheses as clang reads it: C99 7.15.1.4p4 makes it undefined
+    /// parentheses: C99 7.15.1.4p4 makes it undefined
     /// unless the operand is the last named parameter, neither `register`
     /// nor of a type the default argument promotions change.
     pub(super) fn check_va_start_operand(
@@ -3193,8 +3192,8 @@ impl Compiler {
                 Ty::Double as i64
             }
         } else if is_int_bit_unary {
-            // C99 has no such builtin; GCC defines the result
-            // type as `int` for every form.
+            // C99 has no such builtin; the result type is `int`
+            // for every form.
             Ty::Int as i64
         } else if is_bswap {
             // The result is the unsigned type of the operand
@@ -5921,7 +5920,7 @@ impl Compiler {
                 self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Div, slot);
             } else if !fn_ptr_arith && self.pointee_size(lhs_ty) > 1 {
                 // Zero-size elements share one address, so their byte
-                // distance, zero, is the result, as clang gives it.
+                // distance, zero, is the result.
                 let scale = self.pointee_size(lhs_ty);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
             }
@@ -7989,8 +7988,8 @@ fn array_dims_match(a: &[i64], b: &[i64]) -> bool {
 /// A type-specific checked-arithmetic builtin
 /// (`__builtin_{s,u}{add,sub,mul}{,l,ll}_overflow`), as
 /// `(op, unsigned, rank)`; `op` matches [`Expr::CheckedArith`] and `rank`
-/// is `i` / `l` / `q` for int / long / long long. gcc documents the
-/// family from 5.1; the generic three take any integer type instead.
+/// is `i` / `l` / `q` for int / long / long long. The generic three take
+/// any integer type instead.
 fn typed_overflow_builtin(name: &str) -> Option<(i64, bool, u8)> {
     let rest = name.strip_prefix("__builtin_")?;
     let (unsigned, rest) = match rest.strip_prefix('s') {

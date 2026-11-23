@@ -1624,14 +1624,14 @@ impl<'a> RelocWriter<'a> {
                 .get_or_insert_in(&s.name, s.group.as_ref(), sh_type, flags, align)
                 .map_err(|_| {
                     // Two assembler statements that name the section with
-                    // different types, which gas refuses within one source.
+                    // different types, an error within one source.
                     C5Error::hard(
                         Code::OBJECT_FORMAT,
                         alloc::format!("inline asm: changed section type for `{}`", s.name),
                     )
                 })?;
             // The first block to give an entry size or an ordering section
-            // sets it, as GNU as keeps a section's first attributes.
+            // sets it; a section keeps its first attributes.
             let ent = &mut self.layout.carve.table.entries[e];
             if ent.entsize == 0 {
                 ent.entsize = s.entsize as u64;
@@ -1715,7 +1715,7 @@ impl<'a> RelocWriter<'a> {
             let base = self.place_in_entry(e, 8, tables_len);
             self.layout.jt_placement = Some((e, base));
         }
-        // Floating literals take GNU as's mergeable constant sections. An
+        // Floating literals take the mergeable constant sections. An
         // x86-64 load reaches its literal through a displacement whose addend
         // carries -4, which a linker resolving a section-relative reference
         // into a mergeable section reads as a place ahead of the element, so
@@ -2219,8 +2219,8 @@ impl<'a> RelocWriter<'a> {
             }
         }
         // A reference through a dropped alias resolves against its chain's
-        // end; the ends of all dropped aliases follow, since GNU as emits
-        // the undefined entry for an unreferenced `.set` target too.
+        // end; the ends of all dropped aliases follow, an unreferenced
+        // `.set` target's undefined entry included.
         let section_syms = (self.asm_sections.iter())
             .flat_map(|s| &s.relocs)
             .map(|r| &r.target);
@@ -2326,7 +2326,7 @@ impl<'a> RelocWriter<'a> {
                             },
                         weak: l.weak || weak_names.contains(l.name.as_str()),
                         unique,
-                        // bfd types every symbol in a thread-local section STT_TLS.
+                        // Every symbol in a thread-local section is STT_TLS.
                         st_type: if tls { STT_TLS } else { st_type_of(ty) },
                         st_size: l.size.or(d.and_then(|d| d.size)).unwrap_or(0),
                         merge,
@@ -2370,7 +2370,7 @@ impl<'a> RelocWriter<'a> {
             .asm_sym_decls
             .iter()
             .filter(|d| {
-                // gas: a name only `.type` or `.size` gives is an undefined global.
+                // A name only `.type` or `.size` gives is an undefined global.
                 let attrs = d.sym_type != AsmSymType::NoType || d.size.is_some();
                 (d.bind == AsmSymBind::Global || d.bind == AsmSymBind::Default && attrs)
                     && d.common.is_none()
@@ -2570,7 +2570,7 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
-    /// A local label GNU as treats as an assembler temporary: references
+    /// Whether a local label is an assembler temporary, whose references
     /// reduce to its section plus an addend whatever `.type` and `.size`
     /// say.
     fn asm_local_temp(&self, l: &AsmLabelSym) -> bool {
@@ -2685,9 +2685,9 @@ impl<'a> RelocWriter<'a> {
     }
 
     /// Local inline-asm section labels (`--keep-locals` holds the
-    /// temporaries, as `as -L` does; the stand-ins for numeric labels stay
-    /// out, as gas's unnamed ones do), main-stream labels a directive left
-    /// local, and assignments no directive bound global or weak.
+    /// temporaries; the stand-ins for numeric labels stay out), main-stream
+    /// labels a directive left local, and assignments no directive bound
+    /// global or weak.
     fn emit_local_asm_symbols(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         // The names a GOT access of the C code reaches, and those an asm
@@ -2795,8 +2795,8 @@ impl<'a> RelocWriter<'a> {
                     a.name
                 )));
             };
-            // A `.type` / `.size` naming the alias states its own attributes,
-            // as in GNU as; without one it takes the target's.
+            // A `.type` / `.size` naming the alias states its own attributes;
+            // without one it takes the target's.
             let d = self.sym_decl(a.name.as_str());
             let st_size = d.and_then(|d| d.size).unwrap_or(st_size);
             let st_type = match d.map_or(AsmSymType::NoType, |d| d.sym_type) {
@@ -3098,10 +3098,8 @@ impl<'a> RelocWriter<'a> {
     }
 
     /// A reference to an assembler-local label resolves to the label's
-    /// section plus its offset, not to the label symbol: gas reduces a
-    /// relocation against a local non-function/object symbol that way, and
-    /// readers of an object's metadata sections require the section+addend
-    /// form.
+    /// section plus its offset, not to the label symbol: readers of an
+    /// object's metadata sections require the section+addend form.
     fn build_asm_label_refs(&mut self) {
         let mut secref: BTreeMap<&'a str, (u64, i64)> = BTreeMap::new();
         for l in &self.names.asm_labels {
@@ -3538,9 +3536,8 @@ impl<'a> RelocWriter<'a> {
     }
 
     /// Cross-TU data references, per [`Self::extern_addr_form`]: a name
-    /// this unit's assembly defines binds to that definition, as gas binds
-    /// a reference within one unit, except that a GOT reference keeps the
-    /// symbol (the slot is per symbol).
+    /// this unit's assembly defines binds to that definition, except that a
+    /// GOT reference keeps the symbol (the slot is per symbol).
     fn emit_extern_ref_relocs(&mut self) -> Result<(), C5Error> {
         let (program, build) = (self.program, self.build);
         let machine = self.machine;
@@ -3708,9 +3705,9 @@ impl<'a> RelocWriter<'a> {
 
     /// A name a relocation written with a gas operator (`sym@GOTPCREL`,
     /// `sym@PLT`, `sym@TLSGD`, ...) or an aarch64 GOT access references: an
-    /// asm label's or an internal-linkage object's own symbol, as GNU as
-    /// keeps it for the GOT, PLT and TLS relocations, whose slot belongs to
-    /// the symbol, else what [`Self::asm_symbol_ref`] resolves.
+    /// asm label's or an internal-linkage object's own symbol, kept for the
+    /// GOT, PLT and TLS relocations, whose slot belongs to the symbol, else
+    /// what [`Self::asm_symbol_ref`] resolves.
     fn asm_operator_ref(&self, what: &str, name: &str, addend: i64) -> Result<(u64, i64), C5Error> {
         match self.syms.asm_label_symidx.get(name) {
             Some(&i) => Ok((u64::from(i), addend)),
@@ -3787,8 +3784,8 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
-    /// The type a gas relocation operator names for a field of `width`, as
-    /// GNU as 2.46.1 picks it.
+    /// The type a gas relocation operator names for a field of `width`
+    /// (measured with GNU as 2.46.1).
     fn asm_op_reloc_type(
         &self,
         op: crate::c5::asm::AsmRelocOp,
@@ -4306,7 +4303,7 @@ impl<'a> RelocWriter<'a> {
 
     /// Each group's signature: the unit's symbol of the group's name, or,
     /// when the unit has none, a local one at the start of the group
-    /// section, as GNU as defines it.
+    /// section.
     fn bind_group_signatures(&mut self) {
         if self.layout.groups.is_empty() {
             return;
@@ -4593,8 +4590,8 @@ impl<'a> RelocWriter<'a> {
         }
         fold_rel_addends(self.class, &self.relocs.text, &mut text_body)?;
         if !self.layout.text_shadowed {
-            // An empty section constrains nothing; GNU as leaves the
-            // default sections it creates at alignment 1.
+            // An empty section constrains nothing, so a default section
+            // with no content keeps alignment 1.
             let text_align = if text_body.is_empty() {
                 1
             } else {
@@ -5042,7 +5039,7 @@ impl<'a> RelocWriter<'a> {
         e_ident[4] = class.ei_class();
         e_ident[5] = ELF_DATA_LSB;
         e_ident[6] = ELF_VERSION_CURRENT;
-        // gas marks an object holding a GNU extension binding.
+        // An object holding a GNU extension binding takes `ELFOSABI_GNU`.
         if self
             .syms
             .symbols

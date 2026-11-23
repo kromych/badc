@@ -45,7 +45,7 @@ pub(crate) const DW_CFA_NEGATE_RA_STATE: u8 = 0x2d;
 const DW_EH_PE_PCREL_SDATA4: u8 = 0x1b;
 
 /// Which of the two tables a unit's CFI lands in. `.cfi_sections` sets it;
-/// with no directive the unit emits `.eh_frame` alone, as GNU as does.
+/// with no directive the unit emits `.eh_frame` alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CfiSections {
     pub eh_frame: bool,
@@ -651,7 +651,7 @@ fn collect_fdes(records: &[CfiRecord]) -> Result<(Vec<Fde>, CfiSections), String
     for r in records {
         match &r.op {
             CfiOp::Sections(s) => {
-                // GNU as honors the directive only before the first frame
+                // The directive takes effect only before the first frame
                 // opens; one inside a description leaves the choice alone.
                 if !saw_proc {
                     sections = *s;
@@ -1701,7 +1701,7 @@ mod leb128_tests {
 mod seh_tests {
     use super::*;
 
-    /// GNU as's x64 `.seh_*` directives give each `.seh_proc` function its
+    /// The x64 `.seh_*` directives give each `.seh_proc` function its
     /// prologue steps at the offsets they follow; a function with none is
     /// a leaf, and a directive outside a function is refused.
     #[test]

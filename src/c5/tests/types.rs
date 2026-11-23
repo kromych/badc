@@ -76,11 +76,10 @@ fn prefixed_char_constant_takes_its_own_type() {
 }
 
 /// `-fshort-wchar` gives `wchar_t` an unsigned 16-bit type on every
-/// target, as gcc 16.1.1 does: `sizeof(wchar_t)` and the element width
-/// of `L"..."` / `L'...'` follow it, and a `wchar_t`-width array is then
-/// the 2-byte one (C99 6.7.8p15). The Windows targets are already
-/// 2-byte, so the flag is a no-op there and `-fno-short-wchar` does not
-/// widen them.
+/// target: `sizeof(wchar_t)` and the element width of `L"..."` /
+/// `L'...'` follow it, and a `wchar_t`-width array is then the 2-byte
+/// one (C99 6.7.8p15). The Windows targets are already 2-byte, so the
+/// flag is a no-op there and `-fno-short-wchar` does not widen them.
 #[test]
 fn short_wchar_narrows_wchar_t_on_every_target() {
     use super::Vm;
@@ -385,8 +384,8 @@ fn a_pragma_overrides_werror_where_it_covers_the_position() {
 }
 
 /// Diagnostic pragmas an expansion produces govern the declaration or
-/// statement between them on their line, as in gcc 16 and clang: only
-/// the conversions outside the macro report.
+/// statement between them on their line: only the conversions outside
+/// the macro report.
 #[test]
 fn pragma_operators_scope_a_parser_diagnostic_within_their_line() {
     let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
@@ -413,8 +412,8 @@ fn pragma_operators_scope_a_parser_diagnostic_within_their_line() {
 }
 
 /// Diagnostic pragmas inside an expression govern the conversion of the
-/// value between them, as clang resolves a call argument's and a return
-/// value's: a conversion reports at its value's position, not at the token
+/// value between them, a call argument's or a return value's: a
+/// conversion reports at its value's position, not at the token
 /// after it. The same conversions outside the macro report.
 #[test]
 fn pragma_operators_scope_the_conversion_of_a_value_within_an_expression() {
@@ -485,8 +484,8 @@ fn pragma_operators_scope_the_construct_a_diagnostic_reports() {
 
 /// The fall-through check walks the AST once the switch is parsed. A
 /// statement's report resolves the pragmas at its first token, so pragma
-/// lines and a `_Pragma` macro around the statement govern it, as in gcc,
-/// and ignoring the option by its own name ignores badc's level 5 row.
+/// lines and a `_Pragma` macro around the statement govern it, and
+/// ignoring the option by its own name ignores badc's level 5 row.
 #[test]
 fn pragmas_around_a_statement_govern_its_fall_through() {
     let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
@@ -1538,7 +1537,7 @@ fn transparent_union_parameter_accepts_member_typed_arguments() {
 
 #[test]
 fn transparent_union_attribute_binds_in_every_position() {
-    // The spellings gcc accepts: trailing the typedef declarator,
+    // The attribute binds in each position: trailing the typedef declarator,
     // between the keyword and the body, trailing a tagged body, and
     // before the tag of a definition.
     let p = compile_str(
@@ -1580,7 +1579,7 @@ fn transparent_union_parameter_still_warns_on_incompatible_arguments() {
 
 #[test]
 fn transparent_union_attribute_is_ignored_without_a_covering_first_member() {
-    // gcc 16 honors the attribute only when the union's machine mode is
+    // The attribute takes effect only when the union's machine mode is
     // the first member's ({int, long long} and a floating-first union get
     // "attribute ignored"); an ignored union then warns like any other.
     // `long long` is 64 bits on every target, so the three unions keep the
@@ -1663,9 +1662,9 @@ fn transparent_union_honor_rule_follows_the_target_long_width() {
 
 #[test]
 fn transparent_union_acceptance_is_argument_only() {
-    // gcc rejects member-typed initializers, assignments and returns of
-    // a transparent union; the acceptance must not reach past call
-    // arguments, so the object mismatch stays rejected.
+    // The extension covers call arguments only: a member-typed
+    // initializer, assignment or return of a transparent union stays
+    // rejected.
     let msg = constraint_error(
         "struct page;\n\
          typedef union { struct page **p; } T __attribute__((transparent_union));\n\
@@ -1876,8 +1875,8 @@ fn shufflevector_types_its_result_and_checks_its_indices() {
 /// them over the builtin `__SV*_t` types, which pointers, prototypes and
 /// function pointers take. `sizeof`, `_Alignof`, an array, a member, an
 /// object of static storage duration, `_Atomic` and pointer arithmetic are
-/// errors, as with clang; an SVE value is passed, returned or computed
-/// nowhere yet. Off AArch64 the names are ordinary identifiers.
+/// errors; an SVE value is passed, returned or computed nowhere yet. Off
+/// AArch64 the names are ordinary identifiers.
 #[test]
 fn the_sve_types_are_sizeless() {
     use crate::{Compiler, Target};
@@ -2146,7 +2145,7 @@ fn unnamed_bitfield_alignment_follows_the_target_abi() {
 /// declared type, shared only by adjacent bit-fields whose type has the same
 /// size, with `#pragma pack` and `packed` lowering where a unit may start.
 /// A row is `pack|declaration|size/alignment|member@bit ...`, the bit being
-/// the member's lowest one, as clang 21 lays the shape out for both
+/// the member's lowest one. The rows are clang 21's for both
 /// `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`; MSVC 14.44 agrees
 /// on every row without a GNU attribute.
 #[test]
@@ -2621,11 +2620,11 @@ fn an_enum_named_before_its_definition_is_int_sized_on_the_pe_targets() {
     );
 }
 
-/// The Microsoft declarator modifiers on the PE targets, as clang 22 takes
-/// them for both windows-msvc triples (which accept the unit): `__ptr64`,
-/// `__w64`, `__sptr` and `__uptr` leave the type as it is, an `__unaligned`
-/// access reads and writes misaligned data, and `__builtin_alignof` is
-/// `_Alignof`. The other targets do not take them.
+/// The Microsoft declarator modifiers on the PE targets (clang 22 accepts
+/// the unit for both windows-msvc triples): `__ptr64`, `__w64`, `__sptr` and
+/// `__uptr` leave the type as it is, an `__unaligned` access reads and
+/// writes misaligned data, and `__builtin_alignof` is `_Alignof`. The other
+/// targets do not take them.
 #[test]
 fn microsoft_declarator_modifiers_on_the_pe_targets() {
     use crate::{Compiler, Target};
@@ -2661,8 +2660,8 @@ fn microsoft_declarator_modifiers_on_the_pe_targets() {
     );
 }
 
-/// MSVC's `__ptr32`, as clang 22 takes it for x86_64- and
-/// aarch64-pc-windows-msvc: a 4-byte pointer, sign-extended when it widens.
+/// MSVC's `__ptr32` on x86_64- and aarch64-pc-windows-msvc: a 4-byte
+/// pointer, sign-extended when it widens.
 /// The fixture runs under the interpreter for both PE targets; a
 /// `__ptr32` that follows no `*`, a zero-extended one and a static address
 /// in one are refused.
@@ -2817,9 +2816,10 @@ fn constants_of_an_enum_wider_than_int_have_the_enumerated_type() {
 }
 
 /// A bit-field of an enum with no negative enumerator reads unsigned on the PE
-/// targets, as mingw-w64's gcc and clang for the windows-gnu triples read it:
-/// the field is masked and nothing sign-extends it. `_Generic` selects
-/// `unsigned int` for the enum and its value 4 survives the 3-bit field.
+/// targets (measured with mingw-w64's gcc and clang for the windows-gnu
+/// triples): the field is masked and nothing sign-extends it. `_Generic`
+/// selects `unsigned int` for the enum and its value 4 survives the 3-bit
+/// field.
 #[cfg(feature = "linker")]
 #[test]
 fn an_unsigned_enums_bit_field_reads_unsigned_on_the_pe_targets() {
@@ -4093,8 +4093,8 @@ fn the_address_of_a_function_designator_is_the_function_pointer() {
     assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
 
     // The address of an OBJECT of function-pointer type still adds a
-    // level, and assigning it where the pointer itself belongs is the
-    // mismatch gcc reports as an error and clang as a warning.
+    // level, and assigning it where the pointer itself belongs violates
+    // the constraints of C17 6.5.16.1p1.
     let src = "struct T { int a; };\n\
                typedef struct T *sel_t(int, int);\n\
                void bad(sel_t *v) { sel_t *p; p = &v; (void)p; }\n\
@@ -4154,7 +4154,7 @@ fn typeof_a_dereferenced_function_pointer_names_the_function_type() {
 
     // `typeof` of the pointer OBJECT keeps its own level, so the cast
     // below really is a pointer to a function pointer and the assignment
-    // is the mismatch gcc reports as an error and clang as a warning.
+    // violates the constraints of C17 6.5.16.1p1.
     let src = "struct T { int a; };\n\
                typedef struct T *sel_t(int, int);\n\
                void bad(sel_t *v, sel_t **slot) { *slot = (typeof(v) *)(v); }\n\
@@ -5640,8 +5640,8 @@ fn equal_arithmetic_arms_of_a_conditional_take_the_usual_conversions() {
 /// GNU C: a cast between a vector and an integer of the same size, `__int128`
 /// included, or between two vectors of the same size, keeps the bits; one
 /// to or from a pointer, a floating type, `_Bool` or another size is
-/// rejected, as gcc 16 and clang 21 reject it. The bits themselves are the
-/// `vector_casts_keep_the_bits.c` fixture's.
+/// rejected. The bits themselves are the `vector_casts_keep_the_bits.c`
+/// fixture's.
 #[test]
 fn a_vector_casts_only_to_an_integer_or_a_vector_of_its_size() {
     use crate::{CompileOptions, Compiler, Target};
@@ -5871,7 +5871,7 @@ fn an_old_style_parameter_declaration_adjusts_as_a_prototype_does() {
 }
 
 /// A type attribute trailing a function declarator applies to the return
-/// type, as in gcc: `float *f(void) __attribute__((vector_size(16)))`
+/// type: `float *f(void) __attribute__((vector_size(16)))`
 /// returns a pointer to a 16-byte vector, at file scope and in a
 /// block-scope prototype alike, and the attribute does not carry over to the
 /// declarations that follow it. A trailing `mode` is an error there: a
@@ -5916,9 +5916,9 @@ fn a_type_attribute_trailing_a_function_declarator_types_its_return() {
 
 /// C99 6.7.2p2 requires a type specifier in every declaration and type name.
 /// Specifiers that give none take `int`, as under C89, and B2011
-/// implicit-int reports each declarator in gcc's words: an error by default,
-/// a warning under `-Wno-error=implicit-int` or the matching pragma, and
-/// nothing under `-Wno-implicit-int`.
+/// implicit-int reports each declarator: an error by default, a warning
+/// under `-Wno-error=implicit-int` or the matching pragma, and nothing under
+/// `-Wno-implicit-int`.
 #[test]
 fn a_declaration_without_a_type_specifier_takes_int_and_reports_it() {
     use super::Vm;
@@ -6002,10 +6002,10 @@ fn a_declaration_without_a_type_specifier_takes_int_and_reports_it() {
 }
 
 /// GNU C's `vector_size` makes a vector of the innermost element type,
-/// through pointer, array and function derivations, at the sizes gcc gives;
-/// the element is an integer type other than `_Bool`, or a floating type, so
-/// a structure, `void` or `_Bool` element is an error on a typedef, a member,
-/// an object or a pointer.
+/// through pointer, array and function derivations; the element is an integer
+/// type other than `_Bool`, or a floating type, so a structure, `void` or
+/// `_Bool` element is an error on a typedef, a member, an object or a
+/// pointer.
 #[test]
 fn vector_size_applies_to_the_innermost_element_type() {
     use crate::{Compiler, Target};
@@ -6855,10 +6855,9 @@ fn a_pointer_to_an_array_of_pointers_keeps_each_qualifier_at_its_level() {
 /// C99 6.3.1.3: an integer converted to an integer type that cannot
 /// represent it changes value. For an integer constant converted
 /// implicitly -- in an initializer, an assignment, an argument or a
-/// return, to an object or a bit-field -- B3010 constant-conversion warns,
-/// as gcc's -Woverflow and clang's -Wconstant-conversion do by default. A
-/// value that fits the width at the other signedness keeps its bits
-/// (`unsigned g = -1;`, `char c = 255;`); an explicit cast states the
+/// return, to an object or a bit-field -- B3010 constant-conversion warns
+/// by default. A value that fits the width at the other signedness keeps
+/// its bits (`unsigned g = -1;`, `char c = 255;`); an explicit cast states the
 /// conversion; `_Bool` takes any value. The lines and values below are the
 /// ones gcc 16.2.1 reports on both Linux targets.
 #[test]
@@ -6971,11 +6970,10 @@ fn an_implicit_conversion_that_changes_a_constant_warns() {
 
 /// C99 6.5.3.2p1: the operand of `&` is not declared `register`, nor a
 /// member or element of such an object; 6.3.2.1p3 leaves a `register`
-/// array's conversion to a pointer undefined, and gcc 16 and clang 22
-/// reject it as the same request. gcc takes a `register` array as either
-/// operand of a subscript, which clang rejects; badc does as gcc does, and
-/// each outcome below is gcc 16's. A `register` struct's array member that
-/// converts is gcc's error and not clang's; badc accepts it, as clang does.
+/// array's conversion to a pointer undefined, and badc rejects it as the
+/// same request, except as either operand of a subscript. A `register`
+/// struct's array member that converts is accepted. The outcomes below are
+/// gcc 16's, the last one clang 22's.
 #[test]
 fn the_address_of_a_register_object_is_an_error() {
     use crate::{CompileOptions, Compiler, Target};

@@ -231,7 +231,7 @@ impl Compiler {
     }
 
     /// Record a `.set` alias of the unit, a later assignment to the same name
-    /// winning as in GNU as.
+    /// winning.
     fn set_alias(sets: &mut Vec<(String, String, i64)>, name: &str, target: &str, addend: i64) {
         let e = (String::from(name), String::from(target), addend);
         match sets.iter_mut().find(|(n, _, _)| n == name) {
@@ -393,7 +393,7 @@ impl Compiler {
         {
             later.extend(e.0);
         }
-        // In the order gas reads the statements; an expansion error first on a tie.
+        // In source statement order; an expansion error first on a tie.
         for mut e in later {
             let read = e.line.checked_sub(1).unwrap_or(u32::MAX);
             origin.place(&mut e);
@@ -3461,11 +3461,9 @@ impl Compiler {
     /// copy rather than to an undefined symbol. C99 6.7.4p6 states that
     /// choice outright ("provides an alternative to an external
     /// definition, which a translator may use to implement any call to
-    /// the function in the same translation unit"); gcc leaves an
-    /// external reference instead, which it can because it inlines an
-    /// `always_inline` body at every optimization level. badc's inliner
-    /// runs only under `-O` and declines a body its candidate filter
-    /// rejects, so the copy is what keeps those calls resolvable.
+    /// the function in the same translation unit"). badc's inliner runs
+    /// only under `-O` and declines a body its candidate filter rejects,
+    /// so the copy is what keeps those calls resolvable.
     ///
     /// That license covers calls, not the address. The name keeps
     /// external linkage, so C99 6.2.2p2 requires `&f` to denote one
@@ -3643,7 +3641,7 @@ impl Compiler {
         if let Some(area) = self.pending.attrs.patchable_entry.take() {
             self.symbols[id_idx].patchable_function_entry = Some(area);
         }
-        // Each declaration's adds to the name's, as gcc and clang merge them.
+        // Each declaration's adds to the name's.
         let nonnull = core::mem::take(&mut self.pending.attrs.nonnull);
         let sym = &mut self.symbols[id_idx];
         for n in nonnull {

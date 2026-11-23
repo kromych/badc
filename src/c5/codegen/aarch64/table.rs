@@ -648,8 +648,8 @@ fn fp_pair_reg(o: &Opnd) -> Option<(u8, u8)> {
 /// (assembly) order. `OptLsl` slots may be omitted by the caller (a missing
 /// trailing shift defaults to 0).
 pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
-    // The add/sub immediate field is unsigned, so GNU as encodes a negative
-    // immediate as the opposite operation on the negated value: `cmp x0, #-16`
+    // The add/sub immediate field is unsigned, so a negative immediate
+    // encodes as the opposite operation on the negated value: `cmp x0, #-16`
     // assembles as `cmn x0, #16`. The immediate is last, or last before an
     // explicit `lsl`.
     if let Some(opposite) = match mnemonic {
@@ -791,7 +791,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                 ));
             }
         };
-        // GNU as rejects register 31 wherever the operand is a pointer or the
+        // Register 31 is rejected wherever the operand is a pointer or the
         // size; only the set value reads it, as xzr.
         if rd == 31 || rn == 31 || (!set && rs == 31) {
             return Err(format!(

@@ -320,9 +320,9 @@ impl Target {
 
     /// The ceiling on a vector type's alignment, `None` where the ABI gives
     /// a vector its width. AAPCS64 5.1 defines the 8- and 16-byte short
-    /// vectors and a wider vector keeps the 16-byte boundary in gcc's and
-    /// clang's layout; the x86-64 psABI aligns `__m256` at 32 and `__m512`
-    /// at 64.
+    /// vectors and a wider vector keeps the 16-byte boundary gcc- and
+    /// clang-compiled code reads; the x86-64 psABI aligns `__m256` at 32
+    /// and `__m512` at 64.
     pub fn vector_align_cap(self) -> Option<usize> {
         self.is_aarch64().then_some(16)
     }
@@ -1052,7 +1052,8 @@ pub(super) fn plan_call_args_aggs(
                 placements.push(placement);
                 continue;
             }
-            // An unnamed 32-byte vector goes in memory, as gcc passes it.
+            // An unnamed 32-byte vector goes in memory, where a gcc-compiled
+            // `va_arg` reads it.
             let memory = AggClass::ByStack;
             let class = match &agg.class {
                 AggClass::Regs(c) if i >= fixed_args && c[..] == [RegClass::Vector256] => &memory,
@@ -2694,8 +2695,8 @@ pub(crate) struct Build {
     /// single-image and JIT paths patch each site in place.
     pub asm_sym_fixups: Vec<AsmSymFixup>,
     /// Symbol directives inline-asm templates carried outside any section
-    /// (`.globl` / `.local` / `.weak` / `.type` / `.size`). GNU as scopes
-    /// them to the unit; the writers apply each to the definition the unit
+    /// (`.globl` / `.local` / `.weak` / `.type` / `.size`). They scope to
+    /// the unit; the writers apply each to the definition the unit
     /// holds, or emit an undefined symbol when it holds none.
     pub asm_sym_decls: Vec<crate::c5::asm::AsmSymDecl>,
     /// `(offset, len)` of every run of data placed in `text`, ascending: an
@@ -2731,7 +2732,7 @@ impl Build {
 }
 
 /// A named label an inline-asm template defines in the emitted code stream
-/// (`asm volatile ("some_label:\n\t...")`). GNU as makes such a label a
+/// (`asm volatile ("some_label:\n\t...")`). Such a label is a
 /// definition of the unit, so a reference from C binds to it instead of
 /// leaving an undefined symbol.
 #[derive(Debug, Clone)]
@@ -3833,7 +3834,7 @@ pub(crate) struct RelocCallSite {
     /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
     /// calls (`bl` / `call rel32`). x86_64 uses `R_X86_64_PLT32`
     /// for both; aarch64 types the field `R_AARCH64_JUMP26` /
-    /// `R_AARCH64_CALL26` as GNU as does.
+    /// `R_AARCH64_CALL26`, the AAELF64 relocations for `b` / `bl`.
     pub is_tail: bool,
     /// `true` for an address-of site (`lea` rip-relative on
     /// x86_64, `adrp + add` on aarch64) materializing the import's
@@ -4713,8 +4714,7 @@ pub struct NativeOptions {
     /// across runs, useful for golden-hash bisection.
     pub debug_info: bool,
     /// `.eh_frame` in a Linux object, rules for every instruction of each
-    /// function (gcc's `-fasynchronous-unwind-tables`); on by default, as in
-    /// gcc and clang.
+    /// function (`-fasynchronous-unwind-tables`); on by default.
     pub unwind_tables: bool,
     /// Print each SSA function's IR + allocator output to stderr
     /// before lowering. Same as `--dump-asm` for native code: a
@@ -4788,8 +4788,8 @@ pub struct NativeOptions {
     pub sibling_calls: bool,
     /// `-fno-plt`: a call to a function the link resolves loads the
     /// callee's address from its GOT entry and calls through it, with no
-    /// PLT stub between, where gcc applies it: x86-64 ELF objects, and
-    /// aarch64 ELF objects under `-fPIC`. PE and Mach-O have no PLT.
+    /// PLT stub between, in x86-64 ELF objects and in aarch64 ELF objects
+    /// under `-fPIC`. PE and Mach-O have no PLT.
     pub no_plt: bool,
     /// `-funroll-loops` / `-fno-unroll-loops`: whether `-O` fully unrolls
     /// a constant-trip loop.
@@ -4842,7 +4842,7 @@ pub struct NativeOptions {
     pub elf_class: ElfClass,
     /// `-Wa,-L` / `-Wa,--keep-locals`: keep the assembler's local-label
     /// temporaries (the `.L`-prefixed names) in a relocatable object's
-    /// `.symtab`. Off by default, as in GNU as. The relocations are the
+    /// `.symtab`. Off by default. The relocations are the
     /// same either way -- a reference to one reduces to its section plus
     /// an addend regardless -- so this only changes what a symbol dump
     /// shows.
@@ -5496,7 +5496,7 @@ pub(crate) fn lower_for_with_prebuilt(
         ));
     }
     // The profiling call names `__fentry__` / `mcount` the same way.
-    // TODO: gcc's aarch64 form (`mov x0, x30; bl _mcount` after the
+    // TODO: the aarch64 `_mcount` form (`mov x0, x30; bl _mcount` after the
     // prologue) needs the argument registers kept across the call.
     if options.profiling.enabled {
         if options.output_kind != OutputKind::Relocatable {

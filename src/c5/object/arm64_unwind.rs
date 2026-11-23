@@ -494,7 +494,7 @@ mod tests {
         let codes = alloc::vec![0xE1, 0x81, 0xFC, 0xE3, 0xE3, 0xE3];
         assert_eq!(prologue_codes(&t, 0, 24), Some(codes));
         // A frameless body behind the pad has no prolog; a signed one's
-        // ends at `paciasp`, as clang's `-mbranch-protection=pac-ret+leaf`.
+        // ends at `paciasp` (the `-mbranch-protection=pac-ret+leaf` shape).
         let t = words(&[0xD503_245F, 0xD503_233F, 0x9100_0400, 0xD65F_03C0]);
         assert_eq!(prologue_codes(&t, 0, 4), None);
         assert_eq!(prologue_codes(&t, 0, 8), Some(alloc::vec![0xFC, 0xE3]));

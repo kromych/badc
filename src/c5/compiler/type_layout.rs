@@ -1375,7 +1375,7 @@ fn scalar_kind(ty: i64, target: Target) -> ScalarKind {
 /// `target`, decided from the members: a struct has the sum of its
 /// members' elements, a union the most any member has, an array its
 /// element's times its length, and no padding. On macOS an `_Atomic`
-/// aggregate or member is none, as clang classifies it; elsewhere
+/// aggregate or member is none, the platform ABI's classification; elsewhere
 /// `_Atomic` is a qualifier the classification looks through.
 pub(crate) fn homogeneous_aggregate(
     structs: &[StructDef],
@@ -1500,8 +1500,8 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
     host_abi_agg_desc_conv(structs, target, crate::c5::codegen::CallConv::Target, ty)
 }
 
-/// Whether aggregate `id` holds no member with storage, as clang's
-/// `isEmptyRecord` decides it: each member is an unnamed bit-field, a
+/// Whether aggregate `id` holds no member with storage: each member is an
+/// unnamed bit-field, a
 /// zero-length array, or an empty aggregate or an array of them.
 fn is_empty_record(structs: &[StructDef], id: usize) -> bool {
     let sd = &structs[id];

@@ -1270,12 +1270,9 @@ impl FunctionEmitter<'_, '_> {
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => {}
-            // TODO(#2148): Windows on ARM64 records no epilogue scope for a
-            // tail call.
             Terminator::Return(_) if self.tail_call.is_some() => {
                 let tail = self.tail_call.take().expect("tail call");
                 let mut steps = Vec::new();
-                let windows = self.fcx.target == Target::WindowsAarch64;
                 let start = emit_tail_call(
                     self.cx.code,
                     tail,
@@ -1284,12 +1281,9 @@ impl FunctionEmitter<'_, '_> {
                     self.cx.plt_call_fixups,
                     self.cx.asm_extern_call_sites,
                     self.cx.user_extern_data_refs,
-                    (!windows).then_some(&mut steps),
+                    Some(&mut steps),
                 )?;
-                if !windows {
-                    return self.record_exit(start, steps);
-                }
-                return Ok(());
+                return self.record_exit(start, steps);
             }
             Terminator::Return(v) => {
                 let mut steps = Vec::new();

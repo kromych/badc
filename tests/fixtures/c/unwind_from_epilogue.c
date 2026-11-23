@@ -7,7 +7,7 @@
 // unwinds the context it stopped in to `outer`'s frame, which must hold
 // `outer`'s registers, stack pointer and frame pointer. Each instruction
 // of each epilogue, from the first that moves sp or reloads the frame
-// record to the `ret` (Win64: or a tail call's `jmp`), takes its turn: an
+// record to the `ret` or a tail call's branch, takes its turn: an
 // ARM64 epilogue the `.xdata` epilog scopes describe, a Win64 one in the
 // form the unwinder recognizes. Elsewhere the program exits 0.
 
@@ -277,11 +277,20 @@ __attribute__((noinline)) static long va_caller(long a) { return va(2, a, a + 1)
 
 __attribute__((noinline)) static long via_leaf(long a) { return leaf(a) + 1; }
 
+// Values live across a call, then a tail call: at -O the epilogue ends at
+// the branch to `leaf`.
+__attribute__((noinline)) static long tail(long a)
+{
+    long b = a * 3 + 1, c = b ^ 5;
+    long r = leaf(a);
+    return leaf(r + b + c);
+}
+
 // Every function here, the bounds of each one's code.
 static void *const functions[] = {
     (void *)outer, (void *)compare, (void *)put,      (void *)plant,   (void *)on_break,
     (void *)leaf,  (void *)fold,    (void *)top,      (void *)big,     (void *)exits,
-    (void *)dynamic, (void *)va,    (void *)va_caller, (void *)via_leaf,
+    (void *)dynamic, (void *)va,    (void *)va_caller, (void *)via_leaf, (void *)tail,
 };
 
 struct target {
@@ -316,8 +325,9 @@ static int epilogues(unsigned char *begin, unsigned char *end, unsigned char **s
                 from--;
         } else if (w[i] != 0xD50323BF) // autiasp, a signed leaf's
             continue;
+        // ret, or the b of a tail call.
         int to = i;
-        while (to < count && w[to] != 0xD65F03C0)
+        while (to < count && w[to] != 0xD65F03C0 && (w[to] & 0xFC000000) != 0x14000000)
             to++;
         if (to == count)
             return -1;
@@ -364,7 +374,7 @@ int main(void)
         {(void *)leaf, via_leaf, {1, 0, 0}},  {(void *)fold, fold, {1, 0, 0}},
         {(void *)top, top, {1, 0, 0}},        {(void *)big, big, {1, 0, 0}},
         {(void *)exits, exits, {1, 2, 4}},    {(void *)dynamic, dynamic, {5, 0, 0}},
-        {(void *)va, va_caller, {1, 0, 0}},
+        {(void *)va, va_caller, {1, 0, 0}},   {(void *)tail, tail, {1, 0, 0}},
     };
     unsigned char *lo = (unsigned char *)main, *hi = lo;
     for (unsigned i = 0; i < sizeof functions / sizeof *functions; i++) {

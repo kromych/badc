@@ -452,9 +452,10 @@ fn pdata_holds_the_array_alone_and_the_unwind_records_lie_in_rdata() {
 }
 
 /// In a linked Windows on ARM64 image, every `ret` of a function with an
-/// `.xdata` record ends an epilog scope as the unwinder locates it: one in
-/// the header (E bit) ends the function, one in the list starts at its
-/// offset, and either spans its codes up to `end` plus the `ret`. Folded,
+/// `.xdata` record ends an epilog scope as the unwinder locates it, and so
+/// does a tail call's `b`: one in the header (E bit) ends the function, one
+/// in the list starts at its offset, and either spans its codes up to `end`
+/// plus the `ret` or `b`. Folded,
 /// top-block, frame-only, large, dynamic and variadic frames, with one exit
 /// and several, at -O0 and -O, with and without `-mbranch-protection`.
 #[cfg(feature = "linker")]
@@ -511,9 +512,12 @@ fn every_arm64_return_ends_an_epilog_scope() {
                 .filter(|&r| word(text + r as usize) == RET)
                 .collect();
             let ends: alloc::vec::Vec<u32> = scopes.iter().map(|&(s, size)| s + size - 4).collect();
-            assert_eq!(
-                rets, ends,
-                "{hardening:?} -O={optimize}: {begin:#x} {scopes:x?}"
+            // A scope ends at a `ret` or at a tail call's `b`.
+            let exit = |w: u32| w == RET || w & 0xFC00_0000 == 0x1400_0000;
+            assert!(
+                rets.iter().all(|r| ends.contains(r))
+                    && ends.iter().all(|&e| exit(word(text + e as usize))),
+                "{hardening:?} -O={optimize}: {begin:#x} {scopes:x?} rets {rets:x?}"
             );
             let packed = word(at) & 1 << 21 != 0;
             header += usize::from(packed);

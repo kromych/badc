@@ -614,8 +614,8 @@ pub(super) struct TailCall<'a> {
 /// `detect_tail_call` states: the arguments fit the argument registers, no
 /// aggregate rides the call, neither function is variadic, both are on one
 /// convention and agree on the result's extension, and nothing addresses
-/// the frame. Windows on Arm describes each epilogue in its unwind data,
-/// which records the one a return ends, so it takes none.
+/// the frame. Windows on Arm describes a tail call's epilogue in its unwind
+/// data as it does a return's.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
@@ -628,11 +628,7 @@ pub(super) fn detect_tail_call<'a>(
     target: Target,
 ) -> Option<TailCall<'a>> {
     // A callee of another standard may change what the SVE PCS preserves.
-    if !abi.sibling_calls
-        || target == Target::WindowsAarch64
-        || func.is_variadic
-        || func.sve_pcs.is_some()
-    {
+    if !abi.sibling_calls || func.is_variadic || func.sve_pcs.is_some() {
         return None;
     }
     let (v, void) = super::ssa::emit_common::tail_call_site(func, alloc, block)?;

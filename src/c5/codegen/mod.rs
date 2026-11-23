@@ -5711,7 +5711,7 @@ pub(crate) fn reloc_callee_ctx(
         .map(|s| s.def_link_name())
         .collect();
     let interposable_names: alloc::collections::BTreeSet<&str> = defined_funcs()
-        .filter(|s| program.interposable_refs && !s.is_weak && s.is_interposable_definition())
+        .filter(|s| program.interposable_refs && s.is_interposable_definition())
         .map(|s| s.def_link_name())
         .collect();
     if section_of.is_empty() && weak_names.is_empty() && interposable_names.is_empty() {

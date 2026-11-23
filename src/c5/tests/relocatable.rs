@@ -619,12 +619,15 @@ fn a_pic_unit_names_its_interposable_definitions() {
     // and objects of default visibility it defines through their symbols,
     // so the link decides whether another component preempts them -- a
     // call by PLT relocation, an address and a read through the GOT, an
-    // initializer against the symbol. A `static` and a hidden definition
-    // stay direct.
+    // initializer against the symbol. A weak definition is one of them: a
+    // PC-relative address of it is refused in a shared object by GNU ld and
+    // lld, and bound to this copy by a linker that accepts it. A `static`
+    // and a hidden definition stay direct.
     let src = "int g = 1;\nint *pg = &g;\nint f(void) { return 1; }\nint (*pf)(void) = f;\n\
                static int s(void) { return 3; }\n\
                __attribute__((visibility(\"hidden\"))) int h(void) { return 4; }\n\
-               int use(void) { return f() + s() + h() + g + (pf == f); }\n";
+               __attribute__((weak)) int w(void) { return 5; }\n\
+               int use(void) { return f() + s() + h() + g + (pf == f) + (pf == w); }\n";
     let copts = CompileOptions {
         no_entry_point: true,
         ..Default::default()
@@ -645,13 +648,14 @@ fn a_pic_unit_names_its_interposable_definitions() {
         .map(|r| (name_of(r), r.rtype))
         .collect();
     // R_X86_64_PLT32 (4) and R_X86_64_REX_GOTPCRELX (42).
-    for want in [("f", 4), ("f", 42), ("g", 42)] {
+    for want in [("f", 4), ("f", 42), ("g", 42), ("w", 42)] {
         assert!(
             text.iter().any(|(n, t)| (n.as_str(), *t) == want),
             "{want:?}: {text:?}"
         );
     }
     assert!(!text.iter().any(|(n, _)| n == "s" || n == "h"), "{text:?}");
+    assert!(!text.iter().any(|(n, t)| n == "w" && *t == 2), "{text:?}");
     let data: Vec<String> = section(".data").relocs.iter().map(name_of).collect();
     assert!(
         data.contains(&"g".to_string()) && data.contains(&"f".to_string()),

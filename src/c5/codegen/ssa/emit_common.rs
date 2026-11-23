@@ -3737,20 +3737,22 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             });
             continue;
         }
-        if let Some(name) = reloc_ctx.weak_target(target_ent_pc) {
-            st.user_extern_data_refs.push(super::UserExternDataRef {
-                instr_offset,
-                symbol_name: name.into(),
-                direct_pcrel: B::WEAK_ADDR_PCREL,
-                import_slot: false,
-            });
-            continue;
-        }
+        // A weak definition another component may preempt is reached as
+        // any interposable one is, through its GOT entry.
         if let Some(name) = reloc_ctx.interposable_target(target_ent_pc) {
             st.user_extern_data_refs.push(super::UserExternDataRef {
                 instr_offset,
                 symbol_name: name.into(),
                 direct_pcrel: None,
+                import_slot: false,
+            });
+            continue;
+        }
+        if let Some(name) = reloc_ctx.weak_target(target_ent_pc) {
+            st.user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset,
+                symbol_name: name.into(),
+                direct_pcrel: B::WEAK_ADDR_PCREL,
                 import_slot: false,
             });
             continue;

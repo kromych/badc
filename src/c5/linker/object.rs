@@ -745,6 +745,19 @@ impl RelocSite<'_> {
         )
     }
 
+    /// A reference to a definition the loader may preempt that reaches it
+    /// through neither the GOT nor the PLT. See [`preemptible_in_shared_body`].
+    pub(crate) fn preempted_in_shared(&self) -> C5Error {
+        C5Error::hard(
+            Code::RELOCATION,
+            preemptible_in_shared_body(
+                &self.locate(),
+                &reloc_desc(self.machine, self.rtype),
+                self.symbol,
+            ),
+        )
+    }
+
     /// A resolved value the relocation's field cannot hold. GNU ld
     /// makes this a link error rather than truncating, and so does
     /// badc: a silently narrowed address is a miscompile.

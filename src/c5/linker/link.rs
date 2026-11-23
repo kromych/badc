@@ -3363,6 +3363,22 @@ impl<'a> Link<'a> {
             && self.preemptible.contains(name)
     }
 
+    /// Whether a code reference to a preemptible definition has a form GNU
+    /// ld refuses in a shared object: one binding it to the image's own
+    /// definition, which no dynamic relocation of read-only code redirects.
+    fn refuses_preempted(&self, sym: &NativeSymbol, reloc: &NativeReloc) -> bool {
+        let name = sym.name.as_str();
+        let machine = match self.machine {
+            NativeMachine::X86_64 => super::relocatable::EM_X86_64,
+            NativeMachine::Aarch64 => super::relocatable::EM_AARCH64,
+        };
+        let noted = self.extern_data_names.contains(name);
+        sym.binding != 0
+            && self.preemptible.contains(name)
+            && super::lds_link::reach(machine, reloc.rtype, false, noted, reloc.addend)
+                == super::lds_link::Reach::Refused
+    }
+
     /// Whether `reloc` takes only an import's address, which its GOT slot
     /// holds: a GOT form, the aarch64 address pair, or an x86-64 `lea`.
     fn takes_slot_address(&self, reloc: &NativeReloc, patch_offset: usize) -> bool {
@@ -3884,6 +3900,11 @@ impl<'a> Link<'a> {
                 if self.preempts(sym, reloc.rtype) {
                     self.admit_preempted(sym, reloc, patch_offset);
                     continue;
+                }
+                if self.refuses_preempted(sym, reloc) {
+                    let name = origin.symbol_name(sym);
+                    let site = origin.at(self.machine, reloc.rtype, name, reloc.offset);
+                    return Err(site.preempted_in_shared());
                 }
                 let sym_section = self.reference_section(i, sym);
                 if let Some(&slot) = self.got_slot_sites.get(&(i, reloc.offset)) {

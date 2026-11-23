@@ -73,6 +73,7 @@ use hashbrown::{HashMap, HashSet};
 
 use inputs::RawSection;
 pub use inputs::{LdsObject, parse_lds_object};
+pub(crate) use preempt::{Reach, reach};
 use sections::is_debug_section;
 
 // ELF constants.

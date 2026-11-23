@@ -22,7 +22,7 @@ use super::{
 
 /// How a reference reaches a preemptible definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Reach {
+pub(crate) enum Reach {
     Direct,
     Plt,
     Got,
@@ -36,7 +36,7 @@ pub(super) enum Reach {
 
 /// How a field of `rtype` reaches a preemptible definition, as GNU ld
 /// 2.46 links one; `writable` is the referring section's `SHF_WRITE`.
-pub(super) fn reach(machine: u16, rtype: u32, writable: bool, noted: bool, addend: i64) -> Reach {
+pub(crate) fn reach(machine: u16, rtype: u32, writable: bool, noted: bool, addend: i64) -> Reach {
     // i386 takes a dynamic relocation for a PC-relative field in any
     // section, and binds a GOT-relative or narrower one directly.
     if machine == EM_386 {

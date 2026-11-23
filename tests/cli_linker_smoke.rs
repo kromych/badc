@@ -23004,6 +23004,69 @@ mod aarch64_link {
     }
 }
 
+/// A shared object's default-visibility definitions may be preempted
+/// (System V gABI, symbol visibility), so read-only code reaches one
+/// through the GOT or the PLT. A PC-relative address of one is refused,
+/// as GNU ld and lld refuse it, rather than bound to the object's own
+/// definition; a branch, a GOT load and a hidden definition's address link.
+#[test]
+fn a_pc_relative_address_of_a_preemptible_definition_is_refused_in_a_shared_object() {
+    let dir = tempdir("preempt-pcrel");
+    let defs =
+        "\t.globl\thook\nhook:\n\tret\n\t.globl\tlocal_fn\n\t.hidden\tlocal_fn\nlocal_fn:\n\tret\n";
+    for (target, linked, refused, rtype) in [
+        (
+            "linux-x64",
+            "\tcall\thook\n\tmovq\thook@GOTPCREL(%rip), %rax\n\tleaq\tlocal_fn(%rip), %rax\n",
+            "\tleaq\thook(%rip), %rax\n",
+            "R_X86_64_PC32",
+        ),
+        (
+            "linux-aarch64",
+            "\tbl\thook\n\tadrp\tx0, local_fn\n\tadd\tx0, x0, :lo12:local_fn\n",
+            "\tadrp\tx0, hook\n\tadd\tx0, x0, :lo12:hook\n",
+            "R_AARCH64_ADR_PREL_PG_HI21",
+        ),
+    ] {
+        for (body, ok) in [(linked, true), (refused, false)] {
+            let src = write_source(
+                &dir,
+                "u.s",
+                &format!("\t.text\n\t.globl\tuse\nuse:\n{body}\tret\n{defs}"),
+            );
+            let obj = dir.join("u.o");
+            run(
+                Command::new(badc())
+                    .args(["-q", "-c", &format!("--target={target}")])
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&obj),
+                "assemble",
+            );
+            let out = Command::new(badc())
+                .args(["-q", &format!("--target={target}"), "-shared"])
+                .arg(&obj)
+                .arg("-o")
+                .arg(dir.join("libu.so"))
+                .output()
+                .expect("run the link");
+            let err = String::from_utf8_lossy(&out.stderr);
+            if ok {
+                assert!(out.status.success(), "{target}: {err}");
+            } else {
+                assert!(
+                    !out.status.success()
+                        && err.contains(&format!("{rtype} "))
+                        && err.contains(
+                            "against symbol `hook` can not be used when making a shared object"
+                        ),
+                    "{target}: {err}"
+                );
+            }
+        }
+    }
+}
+
 // COMDAT groups reach the linker from C++ inline functions and from
 // gcc's PIC thunks, and no compiler here emits one, so the inputs are
 // written out directly. x86-64 only: the bodies are machine code.

@@ -660,6 +660,7 @@ Disassembly of section .text:
                	mov	x0, #0x101              // =257
                	strh	w0, [x3]
                	mov	x1, #0x2                // =2
+               	str	x3, [sp, #0x10]
                	b	<addr>
                	add	x1, x1, #0x1
                	mul	x0, x1, x1
@@ -670,7 +671,6 @@ Disassembly of section .text:
                	ldr	x16, [sp, #0x18]
                	ldrsw	x0, [x16]
                	add	x2, x0, #0x40
-               	str	x3, [sp, #0x10]
                	str	x1, [sp, #0x8]
                	mov	x0, x3
                	bl	<addr>

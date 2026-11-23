@@ -58,6 +58,7 @@ Disassembly of section .text:
                	mov	x23, x3
                	movi	v3.16b, #0x1d
                	mov	x20, #0x0               // =0
+               	str	q3, [sp, #0x50]
                	mov	x22, x20
                	ldr	x0, [x21, #0x18]
                	add	x0, x0, x20
@@ -78,7 +79,6 @@ Disassembly of section .text:
                	b.ge	<addr>
                	ldr	x0, [x21, #0x18]
                	add	x0, x0, x20
-               	str	q3, [sp, #0x50]
                	str	q0, [sp, #0x40]
                	str	q1, [sp, #0x30]
                	bl	<addr>

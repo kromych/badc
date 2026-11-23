@@ -525,24 +525,21 @@ Disassembly of section .text:
                	movw	$0x101, <rip> # imm = 0x101
                                                 # <addr>
                	movl	$0x2, %ecx
-               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	incq	%rcx
                	movq	%rcx, %rax
                	imulq	%rcx, %rax
                	cmpl	$0x40, %eax
                	jge	<addr>
-               	cmpb	$0x0, (%rsi,%rcx)
+               	leaq	<rip>, %rdi # <addr>
+               	cmpb	$0x0, (%rdi,%rcx)
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	leaq	0x40(%rax), %rdx
-               	movq	%rsi, 0x8(%rsp)
-               	movq	%rcx, (%rsp)
-               	movq	%rsi, %rdi
+               	movq	%rcx, 0x8(%rsp)
                	movq	%rcx, %rsi
                	callq	<addr>
-               	movq	0x8(%rsp), %rsi
-               	movq	(%rsp), %rcx
+               	movq	0x8(%rsp), %rcx
                	jmp	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %eax # <addr>

@@ -524,12 +524,12 @@ Disassembly of section .text:
                	movl	-0x38(%rbp), %r12d
                	xorl	%ebx, %ebx
                	movl	%ebx, -0x40(%rbp)
+               	vmovups	%ymm1, -0xe0(%rbp)
                	movss	-0x20(%rbp,%rbx,4), %xmm0
                	movss	%xmm0, -0x38(%rbp)
                	movl	-0x38(%rbp), %edi
                	xorl	%esi, %esi
                	leaq	-0x40(%rbp), %rcx
-               	vmovups	%ymm1, -0xe0(%rbp)
                	movq	%r12, %rdx
                	vzeroupper
                	callq	<addr>
@@ -564,12 +564,12 @@ Disassembly of section .text:
                	movl	-0x38(%rbp), %r13d
                	xorl	%ebx, %ebx
                	movl	%ebx, -0x40(%rbp)
+               	movups	%xmm0, -0xd0(%rbp)
                	movss	-0x30(%rbp,%rbx,4), %xmm1
                	movss	%xmm1, -0x38(%rbp)
                	movl	-0x38(%rbp), %edi
                	xorl	%esi, %esi
                	leaq	-0x40(%rbp), %rcx
-               	movups	%xmm0, -0xd0(%rbp)
                	movq	%r13, %rdx
                	vzeroupper
                	callq	<addr>

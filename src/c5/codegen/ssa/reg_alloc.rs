@@ -241,7 +241,8 @@ pub(crate) struct Allocation {
 }
 
 /// The code the saves around loops add at block boundaries
-/// ([`super::loop_saves`]).
+/// ([`super::loop_saves`]), with the stores of the values saved around
+/// calls that store once where they are defined ([`save_store_blocks`]).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LoopSaveCode {
     /// Per block: saves stored at its end, ahead of its phi moves.
@@ -296,6 +297,8 @@ pub(crate) struct CallSave {
     pub is_fp: bool,
     pub wide: VecWidth,
     pub slot: u32,
+    /// The slot holds the value already: the call only reloads it.
+    pub stored: bool,
 }
 
 /// Each value output of the asm statement at `site` with its place;
@@ -2058,17 +2061,25 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         places[v as usize] = Place::None;
     }
     let mut spill_count = coloring.spill_count;
-    let saves_at = call_save_lists(
+    let store_in = save_store_blocks(func, (&crossings, &node_of), &coloring.saved, &freqs);
+    let (saves_at, def_stores) = call_save_lists(
         (&crossings, &node_of),
         (&coloring.saved, &node_cons, &places),
+        (&store_in, &|b, v| liveness.block_liveness().live_out(b, v)),
         &mut spill_count,
     );
-    let loop_code = loop_save_code(
+    let mut loop_code = loop_save_code(
         loops.as_ref(),
         &coloring.loop_saved,
         (&node_cons, &places),
         &mut spill_count,
     );
+    for (b, save) in def_stores {
+        match loop_code.stores.iter_mut().find(|(x, _)| *x == b) {
+            Some((_, saves)) => saves.push(save),
+            None => loop_code.stores.push((b, alloc::vec![save])),
+        }
+    }
     // A copy or an atomic read-modify-write may take any register as a
     // temporary, so its record covers them all; the x86-64 shift and
     // division records cover the registers they write.
@@ -2763,18 +2774,78 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     }
 }
 
+/// The block whose end stores each node the coloring saved around calls,
+/// in place of a store ahead of each call: a node of one value whose
+/// defining block holds none of the calls it crosses and, by the per-block
+/// `weights`, runs less often than one of them alone, as outside a loop
+/// holding the call. A sum over the calls would count calls that exclude
+/// one another, as on the paths past an early return; a tie is no
+/// evidence, as the estimate stops dividing past a nesting depth.
+fn save_store_blocks(
+    func: &FunctionSsa,
+    (crossings, node_of): (&[(ValueId, Vec<ValueId>)], &[ValueId]),
+    saved: &[bool],
+    weights: &[u64],
+) -> Vec<Option<crate::c5::ir::BlockId>> {
+    let mut out = alloc::vec![None; saved.len()];
+    if !saved.iter().any(|&s| s) {
+        return out;
+    }
+    let mut block_of = alloc::vec![0usize; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            block_of[v as usize] = b;
+        }
+    }
+    let mut members = alloc::vec![0u32; saved.len()];
+    for &root in node_of {
+        members[root as usize] += 1;
+    }
+    let mut hottest_call = alloc::vec![0u64; saved.len()];
+    let mut in_def_block = alloc::vec![false; saved.len()];
+    for (site, live) in crossings {
+        let b = block_of[*site as usize];
+        for &v in live {
+            let root = node_of[v as usize] as usize;
+            if saved[root] && members[root] == 1 {
+                hottest_call[root] = hottest_call[root].max(weights[b]);
+                in_def_block[root] |= block_of[root] == b;
+            }
+        }
+    }
+    for (root, out) in out.iter_mut().enumerate() {
+        let b = block_of[root];
+        if hottest_call[root] > weights[b] && !in_def_block[root] {
+            *out = Some(b as crate::c5::ir::BlockId);
+        }
+    }
+    out
+}
+
 /// Each call a node the coloring saved crosses, with the caller-saved
 /// registers of those nodes and their slots, which the reservation grows
-/// by. A slot holds its value only around one call, so nodes saved at no
-/// common call share it.
+/// by, and the block-end stores of the nodes [`save_store_blocks`] places.
+/// Nodes saved at no common call share a slot: one stored ahead of a call
+/// holds its value only around it, and one stored where it is defined
+/// is live across each call between. Two of the latter share it when
+/// neither is live where the other is stored (`live_out`).
+#[allow(clippy::type_complexity)]
 fn call_save_lists(
     (crossings, node_of): (&[(ValueId, Vec<ValueId>)], &[ValueId]),
     (saved, node_cons, places): (&[bool], &[Option<NodeConstraints>], &[Place]),
+    (store_in, live_out): (
+        &[Option<crate::c5::ir::BlockId>],
+        &dyn Fn(crate::c5::ir::BlockId, ValueId) -> bool,
+    ),
     spill_count: &mut u32,
-) -> Vec<(ValueId, Vec<CallSave>)> {
+) -> (
+    Vec<(ValueId, Vec<CallSave>)>,
+    Vec<(crate::c5::ir::BlockId, CallSave)>,
+) {
     if !saved.iter().any(|&s| s) {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
+    let store_in = |node: usize| store_in.get(node).copied().flatten();
     let in_reg = |v: ValueId| matches!(places[v as usize], Place::IntReg(_) | Place::FpReg(_));
     let mut sites_of: Vec<Vec<usize>> = alloc::vec![Vec::new(); saved.len()];
     for (k, (_, live)) in crossings.iter().enumerate() {
@@ -2789,12 +2860,29 @@ fn call_save_lists(
     let mut taken: Vec<Vec<u32>> = alloc::vec![Vec::new(); crossings.len()];
     let mut slot = alloc::vec![u32::MAX; saved.len()];
     let mut end = 0u32;
+    // The nodes stored where they are defined: slot, units, block, node.
+    let mut at_def: Vec<(u32, u32, crate::c5::ir::BlockId, usize)> = Vec::new();
     for (node, sites) in sites_of.iter().enumerate().filter(|(_, s)| !s.is_empty()) {
         let units = node_cons[node].map_or(1, |c| c.wide.units());
-        let free = |s: u32| (sites.iter()).all(|&k| (s..s + units).all(|u| !taken[k].contains(&u)));
+        let def = store_in(node);
+        let clash = |s: u32| {
+            def.is_some_and(|b| {
+                (at_def.iter()).any(|&(s2, u2, b2, n2)| {
+                    s < s2 + u2
+                        && s2 < s + units
+                        && (live_out(b2, node as ValueId) || live_out(b, n2 as ValueId))
+                })
+            })
+        };
+        let free = |s: u32| {
+            (sites.iter()).all(|&k| (s..s + units).all(|u| !taken[k].contains(&u))) && !clash(s)
+        };
         let s = (0..).find(|&s| free(s)).unwrap_or(0);
         for &k in sites {
             taken[k].extend(s..s + units);
+        }
+        if let Some(b) = def {
+            at_def.push((s, units, b, node));
         }
         slot[node] = *spill_count + s;
         end = end.max(s + units);
@@ -2819,6 +2907,7 @@ fn call_save_lists(
                 is_fp,
                 wide,
                 slot: slot[root],
+                stored: store_in(root).is_some(),
             });
         }
         if !saves.is_empty() {
@@ -2826,7 +2915,30 @@ fn call_save_lists(
         }
     }
     out.sort_unstable_by_key(|&(site, _)| site);
-    out
+    let mut stores = Vec::new();
+    for (node, b) in (0..saved.len()).filter_map(|n| Some((n, store_in(n)?))) {
+        let (reg, is_fp) = match places[node] {
+            Place::IntReg(r) => (r, false),
+            Place::FpReg(r) => (r, true),
+            _ => continue,
+        };
+        if sites_of[node].is_empty() {
+            continue;
+        }
+        let wide = node_cons[node].map_or(VecWidth::Scalar, |c| c.wide);
+        let slot = slot[node];
+        stores.push((
+            b,
+            CallSave {
+                reg,
+                is_fp,
+                wide,
+                slot,
+                stored: false,
+            },
+        ));
+    }
+    (out, stores)
 }
 
 /// The stores and loads of the saves around loops the coloring chose, with a
@@ -2871,6 +2983,7 @@ fn loop_save_code(
             is_fp,
             wide,
             slot,
+            stored: false,
         };
         at(&mut code.stores, info.loops[l as usize].preheader, save);
         for &r in &t.reloads {
@@ -8877,11 +8990,13 @@ int main(void) { return 0; }
                 None,
             ];
             let mut count = 7;
-            let lists = call_save_lists(
+            let (lists, stores) = call_save_lists(
                 (&crossings, &node_of),
                 (&saved, &node_cons, &places),
+                (&[], &|_, _| false),
                 &mut count,
             );
+            assert!(stores.is_empty());
             let slot = |site: ValueId, reg: u8| {
                 let (_, saves) = lists.iter().find(|(s, _)| *s == site).expect("site");
                 saves.iter().find(|c| c.reg == reg).expect("save").slot

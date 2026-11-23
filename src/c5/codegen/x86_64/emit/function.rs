@@ -1073,7 +1073,7 @@ impl FnEmit<'_, '_> {
         let saves = (alloc.call_saves)
             .binary_search_by_key(&v, |&(site, _)| site)
             .map_or(&[][..], |i| alloc.call_saves[i].1.as_slice());
-        for s in saves {
+        for s in saves.iter().filter(|s| !s.stored) {
             call_save(self.out.cx.code, self.fcx.frame, s, true);
         }
         let lowered = emit_memory_destination(self.out.cx.code, v, &self.mem_dest, &self.fcx)

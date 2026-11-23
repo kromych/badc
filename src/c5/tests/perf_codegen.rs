@@ -7812,6 +7812,38 @@ double f(const double *c, const double *xs, int n) {\n\
     m.finish();
 }
 
+/// A value saved around the call in a loop, defined ahead of the loop and
+/// never redefined, is stored once where it is defined: the call only
+/// reloads it. Here more values cross the call than the callee-saved
+/// registers hold, so the row, column and box indices are saved around it.
+#[test]
+fn x64_value_saved_around_a_call_in_a_loop_is_stored_before_the_loop() {
+    const SRC: &str = "struct board { unsigned row[9], col[9], box[9]; unsigned char cell[81];\n\
+int found; };\n void search(struct board *s, int filled);\n\
+void step(struct board *s, int best, int r, int c, int b, unsigned mask, int filled) {\n\
+for (unsigned m = mask; m != 0 && s->found < 2; m &= m - 1) {\n\
+unsigned bit = m & -m;\n s->cell[best] = (unsigned char)bit;\n\
+s->row[r] |= bit;\n s->col[c] |= bit;\n s->box[b] |= bit;\n\
+search(s, filled + 1);\n\
+s->row[r] &= ~bit;\n s->col[c] &= ~bit;\n s->box[b] &= ~bit;\n }\n}\n";
+    let insns = x64(SRC, "step");
+    // `mov [rsp + disp], r64`: a SIB byte naming rsp as the base.
+    let frame_store = |i: &X64Insn| {
+        i.op == 0x89
+            && i.modrm.is_some_and(|m| m >> 6 != 3 && m & 7 == 4)
+            && i.sib.is_some_and(|s| s & 7 == 4)
+            && i.rex & 1 == 0
+    };
+    assert!(
+        insns.iter().any(frame_store),
+        "nothing is saved: {insns:x?}"
+    );
+    assert!(
+        !x64_in_loop(&insns, frame_store),
+        "a save is stored in the loop: {insns:x?}"
+    );
+}
+
 /// A spilled indirect-call target that no free register can hold across
 /// the argument moves reloads from its own slot after them: no second
 /// stack slot to stage it through. Here a variadic call fills every

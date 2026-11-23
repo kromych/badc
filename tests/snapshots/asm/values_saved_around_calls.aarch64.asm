@@ -60,6 +60,7 @@ Disassembly of section .text:
                	ldr	x22, [x6, #0x58]
                	ldr	x21, [x6, #0x60]
                	ldr	x6, [x6, #0x68]
+               	str	x1, [sp, #0x78]
                	b	<addr>
                	add	x20, x20, #0x1
                	cmp	w20, w1
@@ -80,7 +81,6 @@ Disassembly of section .text:
                	eor	x6, x6, x21
                	and	x7, x20, #0x7
                	cbnz	w7, <addr>
-               	str	x1, [sp, #0x78]
                	str	x5, [sp, #0x50]
                	str	x4, [sp, #0x58]
                	str	x3, [sp, #0x60]

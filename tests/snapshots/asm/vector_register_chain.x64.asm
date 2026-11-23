@@ -78,6 +78,7 @@ Disassembly of section .text:
                	movdqu	(%rax), %xmm0
                	movapd	%xmm0, %xmm5
                	xorl	%ebx, %ebx
+               	movups	%xmm5, 0x50(%rsp)
                	movq	%rbx, %r13
                	movq	0x18(%r12), %rax
                	addq	%rbx, %rax
@@ -104,7 +105,6 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	0x18(%r12), %rax
                	leaq	(%rax,%rbx), %rdi
-               	movups	%xmm5, 0x50(%rsp)
                	movups	%xmm2, 0x40(%rsp)
                	movups	%xmm3, 0x30(%rsp)
                	callq	<addr>

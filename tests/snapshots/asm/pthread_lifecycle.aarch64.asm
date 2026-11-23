@@ -213,10 +213,10 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0xb0
                	ret
                	mov	x1, #0x0                // =0
+               	str	x1, [sp, #0x18]
                	mov	x20, x1
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x1, [sp, #0x18]
                	mov	x3, x1
                	ldr	x0, [sp, #0x28]
                	ldr	x1, [sp, #0x20]

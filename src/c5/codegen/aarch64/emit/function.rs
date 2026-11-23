@@ -1122,7 +1122,7 @@ impl FunctionEmitter<'_, '_> {
         let saves = (alloc.call_saves)
             .binary_search_by_key(&v, |&(site, _)| site)
             .map_or(&[][..], |i| alloc.call_saves[i].1.as_slice());
-        for s in saves {
+        for s in saves.iter().filter(|s| !s.stored) {
             call_save(self.cx.code, self.fcx.frame, s, true);
         }
         let fused = emit_lane_memory(self.cx.code, inst, &self.lane_mem, place, &self.fcx)

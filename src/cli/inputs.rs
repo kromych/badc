@@ -603,6 +603,16 @@ impl Inputs {
             search_paths.extend(sysroot_library_paths(cli.target, root));
         }
         search_paths.extend(super::paths::pe_lib_env_paths(cli.target));
+        // `--jit` and `--interp` run against the process's C library and link
+        // nothing else: a part of it passes, any other library is refused.
+        let in_process = matches!(cli.mode, Mode::Jit | Mode::Interp);
+        let refuse = |what: String| -> ! {
+            eprintln!(
+                "badc: error: {} links no library but the C library's: {what}",
+                cli.mode.flag_name()
+            );
+            std::process::exit(1);
+        };
         for entry in core::mem::take(&mut self.named) {
             let (name, whole) = match entry {
                 Named::Input(input) => {
@@ -610,6 +620,7 @@ impl Inputs {
                     continue;
                 }
                 Named::Lib { name, whole } => (name, whole),
+                Named::SharedPath(path) if in_process => refuse(format!("`{path}`")),
                 Named::SharedPath(path) => {
                     if let Err(e) =
                         ingest_linker_input(self, &path, &search_paths, cli.target, false, 0)
@@ -620,7 +631,11 @@ impl Inputs {
                     continue;
                 }
             };
+            if in_process && !cli.freestanding && c_library_part(&name, cli.target) {
+                continue;
+            }
             match find_library(&name, &search_paths, cli.target) {
+                Some(p) if in_process => refuse(format!("`-l{name}` is `{p}`")),
                 Some(p) => {
                     if let Err(e) =
                         ingest_linker_input(self, &p, &search_paths, cli.target, whole, 0)

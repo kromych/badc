@@ -3113,6 +3113,53 @@ fn jit_runs_one_unit_and_passes_extra_inputs_as_argv() {
     );
 }
 
+/// `--jit` and `--interp` run against the process's C library and link
+/// nothing else: a `-l` naming a part of it passes, a library found on the
+/// search path is refused by name rather than ignored, and a missing one is
+/// reported as the native link reports it.
+#[test]
+fn in_process_runs_refuse_a_library_they_would_not_link() {
+    let dir = tempdir("jit-libraries");
+    let main = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    let lib = write_source(&dir, "lib.c", "int lib_value(void) { return 7; }\n");
+    run(
+        Command::new(badc())
+            .args(["-q", "--ar", "-o", "libfoo.a"])
+            .arg(&lib)
+            .current_dir(&dir),
+        "archive the library",
+    );
+    let run_with = |mode: &str, args: &[&str]| {
+        Command::new(badc())
+            .arg(mode)
+            .args(args)
+            .arg(&main)
+            .current_dir(&dir)
+            .output()
+            .expect("invoke badc")
+    };
+    for mode in ["--jit", "--interp"] {
+        let out = run_with(mode, &["-lm", "-lpthread"]);
+        assert!(out.status.success(), "{mode}: {out:?}");
+        let out = run_with(mode, &["-L.", "-lfoo"]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success()
+                && err.contains(&format!(
+                    "{mode} links no library but the C library's: `-lfoo` is `"
+                ))
+                && err.contains("libfoo.a`"),
+            "{mode}: {err}"
+        );
+        let out = run_with(mode, &["-L.", "-lnosuch"]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("cannot find"),
+            "{mode}: {err}"
+        );
+    }
+}
+
 #[test]
 fn a_block_scope_extern_thread_local_reaches_the_other_units_definition() {
     // C11 6.7.1p3: an object declared `extern _Thread_local` only at block

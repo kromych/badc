@@ -246,12 +246,8 @@ impl Opnd {
 /// memory operand of `name` across its forms; none for an operand of no
 /// width (`lgdt`, `clflush`).
 fn memory_widths(name: &str) -> u8 {
-    let forms = super::isa_x86_table::FORMS;
-    let start = forms.partition_point(|f| f.mnemonic < name);
-    let generated = forms[start..].iter().take_while(|f| f.mnemonic == name);
-    let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnemonic == name);
     let mut mask = 0;
-    for p in generated.chain(supplemental).flat_map(|f| f.ops) {
+    for p in memory_forms(name).flat_map(|f| f.ops) {
         if let OpPat::Rm(w) | OpPat::Mem(w) = *p {
             for opw in [1u8, 2, 4, 8] {
                 mask |= wbytes(w, opw).unwrap_or(0);
@@ -259,6 +255,40 @@ fn memory_widths(name: &str) -> u8 {
         }
     }
     mask
+}
+
+/// The catalog's and the supplement's forms of `name` that take a memory
+/// operand.
+fn memory_forms(name: &str) -> impl Iterator<Item = &'static Form> + '_ {
+    let forms = super::isa_x86_table::FORMS;
+    let start = forms.partition_point(|f| f.mnemonic < name);
+    let generated = forms[start..]
+        .iter()
+        .take_while(move |f| f.mnemonic == name);
+    let supplemental = FORMS_SUPPLEMENT.iter().filter(move |f| f.mnemonic == name);
+    generated
+        .chain(supplemental)
+        .filter(|f| (f.ops.iter()).any(|p| matches!(p, OpPat::Rm(_) | OpPat::Mem(_))))
+}
+
+/// The width GNU as gives a memory operand of `name` that neither a suffix
+/// nor a register sizes: the stack and near-branch group's follows the
+/// mode; a sole width is that width; any other takes the mode's default
+/// operand size, the `l` form, of which GNU as warns ("no instruction
+/// mnemonic suffix given and no register operands"). `None` for an operand
+/// of no width.
+pub(crate) fn unsized_memory_width(name: &str, mode: Mode) -> Option<u8> {
+    let mask = memory_widths(name);
+    if mask == 0 {
+        return None;
+    }
+    if memory_forms(name).any(|f| f.rexw == RexW::Default64) {
+        return Some(mode.stack_opsize());
+    }
+    if mask.is_power_of_two() {
+        return Some(mask);
+    }
+    Some(mode.opsize())
 }
 
 /// Whether the catalog gives `name` a memory operand of `bytes`.

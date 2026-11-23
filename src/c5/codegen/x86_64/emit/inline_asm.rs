@@ -61,6 +61,17 @@ fn asm_mem_size(
         })
 }
 
+/// The width of a memory operand nothing in the instruction sizes, as
+/// [`super::table::unsized_memory_width`] gives it under `mode`.
+fn unsized_mem_size(
+    insn: &super::asm::AsmInsn,
+    mode: super::table::Mode,
+) -> Option<super::super::ir::AsmRegSize> {
+    super::asm::table_name(insn.mnemonic)
+        .and_then(|name| super::table::unsized_memory_width(name, mode))
+        .map(super::super::ir::AsmRegSize::from_width)
+}
+
 /// RIP-relative target of an inline-asm `%a` address operand: an
 /// `i`-class operand naming a link-time data address (`&global`,
 /// optionally offset by a constant).
@@ -815,9 +826,10 @@ impl SectionInsn<'_> {
     /// mode's default operand size, which the near-branch and stack group
     /// promotes to 64 bits in long mode and leaves at 32 or 16 outside it.
     fn mem_size(&self) -> super::super::ir::AsmRegSize {
-        asm_mem_size(None, self.insn, self.refs.operands, self.refs.op_reg).unwrap_or(
-            super::super::ir::AsmRegSize::from_width(self.mode.stack_opsize()),
-        )
+        use super::super::ir::AsmRegSize;
+        asm_mem_size(None, self.insn, self.refs.operands, self.refs.op_reg)
+            .or_else(|| unsized_mem_size(self.insn, self.mode))
+            .unwrap_or(AsmRegSize::from_width(self.mode.stack_opsize()))
     }
 
     /// A template operand's register, or its `i`-class constant.
@@ -2631,6 +2643,7 @@ impl AsmPass<'_> {
 
     fn mem_size_or_quad(&self, insn: &super::asm::AsmInsn) -> super::super::ir::AsmRegSize {
         self.mem_size(None, insn)
+            .or_else(|| unsized_mem_size(insn, super::table::Mode::Bits64))
             .unwrap_or(super::super::ir::AsmRegSize::Quad)
     }
 

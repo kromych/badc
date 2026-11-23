@@ -2045,6 +2045,78 @@ fn section64(bytes: &[u8], want: &str) -> Vec<u8> {
     Vec::new()
 }
 
+/// An instruction whose memory operand neither a suffix nor a register
+/// sizes takes the width GNU as gives it: the mode's default operand size
+/// (`inc (%rax)` is `incl`), the mode's stack size for the stack and
+/// near-branch group, and a form's sole width. Each row is GNU as 2.47's
+/// encoding, as is each mode's below.
+#[test]
+fn an_unsized_memory_operand_takes_the_width_gnu_as_gives_it() {
+    for (insn, want) in [
+        ("add $1, (%rax)", "83 00 01"),
+        ("sub $300, (%rax)", "81 28 2c 01 00 00"),
+        ("and $1, (%rax)", "83 20 01"),
+        ("or $1, (%rax)", "83 08 01"),
+        ("xor $1, (%rax)", "83 30 01"),
+        ("adc $1, (%rax)", "83 10 01"),
+        ("sbb $1, (%rax)", "83 18 01"),
+        ("cmp $1, (%rax)", "83 38 01"),
+        ("mov $1, (%rax)", "c7 00 01 00 00 00"),
+        ("rol (%rax)", "d1 00"),
+        ("ror $3, (%rax)", "c1 08 03"),
+        ("rcl %cl, (%rax)", "d3 10"),
+        ("rcr (%rax)", "d1 18"),
+        ("sal $1, (%rax)", "d1 20"),
+        ("shl $1, (%rax)", "d1 20"),
+        ("shr %cl, (%rax)", "d3 28"),
+        ("sar $2, (%rax)", "c1 38 02"),
+        ("inc (%rax)", "ff 00"),
+        ("dec (%rax)", "ff 08"),
+        ("not (%rax)", "f7 10"),
+        ("neg (%rax)", "f7 18"),
+        ("mul (%rax)", "f7 20"),
+        ("imul (%rax)", "f7 28"),
+        ("div (%rax)", "f7 30"),
+        ("idiv (%rax)", "f7 38"),
+        ("test $1, (%rax)", "f7 00 01 00 00 00"),
+        ("nop (%rax)", "0f 1f 00"),
+        ("bt $3, (%rax)", "0f ba 20 03"),
+        ("bts $3, (%rax)", "0f ba 28 03"),
+        ("btr $3, (%rax)", "0f ba 30 03"),
+        ("btc $3, (%rax)", "0f ba 38 03"),
+        ("cvtsi2sd (%rax), %xmm0", "f2 0f 2a 00"),
+        ("cvtsi2ss 8(%rax), %xmm1", "f3 0f 2a 48 08"),
+        ("push (%rax)", "ff 30"),
+        ("pop (%rax)", "8f 00"),
+        ("call *(%rax)", "ff 10"),
+        ("jmp *(%rax)", "ff 20"),
+        ("sete (%rax)", "0f 94 00"),
+        ("cmpxchg8b (%rax)", "0f c7 08"),
+        ("lgdt (%rax)", "0f 01 10"),
+        ("add $1, sym(%rip)", "83 05 00 00 00 00 01"),
+    ] {
+        let hex: Vec<String> = text_of("unsized-mem", &format!("{insn}\n"))
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(hex.join(" "), want, "{insn}");
+    }
+    for (mode, insn, want) in [
+        (".code32", "inc (%eax)", "ff 00"),
+        (".code32", "push (%eax)", "ff 30"),
+        (".code32", "cmpxchg8b (%eax)", "0f c7 08"),
+        (".code16", "inc (%bx)", "ff 07"),
+        (".code16", "add $1, (%bx)", "83 07 01"),
+        (".code16", "shl (%bx)", "d1 27"),
+    ] {
+        let hex: Vec<String> = text_of("unsized-mem-mode", &format!("{mode}\n{insn}\n.code64\n"))
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(hex.join(" "), want, "{mode} {insn}");
+    }
+}
+
 /// Assemble `src` for x86_64 and return its `.text`.
 fn text_of(name: &str, src: &str) -> Vec<u8> {
     section64(&object_of(name, src), ".text")

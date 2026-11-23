@@ -3881,26 +3881,12 @@ fn modrm_sib(
     }
 }
 
-/// Map a template instruction to the table encoder's mnemonic name and its
-/// operands in Intel (`dst, src`) order, or `None` when this mnemonic keeps its
-/// bespoke encoding below. Template operands are AT&T (`src, dst`), so a
-/// two-operand form is transposed; a shift's count operand moves after the
-/// destination, and an omitted count becomes the implicit `1`. Instructions
-/// naming a control / debug / segment / MMX register (marked `reg >= 16`) stay
-/// on the bespoke path.
-fn to_table(
-    mnemonic: Mnemonic,
-    suffix: Option<AsmRegSize>,
-    ops: &[Concrete],
-) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
-    use super::table::Opnd;
+/// The table encoder's name for a mnemonic that keeps a bespoke parse but
+/// encodes through the catalog, or a catalog-passthrough mnemonic's own.
+pub(crate) fn table_name(mnemonic: Mnemonic) -> Option<&'static str> {
     use Mnemonic as M;
-    // A catalog-passthrough mnemonic carries its own name; arrange the AT&T
-    // operands into the table's Intel order by arity and route straight through.
-    if let M::Table(name) = mnemonic {
-        return to_table_generic(name, suffix, ops);
-    }
-    let name = match mnemonic {
+    Some(match mnemonic {
+        M::Table(name) => name,
         M::Add => "add",
         M::Sub => "sub",
         M::And => "and",
@@ -3931,7 +3917,29 @@ fn to_table(
         M::Mwait => "mwait",
         M::Hlt => "hlt",
         _ => return None,
-    };
+    })
+}
+
+/// Map a template instruction to the table encoder's mnemonic name and its
+/// operands in Intel (`dst, src`) order, or `None` when this mnemonic keeps its
+/// bespoke encoding below. Template operands are AT&T (`src, dst`), so a
+/// two-operand form is transposed; a shift's count operand moves after the
+/// destination, and an omitted count becomes the implicit `1`. Instructions
+/// naming a control / debug / segment / MMX register (marked `reg >= 16`) stay
+/// on the bespoke path.
+fn to_table(
+    mnemonic: Mnemonic,
+    suffix: Option<AsmRegSize>,
+    ops: &[Concrete],
+) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
+    use super::table::Opnd;
+    use Mnemonic as M;
+    // A catalog-passthrough mnemonic carries its own name; arrange the AT&T
+    // operands into the table's Intel order by arity and route straight through.
+    if let M::Table(name) = mnemonic {
+        return to_table_generic(name, suffix, ops);
+    }
+    let name = table_name(mnemonic)?;
     if ops
         .iter()
         .any(|o| matches!(o, Concrete::Reg { reg, .. } if *reg >= MMX_BASE))

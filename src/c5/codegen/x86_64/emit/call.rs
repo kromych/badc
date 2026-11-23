@@ -4,18 +4,25 @@ use super::*;
 /// survives overlaps: the allocator's caller-saved bank covers the
 /// argument registers, so one argument's value can sit in another's
 /// target. Stack slots first, then the FP registers, then the integer
-/// registers as one parallel copy, then the spilled sources.
+/// registers as one parallel copy, then the spilled sources. An aggregate
+/// given as its register parts (`insts` holding its `Inst::AggParts`)
+/// moves as one scalar per part.
 #[allow(clippy::too_many_arguments)]
 fn marshal_args(
     code: &mut CodeBuf,
     plan: &super::CallPlan,
-    args: &[u32],
+    (args, insts): (&[u32], &[Inst]),
     aggs: &[Option<super::ArgAgg>],
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
     site: &str,
 ) -> Emit {
+    let expanded = expand_parts(plan, args, aggs, insts)?;
+    let (plan, args, aggs) = match &expanded {
+        Some((p, a, g)) => (p, a.as_slice(), g.as_slice()),
+        None => (plan, args, aggs),
+    };
     let m = Marshal {
         plan,
         args,
@@ -37,6 +44,54 @@ fn marshal_args(
         super::encode::emit_movq_r_xmm(code, Reg(r), Reg(x));
     }
     Ok(())
+}
+
+/// The call with each aggregate argument given as an `Inst::AggParts`
+/// (`passes::agg_parts`) as one scalar per part, in the part's register or,
+/// where the registers ran out, its eightbyte of the aggregate's stack
+/// slot; `None` when no argument is one.
+#[allow(clippy::type_complexity)]
+fn expand_parts(
+    plan: &super::CallPlan,
+    args: &[u32],
+    aggs: &[Option<super::ArgAgg>],
+    insts: &[Inst],
+) -> Emit<Option<(super::CallPlan, Vec<u32>, Vec<Option<super::ArgAgg>>)>> {
+    let parts_of = |v: u32| match insts.get(v as usize) {
+        Some(Inst::AggParts { parts, .. }) => Some(parts),
+        _ => None,
+    };
+    if !args.iter().any(|&v| parts_of(v).is_some()) {
+        return Ok(None);
+    }
+    let mut out = plan.clone();
+    out.placements.clear();
+    let (mut values, mut classes) = (Vec::new(), Vec::new());
+    for (i, (&v, &placement)) in args.iter().zip(&plan.placements).enumerate() {
+        let Some(parts) = parts_of(v) else {
+            values.push(v);
+            classes.push(aggs.get(i).cloned().flatten());
+            out.placements.push(placement);
+            continue;
+        };
+        for (k, &part) in parts.iter().enumerate() {
+            out.placements.push(match placement {
+                super::ArgPlacement::StructRegs { regs, n, .. } if parts.len() == n as usize => {
+                    match regs[k] {
+                        super::ClassReg { reg, is_fp: true } => super::ArgPlacement::FpReg(reg),
+                        super::ClassReg { reg, .. } => super::ArgPlacement::IntReg(reg),
+                    }
+                }
+                super::ArgPlacement::StructStack { off, .. } => {
+                    super::ArgPlacement::Stack(off + 8 * k as u32)
+                }
+                _ => return fail("AggParts argument: placement takes no parts"),
+            });
+            values.push(part);
+            classes.push(None);
+        }
+    }
+    Ok(Some((out, values, classes)))
 }
 
 /// Tags r10 among the xmm numbers of an FP argument parallel copy.
@@ -647,7 +702,16 @@ pub(super) fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    marshal_args(code, &plan, args, &aggs, alloc, frame, abi, site)?;
+    marshal_args(
+        code,
+        &plan,
+        (args, &func.insts),
+        &aggs,
+        alloc,
+        frame,
+        abi,
+        site,
+    )?;
     if let Some(n) = xmm_count {
         super::encode::emit_mov_al_imm8(code, n);
     }
@@ -725,7 +789,16 @@ pub(super) fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    marshal_args(code, &plan, args, &aggs, alloc, frame, abi, "CallExt")?;
+    marshal_args(
+        code,
+        &plan,
+        (args, &func.insts),
+        &aggs,
+        alloc,
+        frame,
+        abi,
+        "CallExt",
+    )?;
     // System V AMD64 3.2.3: a variadic callee reads the XMM argument count
     // from `al`, which a call without a prototype passes as well. Win64
     // clears `variadic_zero_xmm_count`.
@@ -844,7 +917,12 @@ pub(super) fn emit_call_indirect(
         Place::IntReg(r) if r != SCRATCH_R11.0 && !blocked.iter().any(|b| b.0 == r) => Some(Reg(r)),
         _ => None,
     };
-    for &a in args {
+    // An aggregate given as its parts reads them from their places.
+    let parts = |a: u32| match func.insts.get(a as usize) {
+        Some(Inst::AggParts { parts, .. }) => parts.as_slice(),
+        _ => &[],
+    };
+    for &a in args.iter().chain(args.iter().flat_map(|&a| parts(a))) {
         if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
             blocked.push(Reg(*r));
         }
@@ -889,7 +967,16 @@ pub(super) fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        marshal_args(code, &plan, args, &aggs, alloc, frame, abi, "CallIndirect")?;
+        marshal_args(
+            code,
+            &plan,
+            (args, &func.insts),
+            &aggs,
+            alloc,
+            frame,
+            abi,
+            "CallIndirect",
+        )?;
         let call_r = match target_scratch {
             Some(r) => r,
             None => {
@@ -934,7 +1021,7 @@ pub(super) fn emit_call_indirect(
         marshal_args(
             code,
             &shifted,
-            args,
+            (args, &func.insts),
             &aggs,
             alloc,
             frame,
@@ -1309,7 +1396,7 @@ pub(super) fn emit_tail_call(
     // this function's caller), so rsp has not moved and the marshal's
     // sp shift must be zero.
     plan.scratch_bytes = 0;
-    marshal_args(code, &plan, args, &[], alloc, frame, abi, "TailCall")?;
+    marshal_args(code, &plan, (args, &[]), &[], alloc, frame, abi, "TailCall")?;
     // `emit_return`'s epilogue without the return-value staging. A frame
     // realigned for an over-aligned object has rsp below the saves;
     // `detect_tail_call` admits it, no address of the object being taken.
@@ -1415,7 +1502,17 @@ mod tests {
         let abi = callee_abi(target.abi(), target, *callee_conv);
         let plan = super::super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
         let mut code = CodeBuf::default();
-        marshal_args(&mut code, &plan, args, &[], &alloc, frame, abi, "Call").expect("marshal");
+        marshal_args(
+            &mut code,
+            &plan,
+            (args, &[]),
+            &[],
+            &alloc,
+            frame,
+            abi,
+            "Call",
+        )
+        .expect("marshal");
         let mut regs: [u8; 32] = core::array::from_fn(|r| r as u8);
         for (dst, src) in decode_moves(&code) {
             regs[dst as usize] = regs[src as usize];

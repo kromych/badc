@@ -161,6 +161,7 @@ fn accum_add_long() -> FunctionSsa {
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
+                parts: Vec::new(),
             },
             Inst::Binop {
                 op: BinOp::Add,
@@ -419,6 +420,7 @@ fn const_void_tail() -> FunctionSsa {
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
+                parts: Vec::new(),
             },
             Inst::Imm(0), // tail return value
         ],
@@ -615,6 +617,7 @@ fn pure_value_tail_is_left_to_emit_conversion() {
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
+                parts: Vec::new(),
             },
         ],
         vec![

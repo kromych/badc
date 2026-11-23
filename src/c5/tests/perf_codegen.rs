@@ -7812,6 +7812,35 @@ double f(const double *c, const double *xs, int n) {\n\
     m.finish();
 }
 
+/// A named argument System V AMD64 passes in two registers goes as its
+/// parts: a constant compound literal reaches its registers as immediates
+/// and an object read through a pointer as its two loads, with no frame
+/// object staging either.
+#[test]
+fn x64_a_two_register_aggregate_argument_goes_as_its_parts() {
+    const SRC: &str = "typedef struct { long u, tag; } V;\n\
+V callee(void *c, V a, V b);\n\
+V caller(void *c, V *p) { return callee(c, p[-1], (V){ 0, 3 }); }\n";
+    let insns = x64(SRC, "caller");
+    let frame = |i: &X64Insn| {
+        i.modrm.is_some_and(|m| {
+            let (md, rm) = (m >> 6, m & 7);
+            md != 3
+                && i.rex & 1 == 0
+                && ((rm == 5 && md != 0) || (rm == 4 && i.sib.is_some_and(|s| s & 7 == 4)))
+        })
+    };
+    assert!(
+        !insns.iter().any(frame),
+        "an argument is staged in the frame: {insns:x?}"
+    );
+    let three = |i: &&X64Insn| i.imm == 3 && matches!(i.op, 0xb8..=0xbf | 0xc7);
+    assert!(
+        insns.iter().any(|i| three(&i)),
+        "the tag is not an immediate: {insns:x?}"
+    );
+}
+
 /// A local read back through a cast of its address, `*(T *)&local`, stays
 /// in registers: the address is read by that load alone, which reads the
 /// slot as a load of the local does, so the slot is promoted like one no

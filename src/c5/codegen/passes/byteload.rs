@@ -1166,6 +1166,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 }, // v2
                 u8_load(0, 1), // v3
                 shl(3, 8),     // v4

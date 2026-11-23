@@ -176,16 +176,13 @@ Disassembly of section .text:
 <by_value_arg>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	movl	$0x4, %eax
                	movq	%rsi, (%rdi)
-               	movq	$0x4, 0x8(%rdi)
-               	leaq	-0x10(%rbp), %rdi
-               	movq	%rsi, -0x10(%rbp)
-               	movq	$0x4, -0x8(%rbp)
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	%rax, 0x8(%rdi)
+               	movq	%rsi, %rdi
+               	movq	%rax, %rsi
                	callq	<addr>
-               	leave
+               	popq	%rbp
                	retq
 
 <make_pair>:
@@ -415,9 +412,10 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x278(%rbp), %rdi
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movq	-0x278(%rbp), %rax
+               	movq	-0x270(%rbp), %rcx
+               	movq	%rax, %rdi
+               	movq	%rcx, %rsi
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)

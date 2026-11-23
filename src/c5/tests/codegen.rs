@@ -13495,7 +13495,9 @@ fn copy_out_of_an_object_a_call_reaches_stays_a_block_copy() {
 
 /// An object passed by value reaches the call through a copy into the
 /// call's argument temporary, so it splits: the copy out and the temporary
-/// take its fields, and no block copy is left.
+/// take its fields, and no block copy is left. On System V AMD64 the
+/// temporary goes as well: the call takes the fields as the parts of its
+/// registers.
 #[test]
 fn an_object_passed_by_value_splits_into_the_argument_copy() {
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
@@ -13511,7 +13513,13 @@ fn an_object_passed_by_value_splits_into_the_argument_copy() {
             .iter()
             .filter(|(_, i)| i.starts_with("StoreLocal"))
             .count();
-        assert_eq!(temp_stores, 2, "{target:?}: {body}");
+        let parts = target == crate::Target::LinuxX64;
+        assert_eq!(temp_stores, if parts { 0 } else { 2 }, "{target:?}: {body}");
+        assert_eq!(
+            has_inst(&insts, &["AggParts {"]),
+            parts,
+            "{target:?}: {body}"
+        );
     }
 }
 
@@ -19398,6 +19406,18 @@ fn windows_arm64_variadic_composite_at_x7_is_split_with_the_stack() {
     );
 }
 
+/// Whether `code` holds a 64-bit load `mov r64, [base + disp]` from the
+/// general register `base` below r8, `disp` 0 or an 8-bit displacement.
+fn loads_from(code: &[u8], base: u8, disp: u8) -> bool {
+    code.windows(4).any(|w| {
+        let (md, rm) = (w[2] >> 6, w[2] & 7);
+        matches!(w[0], 0x48 | 0x4c)
+            && w[1] == 0x8b
+            && rm == base
+            && ((md == 0 && disp == 0) || (md == 1 && w[3] == disp))
+    })
+}
+
 /// A variadic callee's named by-value aggregate travels in registers as a
 /// non-variadic one's does, and `va_start` starts past it.
 #[test]
@@ -19457,8 +19477,12 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
         &function_bytes(&sysv, "nva"),
         &[0xc7, 0x00, 0x10, 0, 0, 0]
     ));
+    // The named `__int128` goes as its two eightbytes, each loaded from `*p`.
     let call = function_bytes(&sysv, "call_nva");
-    assert!(has(&call, &[0x48, 0x8b, 0x77, 0x08]) && has(&call, &[0x48, 0x8b, 0x3f]));
+    assert!(
+        loads_from(&call, 7, 8) && loads_from(&call, 7, 0),
+        "call_nva: {call:x?}"
+    );
     let win = relocatable_object(SRC, Target::WindowsX64);
     // lea r10, [rbp + 24] ; mov rcx, [rcx]
     assert!(has(&function_bytes(&win, "w8"), &[0x4c, 0x8d, 0x55, 0x18]));
@@ -19485,17 +19509,16 @@ fn out_pointer_callee_aggregates_follow_the_callee_convention() {
             .windows(seq.len())
             .any(|w| w == seq)
     };
-    // mov rcx, [rdx + 8] and mov rdx, [rdx]: the pair's eightbytes.
+    // A named pair goes as its eightbytes, each loaded from `*p` in rdi.
+    for name in ["call_ptr", "vcall_ptr"] {
+        let code = function_bytes(&obj, name);
+        assert!(
+            loads_from(&code, 7, 0) && loads_from(&code, 7, 8),
+            "{name}: {code:x?}"
+        );
+    }
+    // mov rcx, [rdx + 8] and mov rdx, [rdx]: the variadic tail's pair, by address.
     let (hi, lo) = ([0x48, 0x8b, 0x4a, 0x08], [0x48, 0x8b, 0x12]);
-    assert!(
-        has("call_ptr", &hi) && has("call_ptr", &lo),
-        "call_ptr: the pair not in rdx:rcx"
-    );
-    // mov rdx, [rsi + 8] and mov rsi, [rsi]: the pair's eightbytes after the pointer in rdi.
-    assert!(
-        has("vcall_ptr", &[0x48, 0x8b, 0x56, 0x08]) && has("vcall_ptr", &[0x48, 0x8b, 0x36]),
-        "vcall_ptr: the pair not in rsi:rdx"
-    );
     assert!(
         has("call_vtail", &hi) && has("call_vtail", &lo),
         "call_vtail: the pair by address"

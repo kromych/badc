@@ -757,6 +757,7 @@ mod tests {
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         }
     }
 

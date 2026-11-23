@@ -8106,6 +8106,7 @@ int main(void) { return 0; }
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         };
         let f = branch_func(vec![load_i64(), load_i64(), call], 2);
         assert_eq!(compute_use_counts(&f)[..2], [1, 1]);
@@ -8609,6 +8610,7 @@ int main(void) { return 0; }
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 },
                 Inst::Binop {
                     op: BinOp::Add,
@@ -8773,6 +8775,7 @@ int main(void) { return 0; }
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
+                parts: Vec::new(),
             };
             let func = store_func(
                 vec![
@@ -8844,6 +8847,7 @@ int main(void) { return 0; }
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         };
         let part = |slot| Inst::RetPart {
             slot,

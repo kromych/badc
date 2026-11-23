@@ -1765,6 +1765,7 @@ impl SsaBuilder {
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         })
     }
 
@@ -1794,6 +1795,7 @@ impl SsaBuilder {
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         });
         self.func.extern_call_refs.push((v, sym_idx));
         v
@@ -1825,6 +1827,7 @@ impl SsaBuilder {
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         })
     }
 

@@ -689,6 +689,7 @@ fn devirtualize_indirect_calls(
                 arg_aggs,
                 ret_agg,
                 ret_slot_local,
+                parts,
                 ..
             } = taken
             else {
@@ -706,6 +707,7 @@ fn devirtualize_indirect_calls(
                 arg_aggs,
                 ret_agg,
                 ret_slot_local,
+                parts,
             };
             if let Some(ki) = ki {
                 succ[fi].insert(ki);
@@ -5106,6 +5108,7 @@ mod tests {
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         }
     }
 
@@ -5395,6 +5398,7 @@ mod tests {
                 arg_aggs: alloc::vec![],
                 ret_agg: None,
                 ret_slot_local: 0,
+                parts: Vec::new(),
             },
             Inst::LoadLocal {
                 disp: 0,
@@ -5959,6 +5963,7 @@ mod tests {
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         };
         let f = FunctionSsa {
             ent_pc: 5,
@@ -6959,6 +6964,7 @@ mod tests {
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
+                parts: Vec::new(),
             }],
             ..Default::default()
         };
@@ -7048,6 +7054,7 @@ mod tests {
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         };
         let reason_for_opt = |kind: i64| {
             let caller = FunctionSsa {
@@ -7337,6 +7344,7 @@ mod tests {
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         };
         let caller_insts = alloc::vec![
             Inst::Imm(41),
@@ -7569,6 +7577,7 @@ mod tests {
                 arg_aggs: alloc::vec![],
                 ret_agg: None,
                 ret_slot_local: 0,
+                parts: Vec::new(),
             },
             Inst::Imm(0),
         ];

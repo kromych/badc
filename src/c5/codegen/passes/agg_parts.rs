@@ -45,6 +45,11 @@
 //! that register's bank: in the register, or past the registers in an
 //! eight-byte stack slot. The pass loads it ahead of the call and passes
 //! the value, so what the call reads of the object is a load in the tape.
+//! On System V AMD64 an aggregate of more parts is passed as an
+//! `Inst::AggParts` of them, right ahead of the call, which moves each part
+//! into its register, or into its eightbyte of the stack slot where the
+//! registers run out (`x86_64::emit::call`) -- for a few such parts only,
+//! as each holds a register up to the call.
 //!
 //! Runs after the inliner, whose splices bind a callee's parameter object
 //! to the caller's argument and copy a returned object field by field, and
@@ -509,8 +514,12 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     for i in taken {
         func.param_local_slots[i] = 0;
     }
-    for (v, k, value, fp) in args {
+    for (v, k, value, kind) in args {
         let value = rewrite.ids[(value - base) as usize];
+        let read: Vec<ValueId> = match &func.insts[value as usize] {
+            Inst::AggParts { parts, .. } => parts.clone(),
+            _ => Vec::new(),
+        };
         match &mut func.insts[rewrite.remap[v as usize] as usize] {
             Inst::Call {
                 args,
@@ -518,6 +527,7 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
                 fp_arg_mask,
                 low_word_args,
                 arg_widths,
+                parts,
                 ..
             }
             | Inst::CallIndirect {
@@ -526,9 +536,14 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
                 fp_arg_mask,
                 low_word_args,
                 arg_widths,
+                parts,
                 ..
             } => {
                 args[k] = value;
+                let ArgValue::Scalar { fp } = kind else {
+                    parts.extend(read);
+                    continue;
+                };
                 arg_aggs[k] = None;
                 if fp {
                     fp_arg_mask.set(k);
@@ -549,43 +564,112 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     }
 }
 
+/// The parts of a call's aggregates placed on the stack that stand in
+/// registers ahead of it, two 16-byte aggregates': past them the parts
+/// outnumber the registers free there and spill, where the address form
+/// copies memory to memory.
+const STACK_PARTS: usize = 4;
+
+/// What replaces a call argument's address: a scalar loaded from the object,
+/// a floating-point register's when `fp`, or the object's register parts.
+#[derive(Clone, Copy)]
+enum ArgValue {
+    Scalar { fp: bool },
+    Parts,
+}
+
 /// Plan the load of each named argument the callee's convention passes as
 /// one eight-byte register, an aggregate of eight bytes aligned to eight,
-/// right ahead of its call. A library call's binding does not say which of
-/// its arguments are named, so its arguments keep their addresses. Returns the call, the argument's position, the
-/// planned load and whether it is a floating-point register's.
+/// right ahead of its call, and on System V AMD64 the parts of one of more,
+/// the `AggParts` of each call after every load. A library call's binding does not say which
+/// of its arguments are named, so its arguments keep their addresses.
+/// Returns the call, the argument's position and its planned value.
 fn argument_values(
     func: &FunctionSsa,
     target: Target,
     plan: &mut Plan,
-) -> Vec<(ValueId, usize, ValueId, bool)> {
+) -> Vec<(ValueId, usize, ValueId, ArgValue)> {
     let mut out = Vec::new();
     for block in &func.blocks {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            let (args, arg_aggs, fixed_args) = match inst {
+            let (args, arg_aggs, fixed_args, fp_arg_mask) = match inst {
                 Inst::Call {
                     args,
                     arg_aggs,
                     fixed_args,
+                    fp_arg_mask,
                     ..
                 }
                 | Inst::CallIndirect {
                     args,
                     arg_aggs,
                     fixed_args,
+                    fp_arg_mask,
                     ..
-                } => (args, arg_aggs, *fixed_args),
+                } => (args, arg_aggs, *fixed_args, fp_arg_mask),
                 _ => continue,
             };
             let Some(conv) = inst.call_conv() else {
                 continue;
             };
             let abi = target.abi_row(conv).abi();
+            // Where the call places each argument. An aggregate the registers
+            // ran out for goes to memory, so its parts hold registers ahead
+            // of the call only: up to `STACK_PARTS` of them in all.
+            let mut stack_parts = 0usize;
+            let placements = (target.is_x86_64() && !abi.position_indexed_args).then(|| {
+                let aggs = crate::c5::codegen::ssa::emit_common::build_call_aggs(
+                    func, args, arg_aggs, abi,
+                );
+                let n = args.len();
+                let widths = crate::c5::ir::ArgWidths::default();
+                crate::c5::codegen::plan_call_args_aggs(
+                    n,
+                    fixed_args,
+                    fp_arg_mask,
+                    abi,
+                    &aggs,
+                    false,
+                    widths,
+                )
+                .placements
+            });
+            let mut bundles: Vec<(usize, Inst)> = Vec::new();
             for (k, agg) in arg_aggs.iter().enumerate().take(fixed_args) {
                 let Some(d) = agg else { continue };
                 let desc = &func.agg_descs[*d as usize];
-                if (desc.size, desc.align) != (8, 8) || desc.vector {
+                if desc.vector {
+                    continue;
+                }
+                if (desc.size, desc.align) != (8, 8) {
+                    let placed = placements.as_ref().and_then(|p| p.get(k).copied());
+                    let on_stack = matches!(placed, Some(ArgPlacement::StructStack { .. }));
+                    let parts = register_parts(desc, abi, false).filter(|p| {
+                        (matches!(placed, Some(ArgPlacement::StructRegs { .. }))
+                            || (on_stack && stack_parts + p.len() <= STACK_PARTS))
+                            && p.len() > 1
+                            && tape_carries(p, desc.fields.len())
+                            && p.iter().all(|p| p.class != RegClass::Vector256)
+                    });
+                    let Some(parts) = parts else { continue };
+                    if on_stack {
+                        stack_parts += parts.len();
+                    }
+                    let mut fp_mask = FpMask::EMPTY;
+                    let mut vals = Vec::with_capacity(parts.len());
+                    for (j, p) in parts.iter().enumerate() {
+                        if p.class != RegClass::Integer {
+                            fp_mask.set(j);
+                        }
+                        vals.push(gather(plan, At::Before(v), args[k], p, desc));
+                    }
+                    let bundle = Inst::AggParts {
+                        desc: *d,
+                        parts: vals,
+                        fp_mask,
+                    };
+                    bundles.push((k, bundle));
                     continue;
                 }
                 let Some([part]) =
@@ -609,7 +693,12 @@ fn argument_values(
                     },
                     false,
                 );
-                out.push((v, k, value, kind == LoadKind::F64));
+                let fp = kind == LoadKind::F64;
+                out.push((v, k, value, ArgValue::Scalar { fp }));
+            }
+            for (k, bundle) in bundles {
+                let value = plan.push(At::Before(v), bundle, false);
+                out.push((v, k, value, ArgValue::Parts));
             }
         }
     }

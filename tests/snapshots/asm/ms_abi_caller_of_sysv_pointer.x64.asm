@@ -34,15 +34,12 @@ Disassembly of section .text:
 <caller>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rdi, %rdx
-               	leaq	-0x10(%rbp), %rdi
-               	movq	%rsi, -0x10(%rbp)
-               	movq	$0x7, -0x8(%rbp)
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movl	$0x7, %eax
+               	movq	%rsi, %rdi
+               	movq	%rax, %rsi
                	callq	*%rdx
-               	leave
+               	popq	%rbp
                	retq
 
 <main>:

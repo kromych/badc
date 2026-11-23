@@ -640,6 +640,7 @@ mod tests {
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         };
         let mul = |lhs, rhs| Inst::Binop {
             op: crate::c5::ir::BinOp::Mul,

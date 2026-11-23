@@ -405,6 +405,10 @@ pub(crate) enum Inst {
         /// call returning no aggregate, and for one whose `RetPart`s read
         /// the result registers.
         ret_slot_local: i64,
+        /// The parts of each argument given as an `Inst::AggParts`, read
+        /// here: the marshalling moves them from their places, so they live
+        /// up to the call whatever comes between it and the `AggParts`.
+        parts: Vec<ValueId>,
     },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
@@ -444,6 +448,8 @@ pub(crate) enum Inst {
         ret_agg: Option<u32>,
         /// See [`Self::Call::ret_slot_local`].
         ret_slot_local: i64,
+        /// See [`Self::Call::parts`].
+        parts: Vec<ValueId>,
     },
     /// External library call.
     CallExt {
@@ -1033,8 +1039,12 @@ impl Inst {
             Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(*value),
             Inst::Copy { value, .. } => f(*value),
             Inst::FpCast { value, .. } => f(*value),
-            Inst::Call { args, .. }
-            | Inst::CallExt { args, .. }
+            Inst::Call { args, parts, .. } => {
+                for &a in args.iter().chain(parts) {
+                    f(a);
+                }
+            }
+            Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
             | Inst::Simd { args, .. }
             | Inst::SimdVal { args, .. } => {
@@ -1050,9 +1060,14 @@ impl Inst {
                     }
                 }
             }
-            Inst::CallIndirect { target, args, .. } => {
+            Inst::CallIndirect {
+                target,
+                args,
+                parts,
+                ..
+            } => {
                 f(*target);
-                for &a in args {
+                for &a in args.iter().chain(parts) {
                     f(a);
                 }
             }
@@ -1170,8 +1185,12 @@ impl Inst {
             Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(value),
             Inst::Copy { value, .. } => f(value),
             Inst::FpCast { value, .. } => f(value),
-            Inst::Call { args, .. }
-            | Inst::CallExt { args, .. }
+            Inst::Call { args, parts, .. } => {
+                for a in args.iter_mut().chain(parts) {
+                    f(a);
+                }
+            }
+            Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
             | Inst::Simd { args, .. }
             | Inst::SimdVal { args, .. } => {
@@ -1184,9 +1203,14 @@ impl Inst {
                     f(a);
                 }
             }
-            Inst::CallIndirect { target, args, .. } => {
+            Inst::CallIndirect {
+                target,
+                args,
+                parts,
+                ..
+            } => {
                 f(target);
-                for a in args {
+                for a in args.iter_mut().chain(parts) {
                     f(a);
                 }
             }

@@ -230,6 +230,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 }, // v2 (b2, dead)
             ],
             vec![
@@ -350,6 +351,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 }, // v2 (b2, dead)
                 Inst::Imm(0), // v3 (b3)
             ],

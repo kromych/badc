@@ -80,50 +80,44 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	leaq	-0x48(%rbp), %rdi
+               	subq	$0x40, %rsp
+               	leaq	-0x28(%rbp), %rdi
                	leaq	<rip>, %rax
                	movq	(%rax), %r10
                	movq	%r10, (%rdi)
-               	leaq	-0x38(%rbp), %rdx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %r10
-               	movq	%r10, (%rdx)
-               	movl	0x8(%rax), %r10d
-               	movl	%r10d, 0x8(%rdx)
-               	leaq	-0x40(%rbp), %r8
+               	leaq	-0x20(%rbp), %r8
                	leaq	<rip>, %rax
                	movl	(%rax), %r10d
                	movl	%r10d, (%r8)
-               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x18(%rbp), %rcx
-               	leaq	<rip>, %rsi
-               	movups	(%rsi), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movq	0x10(%rsi), %r10
-               	movq	%r10, 0x10(%rcx)
-               	movl	$0x3e8, %esi            # imm = 0x3E8
-               	movl	$0x7d0, %r9d            # imm = 0x7D0
+               	movq	0x10(%rcx), %r10
+               	movq	%r10, 0x10(%rax)
+               	movl	$0x3e8, %r10d           # imm = 0x3E8
+               	movq	%r10, 0x8(%rsp)
+               	movl	$0x7d0, %r10d           # imm = 0x7D0
+               	movq	%r10, (%rsp)
+               	movabsq	$0x400000003, %rcx      # imm = 0x400000003
+               	movl	$0x5, %edx
+               	movabsq	$0x200000001, %rsi      # imm = 0x200000001
+               	movabsq	$0x400000003, %r9       # imm = 0x400000003
                	subq	$0x30, %rsp
+               	movq	%rsi, (%rsp)
+               	movq	%r9, 0x8(%rsp)
                	movq	$0xbb8, 0x28(%rsp)      # imm = 0xBB8
                	movq	%rax, %r10
-               	movq	(%r10), %r11
-               	movq	%r11, (%rsp)
-               	movq	0x8(%r10), %r11
-               	movq	%r11, 0x8(%rsp)
-               	movq	%rcx, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
                	movq	0x10(%r10), %r11
                	movq	%r11, 0x20(%rsp)
+               	xchgq	%rcx, %rdx
+               	movq	0x38(%rsp), %rsi
+               	movq	0x30(%rsp), %r9
                	movq	(%rdi), %rdi
-               	movl	0x8(%rdx), %ecx
-               	movq	(%rdx), %rdx
                	movl	(%r8), %r8d
                	callq	<addr>
                	addq	$0x30, %rsp

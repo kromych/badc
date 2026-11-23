@@ -2287,6 +2287,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 },
             ],
             vec![
@@ -2354,6 +2355,7 @@ mod tests {
                         arg_aggs: Vec::new(),
                         ret_agg: None,
                         ret_slot_local: 0,
+                        parts: Vec::new(),
                     },
                 });
             }
@@ -2475,6 +2477,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 },
             ],
             vec![Block {

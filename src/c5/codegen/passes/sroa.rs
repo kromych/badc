@@ -3749,6 +3749,7 @@ mod tests {
                 arg_aggs: Vec::new(),
                 ret_agg: Some(0),
                 ret_slot_local: -2,
+                parts: Vec::new(),
             }, // v0
             Inst::LocalAddr(-2), // v1
             load(1),             // v2
@@ -3903,6 +3904,7 @@ mod tests {
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         }
     }
 

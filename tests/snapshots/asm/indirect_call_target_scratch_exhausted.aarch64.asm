@@ -139,7 +139,9 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0xc0
+               	sub	sp, sp, #0xe0
+               	stp	x20, x21, [sp, #0xc0]
+               	stp	x22, x23, [sp, #0xd0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	xzr, [x0]
@@ -199,97 +201,107 @@ Disassembly of section .text:
                	str	x1, [x0, #0xf8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x2, x0, #0x10
-               	add	x4, x0, #0x20
-               	add	x6, x0, #0x30
-               	add	x1, x0, #0x40
-               	add	x3, x0, #0x50
-               	add	x5, x0, #0x60
-               	add	x7, x0, #0x70
-               	add	x8, x0, #0x80
-               	add	x9, x0, #0x90
-               	add	x10, x0, #0xa0
-               	add	x11, x0, #0xb0
-               	add	x12, x0, #0xc0
-               	add	x13, x0, #0xd0
-               	add	x14, x0, #0xe0
-               	add	x15, x0, #0xf0
-               	mov	x16, x1
+               	add	x8, x0, #0x40
+               	add	x9, x0, #0x50
+               	add	x10, x0, #0x60
+               	add	x11, x0, #0x70
+               	add	x12, x0, #0x80
+               	add	x13, x0, #0x90
+               	add	x14, x0, #0xa0
+               	add	x15, x0, #0xb0
+               	add	x20, x0, #0xc0
+               	add	x21, x0, #0xd0
+               	add	x22, x0, #0xe0
+               	add	x23, x0, #0xf0
+               	ldr	x1, [x0]
+               	ldr	x2, [x0, #0x8]
+               	ldr	x3, [x0, #0x10]
+               	ldr	x4, [x0, #0x18]
+               	ldr	x5, [x0, #0x20]
+               	ldr	x6, [x0, #0x28]
+               	ldr	x7, [x0, #0x30]
+               	ldr	x0, [x0, #0x38]
+               	mov	x16, x8
                	ldr	x17, [x16]
                	str	x17, [sp]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x8]
-               	mov	x16, x3
+               	mov	x16, x9
                	ldr	x17, [x16]
                	str	x17, [sp, #0x10]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x18]
-               	mov	x16, x5
+               	mov	x16, x10
                	ldr	x17, [x16]
                	str	x17, [sp, #0x20]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x28]
-               	mov	x16, x7
+               	mov	x16, x11
                	ldr	x17, [x16]
                	str	x17, [sp, #0x30]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x38]
-               	mov	x16, x8
+               	mov	x16, x12
                	ldr	x17, [x16]
                	str	x17, [sp, #0x40]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x48]
-               	mov	x16, x9
+               	mov	x16, x13
                	ldr	x17, [x16]
                	str	x17, [sp, #0x50]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x58]
-               	mov	x16, x10
+               	mov	x16, x14
                	ldr	x17, [x16]
                	str	x17, [sp, #0x60]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x68]
-               	mov	x16, x11
+               	mov	x16, x15
                	ldr	x17, [x16]
                	str	x17, [sp, #0x70]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x78]
-               	mov	x16, x12
+               	mov	x16, x20
                	ldr	x17, [x16]
                	str	x17, [sp, #0x80]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x88]
-               	mov	x16, x13
+               	mov	x16, x21
                	ldr	x17, [x16]
                	str	x17, [sp, #0x90]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x98]
-               	mov	x16, x14
+               	mov	x16, x22
                	ldr	x17, [x16]
                	str	x17, [sp, #0xa0]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0xa8]
-               	mov	x16, x15
+               	mov	x16, x23
                	ldr	x17, [x16]
                	str	x17, [sp, #0xb0]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0xb8]
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
-               	ldr	x3, [x2, #0x8]
-               	ldr	x2, [x2]
-               	ldr	x5, [x4, #0x8]
-               	ldr	x4, [x4]
-               	ldr	x7, [x6, #0x8]
-               	ldr	x6, [x6]
+               	mov	x16, x1
+               	mov	x1, x2
+               	mov	x2, x3
+               	mov	x3, x4
+               	mov	x4, x5
+               	mov	x5, x6
+               	mov	x6, x7
+               	mov	x7, x0
+               	mov	x0, x16
                	bl	<addr>
                	cmp	x0, #0x168
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0xc0
+               	ldp	x22, x23, [sp, #0xd0]
+               	ldp	x20, x21, [sp, #0xc0]
+               	add	sp, sp, #0xe0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0xc0
+               	ldp	x22, x23, [sp, #0xd0]
+               	ldp	x20, x21, [sp, #0xc0]
+               	add	sp, sp, #0xe0
                	ldp	x29, x30, [sp], #0x10
                	ret

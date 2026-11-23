@@ -1070,7 +1070,12 @@ pub(super) fn emit_call_indirect(
     // source may sit in one; the target must avoid those while the marshal
     // reads them.
     let mut arg_source_regs: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(args.len());
-    for &a in args {
+    // An aggregate given as its parts reads them from their places.
+    let parts = |a: u32| match func.insts.get(a as usize) {
+        Some(Inst::AggParts { parts, .. }) => parts.as_slice(),
+        _ => &[],
+    };
+    for &a in args.iter().chain(args.iter().flat_map(|&a| parts(a))) {
         if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
             arg_source_regs.push(*r);
         }
@@ -1634,6 +1639,51 @@ impl CallArgs<'_> {
 /// slots, stack aggregates, FP and SVE registers, HFA members, integer
 /// registers, aggregate eightbytes, the copies' addresses.
 #[allow(clippy::too_many_arguments)]
+/// The call with each aggregate argument given as an `Inst::AggParts`
+/// (`passes::agg_parts`) as one scalar per part, in the part's register;
+/// `None` when no argument is one.
+#[allow(clippy::type_complexity)]
+fn expand_parts(
+    plan: &super::CallPlan,
+    args: &[u32],
+    arg_aggs: &[Option<u32>],
+    insts: &[Inst],
+) -> Emit<Option<(super::CallPlan, Vec<u32>, Vec<Option<u32>>)>> {
+    let parts_of = |v: u32| match insts.get(v as usize) {
+        Some(Inst::AggParts { parts, .. }) => Some(parts),
+        _ => None,
+    };
+    if !args.iter().any(|&v| parts_of(v).is_some()) {
+        return Ok(None);
+    }
+    let mut out = plan.clone();
+    out.placements.clear();
+    let (mut values, mut aggs) = (Vec::new(), Vec::new());
+    for (i, (&v, &placement)) in args.iter().zip(&plan.placements).enumerate() {
+        let Some(parts) = parts_of(v) else {
+            values.push(v);
+            aggs.push(arg_aggs.get(i).copied().flatten());
+            out.placements.push(placement);
+            continue;
+        };
+        let super::ArgPlacement::StructRegs { regs, n, .. } = placement else {
+            return fail("AggParts argument: placement takes no parts");
+        };
+        if parts.len() != n as usize {
+            return fail("AggParts argument: parts do not match its registers");
+        }
+        for (&part, cr) in parts.iter().zip(regs.iter()) {
+            out.placements.push(match cr.is_fp {
+                true => super::ArgPlacement::FpReg(cr.reg),
+                false => super::ArgPlacement::IntReg(cr.reg),
+            });
+            values.push(part);
+            aggs.push(None);
+        }
+    }
+    Ok(Some((out, values, aggs)))
+}
+
 pub(super) fn marshal_args(
     code: &mut CodeBuf,
     plan: &super::CallPlan,
@@ -1645,6 +1695,11 @@ pub(super) fn marshal_args(
     func: &FunctionSsa,
     abi: super::Abi,
 ) -> Emit {
+    let expanded = expand_parts(plan, args, arg_aggs, &func.insts)?;
+    let (plan, args, arg_aggs) = match &expanded {
+        Some((p, a, g)) => (p, a.as_slice(), g.as_slice()),
+        None => (plan, args, arg_aggs),
+    };
     let call = CallArgs {
         plan,
         args,

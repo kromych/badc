@@ -45,11 +45,12 @@
 //! that register's bank: in the register, or past the registers in an
 //! eight-byte stack slot. The pass loads it ahead of the call and passes
 //! the value, so what the call reads of the object is a load in the tape.
-//! On System V AMD64 an aggregate of more parts is passed as an
-//! `Inst::AggParts` of them, right ahead of the call, which moves each part
-//! into its register, or into its eightbyte of the stack slot where the
-//! registers run out (`x86_64::emit::call`) -- for a few such parts only,
-//! as each holds a register up to the call.
+//! An aggregate of more parts, integer or scalar floating-point, is passed
+//! as an `Inst::AggParts` of them, right ahead of the call, which moves each
+//! part into its register; on System V AMD64 also into its eightbyte of the
+//! stack slot where the registers run out, for a few such parts only, as
+//! each holds a register up to the call (`x86_64::emit::call`,
+//! `aarch64::emit::call`).
 //!
 //! Runs after the inliner, whose splices bind a callee's parameter object
 //! to the caller's argument and copy a returned object field by field, and
@@ -593,12 +594,13 @@ fn argument_values(
     for block in &func.blocks {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            let (args, arg_aggs, fixed_args, fp_arg_mask) = match inst {
+            let (args, arg_aggs, fixed_args, fp_arg_mask, arg_widths) = match inst {
                 Inst::Call {
                     args,
                     arg_aggs,
                     fixed_args,
                     fp_arg_mask,
+                    arg_widths,
                     ..
                 }
                 | Inst::CallIndirect {
@@ -606,24 +608,32 @@ fn argument_values(
                     arg_aggs,
                     fixed_args,
                     fp_arg_mask,
+                    arg_widths,
                     ..
-                } => (args, arg_aggs, *fixed_args, fp_arg_mask),
+                } => (args, arg_aggs, *fixed_args, fp_arg_mask, *arg_widths),
                 _ => continue,
             };
             let Some(conv) = inst.call_conv() else {
                 continue;
             };
             let abi = target.abi_row(conv).abi();
-            // Where the call places each argument. An aggregate the registers
-            // ran out for goes to memory, so its parts hold registers ahead
-            // of the call only: up to `STACK_PARTS` of them in all.
+            // Where the call places each argument, as the emitter plans it.
+            // System V AMD64 takes the parts of an aggregate the registers
+            // ran out for into its stack slot, up to `STACK_PARTS` in all,
+            // as each holds a register ahead of the call; AAPCS64 takes those
+            // in registers, of a call with no variadic arguments, outside
+            // Windows, whose variadic callee places its named arguments as
+            // variadic ones.
+            let sysv = target.is_x86_64() && !abi.position_indexed_args;
+            let aapcs =
+                target.is_aarch64() && !abi.win_arm64_variadic() && fixed_args == args.len();
             let mut stack_parts = 0usize;
-            let placements = (target.is_x86_64() && !abi.position_indexed_args).then(|| {
+            let placements = (sysv || aapcs).then(|| {
                 let aggs = crate::c5::codegen::ssa::emit_common::build_call_aggs(
                     func, args, arg_aggs, abi,
                 );
+                let widths = if sysv { Default::default() } else { arg_widths };
                 let n = args.len();
-                let widths = crate::c5::ir::ArgWidths::default();
                 crate::c5::codegen::plan_call_args_aggs(
                     n,
                     fixed_args,
@@ -644,13 +654,15 @@ fn argument_values(
                 }
                 if (desc.size, desc.align) != (8, 8) {
                     let placed = placements.as_ref().and_then(|p| p.get(k).copied());
-                    let on_stack = matches!(placed, Some(ArgPlacement::StructStack { .. }));
+                    let on_stack = sysv && matches!(placed, Some(ArgPlacement::StructStack { .. }));
+                    // A scalar part moves as a scalar argument does.
                     let parts = register_parts(desc, abi, false).filter(|p| {
                         (matches!(placed, Some(ArgPlacement::StructRegs { .. }))
                             || (on_stack && stack_parts + p.len() <= STACK_PARTS))
                             && p.len() > 1
                             && tape_carries(p, desc.fields.len())
-                            && p.iter().all(|p| p.class != RegClass::Vector256)
+                            && p.iter()
+                                .all(|p| matches!(p.class, RegClass::Integer | RegClass::Sse))
                     });
                     let Some(parts) = parts else { continue };
                     if on_stack {

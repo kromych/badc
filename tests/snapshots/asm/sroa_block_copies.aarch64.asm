@@ -164,17 +164,12 @@ Disassembly of section .text:
 <by_value_arg>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x2, #0x4                // =4
                	str	x1, [x0]
                	str	x2, [x0, #0x8]
-               	sub	x0, x29, #0x10
-               	stur	x1, [x29, #-0x10]
-               	stur	x2, [x29, #-0x8]
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	mov	x0, x1
+               	mov	x1, x2
                	bl	<addr>
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -422,9 +417,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x2a0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x278
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	ldr	x0, [sp, #0x28]
+               	ldr	x1, [sp, #0x30]
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]

@@ -40,46 +40,32 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	movi	d0, #0000000000000000
                	adrp	x16, <page>
                	ldr	d1, [x16]
                	adrp	x16, <page>
                	ldr	d2, [x16, #0x8]
-               	sub	x7, x29, #0x20
-               	stur	xzr, [x29, #-0x20]
-               	stur	xzr, [x29, #-0x18]
-               	stur	d1, [x29, #-0x10]
-               	stur	d2, [x29, #-0x8]
-               	ldr	d0, [x7]
-               	ldr	d1, [x7, #0x8]
-               	ldr	d2, [x7, #0x10]
-               	ldr	d3, [x7, #0x18]
+               	fmov	d3, d2
+               	fmov	d2, d1
+               	fmov	d1, d0
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x6                // =6
-               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x7, x29, #0x20
-               	stur	xzr, [x29, #-0x20]
-               	stur	xzr, [x29, #-0x18]
+               	movi	d0, #0000000000000000
                	adrp	x16, <page>
-               	ldr	d0, [x16]
-               	stur	d0, [x29, #-0x10]
+               	ldr	d1, [x16]
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x8]
-               	stur	d0, [x29, #-0x8]
-               	ldr	d0, [x7]
-               	ldr	d1, [x7, #0x8]
-               	ldr	d2, [x7, #0x10]
-               	ldr	d3, [x7, #0x18]
+               	ldr	d2, [x16, #0x8]
+               	fmov	d3, d2
+               	fmov	d2, d1
+               	fmov	d1, d0
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

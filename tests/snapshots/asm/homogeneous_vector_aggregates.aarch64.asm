@@ -465,10 +465,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x120
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x7, x29, #0x48
-               	ldr	d0, [x7]
-               	ldr	d1, [x7, #0x8]
-               	ldr	d2, [x7, #0x10]
+               	ldur	d0, [x29, #-0x48]
+               	ldur	d1, [x29, #-0x40]
+               	ldur	d2, [x29, #-0x38]
                	bl	<addr>
                	fmov	d1, d0
                	fmov	d0, #0.50000000
@@ -478,9 +477,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x120
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x58
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	ldur	x0, [x29, #-0x58]
+               	ldur	x1, [x29, #-0x50]
                	bl	<addr>
                	fmov	d1, #0.50000000
                	fcmp	d0, d1

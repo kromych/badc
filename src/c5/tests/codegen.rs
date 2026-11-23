@@ -13495,9 +13495,8 @@ fn copy_out_of_an_object_a_call_reaches_stays_a_block_copy() {
 
 /// An object passed by value reaches the call through a copy into the
 /// call's argument temporary, so it splits: the copy out and the temporary
-/// take its fields, and no block copy is left. On System V AMD64 the
-/// temporary goes as well: the call takes the fields as the parts of its
-/// registers.
+/// take its fields, and no block copy is left. The temporary goes as well:
+/// the call takes the fields as the parts of its registers.
 #[test]
 fn an_object_passed_by_value_splits_into_the_argument_copy() {
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
@@ -13513,13 +13512,8 @@ fn an_object_passed_by_value_splits_into_the_argument_copy() {
             .iter()
             .filter(|(_, i)| i.starts_with("StoreLocal"))
             .count();
-        let parts = target == crate::Target::LinuxX64;
-        assert_eq!(temp_stores, if parts { 0 } else { 2 }, "{target:?}: {body}");
-        assert_eq!(
-            has_inst(&insts, &["AggParts {"]),
-            parts,
-            "{target:?}: {body}"
-        );
+        assert_eq!(temp_stores, 0, "{target:?}: {body}");
+        assert!(has_inst(&insts, &["AggParts {"]), "{target:?}: {body}");
     }
 }
 
@@ -18834,16 +18828,20 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
             adds_regs(&take_c, pair, next),
             "{target:?} take_c: the pair is not x{pair}: {take_c:08x?}"
         );
-        let caller = [
-            enc_ldr_imm(x(pair + 1), x(pair), 8),
-            enc_ldr_imm(x(pair), x(pair), 0),
-            enc_movz(x(next), 3, 0),
-        ];
-        expect_words(
-            &function_words(&obj, "call_take"),
-            &caller,
-            &alloc::format!("{target:?} call_take"),
-        );
+        // The pair arrives where the call passes it, as its parts outside
+        // Windows; Windows loads it from the parameter's object.
+        let call_take = function_words(&obj, "call_take");
+        let what_take = alloc::format!("{target:?} call_take");
+        expect_words(&call_take, &[enc_movz(x(next), 3, 0)], &what_take);
+        if matches!(target, Target::WindowsAarch64) {
+            let loads = [
+                enc_ldr_imm(x(pair + 1), x(pair), 8),
+                enc_ldr_imm(x(pair), x(pair), 0),
+            ];
+            expect_words(&call_take, &loads, &what_take);
+        } else {
+            assert_eq!(call_take.len(), 6, "{what_take}: {call_take:08x?}");
+        }
         let want = if matches!(target, Target::LinuxAarch64) {
             2
         } else {
@@ -18892,11 +18890,13 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         enc_ldr_imm(x(0), x(29), 32),
     ];
     expect_words(&function_words(&obj, "after_seven"), &seven, "after_seven");
+    // The pair moves from its parameter registers into x6:x7 as its parts:
+    // nothing is loaded into them.
     let call_five = function_words(&obj, "call_five");
-    expect_words(
-        &call_five,
-        &[enc_ldr_imm(x(7), x(6), 8), enc_ldr_imm(x(6), x(6), 0)],
-        "call_five",
+    let loads_pair = |&w: &u32| w & 0xffc0_0000 == 0xf940_0000 && matches!(w & 0x1f, 6 | 7);
+    assert!(
+        !call_five.iter().any(loads_pair),
+        "call_five: {call_five:08x?}"
     );
     assert!(stores_at(&call_five, 0), "call_five: c not at [sp]");
     let call_seven = function_words(&obj, "call_seven");
@@ -18946,16 +18946,20 @@ fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
             "{}: the pair is not x{pair}: {take_reg:08x?}",
             what("take_reg")
         );
+        // The eightbytes load from `*p` into the pair, as the parts outside
+        // Windows, through the base routed into the pair on Windows.
+        let call_reg = function_words(&obj, "call_reg");
+        let base = if matches!(target, Target::WindowsAarch64) {
+            pair
+        } else {
+            0
+        };
         let caller = [
-            enc_ldr_imm(x(pair + 1), x(pair), 8),
-            enc_ldr_imm(x(pair), x(pair), 0),
+            enc_ldr_imm(x(pair + 1), x(base), 8),
+            enc_ldr_imm(x(pair), x(base), 0),
             enc_movz(x(pair + 2), 3, 0),
         ];
-        expect_words(
-            &function_words(&obj, "call_reg"),
-            &caller,
-            &what("call_reg"),
-        );
+        expect_words(&call_reg, &caller, &what("call_reg"));
         let stack = function_words(&obj, "call_stack");
         let copy = [
             enc_str_imm(x(17), sp, slot),

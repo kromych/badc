@@ -23,16 +23,12 @@ Disassembly of section .text:
 <caller>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x2, x0
-               	sub	x0, x29, #0x10
-               	stur	x1, [x29, #-0x10]
-               	mov	x1, #0x7                // =7
-               	stur	x1, [x29, #-0x8]
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	mov	x0, #0x7                // =7
+               	mov	x16, x1
+               	mov	x1, x0
+               	mov	x0, x16
                	blr	x2
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

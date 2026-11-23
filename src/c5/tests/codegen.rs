@@ -3026,7 +3026,9 @@ fn windows_bindings_name_exports_of_their_dlls() {
 /// On a macOS or Linux host, every binding the bundled headers state for the
 /// host's target names an export of its library, so an image importing it
 /// loads. A Mach-O symbol carries the leading underscore `dlsym` does not
-/// take.
+/// take. A binding whose glibc version node (`libc/versions`) is newer than
+/// the host's glibc is not looked for: an image importing it needs that
+/// glibc.
 #[cfg(all(
     unix,
     any(target_os = "macos", target_os = "linux"),
@@ -3044,8 +3046,20 @@ fn posix_bindings_name_exports_of_their_libraries() {
         crate::Target::LinuxX64
     };
     let mut host = crate::StdHost::default();
+    let glibc = host_glibc_release(&mut host);
+    let machine = if cfg!(target_arch = "aarch64") {
+        crate::c5::codegen::Machine::Aarch64
+    } else {
+        crate::c5::codegen::Machine::X86_64
+    };
     let mut missing = alloc::vec::Vec::new();
     for (library, symbol) in crate::c5::linker::library_bindings(target) {
+        let node = crate::c5::object::so_versions::manifest_version(machine, &library, &symbol);
+        if let (Some(host), Some(need)) = (glibc, node.and_then(|v| v.strip_prefix("GLIBC_")))
+            && release(need).is_some_and(|need| need > host)
+        {
+            continue;
+        }
         let name = if cfg!(target_os = "macos") {
             symbol.strip_prefix('_').unwrap_or(&symbol)
         } else {
@@ -3061,6 +3075,37 @@ fn posix_bindings_name_exports_of_their_libraries() {
         "{target:?}: not exported:\n  {}",
         missing.join("\n  ")
     );
+}
+
+/// `major.minor` of a glibc release or version node.
+#[cfg(all(unix, any(target_os = "macos", target_os = "linux")))]
+fn release(v: &str) -> Option<(u32, u32)> {
+    let (major, rest) = v.split_once('.')?;
+    let minor = rest.split('.').next()?;
+    Some((major.parse().ok()?, minor.parse().ok()?))
+}
+
+/// The host glibc's release, from `gnu_get_libc_version`; `None` on a host
+/// whose C library is not glibc.
+#[cfg(all(unix, any(target_os = "macos", target_os = "linux")))]
+fn host_glibc_release(host: &mut crate::StdHost) -> Option<(u32, u32)> {
+    use crate::c5::host::Host;
+    let libc = host.dlopen(Some("libc.so.6"), 1);
+    let f = if libc == 0 {
+        0
+    } else {
+        host.dlsym(libc, "gnu_get_libc_version")
+    };
+    if f == 0 {
+        return None;
+    }
+    // SAFETY: glibc declares `const char *gnu_get_libc_version(void)`, which
+    // returns a static NUL-terminated string.
+    let text = unsafe {
+        let get: extern "C" fn() -> *const core::ffi::c_char = core::mem::transmute(f as usize);
+        core::ffi::CStr::from_ptr(get())
+    };
+    release(text.to_str().ok()?)
 }
 
 /// A `#pragma binding(data lib::sym, ...)` import on the Windows

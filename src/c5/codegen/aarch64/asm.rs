@@ -164,8 +164,13 @@ pub(crate) enum AsmOpndA64 {
     Sym { expr: String, spec: SymSpec },
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the low
     /// 12 bits of a symbol expression. The base is an operand reference or
-    /// an explicit register, as for [`AsmOpndA64::Mem`].
-    MemSymLo12 { base: MemBase, expr: String },
+    /// an explicit register, as for [`AsmOpndA64::Mem`]. `got` marks
+    /// `:got_lo12:`, the offset of the symbol's GOT slot in its page.
+    MemSymLo12 {
+        base: MemBase,
+        expr: String,
+        got: bool,
+    },
     /// An immediate written as an expression over labels (`#(1b - vs + 4)`):
     /// absolute, but only the section layout knows the value, and on A64 the
     /// value selects the encoding, so the section path folds it before
@@ -225,6 +230,8 @@ pub(crate) enum SymSpec {
     Addr,
     /// `:lo12:` -- the low 12 bits, for an `add` or a load/store immediate.
     Lo12,
+    /// `:got:` -- the page of the symbol's GOT slot, for `adrp`.
+    Got,
     /// `:abs_gN[_s|_nc]:` -- the `group`th 16-bit group of the value, for a
     /// `movz` / `movk` immediate. `signed` marks the `_s` forms, whose
     /// negative values encode as `movn`; `check` is the value width GNU as
@@ -954,23 +961,32 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
                 "inline asm: `@PAGEOFF` has no writeback `[{inner}]`"
             ));
         }
-        return Ok(AsmOpndA64::MemSymLo12 { base, expr });
+        return Ok(AsmOpndA64::MemSymLo12 {
+            base,
+            expr,
+            got: false,
+        });
     }
-    // `[base, :lo12:sym]`: the symbol's low 12 bits as the scaled immediate.
+    // `[base, :lo12:sym]`: the symbol's low 12 bits as the scaled immediate;
+    // `[base, :got_lo12:sym]`, those of its GOT slot.
+    let field = parts.get(1).map(|p| p.strip_prefix('#').unwrap_or(p));
+    let lo12 = field.and_then(|f| {
+        (f.strip_prefix(":lo12:").map(|s| (s, false)))
+            .or_else(|| f.strip_prefix(":got_lo12:").map(|s| (s, true)))
+    });
     if parts.len() == 2
-        && let Some(spec) = parts[1]
-            .strip_prefix('#')
-            .unwrap_or(parts[1])
-            .strip_prefix(":lo12:")
+        && let Some((spec, got)) = lo12
     {
+        let op = if got { ":got_lo12:" } else { ":lo12:" };
         if pre {
-            return Err(format!("inline asm: `:lo12:` has no writeback `[{inner}]`"));
+            return Err(format!("inline asm: `{op}` has no writeback `[{inner}]`"));
         }
         let expr = split_sym_addend(spec)
-            .ok_or_else(|| format!("inline asm: bad `:lo12:` symbol `[{inner}]`"))?;
+            .ok_or_else(|| format!("inline asm: bad `{op}` symbol `[{inner}]`"))?;
         return Ok(AsmOpndA64::MemSymLo12 {
             base,
             expr: String::from(expr),
+            got,
         });
     }
     // A second part that is not an immediate is a register index: the
@@ -1501,13 +1517,15 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     }
     // `:lo12:sym` (with GAS's optional `#`): a symbol's low 12 bits.
     let bare = tok.strip_prefix('#').unwrap_or(tok);
-    if let Some(spec) = bare.strip_prefix(":lo12:")
-        && let Some(expr) = split_sym_addend(spec)
-    {
-        return Ok(AsmOpndA64::Sym {
-            expr: String::from(expr),
-            spec: SymSpec::Lo12,
-        });
+    for (op, spec) in [(":lo12:", SymSpec::Lo12), (":got:", SymSpec::Got)] {
+        if let Some(rest) = bare.strip_prefix(op)
+            && let Some(expr) = split_sym_addend(rest)
+        {
+            return Ok(AsmOpndA64::Sym {
+                expr: String::from(expr),
+                spec,
+            });
+        }
     }
     if let Some((expr, spec)) = apple_page_operand(bare) {
         return Ok(AsmOpndA64::Sym { expr, spec });

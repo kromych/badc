@@ -2075,8 +2075,10 @@ fn encode_sym_operand(
     };
     let name = crate::c5::asm::asm_symbol_name(syms.format, &name).into_owned();
     let target = match syms.data_sym_offsets.get(name.as_str()) {
-        Some(&off) => crate::c5::asm::AsmSectionTarget::Data(off as u64),
-        None => crate::c5::asm::AsmSectionTarget::Symbol(name),
+        Some(&off) if !kind.names_own_symbol() => {
+            crate::c5::asm::AsmSectionTarget::Data(off as u64)
+        }
+        _ => crate::c5::asm::AsmSectionTarget::Symbol(name),
     };
     out.asm_sym_fixups.push(super::AsmSymFixup {
         instr_offset: out.code.len(),
@@ -2979,9 +2981,15 @@ fn encode_a64_sym_insn(
     }
     // A load/store whose immediate is `:lo12:sym`: encode with a zero
     // offset; the access size names the LDST reloc width.
-    if let Some(AsmOpndA64::MemSymLo12 { base, expr }) = insn.operands.last() {
+    if let Some(AsmOpndA64::MemSymLo12 { base, expr, got }) = insn.operands.last() {
         let rt = insn.operands.first().map(|o| concrete_reg_shape(o, conv));
         let size = a64_access_size(&insn.mnemonic, rt.as_ref())?;
+        // A GOT slot holds a 64-bit address (LP64), which only `ldr Xt` reads.
+        if *got && (insn.mnemonic != "ldr" || size != 8 || insn.operands.len() != 2) {
+            return Err(alloc::string::String::from(
+                "inline asm: `:got_lo12:` operand outside `ldr Xt, [Xn, :got_lo12:sym]`",
+            ));
+        }
         let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
         for o in &insn.operands[..insn.operands.len() - 1] {
             ops.push(conv(o)?);
@@ -2992,7 +3000,12 @@ fn encode_a64_sym_insn(
             pre: false,
         })?);
         let word = super::table::encode(&insn.mnemonic, &ops)?;
-        return Ok(Some((word, K::A64LdstLo12(size), expr.clone())));
+        let kind = if *got {
+            K::A64GotLo12
+        } else {
+            K::A64LdstLo12(size)
+        };
+        return Ok(Some((word, kind, expr.clone())));
     }
     // A numeric-label reference (`b 1b`) is carried as a symbol reference
     // and resolves at materialize time; `.`-relative branches encode
@@ -3016,6 +3029,12 @@ fn encode_a64_sym_insn(
     };
     match spec {
         super::asm::SymSpec::Addr => {}
+        super::asm::SymSpec::Got if insn.mnemonic == "adrp" => {}
+        super::asm::SymSpec::Got => {
+            return Err(alloc::string::String::from(
+                "inline asm: `:got:` operand outside `adrp`",
+            ));
+        }
         super::asm::SymSpec::Lo12 => {
             // `add Rd, Rn, :lo12:sym`.
             if insn.mnemonic != "add" || insn.operands.len() != 3 {
@@ -3087,9 +3106,14 @@ fn encode_a64_sym_insn(
                     ));
                 }
             };
+            let kind = if spec == super::asm::SymSpec::Got {
+                K::A64GotPage21
+            } else {
+                K::A64AdrpPage21
+            };
             Ok(Some((
                 super::encode::enc_adrp(super::Reg(rd), 0),
-                K::A64AdrpPage21,
+                kind,
                 name.clone(),
             )))
         }

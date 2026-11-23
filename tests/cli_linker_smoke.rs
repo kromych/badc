@@ -23023,7 +23023,8 @@ fn a_pc_relative_address_of_a_preemptible_definition_is_refused_in_a_shared_obje
         ),
         (
             "linux-aarch64",
-            "\tbl\thook\n\tadrp\tx0, local_fn\n\tadd\tx0, x0, :lo12:local_fn\n",
+            "\tbl\thook\n\tadrp\tx0, :got:hook\n\tldr\tx0, [x0, :got_lo12:hook]\n\
+             \tadrp\tx0, local_fn\n\tadd\tx0, x0, :lo12:local_fn\n",
             "\tadrp\tx0, hook\n\tadd\tx0, x0, :lo12:hook\n",
             "R_AARCH64_ADR_PREL_PG_HI21",
         ),

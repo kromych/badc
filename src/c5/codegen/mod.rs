@@ -4158,8 +4158,12 @@ impl DataImportSlots {
     ) -> Result<(), C5Error> {
         use crate::c5::asm::AsmRelocKind;
         let part = match fx.kind {
-            AsmRelocKind::A64AdrpPage21 if fx.addend == 0 => AddrPart::Page,
-            AsmRelocKind::A64AddLo12 if fx.addend == 0 => AddrPart::InPage,
+            AsmRelocKind::A64AdrpPage21 | AsmRelocKind::A64GotPage21 if fx.addend == 0 => {
+                AddrPart::Page
+            }
+            AsmRelocKind::A64AddLo12 | AsmRelocKind::A64GotLo12 if fx.addend == 0 => {
+                AddrPart::InPage
+            }
             _ => return Err(self.used_in_place(name)),
         };
         let import_index = self.slot(build, name);

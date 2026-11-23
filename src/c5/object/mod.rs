@@ -299,7 +299,13 @@ fn resolve_single_image_asm_sym_fixups(
             ),
         )
     };
-    for (r, loc) in resolved {
+    for (mut r, loc) in resolved {
+        // The image holds a GOT for its imports alone; any other GOT access
+        // takes its direct form.
+        if !matches!(loc, Loc::Import(_)) {
+            r.kind = crate::c5::asm::relax_a64_got(r.kind, &mut build.text, r.instr_offset)
+                .map_err(|m| err(Code::OBJECT_FORMAT, alloc::format!("inline asm: {m}")))?;
+        }
         let part = match r.kind {
             AsmRelocKind::A64AdrpPage21 => Some(AddrPart::Page),
             AsmRelocKind::A64AddLo12 | AsmRelocKind::A64LdstLo12(_) => Some(AddrPart::InPage),

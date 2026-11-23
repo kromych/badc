@@ -4051,3 +4051,50 @@ fn operator_relocations_name_a_local_label() {
         ]
     );
 }
+
+/// The aarch64 GOT access GNU as and clang assemble -- `adrp :got:` and
+/// `ldr :got_lo12:`, the `#` optional -- names its symbol, a local label's
+/// own among them, since the slot belongs to the symbol. A plain reference
+/// to the label still reduces to its section.
+#[test]
+fn aarch64_got_accesses_name_their_symbol() {
+    let d = dir("a64-got");
+    write(
+        &d,
+        "g.s",
+        ".text\n.globl f\nf:\n    adrp x0, :got:g\n    ldr x0, [x0, :got_lo12:g]\n    \
+         adrp x1, :got:lab\n    ldr x1, [x1, #:got_lo12:lab]\n    adrp x2, lab\n    ret\n\
+         lab:\n    ret\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "--target=linux-aarch64", "-c", "g.s", "-o", "g.o"],
+    );
+    let bytes = std::fs::read(d.join("g.o")).unwrap();
+    let (page, got_page, got_lo12) = (275, 311, 312);
+    assert_eq!(
+        relocs_by_symbol(&bytes, ".rela.text"),
+        [
+            (got_page, String::from("g"), 0),
+            (got_lo12, String::from("g"), 0),
+            (got_page, String::from("lab"), 0),
+            (got_lo12, String::from("lab"), 0),
+            (page, String::from(".text"), 0x18),
+        ]
+    );
+    // The slot holds a 64-bit address, read by `ldr Xt` alone.
+    for (body, op) in [
+        ("add x0, x0, :got:g", ":got:"),
+        ("ldr w0, [x0, :got_lo12:g]", ":got_lo12:"),
+    ] {
+        write(&d, "e.s", &format!(".text\nf:\n    {body}\n"));
+        let (ok, err) = run(
+            &d,
+            &["-q", "--target=linux-aarch64", "-c", "e.s", "-o", "e.o"],
+        );
+        assert!(
+            !ok && err.contains(&format!("`{op}` operand outside")),
+            "{body}: {err}"
+        );
+    }
+}

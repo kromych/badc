@@ -238,6 +238,22 @@ pub(crate) fn fold_asm_sections(
             break;
         }
     }
+    // The image holds no GOT, so a GOT access takes its direct form.
+    for &i in &folded {
+        let Some(AsmLabelPlacement::Text(base)) = bases[i] else {
+            continue;
+        };
+        let s = &mut build.asm_sections[i];
+        for r in &mut s.relocs {
+            let at = base + r.offset as usize;
+            r.kind = crate::c5::asm::relax_a64_got(r.kind, &mut build.text, at).map_err(|m| {
+                err(
+                    Code::OBJECT_FORMAT,
+                    alloc::format!("inline-asm section `{}`: {m}", s.name),
+                )
+            })?;
+        }
+    }
     let mut image_fields: Vec<(UnitDef, usize, AddrPart, i64)> = Vec::new();
     for &i in &folded {
         let s = &build.asm_sections[i];

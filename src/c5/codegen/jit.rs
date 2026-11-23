@@ -2885,7 +2885,11 @@ mod jit_impl {
             };
             let at = r.instr_offset;
             let site_vmaddr = (code_vmaddr + at as u64) as i64;
-            match r.kind {
+            // The JIT reaches every target in place, so a GOT access takes
+            // its direct form.
+            let kind = crate::c5::asm::relax_a64_got(r.kind, code, at)
+                .map_err(|m| internal(format!("JIT: {m}")))?;
+            match kind {
                 AsmRelocKind::A64AdrpPage21 => {
                     a64patch::patch_adrp(code, at, site_vmaddr, target_vmaddr as i64)
                 }

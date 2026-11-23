@@ -414,6 +414,10 @@ pub(crate) enum AsmRelocKind {
     A64AddLo12,
     /// Load/store `:lo12:` scaled immediate; the access size in bytes.
     A64LdstLo12(u8),
+    /// `adrp Xd, :got:sym` -- the page of the symbol's GOT slot.
+    A64GotPage21,
+    /// `ldr Xt, [Xn, :got_lo12:sym]` -- the slot's offset in its page.
+    A64GotLo12,
     /// `ldr Rt, label` 19-bit literal load displacement.
     A64LdrLit19,
     /// `movz` / `movk` with `:abs_gN[_s|_nc]:` -- one 16-bit group of an
@@ -437,6 +441,48 @@ pub(crate) enum AsmRelocKind {
     /// A field a gas relocation operator names (`sym@GOTPCREL`); the object
     /// writer picks the type for the psABI and the field's width.
     Op { op: AsmRelocOp, relax: AsmGotRelax },
+}
+
+impl AsmRelocKind {
+    /// Whether the field reaches the symbol itself rather than an address,
+    /// so the relocation names the symbol, never its section: a gas
+    /// operator's, or an aarch64 GOT access, whose addend would offset the
+    /// slot.
+    pub(crate) fn names_own_symbol(self) -> bool {
+        matches!(
+            self,
+            AsmRelocKind::Op { .. } | AsmRelocKind::A64GotPage21 | AsmRelocKind::A64GotLo12
+        )
+    }
+}
+
+/// The direct form of an aarch64 GOT access, for an image that holds no
+/// GOT: `adrp :got:s` addresses `s`'s page and the `ldr :got_lo12:s` that
+/// reads the slot becomes `add :lo12:s`, as a link relaxes the pair for a
+/// symbol it binds locally. Other kinds are returned unchanged.
+pub(crate) fn relax_a64_got(
+    kind: AsmRelocKind,
+    code: &mut [u8],
+    at: usize,
+) -> Result<AsmRelocKind, alloc::string::String> {
+    match kind {
+        AsmRelocKind::A64GotPage21 => Ok(AsmRelocKind::A64AdrpPage21),
+        AsmRelocKind::A64GotLo12 => {
+            let field = code
+                .get_mut(at..at + 4)
+                .ok_or_else(|| alloc::string::String::from("`:got_lo12:` site past the code"))?;
+            let word = u32::from_le_bytes([field[0], field[1], field[2], field[3]]);
+            // `ldr Xt, [Xn, #imm]` (unsigned offset) to `add Xt, Xn, #0`.
+            if word & 0xFFC0_0000 != 0xF940_0000 {
+                return Err(alloc::format!(
+                    "`:got_lo12:` site {word:#010x} is not a 64-bit `ldr`"
+                ));
+            }
+            field.copy_from_slice(&(0x9100_0000 | (word & 0x3FF)).to_le_bytes());
+            Ok(AsmRelocKind::A64AddLo12)
+        }
+        k => Ok(k),
+    }
 }
 
 /// A gas x86 relocation operator written on a symbol (`sym@PLT`).
@@ -688,6 +734,8 @@ pub(crate) fn patch_asm_insn_field(
         AsmRelocKind::A64AdrpPage21
         | AsmRelocKind::A64AddLo12
         | AsmRelocKind::A64LdstLo12(_)
+        | AsmRelocKind::A64GotPage21
+        | AsmRelocKind::A64GotLo12
         | AsmRelocKind::A64MovwAbs { .. }
         | AsmRelocKind::Explicit(_)
         | AsmRelocKind::Op { .. } => Ok(false),

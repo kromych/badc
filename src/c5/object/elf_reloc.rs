@@ -2693,9 +2693,7 @@ impl<'a> RelocWriter<'a> {
         // The names a GOT access of the C code reaches, and those an asm
         // relocation written with a gas operator names, which keep their
         // own symbols.
-        let operator = |kind: &crate::c5::asm::AsmRelocKind| {
-            matches!(kind, crate::c5::asm::AsmRelocKind::Op { .. })
-        };
+        let operator = |kind: &crate::c5::asm::AsmRelocKind| kind.names_own_symbol();
         let named = |t: &'a crate::c5::asm::AsmSectionTarget| match t {
             crate::c5::asm::AsmSectionTarget::Symbol(n) => Some(n.as_str()),
             _ => None,
@@ -3709,14 +3707,17 @@ impl<'a> RelocWriter<'a> {
     }
 
     /// A name a relocation written with a gas operator (`sym@GOTPCREL`,
-    /// `sym@PLT`, `sym@TLSGD`, ...) references: an asm label's own symbol,
-    /// as GNU as keeps it for the GOT, PLT and TLS relocations, whose addend
-    /// applies to the slot rather than to the symbol, else what
-    /// [`Self::asm_symbol_ref`] resolves.
+    /// `sym@PLT`, `sym@TLSGD`, ...) or an aarch64 GOT access references: an
+    /// asm label's or an internal-linkage object's own symbol, as GNU as
+    /// keeps it for the GOT, PLT and TLS relocations, whose slot belongs to
+    /// the symbol, else what [`Self::asm_symbol_ref`] resolves.
     fn asm_operator_ref(&self, what: &str, name: &str, addend: i64) -> Result<(u64, i64), C5Error> {
         match self.syms.asm_label_symidx.get(name) {
             Some(&i) => Ok((u64::from(i), addend)),
-            None => self.asm_symbol_ref(what, name, addend),
+            None => match self.syms.defined_data_local_symidx.get(name) {
+                Some(&i) => Ok((i, addend)),
+                None => self.asm_symbol_ref(what, name, addend),
+            },
         }
     }
 
@@ -3747,9 +3748,7 @@ impl<'a> RelocWriter<'a> {
                         .plan
                         .map_ref(off.wrapping_add_signed(r.addend), *off),
                 ),
-                AsmSectionTarget::Symbol(name)
-                    if matches!(r.kind, crate::c5::asm::AsmRelocKind::Op { .. }) =>
-                {
+                AsmSectionTarget::Symbol(name) if r.kind.names_own_symbol() => {
                     self.asm_operator_ref("asm operand relocation", name, r.addend)?
                 }
                 AsmSectionTarget::Symbol(name) => {
@@ -3928,7 +3927,7 @@ impl<'a> RelocWriter<'a> {
                             "elf_reloc: unresolved operand-expression section relocation",
                         )));
                     }
-                    AsmSectionTarget::Symbol(name) if matches!(r.kind, RK::Op { .. }) => {
+                    AsmSectionTarget::Symbol(name) if r.kind.names_own_symbol() => {
                         self.asm_operator_ref("asm relocation", name, r.addend)?
                     }
                     AsmSectionTarget::Symbol(name) => {
@@ -5497,6 +5496,8 @@ fn a64_insn_reloc_type(kind: crate::c5::asm::AsmRelocKind) -> Option<u32> {
         RK::A64Adr21 => R_AARCH64_ADR_PREL_LO21,
         RK::A64AdrpPage21 => R_AARCH64_ADR_PREL_PG_HI21,
         RK::A64AddLo12 => R_AARCH64_ADD_ABS_LO12_NC,
+        RK::A64GotPage21 => R_AARCH64_ADR_GOT_PAGE,
+        RK::A64GotLo12 => R_AARCH64_LD64_GOT_LO12_NC,
         RK::A64LdrLit19 => R_AARCH64_LD_PREL_LO19,
         RK::Explicit(t) => t,
         RK::A64LdstLo12(sz) => match sz {

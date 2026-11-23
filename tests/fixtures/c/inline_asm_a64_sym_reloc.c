@@ -1,6 +1,7 @@
 /* aarch64 symbol operands in function-body inline asm: `adrp`, the
  * `:lo12:` add and load/store immediates (each access size), a symbol
- * addend, and `adr` of a function -- each site resolved through a
+ * addend, `adr` of a function, and the `:got:` / `:got_lo12:` GOT load of
+ * an external and an internal object -- each site resolved through a
  * per-instruction relocation. */
 
 #if defined(__APPLE__)
@@ -82,6 +83,22 @@ static long adr_helper(void) {
     return p;
 }
 
+static int *got_global(void) {
+    int *p;
+    __asm__("adrp %x0, :got:" CSYM("g_sym_reloc_word") "\n\t"
+            "ldr %x0, [%x0, #:got_lo12:" CSYM("g_sym_reloc_word") "]"
+            : "=r"(p));
+    return p;
+}
+
+static long *got_static(void) {
+    long *p;
+    __asm__("adrp %x0, :got:" CSYM("s_qword") "\n\t"
+            "ldr %x0, [%x0, :got_lo12:" CSYM("s_qword") "]"
+            : "=r"(p));
+    return p;
+}
+
 int main(void) {
     if (probe() != 42)
         return 1;
@@ -100,5 +117,9 @@ int main(void) {
         return 7;
     if (((int (*)(void))adr_helper())() != 7)
         return 8;
+    if (got_global() != &g_sym_reloc_word)
+        return 9;
+    if (got_static() != &s_qword)
+        return 10;
     return 42;
 }

@@ -1856,7 +1856,10 @@ impl Parser {
             // register file: `-mno-sse` on x86_64 and `-mgeneral-regs-only`
             // on aarch64. Freestanding environments run with that register
             // file trapped, so any access faults.
-            "-mno-sse" | "-mgeneral-regs-only" => code.no_fp_regs = true,
+            "-mno-sse" | "-mgeneral-regs-only" => {
+                code.no_fp_regs = true;
+                self.isa_args.push(arg.to_string());
+            }
             // Keep a register out of the allocator.
             s if s.starts_with("-ffixed-") => {
                 let name = &s["-ffixed-".len()..];
@@ -3134,12 +3137,16 @@ impl Parser {
     /// [`badc::X86Features`] is refused when enabled. x86-64 code assumes
     /// x86-64-v3, so a CPU without it is refused, and so is `-mno-<ext>`
     /// of an extension of it the code generator emits, unless `-mno-sse`
-    /// keeps the code off the vector registers it uses.
+    /// keeps the code off the vector registers it uses. `-mno-sse` and
+    /// `-mgeneral-regs-only` withdraw the extensions that need SSE; `-msse`,
+    /// `-msse2` and an extension that needs SSE bring the registers back, in
+    /// command-line order, as gcc reads them.
     fn apply_x86_isa(&mut self, target: Target) -> Result<(), ParseError> {
         if self.isa_args.is_empty() || !target.is_x86_64() {
             return Ok(());
         }
         let mut features = badc::X86Features::NONE;
+        let mut no_fp = false;
         for arg in self.isa_args.iter().rev() {
             if let Some(cpu) = arg.strip_prefix("-march=") {
                 features = march(cpu)?;
@@ -3152,8 +3159,17 @@ impl Parser {
                 break;
             }
         }
+        let cpu = features;
         for arg in &self.isa_args {
-            if let Some(cpu) = arg.strip_prefix("-mtune=") {
+            if matches!(&arg[..], "-mno-sse" | "-mgeneral-regs-only") {
+                no_fp = true;
+                features = features.without_sse(cpu);
+                if arg == "-mgeneral-regs-only" {
+                    features = features.with_mmx(false);
+                }
+            } else if matches!(&arg[..], "-msse" | "-msse2") {
+                no_fp = false;
+            } else if let Some(cpu) = arg.strip_prefix("-mtune=") {
                 if !(badc::X86Features::is_cpu(cpu)
                     || matches!(cpu, "generic" | "intel" | "native"))
                 {
@@ -3163,7 +3179,7 @@ impl Parser {
                 }
             } else if let Some(ext) = arg.strip_prefix("-mno-") {
                 match badc::X86Features::baseline_ext(ext) {
-                    Some(true) if self.codegen.no_fp_regs => {}
+                    Some(true) if no_fp => {}
                     Some(_) => {
                         return Err(ParseError::diag(format!(
                             "badc: error: `{arg}`: x86-64 code assumes x86-64-v3, which \
@@ -3173,8 +3189,9 @@ impl Parser {
                     None => {}
                 }
                 features.disable(ext);
-            } else if arg.starts_with("-march=") || matches!(&arg[..], "-mmmx" | "-msse" | "-msse2")
-            {
+            } else if arg == "-mmmx" {
+                features = features.with_mmx(true);
+            } else if arg.starts_with("-march=") {
             } else if let Some(ext) = arg.strip_prefix("-m") {
                 if matches!(badc::X86Features::classify(ext), badc::X86ExtOption::Absent) {
                     return Err(ParseError::diag(format!(
@@ -3183,9 +3200,11 @@ impl Parser {
                     )));
                 }
                 features.enable(ext);
+                no_fp &= !badc::X86Features::needs_sse(ext);
             }
         }
         self.codegen.x86_features = features;
+        self.codegen.no_fp_regs = no_fp;
         Ok(())
     }
 
@@ -4516,6 +4535,39 @@ mod tests {
     /// The x86 extension options combine in order: the last `-march=` is
     /// the base, each `-m<ext>` / `-mno-<ext>` applies on top in order,
     /// and `-mno-` drops the extensions implying the one named.
+    /// `-mno-sse`, `-msse`, `-msse2` and `-mgeneral-regs-only` apply in order,
+    /// as gcc 16 reads them: the last decides whether the code may use the SSE
+    /// registers, `-mno-sse` withdraws the extensions that need them but the
+    /// CPU's own POPCNT, an extension that needs them brings them back, and
+    /// `-mgeneral-regs-only` withdraws MMX until `-mmmx`.
+    #[test]
+    fn sse_options_apply_in_order_as_gccs() {
+        let parsed = |args: &[&str]| {
+            let mut all = vec![X64];
+            all.extend_from_slice(args);
+            all.extend_from_slice(&["-c", "a.c"]);
+            let cli = parse(&all);
+            (cli.codegen.no_fp_regs, cli.codegen.x86_features)
+        };
+        let macros = |f: badc::X86Features| f.macros().collect::<Vec<_>>();
+        assert!(!parsed(&["-mno-sse", "-msse2"]).0);
+        assert!(!parsed(&["-mgeneral-regs-only", "-msse"]).0);
+        assert!(parsed(&["-msse2", "-mno-sse"]).0);
+        // XSAVE, which `-mavx2` brought, needs no SSE register and stays.
+        let (off, f) = parsed(&["-mavx2", "-mno-sse"]);
+        assert!(off && macros(f) == ["__XSAVE__"], "{f:?}");
+        let (off, f) = parsed(&["-march=haswell", "-mno-sse"]);
+        assert!(
+            off && !f.avx() && macros(f).contains(&"__POPCNT__"),
+            "{f:?}"
+        );
+        let (off, f) = parsed(&["-mno-sse", "-mavx2"]);
+        assert!(!off && f.avx2());
+        assert!(!parsed(&["-mgeneral-regs-only"]).1.mmx());
+        assert!(parsed(&["-mgeneral-regs-only", "-mmmx"]).1.mmx());
+        assert!(parsed(&["-mno-sse"]).1.mmx());
+    }
+
     #[test]
     fn x86_extension_options_combine_as_gccs() {
         let features = |args: &[&str]| {

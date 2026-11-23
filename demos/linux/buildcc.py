@@ -459,9 +459,6 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
     unknown: list[str] = []
     opt: str | None = None
     debug = False
-    # gcc takes the last of -mno-sse / -msse / -msse2: an FPU unit's
-    # CC_FLAGS_FPU after the global -mno-sse gives it the SSE registers.
-    sse_off = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -480,7 +477,10 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
             opt = a  # last one wins, as with gcc
             i += 1
         elif a in ("-mno-sse", "-msse", "-msse2"):
-            sse_off = a == "-mno-sse"
+            # badc reads them in order, as gcc does: an FPU unit's
+            # CC_FLAGS_FPU after the global -mno-sse gives it the SSE
+            # registers.
+            out.append(a)
             i += 1
         elif a == "-g0":
             debug = False
@@ -507,8 +507,6 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
         else:
             unknown.append(a)
             i += 1
-    if sse_off:
-        out.append("-mno-sse")
     if opt is not None and opt != "-O0":
         out.append("-O")
     if debug:
@@ -722,10 +720,14 @@ def _self_test() -> int:
     # `unknown`, which fails the unit rather than compiling under a
     # configuration the build did not ask for; one badc has no equivalent
     # for is `dropped`, which is reported per unit.
-    # The last of -mno-sse / -msse / -msse2 decides, as with gcc.
+    # -mno-sse / -msse / -msse2 reach badc in order, which it reads as gcc does.
     assert rewrite(["-mno-sse", "-mno-sse2"]).argv == ["-mno-sse"]
-    assert rewrite(["-mno-sse", "-mno-sse2", "-msse", "-msse2", "-mhard-float"]).argv == []
-    assert rewrite(["-msse", "-mno-sse"]).argv == ["-mno-sse"]
+    assert rewrite(["-mno-sse", "-mno-sse2", "-msse", "-msse2", "-mhard-float"]).argv == [
+        "-mno-sse",
+        "-msse",
+        "-msse2",
+    ]
+    assert rewrite(["-msse", "-mno-sse"]).argv == ["-msse", "-mno-sse"]
     for flag in ("-fconserve-stack", "-fno-zero-initialized-in-bss"):
         assert rewrite([flag]).argv == [flag], flag
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]

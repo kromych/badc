@@ -1442,6 +1442,9 @@ impl Preprocessor {
     /// The x86 extensions' feature macros, and `__BIGGEST_ALIGNMENT__`
     /// 32 under AVX, for `-m<ext>` and `-march=`.
     pub fn set_x86_features(&mut self, features: crate::c5::X86Features) {
+        if !features.mmx() {
+            self.macros.remove("__MMX__");
+        }
         for name in features.macros() {
             self.macros.insert(name.into(), "1".into());
         }

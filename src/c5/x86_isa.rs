@@ -4,7 +4,8 @@
 //! carry. The implications between them and the CPU names were measured
 //! against gcc 16, each CPU reduced to the extensions of this set.
 
-/// A set of x86 extensions beyond the x86-64 baseline (SSE2).
+/// A set of x86 extensions beyond the x86-64 baseline (SSE2), and whether
+/// `-mgeneral-regs-only` withdrew the baseline's MMX.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct X86Features(u64);
 
@@ -41,6 +42,8 @@ const AVX512VL: u64 = 1 << 29;
 const AVX512CD: u64 = 1 << 30;
 const AVX512VNNI: u64 = 1 << 31;
 const CX16: u64 = 1 << 32;
+/// MMX withdrawn: no extension, the baseline's register file taken away.
+const NO_MMX: u64 = 1 << 63;
 
 /// An extension: its option name, its bit, its macro, the extensions
 /// enabling it enables, and those disabling it also disables beside its
@@ -287,6 +290,41 @@ impl X86Features {
             .filter(|d| gone & d.bit != 0)
             .fold(0, |m, d| m | d.unsets);
         self.0 &= !(gone | also);
+    }
+
+    /// The set with the baseline's MMX withdrawn (`-mgeneral-regs-only`) or
+    /// restored (`-mmmx`).
+    pub fn with_mmx(self, on: bool) -> Self {
+        Self(if on {
+            self.0 & !NO_MMX
+        } else {
+            self.0 | NO_MMX
+        })
+    }
+
+    /// Whether the baseline's MMX stands, `__MMX__` with it.
+    pub fn mmx(self) -> bool {
+        self.0 & NO_MMX == 0
+    }
+
+    /// `-mno-sse` / `-mgeneral-regs-only` over the extensions of `cpu`, the
+    /// `-march=` set: the extensions that need the SSE registers go, with
+    /// what they implied, as gcc withdraws them; the CPU's own POPCNT stays,
+    /// as do the other scalar extensions.
+    pub fn without_sse(self, cpu: Self) -> Self {
+        let mut f = self;
+        for name in ["sse3", "aes", "pclmul", "sha"] {
+            f.disable(name);
+        }
+        Self(f.0 | (self.0 & cpu.0 & POPCNT))
+    }
+
+    /// Whether `-m<name>` enables an extension that needs the SSE registers,
+    /// which brings them back after `-mno-sse`, as gcc's options do.
+    pub fn needs_sse(name: &str) -> bool {
+        let mut f = Self::NONE;
+        f.enable(name);
+        f.without_sse(Self::NONE) != f
     }
 
     /// `-march=<name>`'s extensions, or `None` for an unknown name.

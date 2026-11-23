@@ -275,16 +275,17 @@ __attribute__((noinline)) static long va(int n, ...)
 
 __attribute__((noinline)) static long va_caller(long a) { return va(2, a, a + 1); }
 
-__attribute__((noinline)) static long via_leaf(long a) { return leaf(a) + 1; }
-
 // Values live across a call, then a tail call: at -O the epilogue ends at
-// the branch to `leaf`.
+// the branch to `leaf`. A listed function follows it, which bounds its
+// code where functions keep their source order.
 __attribute__((noinline)) static long tail(long a)
 {
     long b = a * 3 + 1, c = b ^ 5;
     long r = leaf(a);
     return leaf(r + b + c);
 }
+
+__attribute__((noinline)) static long via_leaf(long a) { return leaf(a) + 1; }
 
 // Every function here, the bounds of each one's code.
 static void *const functions[] = {

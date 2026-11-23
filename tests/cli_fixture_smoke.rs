@@ -5524,17 +5524,18 @@ fn no_instruction_follows_a_trap_unreached() {
 }
 
 /// `-mno-sse` and `-mgeneral-regs-only` keep a unit off the SIMD register
-/// file, and the SSE feature macros go with it; `__MMX__` stays.
+/// file, and the SSE feature macros go with it; `__MMX__` stays under
+/// `-mno-sse` and goes with `-mgeneral-regs-only`, as gcc 16 defines them.
 #[test]
 fn no_sse_drops_the_sse_feature_macros() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let dir = TempDir::new("badc-no-sse");
     let src = dir.join("e.c");
     std::fs::write(&src, "int x;\n").expect("write source");
-    for (flags, sse) in [
-        (&[][..], true),
-        (&["-mno-sse"][..], false),
-        (&["-mgeneral-regs-only"][..], false),
+    for (flags, sse, mmx) in [
+        (&[][..], true, true),
+        (&["-mno-sse"][..], false, true),
+        (&["-mgeneral-regs-only"][..], false, false),
     ] {
         let out = Command::new(badc)
             .args(["--target=linux-x64", "-dM", "-E"])
@@ -5547,7 +5548,7 @@ fn no_sse_drops_the_sse_feature_macros() {
             let defined = text.contains(&format!("#define {name} 1\n"));
             assert_eq!(defined, sse, "{flags:?}: {name}");
         }
-        assert!(text.contains("#define __MMX__ 1\n"), "{flags:?}");
+        assert_eq!(text.contains("#define __MMX__ 1\n"), mmx, "{flags:?}");
     }
 }
 

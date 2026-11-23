@@ -3067,6 +3067,9 @@ impl Parser {
         for arg in &self.isa_args {
             if let Some(spec) = arg.strip_prefix("-march=") {
                 march = Some(spec.to_string());
+            } else if matches!(&arg[..], "-mno-sse" | "-mgeneral-regs-only") {
+                // Each keeps the code off the FP / SIMD registers, set as it
+                // was read; neither names an extension here.
             } else if let Some(cpu) = arg.strip_prefix("-mtune=") {
                 if !(badc::Aarch64Features::is_cpu(cpu) || cpu == "native") {
                     return Err(ParseError::diag(format!(

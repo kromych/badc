@@ -1447,20 +1447,17 @@ fn ret_part_reads(func: &FunctionSsa, target: Target) -> BTreeMap<ValueId, (u64,
 
 /// Per phi-class root, what keeping it in a caller-saved register across
 /// the calls it lives across ([`call_crossings`]) costs: a store and a
-/// load at each, by the call block's `weights` -- the units the coloring
-/// weighs spills in -- and by its frequency and size ([`cost_weights`]).
+/// load at each, by the call block's `weights` ([`cost_weights`]).
 fn call_save_costs(
     func: &FunctionSsa,
     crossings: &[(ValueId, Vec<ValueId>)],
     node_of: &[ValueId],
     weights: &[u64],
-) -> (Vec<u64>, Vec<u64>) {
+) -> Vec<u64> {
     let mut cost = alloc::vec![0u64; func.insts.len()];
-    let mut by_freq = alloc::vec![0u64; func.insts.len()];
     if crossings.is_empty() {
-        return (cost, by_freq);
+        return cost;
     }
-    let freqs = cost_weights(func);
     let mut block_of = alloc::vec![0usize; func.insts.len()];
     for (b, block) in func.blocks.iter().enumerate() {
         for v in block.inst_range.clone() {
@@ -1469,16 +1466,15 @@ fn call_save_costs(
     }
     for (site, live) in crossings {
         let b = block_of[*site as usize];
-        let (w, f) = (weights[b].saturating_mul(2), freqs[b].saturating_mul(2));
+        let w = weights[b].saturating_mul(2);
         let mut roots: Vec<ValueId> = live.iter().map(|&v| node_of[v as usize]).collect();
         roots.sort_unstable();
         roots.dedup();
         for r in roots {
             cost[r as usize] = cost[r as usize].saturating_add(w);
-            by_freq[r as usize] = by_freq[r as usize].saturating_add(f);
         }
     }
-    (cost, by_freq)
+    cost
 }
 
 /// The target's full register banks.
@@ -1872,9 +1868,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             must_callee: false,
             call_forbid: 0,
             save_cost: 0,
-            save_freq: 0,
-            spill_freq: 0,
-            def_cost: 0,
+            spill_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -1901,30 +1895,16 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.call_forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
     }
-    // Every cost the coloring weighs against a spill is in these units: an
-    // instruction's executions and its size.
+    // Every cost the coloring weighs is in these units: an instruction's
+    // executions and its size.
     let freqs = cost_weights(func);
-    let (save_costs, save_freqs) = call_save_costs(func, &crossings, &node_of, &freqs);
-    if save_costs.iter().any(|&c| c > 0) {
-        let defs = def_weights(func, &node_of, &use_counts, &freqs);
-        for (root, c) in node_cons.iter_mut().enumerate() {
-            if let Some(c) = c {
-                c.save_cost = save_costs[root];
-                c.save_freq = save_freqs[root];
-                c.def_cost = defs[root];
-            }
-        }
-    }
-    // What spilling each node costs by block frequency and size, against
-    // opening a callee-saved register for it.
-    {
-        let freqs = cost_weights(func);
-        let uses_by_freq = use_weights(func, &node_of, &liveness, &freqs);
-        let defs_by_freq = def_weights(func, &node_of, &use_counts, &freqs);
-        for (root, c) in node_cons.iter_mut().enumerate() {
-            if let Some(c) = c {
-                c.spill_freq = uses_by_freq[root].saturating_add(defs_by_freq[root]);
-            }
+    let save_costs = call_save_costs(func, &crossings, &node_of, &freqs);
+    let spill_weights = use_weights(func, &node_of, &liveness, &freqs);
+    let defs = def_weights(func, &node_of, &use_counts, &freqs);
+    for (root, c) in node_cons.iter_mut().enumerate() {
+        if let Some(c) = c {
+            c.save_cost = save_costs[root];
+            c.spill_cost = spill_weights[root].saturating_add(defs[root]);
         }
     }
     // A two-address result and an operand dying at it follow each other;
@@ -1950,7 +1930,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
-    let spill_weights = use_weights(func, &node_of, &liveness, &freqs);
     let loops = (!func.has_returns_twice_call)
         .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &freqs))
         .flatten();
@@ -1981,7 +1960,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             .count() as u64;
         let early = super::early_exit::early_exit(func, &param_incoming_plan(func, target));
         let exits = exits - u64::from(early.is_some());
-        let defs = def_weights(func, &node_of, &use_counts, &freqs);
         let conv_banks = RegBanks::new(conv_target, fixed);
         let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
         let (asm_gpr, asm_fpr) =
@@ -2001,7 +1979,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     Place::FpReg(r) if c.is_fp && banks.callee_fprs.contains(&r) => r,
                     _ => continue,
                 };
-                let cost = spill_weights[node].saturating_add(defs[node]);
+                let cost = c.spill_cost;
                 let h = &mut held[usize::from(c.is_fp)][r as usize];
                 *h = h.saturating_add(cost);
             }
@@ -3654,17 +3632,13 @@ pub(crate) struct NodeConstraints {
     /// The registers the calls the node crosses clobber.
     pub call_forbid: u64,
     /// What saving a caller-saved register around those calls costs
-    /// ([`call_save_costs`]), and what spilling costs beyond the uses the
-    /// coloring weighs: the loop-weighted definitions. A zero save cost
-    /// takes no caller-saved register.
+    /// ([`call_save_costs`]), against a spill and against opening a
+    /// callee-saved register, which saves it once per call of the function.
+    /// Zero takes no caller-saved register.
     pub save_cost: u64,
-    /// The save cost by block frequency and size ([`cost_weights`]),
-    /// against opening a callee-saved register, which saves it once per
-    /// call of the function.
-    pub save_freq: u64,
-    /// The spill's uses and definitions by block frequency and size.
-    pub spill_freq: u64,
-    pub def_cost: u64,
+    /// What spilling costs: a load at each use and a store at each
+    /// definition, by block frequency and size ([`cost_weights`]).
+    pub spill_cost: u64,
     /// Preferred register, honored when free and bank-legal.
     pub hint: Option<u8>,
     /// Physical registers (in this node's bank) the colorer must not
@@ -3995,19 +3969,19 @@ pub(crate) fn color_graph(
                     // saving a caller-saved register around the calls costs
                     // less than the save and restore it takes per call of
                     // the function, which the spill fallback weighs.
-                    let saves = c.save_freq > 0
-                        && c.save_freq < banks.open_cost
-                        && c.save_freq < c.spill_freq
+                    let saves = c.save_cost > 0
+                        && c.save_cost < banks.open_cost
+                        && c.save_cost < c.spill_cost
                         && caller.iter().any(|&r| !unsaved[r as usize]);
                     callee.iter().copied().find(open).or_else(|| {
-                        (!saves && (c.spill_freq == 0 || c.spill_freq >= banks.open_cost))
+                        (!saves && (c.spill_cost == 0 || c.spill_cost >= banks.open_cost))
                             .then(|| callee.iter().copied().find(|&r| free(r)))
                             .flatten()
                     })
                 } else {
                     caller.iter().copied().find(|&r| free(r)).or_else(|| {
                         callee.iter().copied().find(open).or_else(|| {
-                            (c.spill_freq == 0 || c.spill_freq >= banks.open_cost)
+                            (c.spill_cost == 0 || c.spill_cost >= banks.open_cost)
                                 .then(|| callee.iter().copied().find(|&r| free(r)))
                                 .flatten()
                         })
@@ -4017,16 +3991,7 @@ pub(crate) fn color_graph(
         // Left to spill, a node crossing calls whose saves cost less than
         // its spill takes a caller-saved register saved around them.
         let pick = pick.or_else(|| {
-            let spill_cost = weights
-                .get(node)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(c.def_cost);
-            let (save, spill) = match c.save_freq {
-                0 => (c.save_cost, spill_cost),
-                f => (f, c.spill_freq),
-            };
-            if save == 0 || save >= spill {
+            if c.save_cost == 0 || c.save_cost >= c.spill_cost {
                 return None;
             }
             // Its own hint first -- a parameter stays in its argument
@@ -4050,11 +4015,7 @@ pub(crate) fn color_graph(
         let pick = pick.or_else(|| {
             let info = loops?;
             let l = (*info.inside.get(node)?)?;
-            let spill_cost = weights
-                .get(node)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(c.def_cost);
+            let spill_cost = c.spill_cost;
             let around = |saves: &[(u32, ValueId)], root: ValueId| {
                 saves.iter().any(|&(o, n)| n == root && info.encloses(o, l))
             };
@@ -6112,9 +6073,7 @@ mod tests {
             must_callee,
             call_forbid: 0,
             save_cost: 0,
-            save_freq: 0,
-            spill_freq: 0,
-            def_cost: 0,
+            spill_cost: 0,
             hint,
             forbid: 0,
             avoid: 0,
@@ -6135,9 +6094,7 @@ mod tests {
             must_callee,
             call_forbid: 0,
             save_cost: 0,
-            save_freq: 0,
-            spill_freq: 0,
-            def_cost: 0,
+            spill_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -6771,7 +6728,7 @@ int main(void) { return 0; }
             let mut cons = [int_node(true, None); 3];
             if let Some(c) = cons[2].as_mut() {
                 c.save_cost = save_cost;
-                c.def_cost = 10;
+                c.spill_cost = 20;
             }
             let r = color_graph(
                 &g,
@@ -8960,9 +8917,7 @@ int main(void) { return 0; }
                 must_callee: true,
                 call_forbid: 0,
                 save_cost: 0,
-                save_freq: 0,
-                spill_freq: 0,
-                def_cost: 0,
+                spill_cost: 0,
                 hint: None,
                 forbid: 0,
                 avoid: 0,

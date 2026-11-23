@@ -398,11 +398,14 @@ fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
     undo
 }
 
-/// Loop-weighted count of the memory traffic and copies placement
-/// forces the emit to issue: one per spilled definition, one per operand
-/// reference naming a spilled value, and one per inserted copy. Charging
-/// the copies is what keeps a split that only renames a value the second
-/// allocation would have given a register anyway from looking free.
+/// Loop-weighted count of the memory traffic and copies placement forces
+/// the emit to issue, in the units of LICM's hoist profits and saves
+/// (`placement_cost` in [`super::licm`]): one per spilled definition, one
+/// per operand reference naming a spilled value, one per inserted copy,
+/// and one per store and load of a register saved around a call or a
+/// loop. Charging the copies is what keeps a split that only renames a
+/// value the second allocation would have given a register anyway from
+/// looking free.
 pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
     let weights = super::reg_alloc::block_weights(func);
     let spilled = |v: ValueId| -> bool {
@@ -426,6 +429,14 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
             }
             if spilled(idx) {
                 total = total.saturating_add(wb);
+            }
+            if let Ok(i) = alloc
+                .call_saves
+                .binary_search_by_key(&idx, |&(site, _)| site)
+            {
+                let saves = &alloc.call_saves[i].1;
+                let moved = saves.len() + saves.iter().filter(|s| !s.stored).count();
+                total = total.saturating_add(wb.saturating_mul(moved as u64));
             }
             super::reg_alloc::for_each_operand(inst, |op| {
                 if spilled(op) {

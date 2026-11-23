@@ -128,8 +128,8 @@ Multi-TU knobs:
                            other directory is read.
   -u <symbol>, -u<symbol>, --undefined=<symbol>
                            Treat <symbol> as referenced, so the archive
-                           member defining it joins the link, as gcc's
-                           and GNU ld's -u. Repeatable. Under --jit and
+                           member defining it joins the link.
+                           Repeatable. Under --jit and
                            --interp it reaches the runtime pool only.
   --whole-archive, --no-whole-archive
                            Load every member of the archives named
@@ -328,7 +328,7 @@ Compile knobs:
                            restores the compiler's own headers.
   -nostdlibinc             As -nostdinc, keeping the compiler's own
                            headers (<stdarg.h>, <stddef.h>, <stdint.h>,
-                           the intrinsic headers, ...), as clang does.
+                           the intrinsic headers, ...).
   -print-file-name=<name>  Print the full path of <name>, or <name> when
                            badc has none. `include` names the directory
                            of the compiler's own headers; on the
@@ -399,7 +399,7 @@ Compile knobs:
                            (`--keep-locals`) keeps the local-label
                            temporaries -- the `.L`-prefixed names --
                            in a `-c` object's symbol table, which
-                           GNU as drops without it.
+                           are dropped without it.
   -m16 / -m32 / -m64       Code model, x86 targets only. `-m16` and
                            `-m32` preprocess the unit as i386 (`__i386__`
                            defined, `__x86_64__` not, ILP32 widths) and
@@ -633,12 +633,12 @@ Compile knobs:
                            `armv9.6-a`, `armv8-r`) or `native`, with
                            -mcpu='s modifiers; it overrides -mcpu='s
                            extensions.
-  -march=CPU               x86 CPU selection: gcc's CPU names and
-                           x86-64-v3/v4 predefine the feature macros of
-                           the extensions below that the CPU has;
-                           `native` reads the host's. x86-64 code
-                           assumes x86-64-v3, so a CPU without it is
-                           refused.
+  -march=CPU               x86 CPU selection: a CPU name (haswell,
+                           znver4, ...) or x86-64-v3/v4 predefines the
+                           feature macros of the extensions below that
+                           the CPU has; `native` reads the host's.
+                           x86-64 code assumes x86-64-v3, so a CPU
+                           without it is refused.
   -mEXT / -mno-EXT         An x86 extension and those it implies: sse3,
                            ssse3, sse4.1, sse4.2, popcnt, crc32, avx,
                            avx2, fma, f16c, aes, pclmul, sha, vaes,
@@ -650,7 +650,7 @@ Compile knobs:
                            is refused for an x86-64-v3 extension the
                            code generator emits unless -mno-sse keeps
                            the code off the vector registers. Any other
-                           gcc extension is refused when enabled.
+                           extension is refused when enabled.
   -mtune=CPU               Accepted; badc has one scheduling model.
   -mstack-protector-guard=global|tls|sysreg
                            Where the guard value is read from. The

@@ -294,7 +294,7 @@ catalog! {
         "a call left in the emitted code to a function declared with `__attribute__((warning(\"message\")))`, which the diagnostic quotes";
     4009, "stack-protector", [], Ignore, Controllable,
         [], Live,
-        "under `-fstack-protector*`, a function `-fstack-protector` leaves unprotected because its character arrays are all shorter than `--param ssp-buffer-size=`, or a variable-length array or `alloca` buffer, which lies below the other locals, so the canary catches an overflow of it only past them; gcc's notes";
+        "under `-fstack-protector*`, a function `-fstack-protector` leaves unprotected because its character arrays are all shorter than `--param ssp-buffer-size=`, or a variable-length array or `alloca` buffer, which lies below the other locals, so the canary catches an overflow of it only past them";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";

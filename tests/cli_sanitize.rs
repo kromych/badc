@@ -154,7 +154,10 @@ fn a_check_badc_does_not_implement_is_refused() {
         .expect("run badc");
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(
-        !o.status.success() && err.contains("signed-integer-overflow"),
+        !o.status.success()
+            && err.contains("error: -fsanitize=address: `address` is neither a check nor a group")
+            && err.contains("signed-integer-overflow")
+            && err.contains("groups: undefined"),
         "{err}"
     );
 }

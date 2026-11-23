@@ -140,12 +140,22 @@ impl Check {
         1 << self as u32
     }
 
-    /// The checks a `-fsanitize=` list item names: one check, clang's name
-    /// for one, or a group: `shift`; `undefined`, which leaves out
-    /// `bounds-strict` as gcc's does and the checks of defined behavior as
-    /// clang's does; clang's `integer`, the integer checks; and clang's
-    /// implicit-conversion groups. A group names the checks of it badc
-    /// implements. `None` for a name badc does not implement.
+    /// The groups a `-fsanitize=` list item may name, besides a check.
+    pub const GROUPS: [&'static str; 8] = [
+        "undefined",
+        "integer",
+        "shift",
+        "array-bounds",
+        "implicit-conversion",
+        "implicit-integer-conversion",
+        "implicit-integer-truncation",
+        "implicit-integer-arithmetic-value-change",
+    ];
+
+    /// The checks a `-fsanitize=` list item names: one check, another name
+    /// for one, or a group: `shift`; `undefined`, the checks of undefined
+    /// behavior but `bounds-strict`; `integer`, the integer checks; and the
+    /// implicit-conversion groups. `None` for a name that is neither.
     pub fn named(name: &str) -> Option<u32> {
         let truncation = Check::ImplicitUnsignedIntegerTruncation.bit()
             | Check::ImplicitSignedIntegerTruncation.bit();

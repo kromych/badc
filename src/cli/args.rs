@@ -2924,7 +2924,7 @@ impl Parser {
             && target.is_aarch64()
         {
             return Err(ParseError::diag(format!(
-                "badc: error: `{flag}` is an x86-64 option; gcc's aarch64 has none"
+                "badc: error: `{flag}` is an x86-64 option; the AArch64 targets take none"
             )));
         }
         if self.codegen.patchable_function_entry != badc::PatchableEntry::NONE && !is_elf_target {
@@ -3443,11 +3443,25 @@ fn parse_stack(value: &str) -> Result<(u64, u64), ParseError> {
     }
 }
 
-/// Apply one of gcc's and clang's `-fsanitize` options to `s`, a check
-/// list naming checks or the group `undefined`. Enabling a check badc
-/// does not implement is refused; disabling one is accepted, as it is
-/// never on. `all`, as an empty list, names every check where checks are
-/// turned off, trapped or recovered, and none can be turned on by it.
+/// The checks and groups a `-fsanitize=` list names, and where `all` may
+/// stand, for a refusal to show.
+fn sanitize_choices() -> String {
+    let checks: Vec<&str> = (badc::SanitizerCheck::ALL.iter())
+        .map(|c| c.name())
+        .collect();
+    format!(
+        "\n  checks: {}\n  groups: {}\n  `all` (every check): -fno-sanitize=, -fsanitize-trap=, \
+         -fno-sanitize-trap=, -fsanitize-recover=, -fno-sanitize-recover=",
+        checks.join(", "),
+        badc::SanitizerCheck::GROUPS.join(", ")
+    )
+}
+
+/// Apply a `-fsanitize` family option to `s`, a list of checks and groups.
+/// Enabling a name that is neither is refused; disabling one is accepted,
+/// as it is never on. `all`, as an empty list, names every check where
+/// checks are turned off, trapped or recovered; it enables nothing, so
+/// `-fsanitize=all` is refused.
 fn sanitize_option(s: &mut badc::Sanitize, arg: &str) -> Result<(), ParseError> {
     let (flag, list) = arg.split_once('=').unwrap_or((arg, ""));
     let every = (badc::SanitizerCheck::ALL.iter()).fold(0, |m, c| m | c.bit());
@@ -3456,21 +3470,18 @@ fn sanitize_option(s: &mut badc::Sanitize, arg: &str) -> Result<(), ParseError> 
         match badc::SanitizerCheck::named(name) {
             Some(b) => bits |= b,
             None if name == "all" && flag == "-fsanitize" => {
-                return Err(ParseError::plain(String::from(
-                    "badc: -fsanitize=all: `all` names every check in -fno-sanitize=, \
-                     -fsanitize-trap= and -fsanitize-recover=, and enables none, as in gcc \
-                     and clang",
+                return Err(ParseError::plain(format!(
+                    "badc: error: -fsanitize=all: `all` enables no check; name the checks or \
+                     a group{}",
+                    sanitize_choices()
                 )));
             }
             None if name == "all" => bits |= every,
             None if flag.starts_with("-fno-") => {}
             None => {
-                let known: Vec<&str> = (badc::SanitizerCheck::ALL.iter())
-                    .map(|c| c.name())
-                    .collect();
                 return Err(ParseError::plain(format!(
-                    "badc: {flag}={name}: the checks badc implements are {}",
-                    known.join(", ")
+                    "badc: error: {flag}={name}: `{name}` is neither a check nor a group{}",
+                    sanitize_choices()
                 )));
             }
         }
@@ -5660,15 +5671,26 @@ mod tests {
     }
 
     /// `all` names every check where checks are turned off, trapped or
-    /// recovered, as gcc and clang have it, `bounds-strict` included, and
-    /// is no check to turn on: both refuse `-fsanitize=all`. A bare
+    /// recovered, `bounds-strict` included. It turns no check on, so
+    /// `-fsanitize=all` is an error that lists the checks and groups. A bare
     /// `-fsanitize-trap` is `-fsanitize-trap=all`.
     #[test]
     fn sanitize_all_names_every_check_and_enables_none() {
         let every = (badc::SanitizerCheck::ALL.iter()).fold(0, |m, c| m | c.bit());
         let strict = badc::SanitizerCheck::named("bounds-strict").unwrap();
         let (message, _) = reject(&["-fsanitize=all", "a.c"]);
-        assert!(message.contains("-fsanitize=all"), "{message}");
+        assert!(
+            message.starts_with("badc: error: -fsanitize=all"),
+            "{message}"
+        );
+        for name in [
+            "bounds-strict",
+            "returns-nonnull-attribute",
+            "undefined",
+            "integer",
+        ] {
+            assert!(message.contains(name), "{name}: {message}");
+        }
         let off = parse(&["-fsanitize=bounds-strict", "-fno-sanitize=all", "a.c"]);
         assert_eq!(off.front.sanitize.enabled, 0);
         for trap in [

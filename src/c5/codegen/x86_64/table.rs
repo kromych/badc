@@ -261,6 +261,11 @@ fn memory_widths(name: &str) -> u8 {
     mask
 }
 
+/// Whether the catalog gives `name` a memory operand of `bytes`.
+pub(crate) fn memory_width_of(name: &str, bytes: u32) -> bool {
+    u32::from(memory_widths(name)) & bytes != 0 && bytes.is_power_of_two() && bytes <= 8
+}
+
 /// The one width the catalog gives a memory operand of `name`, which an
 /// operand written without a size takes, as GNU as reads it. A sole 64-bit
 /// width is the branches' and stack ops', whose operand follows the mode's

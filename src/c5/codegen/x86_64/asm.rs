@@ -2384,6 +2384,23 @@ pub(crate) fn shifts_by_count(m: Mnemonic) -> bool {
     )
 }
 
+/// Whether `mnem` names a catalog instruction rather than one the assembler
+/// parses itself.
+pub(crate) fn catalog_mnemonic(mnem: &str) -> bool {
+    matches!(split_mnemonic(mnem), Some((Mnemonic::Table(_), None)))
+}
+
+/// Whether `sized`, `mnem` with an AT&T size letter, names `mnem` at that
+/// size, as GNU as reads the letter on it.
+pub(crate) fn accepts_size_suffix(mnem: &str, sized: &str) -> bool {
+    match (split_mnemonic(mnem), split_mnemonic(sized)) {
+        (Some((a, None)), Some((b, Some(_)))) => a == b,
+        // `movq` is a whole mnemonic, the integer `mov` at 64 bits too.
+        (Some((Mnemonic::Mov, None)), Some(_)) => sized == "movq",
+        _ => false,
+    }
+}
+
 /// Resolve a mnemonic token to its base form plus any AT&T size suffix,
 /// folding case as GNU as does.
 fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {

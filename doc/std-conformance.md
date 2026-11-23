@@ -592,6 +592,13 @@ with register, memory, and immediate constraints, `asm goto`,
 `__attribute__((naked))` function bodies, and file-scope `asm(...)`. The same
 assembler builds `.s` and `.S` files (`badc -c foo.S -o foo.o`). It implements
 a subset of GNU as; [linux-kernel.md](linux-kernel.md) has coverage figures.
+On x86-64 it reads AT&T syntax and, from `.intel_syntax noprefix` (or `prefix`)
+to `.att_syntax`, GNU as's Intel syntax, in a `.s` file and an `asm` template:
+the destination first, registers and immediates bare, memory as
+`size ptr seg:[base + index*scale + disp]` or `sym[index]`, `offset sym` for an
+address, a name `.set` or `.equ` gives a value as an immediate and any other
+bare name as memory but as a branch target, MASM's `0FFh`, and AVX-512
+decorations. The `ptr` width sizes an instruction no general register sizes.
 On the Windows targets it takes GNU as's `.seh_*` unwind directives, which
 give the function its PE unwind row: x64's `.seh_pushreg`, `.seh_stackalloc`,
 `.seh_setframe` (rbp) and `.seh_savexmm`, and arm64's save, allocation,

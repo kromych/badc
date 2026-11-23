@@ -271,7 +271,14 @@ fn extract_asm_sections_impl(
     file_scope: bool,
     errors: &mut alloc::vec::Vec<AsmError>,
 ) -> Option<AsmExtract> {
+    // Intel-syntax statements reach the rest of the pass in AT&T syntax.
+    let restated = match is_aarch64 {
+        true => None,
+        false => crate::c5::codegen::x86_64::intel::restate(text, errors),
+    };
+    let text = restated.as_deref().unwrap_or(text);
     if !file_scope
+        && restated.is_none()
         && !text.contains(".pushsection")
         && !text.contains(".section")
         && !text.contains(".subsection")

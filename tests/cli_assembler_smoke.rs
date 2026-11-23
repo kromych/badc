@@ -3799,6 +3799,165 @@ fn every_layout_error_is_reported_at_its_line() {
     }
 }
 
+/// A unit in GNU as's Intel syntax: registers and immediates bare, the
+/// destination first, `size ptr` memory with a segment, a scaled index and a
+/// RIP base, `offset`, an equated constant, MASM's `0FFh`, a character
+/// constant, extending moves from memory, a size `ptr` gives where no
+/// register does, indirect branches, AVX-512 decorations, prefixes, and a
+/// return to AT&T syntax.
+const INTEL_UNIT: &str = ".intel_syntax noprefix
+.set K, 24
+.text
+.globl f
+f:
+    push rbp
+    mov rbp, rsp
+    mov eax, 1
+    mov rax, qword ptr [rdi]
+    mov qword ptr [rdi + 8], rax
+    mov dword ptr [rdi + rcx*4 - 16], 7
+    mov byte ptr [rdi], 0FFh
+    add qword ptr [rsp + K], 1
+    lea rax, [rip + g]
+    lea rcx, [rax + rdx*8]
+    mov rax, qword ptr fs:[0x28]
+    movzx eax, byte ptr [rsi]
+    movsx rax, word ptr [rsi]
+    movsxd rax, dword ptr [rsi]
+    cqo
+    imul rax, qword ptr [rbx], 8
+    shl dword ptr [rax], cl
+    shld qword ptr [rsi], rbx, 3
+    crc32 eax, byte ptr [rax]
+    sete byte ptr [rdx]
+    mov rax, offset g
+    mov al, 'a'
+    call g
+    call qword ptr [rip + g@GOTPCREL]
+    jmp qword ptr [rax + 8]
+    jne 1f
+    xor eax, eax
+1:  cvtsi2sd xmm0, dword ptr [rax]
+    vpaddd ymm0, ymm1, ymmword ptr [rax]
+    vaddps zmm0{k1}{z}, zmm1, dword ptr [rax]{1to16}
+    lock xadd dword ptr [rdx], eax
+    rep movsb
+    ret
+.att_syntax
+    movq %rax, %rbx
+.data
+g: .quad 0
+";
+
+/// The same unit in AT&T syntax.
+const ATT_UNIT: &str = ".set K, 24
+.text
+.globl f
+f:
+    push %rbp
+    mov %rsp, %rbp
+    mov $1, %eax
+    movq (%rdi), %rax
+    movq %rax, 8(%rdi)
+    movl $7, -16(%rdi,%rcx,4)
+    movb $0xFF, (%rdi)
+    addq $1, K(%rsp)
+    lea g(%rip), %rax
+    lea (%rax,%rdx,8), %rcx
+    movq %fs:0x28, %rax
+    movzbl (%rsi), %eax
+    movswq (%rsi), %rax
+    movslq (%rsi), %rax
+    cqto
+    imulq $8, (%rbx), %rax
+    shll %cl, (%rax)
+    shldq $3, %rbx, (%rsi)
+    crc32b (%rax), %eax
+    sete (%rdx)
+    mov $g, %rax
+    mov $'a', %al
+    call g
+    call *g@GOTPCREL(%rip)
+    jmp *8(%rax)
+    jne 1f
+    xor %eax, %eax
+1:  cvtsi2sdl (%rax), %xmm0
+    vpaddd (%rax), %ymm1, %ymm0
+    vaddps (%rax){1to16}, %zmm1, %zmm0{%k1}{z}
+    lock xadd %eax, (%rdx)
+    rep movsb
+    ret
+    movq %rax, %rbx
+.data
+g: .quad 0
+";
+
+/// `.intel_syntax noprefix` assembles to the object its AT&T spelling does,
+/// in a `.s` file and in `asm` statements, inline ones with operands
+/// included.
+#[test]
+fn intel_syntax_assembles_as_its_att_spelling() {
+    let d = dir("intel-syntax");
+    let mut objects = Vec::new();
+    for (name, body) in [("i.s", INTEL_UNIT), ("a.s", ATT_UNIT)] {
+        write(&d, name, body);
+        let obj = name.replace(".s", ".o");
+        run_ok(&d, &["-q", "--target=linux-x64", "-c", name, "-o", &obj]);
+        objects.push(std::fs::read(d.join(&obj)).expect("read object"));
+    }
+    assert!(
+        objects[0] == objects[1],
+        "the Intel and AT&T objects differ"
+    );
+    let inline = |template: &str| {
+        format!(
+            "int f(int x) {{ int r; __asm__({template} : \"=r\"(r) : \"r\"(x) : \"eax\"); return r; }}\n"
+        )
+    };
+    let intel_c = inline(
+        "\".intel_syntax noprefix\\n\\tlea eax, [rdi + rdi*2 + 7]\\n\\t.att_syntax\\n\\tmovl %%eax, %0\"",
+    );
+    let att_c = inline("\"leal 7(%%rdi,%%rdi,2), %%eax\\n\\tmovl %%eax, %0\"");
+    let mut texts = Vec::new();
+    for (name, body) in [("i.c", intel_c), ("a.c", att_c)] {
+        write(&d, name, &body);
+        let obj = name.replace(".c", ".o");
+        run_ok(
+            &d,
+            &["-q", "--target=linux-x64", "-O", "-c", name, "-o", &obj],
+        );
+        texts.push(text_bytes(
+            &std::fs::read(d.join(&obj)).expect("read object"),
+        ));
+    }
+    assert_eq!(texts[0], texts[1]);
+}
+
+/// An Intel-syntax statement that names no instruction operand is reported
+/// at its line, as is an `.att_syntax` mode badc does not read.
+#[test]
+fn intel_syntax_reports_what_it_cannot_restate() {
+    let d = dir("intel-syntax-errors");
+    write(
+        &d,
+        "bad.s",
+        ".intel_syntax noprefix\n.text\nmov eax, [rax + rbx + rcx]\n.att_syntax noprefix\n",
+    );
+    let (ok, text) = run(
+        &d,
+        &["-q", "--target=linux-x64", "-c", "bad.s", "-o", "bad.o"],
+    );
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("bad.s:3:") && text.contains("adds three registers"),
+        "{text}"
+    );
+    assert!(
+        text.contains("bad.s:4:") && text.contains("`.att_syntax noprefix`"),
+        "{text}"
+    );
+}
+
 /// AT&T `shld` and `shrd` take a memory destination and `shrd` an immediate
 /// count; an unsized memory operand takes the width of the register beside
 /// it but a shift's `%cl` count, or the one width the instruction has, as

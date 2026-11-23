@@ -1466,6 +1466,70 @@ mod differential {
         cases
     }
 
+    /// The bytes `.intel_syntax noprefix` text assembles to through the
+    /// file-scope assembler, or its errors.
+    fn assemble_intel(itxt: &str) -> Result<Vec<u8>, String> {
+        use crate::c5::asm::AsmSectionItem;
+        let src = alloc::format!(".intel_syntax noprefix\n{itxt}\n");
+        let mut blocks = crate::c5::asm::extract_file_scope_asm_sections(&src, false)
+            .map_err(|e| alloc::format!("{e:?}"))?;
+        crate::c5::codegen::x86_64::emit::encode_x86_file_asm_section_code(
+            &mut blocks,
+            crate::c5::ElfClass::Elf64,
+        )
+        .map_err(|e| alloc::format!("{e:?}"))?;
+        let mut out = Vec::new();
+        for b in &blocks {
+            for li in &b.items {
+                if let AsmSectionItem::CodeBytes { bytes, .. } = &li.item {
+                    out.extend_from_slice(bytes);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Every cataloged form, written in Intel syntax as GNU as reads it,
+    /// assembles to the bytes the table encodes it to: the Intel front
+    /// restates each operand shape and size in the AT&T syntax the
+    /// assembler reads.
+    #[test]
+    fn intel_syntax_assembles_every_form_as_the_table_encodes_it() {
+        let (mut agree, mut differ) = (0usize, Vec::new());
+        for (mnem, ops) in derived_cases() {
+            // Catalog spellings no assembler reads: the two-operand hint
+            // `nop` and the `pushw` row, which clang refuses in both syntaxes.
+            if mnem == "pushw" || (mnem == "nop" && ops.len() == 2) {
+                continue;
+            }
+            let Some(m) = Mnem::from_name(mnem) else {
+                continue;
+            };
+            let Ok(want) = encode(m, None, &ops) else {
+                continue;
+            };
+            let itxt = intel(mnem, &ops);
+            match assemble_intel(&itxt) {
+                Ok(got) if got == want => agree += 1,
+                Ok(got) => differ.push(alloc::format!("{itxt}: {} want {}", hex(&got), hex(&want))),
+                Err(e) => differ.push(alloc::format!("{itxt}: {e}")),
+            }
+        }
+        std::eprintln!("intel: {agree} agree, {} differ", differ.len());
+        assert!(
+            differ.is_empty(),
+            "{} of {} forms differ:\n  {}",
+            differ.len(),
+            agree + differ.len(),
+            differ
+                .iter()
+                .take(60)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n  ")
+        );
+    }
+
     fn sweep_cases() -> Vec<(&'static str, Vec<Opnd>)> {
         let mut cases = derived_cases();
         // Base + displacement across the special bases (rbp/r13 forced disp8,

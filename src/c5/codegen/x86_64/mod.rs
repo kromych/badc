@@ -6,6 +6,7 @@ pub(crate) mod asm;
 pub(crate) mod emit;
 pub(crate) mod encode;
 pub(crate) mod evex;
+pub(crate) mod intel;
 mod isa_x86_table;
 pub(crate) mod table;
 

@@ -194,13 +194,15 @@ jobs:
           - windows-latest
           - windows-11-arm
     runs-on: ${{ matrix.os }}
-    # windows-latest takes about 22 minutes and windows-11-arm 18 (measured at
-    # 11d3ec96e); the Linux and macOS lanes finish well inside that. Process
+    # The Windows lanes are the slowest: over the runs for 513ec4e643 to
+    # d931f0c99d, windows-latest took 31 to 45 minutes and windows-11-arm 28
+    # to 40, ubuntu-latest 15 to 22 and macos-latest 18 to 36. Process
     # spawning dominates the per-fixture runs on Windows. The cap is a hang
     # backstop, so it sits above the slowest lane, not at it. Runners vary:
-    # on the run for 00dd3a0ba every lane took 1.35-1.6x its previous time,
-    # rustc's own build included, and windows-latest passed 30 minutes.
-    timeout-minutes: 45
+    # from the run for 96d60b1306 to the one for d931f0c99d the lib suite
+    # took 1.3x as long on windows-latest and 1.6x on ubuntu-latest, while
+    # on a fixed Windows x64 host its debug run went from 634 s to 477 s.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

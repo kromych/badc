@@ -6103,8 +6103,8 @@ mod tests {
 
     /// Parse a template of explicit-operand instructions (no `%N` refs),
     /// resolve them the way the emitter does (memory width from the suffix,
-    /// else a GP register operand, else the mode's default operand size), and
-    /// encode. For templates whose expected bytes are byte-verified against
+    /// else a GP register operand, else the width GNU as gives an unsized
+    /// operand), and encode. For templates whose expected bytes are byte-verified against
     /// clang.
     pub(super) fn asm_bytes(tmpl: &[u8]) -> Vec<u8> {
         mode_asm_bytes(super::super::table::Mode::Bits64, tmpl).unwrap()
@@ -6124,7 +6124,12 @@ mod tests {
                     _ => None,
                 })
             });
-            let default_size = AsmRegSize::from_width(mode.stack_opsize());
+            let default_size = table_name(insn.mnemonic)
+                .and_then(|name| super::super::table::unsized_memory_width(name, mode))
+                .map_or(
+                    AsmRegSize::from_width(mode.stack_opsize()),
+                    AsmRegSize::from_width,
+                );
             let reg_of = |b: AsmMemBase| match b {
                 AsmMemBase::Reg { num, .. } => num,
                 AsmMemBase::Ref(_) => panic!("explicit-register template expected"),

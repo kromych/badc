@@ -25,25 +25,10 @@ Disassembly of section .text:
                	int3
                	int3
 
-<takes_qualified>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rcx, -0x10(%rbp)
-               	movl	%edx, -0x20(%rbp)
-               	movl	%ecx, -0x10(%rbp)
-               	movl	-0x20(%rbp), %eax
-               	addq	$0x2, %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movl	(%rcx), %ecx
-               	addq	%rcx, %rax
-               	leave
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x30, %rsp
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
                	je	<addr>
@@ -103,22 +88,24 @@ Disassembly of section .text:
                	movl	$0x11, %eax
                	leave
                	retq
-               	movl	$0x1, %edi
-               	movq	%rdi, %rsi
-               	movq	%rdi, %rcx
-               	movq	%rdi, %rdx
-               	callq	<addr>
+               	movl	$0x1, -0x18(%rbp)
+               	movl	$0x1, -0x30(%rbp)
+               	movl	-0x18(%rbp), %eax
+               	addq	$0x2, %rax
+               	leaq	-0x30(%rbp), %rcx
+               	movl	(%rcx), %ecx
+               	addq	%rcx, %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x14, %eax
                	leave
                	retq
+               	movl	$0x4, -0x28(%rbp)
                	movl	$0x4, -0x20(%rbp)
-               	movl	$0x4, -0x18(%rbp)
                	movl	$0x4, -0x10(%rbp)
                	movl	$0x4, -0x8(%rbp)
-               	movl	-0x20(%rbp), %eax
-               	movl	-0x18(%rbp), %ecx
+               	movl	-0x28(%rbp), %eax
+               	movl	-0x20(%rbp), %ecx
                	addq	%rcx, %rax
                	leaq	-0x10(%rbp), %rcx
                	movl	(%rcx), %ecx

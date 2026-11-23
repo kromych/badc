@@ -53,19 +53,31 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
+               	mov	x0, #0x64               // =100
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x3, #0x5                // =5
+               	mov	x2, x0
+               	casal	x2, x3, [x1]
+               	cmp	x2, #0x64
+               	cset	x3, eq
+               	cmp	x3, #0x0
+               	csel	x2, x0, x2, ne
+               	mov	x0, #0x3                // =3
+               	ldaddal	x0, x4, [x1]
+               	cbz	x3, <addr>
                	mov	x0, #0x1                // =1
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x6, #0x7                // =7
-               	mov	x7, #0x8                // =8
-               	bl	<addr>
-               	mov	x1, #0x0                // =0
-               	cmp	x0, #0x24
-               	csel	x0, x1, x0, eq
-               	ldp	x29, x30, [sp], #0x10
                	ret
+               	cmp	x2, #0x9
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	b	<addr>
+               	cmp	x4, #0x9
+               	b.ne	<addr>
+               	ldar	x0, [x1]
+               	cmp	x0, #0xc
+               	b.eq	<addr>
+               	mov	x0, #0x4                // =4
+               	b	<addr>
+               	mov	x0, #0x0                // =0
+               	b	<addr>

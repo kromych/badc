@@ -88,21 +88,35 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
-               	movl	$0x3, %edx
-               	movl	$0x4, %ecx
-               	movl	$0x5, %r8d
-               	movl	$0x6, %r9d
-               	subq	$0x10, %rsp
-               	movq	$0x7, (%rsp)
-               	movq	$0x8, 0x8(%rsp)
-               	callq	<addr>
-               	addq	$0x10, %rsp
-               	xorl	%ecx, %ecx
-               	cmpq	$0x24, %rax
-               	cmoveq	%rcx, %rax
-               	popq	%rbp
+               	movl	$0x64, %edx
+               	leaq	<rip>, %rcx # <addr>
+               	movl	$0x5, %esi
+               	movq	%rdx, %rax
+               	lock
+               	cmpxchgq	%rsi, (%rcx)
+               	cmpq	$0x64, %rax
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	testq	%rsi, %rsi
+               	cmoveq	%rax, %rdx
+               	movl	$0x3, %eax
+               	movq	%rax, %rdi
+               	lock
+               	xaddq	%rdi, (%rcx)
+               	testq	%rsi, %rsi
+               	je	<addr>
+               	movl	$0x1, %eax
                	retq
+               	cmpq	$0x9, %rdx
+               	je	<addr>
+               	movl	$0x2, %eax
+               	jmp	<addr>
+               	cmpq	$0x9, %rdi
+               	jne	<addr>
+               	movq	(%rcx), %rax
+               	cmpq	$0xc, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	jmp	<addr>
+               	xorl	%eax, %eax
+               	jmp	<addr>

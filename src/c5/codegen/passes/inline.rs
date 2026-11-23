@@ -1279,6 +1279,7 @@ fn candidacy(
             | Inst::FpCast { .. }
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. }
+            | Inst::AtomicLoad { .. }
             // Travels with its statement, admitted below on the reloc path.
             | Inst::SimdVal { .. }
             | Inst::VecBinop { .. }
@@ -1329,6 +1330,19 @@ fn candidacy(
                         || !addr_is_slot(func, *addr, redirect_slot.unwrap()))
                 {
                     say(format_args!("store outside the aggregate return slot"));
+                    return false;
+                }
+            }
+            // An atomic writes through its address operand as a store does,
+            // a 16-byte compare-and-exchange through `expected` too, and the
+            // splice reproduces either by remapping the operands; on the flat
+            // aggregate path a write is admissible only into the result slot.
+            Inst::AtomicStore { .. }
+            | Inst::AtomicRmw { .. }
+            | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. } => {
+                if !spliced_aggs.is_empty() && !reloc {
+                    say(format_args!("atomic write on the flat aggregate path"));
                     return false;
                 }
             }
@@ -6447,6 +6461,70 @@ mod tests {
     /// keeps the strict flat-path gates, so the negative-slot store
     /// still rejects when volatile. A volatile read of a declared
     /// parameter's cell is materialized instead and stays a candidate.
+    /// An atomic access through a pointer -- a load, a store, a
+    /// read-modify-write, a compare-and-exchange -- names no frame state, so
+    /// a body holding one, the accessor shape of `atomic_load_explicit`, is a
+    /// candidate as a plain load or store through the pointer is.
+    #[test]
+    fn an_atomic_accessor_is_a_candidate() {
+        use crate::c5::ir::{AtomicRmwOp, MemOrder};
+        let abi = Target::LinuxX64.abi();
+        let order = MemOrder::Relaxed;
+        let param = Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        };
+        let bodies = [
+            alloc::vec![
+                param.clone(),
+                Inst::AtomicLoad {
+                    addr: 0,
+                    width: 8,
+                    order
+                }
+            ],
+            alloc::vec![
+                param.clone(),
+                Inst::Imm(1),
+                Inst::AtomicRmw {
+                    op: AtomicRmwOp::Add,
+                    addr: 0,
+                    value: 1,
+                    width: 8,
+                    order,
+                },
+            ],
+            alloc::vec![
+                param.clone(),
+                Inst::Imm(1),
+                Inst::AtomicCas {
+                    addr: 0,
+                    expected: 1,
+                    desired: 1,
+                    width: 8,
+                    order,
+                },
+            ],
+        ];
+        for insts in bodies {
+            let ret = insts.len() as ValueId - 1;
+            let f = FunctionSsa {
+                n_params: 1,
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
+                f32_values: alloc::vec![false; insts.len()],
+                blocks: alloc::vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..insts.len() as u32,
+                    terminator: Terminator::Return(ret),
+                    exit_acc: ret,
+                }],
+                insts,
+                ..Default::default()
+            };
+            assert!(is_inline_candidate(&f, 32, abi, None), "{:?}", f.insts);
+        }
+    }
+
     #[test]
     fn volatile_access_rejects_inlining() {
         let abi = Target::LinuxX64.abi();

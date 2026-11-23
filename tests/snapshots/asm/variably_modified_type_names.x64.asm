@@ -54,7 +54,5 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	$0x1, -0x8(%rbp)
                	leave
                	retq

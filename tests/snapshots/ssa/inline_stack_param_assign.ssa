@@ -111,10 +111,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v39  BinopI { op=add, lhs=v2, rhs_imm=9 }             -> x1
     v40  Imm(0)                                           -> x2
     v41  LocalAddr(-3)                                    -> x2
-    v42  LoadLocal { off=-3, kind=I64 }                   -> x2
+    v42  Imm(0)                                           -> x2
     v43  Imm(99700)                                       -> x2
     v44  Imm(0)                                           -> x2
-    v45  LoadLocal { off=-3, kind=I64 }                   -> x2
+    v45  Imm(0)                                           -> x2
     v46  LoadLocal { off=-2, kind=I8, volatile }          -> x2
     v47  BinopI { op=add, lhs=v46, rhs_imm=99700 }        -> x2
     v48  Imm(0)                                           -> x6
@@ -125,7 +125,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v53  Imm(1611)                                        -> x8
     v54  Extend { value=v39, kind=I32 }                   -> x1
     v55  BinopI { op=add, lhs=v54, rhs_imm=1611 }         -> x1
-    v56  LoadLocal { off=-3, kind=I64 }                   -> x8
+    v56  Imm(0)                                           -> x8
     v57  Binop { op=add, lhs=v55, rhs=v47 }               -> x1
     v58  BinopI { op=and, lhs=v49, rhs_imm=4294967295 }   -> x2
     v59  Binop { op=add, lhs=v57, rhs=v49 }               -> x1

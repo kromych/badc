@@ -91,7 +91,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v62  LocalAddr(-1)                                    -> x0
     v63  Imm(0)                                           -> x0
     v64  Imm(0)                                           -> x0
-    v65  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v65  Imm(0)                                           -> x0
     v66  Imm(5)                                           -> x7
     v67  Call { target_pc=0, args=[v66], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v68  RetPart(0, kind=I64)                             -> x0

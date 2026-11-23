@@ -2731,11 +2731,11 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v724 Imm(8)                                           -> x0
     v725 Imm(0)                                           -> x0
     v726 VecExtract { vec=v699, off=8, kind=F64, bytes=16 } -> d1
-    v727 Binop { op=fsub, lhs=v722, rhs=v726 }            -> d5
+    v727 Binop { op=fsub, lhs=v722, rhs=v726 }            -> d0
     v728 Imm(0)                                           -> x0
     v729 Imm(8)                                           -> x0
     v730 Imm(0)                                           -> x0
-    v731 VecInsert { vec=v718, value=v727, off=8, kind=F64, bytes=16 } -> d0
+    v731 VecInsert { vec=v718, value=v727, off=8, kind=F64, bytes=16 } -> d1
     v732 Imm(0)                                           -> x0
     v733 Imm(0)                                           -> x0
     v734 LifetimeEnd(0)                                   -> -
@@ -2752,9 +2752,9 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v745 Imm(0)                                           -> x0
     v746 Imm(0)                                           -> x0
     v747 Imm(0)                                           -> x0
-    v748 Copy { value=v663, fp=true }                     -> d0
+    v748 Copy { value=v663, fp=true }                     -> d1
     v749 Imm(3)                                           -> x0
-    v750 Imm(4613937818241073152)                         -> d1
+    v750 Imm(4613937818241073152)                         -> d2
     v751 Binop { op=fne, lhs=v748, rhs=v750 }             -> x0
     v752 Imm(1)                                           -> x1
     v753 Imm(0)                                           -> x1
@@ -2764,9 +2764,9 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v755 Imm(8)                                           -> x0
     v756 Imm(8)                                           -> x0
     v757 Imm(0)                                           -> x0
-    v758 Copy { value=v675, fp=true }                     -> d1
+    v758 Copy { value=v675, fp=true }                     -> d2
     v759 Imm(7)                                           -> x0
-    v760 Imm(4619567317775286272)                         -> d0
+    v760 Imm(4619567317775286272)                         -> d1
     v761 Binop { op=fne, lhs=v758, rhs=v760 }             -> x0
     v762 BinopI { op=ne, lhs=v761, rhs_imm=0 }            -> x1
     v763 Imm(0)                                           -> x1
@@ -2779,9 +2779,9 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v768 Imm(0)                                           -> x0
     v769 Imm(0)                                           -> x0
     v770 Imm(0)                                           -> x0
-    v771 Copy { value=v715, fp=true }                     -> d1
+    v771 Copy { value=v715, fp=true }                     -> d2
     v772 Imm(-1)                                          -> x0
-    v773 Imm(-4616189618054758400)                        -> d2
+    v773 Imm(-4616189618054758400)                        -> d3
     v774 Binop { op=fne, lhs=v771, rhs=v773 }             -> x0
     v775 BinopI { op=ne, lhs=v774, rhs_imm=0 }            -> x1
     v776 Imm(0)                                           -> x1
@@ -2794,7 +2794,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v781 Imm(8)                                           -> x0
     v782 Imm(8)                                           -> x0
     v783 Imm(0)                                           -> x0
-    v784 Copy { value=v727, fp=true }                     -> d1
+    v784 Copy { value=v727, fp=true }                     -> d0
     v785 Imm(-2)                                          -> x0
     v786 Imm(-4611686018427387904)                        -> d2
     v787 Binop { op=fne, lhs=v784, rhs=v786 }             -> x0
@@ -2816,20 +2816,20 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v801 LifetimeEnd(0)                                   -> -
     terminator Return(v791)   (exit_acc=v791)
   block 28  start_pc=0
-    v802 Imm(4618722892845154304)                         -> d1
-    v803 StoreLocal { off=-1, value=v802, kind=F64 }      -> -
+    v802 Imm(4618722892845154304)                         -> d0
+    v803 Imm(0)                                           -> x0
     v804 Imm(0)                                           -> x0
     v805 LocalAddr(-1)                                    -> x0
-    v806 LoadLocal { off=-1, kind=F64 }                   -> d2
+    v806 Imm(0)                                           -> x0
     v807 Imm(0)                                           -> x0
     v808 Undef                                            -> x0
-    v809 VecInsert { vec=v808, value=v806, off=0, kind=F64, bytes=16 } -> d3
+    v809 Undef                                            -> x0
     v810 Imm(0)                                           -> x0
-    v811 LoadLocal { off=-1, kind=F64 }                   -> d3
+    v811 Imm(0)                                           -> x0
     v812 Imm(0)                                           -> x0
     v813 Imm(8)                                           -> x0
     v814 Imm(0)                                           -> x0
-    v815 VecInsert { vec=v809, value=v806, off=8, kind=F64, bytes=16 } -> d3
+    v815 VecSplat { value=v802, kind=F64, bytes=16 }      -> d2
     v816 Imm(0)                                           -> x0
     v817 Imm(0)                                           -> x0
     v818 Imm(0)                                           -> x0
@@ -2839,7 +2839,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v822 Imm(0)                                           -> x0
     v823 Imm(0)                                           -> x0
     v824 ImmData(208)                                     -> x0
-    v825 Load { addr=v824, disp=0, kind=V128, align=8 }   -> d3
+    v825 Load { addr=v824, disp=0, kind=V128, align=8 }   -> d2
     v826 Imm(0)                                           -> x0
     v827 Imm(0)                                           -> x0
     v828 Imm(0)                                           -> x0
@@ -2847,18 +2847,18 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v830 Imm(0)                                           -> x0
     v831 Imm(0)                                           -> x0
     v832 Imm(0)                                           -> x0
-    v833 VecExtract { vec=v825, off=0, kind=F64, bytes=16 } -> d4
+    v833 VecExtract { vec=v825, off=0, kind=F64, bytes=16 } -> d3
     v834 Imm(0)                                           -> x0
     v835 Undef                                            -> x0
-    v836 VecInsert { vec=v835, value=v833, off=0, kind=F64, bytes=16 } -> d5
+    v836 VecInsert { vec=v835, value=v833, off=0, kind=F64, bytes=16 } -> d4
     v837 Imm(0)                                           -> x0
     v838 Imm(0)                                           -> x0
     v839 Imm(0)                                           -> x0
-    v840 VecExtract { vec=v825, off=0, kind=F64, bytes=16 } -> d3
+    v840 VecExtract { vec=v825, off=0, kind=F64, bytes=16 } -> d2
     v841 Imm(0)                                           -> x0
     v842 Imm(8)                                           -> x0
     v843 Imm(0)                                           -> x0
-    v844 VecInsert { vec=v836, value=v840, off=8, kind=F64, bytes=16 } -> d5
+    v844 VecInsert { vec=v836, value=v840, off=8, kind=F64, bytes=16 } -> d4
     v845 Imm(0)                                           -> x0
     v846 Imm(0)                                           -> x0
     v847 LifetimeEnd(0)                                   -> -
@@ -2873,7 +2873,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v856 Imm(0)                                           -> x0
     v857 Imm(0)                                           -> x0
     v858 Imm(0)                                           -> x0
-    v859 Copy { value=v806, fp=true }                     -> d5
+    v859 Copy { value=v802, fp=true }                     -> d4
     v860 Imm(4618722892845154304)                         -> x0
     v861 Binop { op=fne, lhs=v859, rhs=v802 }             -> x0
     v862 Imm(1)                                           -> x1
@@ -2884,7 +2884,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v865 Imm(8)                                           -> x0
     v866 Imm(8)                                           -> x0
     v867 Imm(0)                                           -> x0
-    v868 Copy { value=v806, fp=true }                     -> d2
+    v868 Copy { value=v802, fp=true }                     -> d4
     v869 Imm(4618722892845154304)                         -> x0
     v870 Binop { op=fne, lhs=v868, rhs=v802 }             -> x0
     v871 BinopI { op=ne, lhs=v870, rhs_imm=0 }            -> x1
@@ -2898,7 +2898,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v877 Imm(0)                                           -> x0
     v878 Imm(0)                                           -> x0
     v879 Imm(0)                                           -> x0
-    v880 Copy { value=v833, fp=true }                     -> d1
+    v880 Copy { value=v833, fp=true }                     -> d0
     v881 Imm(7)                                           -> x0
     v882 Imm(4619567317775286272)                         -> x0
     v883 Binop { op=fne, lhs=v880, rhs=v760 }             -> x0
@@ -2913,7 +2913,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v890 Imm(8)                                           -> x0
     v891 Imm(8)                                           -> x0
     v892 Imm(0)                                           -> x0
-    v893 Copy { value=v840, fp=true }                     -> d1
+    v893 Copy { value=v840, fp=true }                     -> d0
     v894 Imm(7)                                           -> x0
     v895 Imm(4619567317775286272)                         -> x0
     v896 Binop { op=fne, lhs=v893, rhs=v760 }             -> x0

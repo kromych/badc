@@ -55,16 +55,15 @@ Disassembly of section .text:
                	movl	$0x14, %ecx
                	cmpl	$0x1, %edi
                	cmovneq	%rcx, %rax
-               	leaq	<rip>, %rsi # <addr>
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rdi
+               	leaq	<rip>, %rcx # <addr>
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rdi
                	movl	%edi, <rip> # <addr>
-               	movb	$0x62, (%rsi,%rcx)
-               	leaq	<rip>, %rsi # <addr>
-               	movslq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rcx), %rdi
+               	movb	$0x62, (%rcx,%rdx)
+               	movslq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rdx), %rdi
                	movl	%edi, <rip> # <addr>
-               	movb	$0x61, (%rsi,%rcx)
+               	movb	$0x61, (%rcx,%rdx)
                	retq
 
 <nested>:
@@ -127,20 +126,18 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	movq	%rdi, -0x40(%rbp)
-               	movl	$0x4, -0x20(%rbp)
                	testl	%esi, %esi
                	jne	<addr>
-               	movq	$0x1, -0x18(%rbp)
-               	movq	$0x2, -0x10(%rbp)
-               	movq	$0x3, -0x8(%rbp)
+               	movq	$0x1, -0x20(%rbp)
+               	movq	$0x2, -0x18(%rbp)
+               	movq	$0x3, -0x10(%rbp)
                	leaq	<rip>, %rdx # <addr>
                	movslq	<rip>, %rax # <addr>
                	leaq	0x1(%rax), %rsi
                	movl	%esi, <rip> # <addr>
                	movb	$0x61, (%rdx,%rax)
-               	movl	$0xffffffff, -0x20(%rbp) # imm = 0xFFFFFFFF
                	movq	-0x40(%rbp), %rax
-               	leaq	-0x18(%rbp), %rcx
+               	leaq	-0x20(%rbp), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
@@ -149,13 +146,13 @@ Disassembly of section .text:
                	retq
                	cmpl	$0x1, %esi
                	jne	<addr>
-               	movq	$0x4, -0x18(%rbp)
-               	movq	$0x2, -0x10(%rbp)
-               	movq	$0x3, -0x8(%rbp)
+               	movq	$0x4, -0x20(%rbp)
+               	movq	$0x2, -0x18(%rbp)
+               	movq	$0x3, -0x10(%rbp)
                	jmp	<addr>
-               	movq	$0x4, -0x18(%rbp)
-               	movq	$0x8, -0x10(%rbp)
-               	movq	$0x3, -0x8(%rbp)
+               	movq	$0x4, -0x20(%rbp)
+               	movq	$0x8, -0x18(%rbp)
+               	movq	$0x3, -0x10(%rbp)
                	jmp	<addr>
 
 <looped>:

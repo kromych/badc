@@ -60,20 +60,15 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0x3, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movslq	-0x8(%rbp), %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
                	xorl	%eax, %eax
-               	movl	%eax, -0x10(%rbp)
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, -0x10(%rbp)
-               	movl	-0x10(%rbp), %ecx
-               	cmpl	$0x1, %ecx
-               	je	<addr>
-               	movl	$0x7, %eax
                	leave
                	retq
+               	movl	$0x7, %eax
                	leave
                	retq
                	movl	$0x5, %eax

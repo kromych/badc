@@ -725,7 +725,7 @@ Disassembly of section .text:
                	cmpq	%rax, %rcx
                	jne	<addr>
                	movsd	-0x70(%rbp), %xmm14
-               	vmovq	%xmm14, %rcx
+               	movq	%xmm14, %rcx
                	movl	%eax, %edx
                	shlq	$0x20, %rax
                	orq	%rdx, %rax

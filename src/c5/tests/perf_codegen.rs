@@ -7812,6 +7812,32 @@ double f(const double *c, const double *xs, int n) {\n\
     m.finish();
 }
 
+/// A local read back through a cast of its address, `*(T *)&local`, stays
+/// in registers: the address is read by that load alone, which reads the
+/// slot as a load of the local does, so the slot is promoted like one no
+/// address names.
+#[test]
+fn x64_a_local_read_through_its_cast_address_stays_in_registers() {
+    const SRC: &str = "long long f(const unsigned char *p) {\n\
+unsigned long long k = p[0];\n\
+if (k >= 0x80) k = (k << 7) ^ p[1];\n\
+return *(long long *)&k;\n}\n";
+    let insns = x64(SRC, "f");
+    // A memory operand based on rbp (`disp(%rbp)`) or rsp (a SIB base of 4).
+    let frame = |i: &X64Insn| {
+        i.modrm.is_some_and(|m| {
+            let (md, rm) = (m >> 6, m & 7);
+            md != 3
+                && i.rex & 1 == 0
+                && ((rm == 5 && md != 0) || (rm == 4 && i.sib.is_some_and(|s| s & 7 == 4)))
+        })
+    };
+    assert!(
+        !insns.iter().any(frame),
+        "the local is in the frame: {insns:x?}"
+    );
+}
+
 /// A value saved around the call in a loop, defined ahead of the loop and
 /// never redefined, is stored once where it is defined: the call only
 /// reloads it. Here more values cross the call than the callee-saved

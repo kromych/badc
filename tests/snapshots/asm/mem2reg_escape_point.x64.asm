@@ -38,20 +38,20 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0xa, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rsi
-               	movl	$0xf, -0x8(%rbp)
-               	movl	$0xa, -0x8(%rbp)
                	xorl	%eax, %eax
                	movq	%rax, %rdx
                	movq	%rax, %rcx
-               	movl	-0x8(%rbp), %edi
-               	addq	%rdi, %rdx
-               	testl	%eax, %eax
-               	cmoveq	%rsi, %rcx
+               	jmp	<addr>
                	addl	$0x1, (%rcx)
                	incq	%rax
                	cmpl	$0x3, %eax
-               	jl	<addr>
+               	jge	<addr>
+               	movl	-0x8(%rbp), %esi
+               	addq	%rsi, %rdx
+               	testl	%eax, %eax
+               	jne	<addr>
+               	leaq	-0x8(%rbp), %rcx
+               	jmp	<addr>
                	cmpl	$0x21, %edx
                	je	<addr>
                	movl	$0x2, %eax
@@ -68,9 +68,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xa, %edi
-               	movl	%edi, -0x8(%rbp)
                	callq	<addr>
-               	movl	%eax, -0x8(%rbp)
                	subq	$0xa, %rax
                	cmpl	$0x14, %eax
                	je	<addr>

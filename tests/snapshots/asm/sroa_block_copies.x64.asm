@@ -355,13 +355,9 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	andq	$0xff, %rax
                	leaq	0x1(%rdi), %rcx
-               	movl	$0xffff00ff, %r11d      # imm = 0xFFFF00FF
-               	andq	%r11, %rax
                	shlq	$0x8, %rcx
                	andq	$0xff00, %rcx           # imm = 0xFF00
                	orq	%rcx, %rax
-               	movl	$0xfffeffff, %r11d      # imm = 0xFFFEFFFF
-               	andq	%r11, %rax
                	orq	$0x10000, %rax          # imm = 0x10000
                	retq
 

@@ -32,19 +32,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	movl	$0x3, %edi
                	callq	<addr>
-               	leaq	0xcb(%rax), %rbx
-               	movl	$0x4, %edi
-               	callq	<addr>
-               	addq	%rbx, %rax
+               	addq	$0xcb, %rax
+               	addq	$0x68, %rax
                	xorl	%ecx, %ecx
                	movl	$0x2, %edx
                	cmpl	$0x19a, %eax            # imm = 0x19A
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq

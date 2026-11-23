@@ -45,9 +45,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	mov	x1, #0x1                // =1
-               	stur	w1, [x29, #-0x8]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

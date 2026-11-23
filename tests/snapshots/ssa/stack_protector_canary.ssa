@@ -258,20 +258,18 @@ fn ent_pc=8 n_params=0 variadic=false locals=4
   block 14  start_pc=0
     v145 Imm(41)                                          -> x0
     v146 Imm(41)                                          -> x0
-    v147 StoreLocal { off=-1, value=v146, kind=I32 }      -> -
+    v147 Imm(0)                                           -> x0
     v148 LocalAddr(-1)                                    -> x0
-    v149 LoadLocal { off=-1, kind=I32 }                   -> x0
+    v149 Imm(0)                                           -> x0
     v150 Imm(42)                                          -> x0
-    v151 StoreLocal { off=-1, value=v150, kind=I32 }      -> -
+    v151 Imm(0)                                           -> x0
     v152 Imm(42)                                          -> x0
     v153 Imm(42)                                          -> x0
     v154 LifetimeEnd(-1)                                  -> -
     v155 Imm(42)                                          -> x0
     v156 Imm(0)                                           -> x0
-    terminator Jmp(b15)   (exit_acc=v156)
-  block 15  start_pc=0
-    v158 Imm(0)                                           -> x0
-    terminator Return(v158)   (exit_acc=v158)
+    v157 Imm(0)                                           -> x0
+    terminator Return(v157)   (exit_acc=v157)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

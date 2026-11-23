@@ -295,10 +295,6 @@ Disassembly of section .text:
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x29               // =41
-               	stur	w0, [x29, #-0x18]
-               	mov	x0, #0x2a               // =42
-               	stur	w0, [x29, #-0x18]
                	mov	x0, #0x0                // =0
                	adrp	x16, <page>
                	ldr	x16, [x16, <lo12>]

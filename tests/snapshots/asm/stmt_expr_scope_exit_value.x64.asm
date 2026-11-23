@@ -55,7 +55,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	$0x5, -0x10(%rbp)
                	movq	%rsp, %rcx
                	movl	$0xc, %edx
                	movq	%rdx, %r11
@@ -72,11 +71,10 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rdx, %rsp
                	movl	$0x5, (%rdx)
-               	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
-               	movl	-0x10(%rbp), %eax
-               	movl	%eax, <rip> # <addr>
+               	movl	<rip>, %edx # <addr>
+               	incq	%rdx
+               	movl	%edx, <rip> # <addr>
+               	movl	$0x5, <rip> # <addr>
                	movq	%rcx, %rsp
                	movl	$0x7, %eax
                	leave

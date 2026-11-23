@@ -99,10 +99,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	pushq	%rbx
-               	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	movsd	<rip>, %xmm1
@@ -112,18 +110,16 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	cmovpq	%rbx, %r10
                	cmoveq	%r10, %rbx
-               	movq	-0x8(%rbp), %rax
                	movsd	<rip>, %xmm0
-               	callq	*%rax
+               	callq	<addr>
                	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x4, %rax
                	ucomisd	%xmm1, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
-               	movq	-0x8(%rbp), %rax
                	movsd	<rip>, %xmm0
-               	callq	*%rax
+               	callq	<addr>
                	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x8, %rax
@@ -166,18 +162,16 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
-               	movq	-0x8(%rbp), %rax
                	movsd	<rip>, %xmm0
-               	callq	*%rax
+               	callq	<addr>
                	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x200, %rax            # imm = 0x200
                	ucomisd	%xmm1, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
-               	movq	-0x8(%rbp), %rax
                	movsd	<rip>, %xmm0
-               	callq	*%rax
+               	callq	<addr>
                	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x400, %rax            # imm = 0x400
@@ -194,8 +188,6 @@ Disassembly of section .text:
                	movq	%rbx, %r10
                	cmovpq	%rax, %r10
                	cmoveq	%r10, %rax
-               	leaq	-<rip>, %rcx # <addr>
-               	movq	%rcx, -0x8(%rbp)
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax

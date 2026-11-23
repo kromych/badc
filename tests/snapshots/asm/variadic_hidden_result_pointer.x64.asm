@@ -123,16 +123,15 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	leaq	-0x20(%rbp), %rdi
-               	movq	-0x20(%rbp), %rcx
-               	movq	-0x18(%rbp), %rdx
-               	movq	-0x10(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
+               	movq	-0x18(%rbp), %rcx
+               	movq	-0x10(%rbp), %rdx
                	movq	-0x8(%rbp), %rsi
-               	movq	%rax, -0x48(%rbp)
-               	cmpq	$0xb, %rcx
+               	cmpq	$0xb, %rax
                	jne	<addr>
-               	cmpq	$0x16, %rdx
+               	cmpq	$0x16, %rcx
                	jne	<addr>
-               	movq	%rax, %xmm0
+               	movq	%rdx, %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
@@ -151,16 +150,15 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	leaq	-0x20(%rbp), %rdi
-               	movq	-0x20(%rbp), %rcx
-               	movq	-0x18(%rbp), %rdx
-               	movq	-0x10(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
+               	movq	-0x18(%rbp), %rcx
+               	movq	-0x10(%rbp), %rdx
                	movq	-0x8(%rbp), %rsi
-               	movq	%rax, -0x48(%rbp)
-               	cmpq	$0xb, %rcx
+               	cmpq	$0xb, %rax
                	jne	<addr>
-               	cmpq	$0x16, %rdx
+               	cmpq	$0x16, %rcx
                	jne	<addr>
-               	movq	%rax, %xmm0
+               	movq	%rdx, %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>

@@ -1,25 +1,25 @@
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=3
+fn ent_pc=3 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(3)                                           -> x0
-    v2   Imm(3)                                           -> x1
-    v3   StoreLocal { off=-3, value=v2, kind=I32 }        -> -
-    v4   LocalAddr(-3)                                    -> x0
-    v5   LocalAddr(-2)                                    -> x2
+    v2   Imm(3)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   LocalAddr(-1)                                    -> x0
+    v5   LocalAddr(-2)                                    -> x1
     v6   Imm(16)                                          -> x0
-    v7   LoadLocal { off=-3, kind=I32 }                   -> x0
+    v7   Imm(0)                                           -> x0
     v8   Imm(3)                                           -> x0
     v9   Imm(16)                                          -> x0
-    v10  Imm(3)                                           -> x0
+    v10  Imm(3)                                           -> x2
     v11  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v11)
   block 1  start_pc=0
     v67  Extend { value=v64, kind=I32 }                   -> x6
     v68  Binop { op=add, lhs=v5, rhs=v64 }                -> x6
-    v69  StoreIndexed { base=v5, index=v64, scale=1, value=v2, kind=I8 } -> -
+    v69  StoreIndexed { base=v5, index=v64, scale=1, value=v10, kind=I8 } -> -
     v70  Extend { value=v64, kind=I32 }                   -> x6
     v71  BinopI { op=add, lhs=v64, rhs_imm=1 }            -> x0
     v72  Extend { value=v71, kind=I32, nsw }              -> x6
@@ -39,7 +39,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v46  Extend { value=v45, kind=I32, nsw }              -> x1
     v47  Extend { value=v45, kind=I32 }                   -> x1
     v48  LifetimeEnd(-2)                                  -> -
-    v49  LifetimeEnd(-3)                                  -> -
+    v49  LifetimeEnd(-1)                                  -> -
     v50  Extend { value=v45, kind=I32 }                   -> x1
     v51  BinopI { op=ne, lhs=v45, rhs_imm=6 }             -> x0
     terminator Bz { cond=v51, target=b5, fall=b4 }   (exit_acc=v51)

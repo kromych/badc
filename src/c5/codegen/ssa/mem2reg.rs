@@ -2011,6 +2011,97 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     promoted
 }
 
+/// A `LocalAddr` read only as the address of `Load`s and `Store`s at its
+/// slot -- `*(T *)&local` -- makes no pointer that outlives them: each
+/// becomes the `LoadLocal` / `StoreLocal` it is, so the slot is a candidate
+/// like one no address names. The forms are kept for a scalar slot whose
+/// every access is then whole and of one width; an aggregate's accesses,
+/// and one bounded below its width, keep the address
+/// ([`crate::c5::codegen::passes::index_fold::local_form`]).
+fn fold_direct_slot_accesses(func: &mut FunctionSsa) {
+    use crate::c5::codegen::passes::index_fold::{load_width, local_form, store_width};
+    let mut direct: Vec<bool> = (func.insts.iter())
+        .map(|i| matches!(i, Inst::LocalAddr(_)))
+        .collect();
+    if !direct.contains(&true) {
+        return;
+    }
+    let mut escape = |op: ValueId| {
+        if let Some(d) = direct.get_mut(op as usize) {
+            *d = false;
+        }
+    };
+    for inst in &func.insts {
+        let mut through = match inst {
+            Inst::Load { addr, .. } | Inst::Store { addr, .. } => {
+                local_form(inst, 0, true).map(|_| *addr)
+            }
+            _ => None,
+        };
+        super::reg_alloc::for_each_operand(inst, |op| {
+            // The address operand once; a stored address escapes.
+            if through == Some(op) {
+                through = None;
+            } else {
+                escape(op);
+            }
+        });
+    }
+    for block in &func.blocks {
+        block.terminator.for_each_operand(&mut escape);
+        if block.exit_acc != NO_VALUE {
+            escape(block.exit_acc);
+        }
+    }
+    let mut folded: Vec<(usize, Inst, i64)> = Vec::new();
+    for v in 0..func.insts.len() {
+        let (Inst::Load { addr, .. } | Inst::Store { addr, .. }) = func.insts[v] else {
+            continue;
+        };
+        if let (true, Some(&Inst::LocalAddr(off))) =
+            (direct[addr as usize], func.insts.get(addr as usize))
+            && let Some(local) = local_form(&func.insts[v], off, true)
+        {
+            folded.push((v, core::mem::replace(&mut func.insts[v], local), off));
+        }
+    }
+    if folded.is_empty() {
+        return;
+    }
+    // Per slot: the one width its accesses take, whole; 0 for another shape.
+    let mut width: alloc::collections::BTreeMap<i64, u8> = alloc::collections::BTreeMap::new();
+    for inst in &func.insts {
+        let (off, disp, w) = match *inst {
+            Inst::LoadLocal {
+                off, disp, kind, ..
+            } => (off, disp, load_width(kind)),
+            Inst::StoreLocal {
+                off, disp, kind, ..
+            } => (off, disp, store_width(kind)),
+            _ => continue,
+        };
+        let seen = width.entry(off).or_insert(w);
+        if disp != 0 || *seen != w {
+            *seen = 0;
+        }
+    }
+    let free = address_free_slots(func);
+    let aggregate = |off: i64| {
+        (func.multi_cell_slots.iter()).any(|&(base, cells)| (base..base + cells).contains(&off))
+            || func.array_slots.contains(&off)
+            || func.vector_objects.contains(&off)
+    };
+    let keep: BTreeSet<i64> = (folded.iter())
+        .map(|&(_, _, off)| off)
+        .filter(|&off| free.contains(&off) && width.get(&off) != Some(&0) && !aggregate(off))
+        .collect();
+    for (v, original, off) in folded {
+        if !keep.contains(&off) {
+            func.insts[v] = original;
+        }
+    }
+}
+
 fn promote(func: &mut FunctionSsa) -> Vec<i64> {
     // Opt out of promotion for A/B measurement against the unpromoted
     // frame-slot codegen. Diagnostic only: read under the `codegen_test`
@@ -2020,6 +2111,7 @@ fn promote(func: &mut FunctionSsa) -> Vec<i64> {
         return Vec::new();
     }
     split_address_phi_loads(func);
+    fold_direct_slot_accesses(func);
     // A non-zero `AllocaInit` moves sp at runtime, but both the fixed
     // locals and the allocator spills are then frame-pointer-relative
     // (`Frame::dynamic_sp`); only the alloca storage rides sp, reached

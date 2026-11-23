@@ -65,10 +65,8 @@ Disassembly of section .text:
                	movq	(%rdx), %rcx
                	jmp	<addr>
                	movq	%rax, %rcx
-               	movq	%rcx, -0x38(%rbp)
                	movq	%rcx, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0
-               	movsd	%xmm0, -0x30(%rbp)
                	movq	%xmm0, %rsi
                	movq	%rcx, %rax
                	lock
@@ -206,7 +204,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x68, %rsp
+               	subq	$0x78, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rax # <addr>
                	leaq	<rip>, %rcx # <addr>
@@ -234,7 +232,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x50(%rbp), %rdi
+               	leaq	-0x58(%rbp), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	movl	$0x1, %ecx
@@ -242,7 +240,7 @@ Disassembly of section .text:
                	callq	*%r11
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	-0x50(%rbp), %rax
+               	leaq	-0x58(%rbp), %rax
                	leaq	0x8(%rax), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
@@ -251,10 +249,10 @@ Disassembly of section .text:
                	callq	*%r11
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	-0x50(%rbp), %rdi
+               	movq	-0x58(%rbp), %rdi
                	xorl	%esi, %esi
                	callq	*%rbx
-               	movq	-0x48(%rbp), %rdi
+               	movq	-0x50(%rbp), %rdi
                	xorl	%esi, %esi
                	callq	*%rbx
                	leaq	<rip>, %rax # <addr>
@@ -307,7 +305,6 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
-               	movq	%rax, -0x48(%rbp)
                	movq	%rax, %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0

@@ -787,7 +787,7 @@ Disassembly of section .text:
                	cmp	x7, x21
                	b.ne	<addr>
                	ldr	d16, [sp, #0x78]
-               	mov	x0, v16.d[0]
+               	fmov	x0, d16
                	mov	w1, w21
                	orr	x1, x1, x21, lsl #32
                	cmp	x0, x1

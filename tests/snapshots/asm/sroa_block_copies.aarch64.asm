@@ -359,11 +359,9 @@ Disassembly of section .text:
 <field_literals>:
                	and	x1, x0, #0xff
                	add	x0, x0, #0x1
-               	and	w1, w1, #0xffff00ff
                	lsl	x0, x0, #8
                	and	x0, x0, #0xff00
                	orr	x0, x1, x0
-               	and	w0, w0, #0xfffeffff
                	orr	x0, x0, #0x10000
                	ret
 

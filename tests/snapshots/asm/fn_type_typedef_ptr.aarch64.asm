@@ -95,9 +95,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	stur	x0, [x29, #-0x8]
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	cmp	w0, #0x4
@@ -106,18 +103,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x1, [x29, #-0x8]
                	mov	x0, #0x4                // =4
-               	blr	x1
+               	bl	<addr>
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x1, [x29, #-0x8]
                	mov	x0, #0x5                // =5
-               	blr	x1
+               	bl	<addr>
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

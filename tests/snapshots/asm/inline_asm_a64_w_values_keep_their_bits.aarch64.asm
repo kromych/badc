@@ -178,7 +178,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmul	v2.2s, v0.2s, v1.2s
-               	mov	x1, v2.d[0]
+               	fmov	x1, d2
                	mov	x17, #0x3ec00000        // =1052770304
                	movk	x17, #0xc100, lsl #48
                	cmp	x1, x17

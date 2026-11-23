@@ -3767,6 +3767,7 @@ fn run_inline_asm(
             | Mnemonic::VexMov { .. }
             | Mnemonic::VexMovd { .. }
             | Mnemonic::Vex2 { .. }
+            | Mnemonic::VexNarrow { .. }
             | Mnemonic::VexImm3 { .. }
             | Mnemonic::VexImm2 { .. }
             | Mnemonic::VexShiftImm { .. }

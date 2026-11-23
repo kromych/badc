@@ -3911,6 +3911,8 @@ f:
     xor eax, eax
 1:  cvtsi2sd xmm0, dword ptr [rax]
     vpaddd ymm0, ymm1, ymmword ptr [rax]
+    vcvtpd2ps xmm0, ymmword ptr [rax]
+    vcvttpd2dq xmm1, xmmword ptr [rax + 8]
     vaddps zmm0{k1}{z}, zmm1, dword ptr [rax]{1to16}
     lock xadd dword ptr [rdx], eax
     rep movsb
@@ -3955,6 +3957,8 @@ f:
     xor %eax, %eax
 1:  cvtsi2sdl (%rax), %xmm0
     vpaddd (%rax), %ymm1, %ymm0
+    vcvtpd2psy (%rax), %xmm0
+    vcvttpd2dqx 8(%rax), %xmm1
     vaddps (%rax){1to16}, %zmm1, %zmm0{%k1}{z}
     lock xadd %eax, (%rdx)
     rep movsb

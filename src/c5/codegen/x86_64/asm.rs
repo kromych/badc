@@ -211,6 +211,15 @@ pub(crate) enum Mnemonic {
     VexMovd {
         w: bool,
     },
+    /// A narrowing packed convert (`vcvtpd2ps`, `vcvtpd2dq`, `vcvttpd2dq`,
+    /// 0F map): the destination is xmm at either vector length, which the
+    /// source sets -- a register's own width, or for a memory source the
+    /// AT&T `x` / `y` suffix (`l`, 0 or 1), as GNU as reads it.
+    VexNarrow {
+        pp: u8,
+        opcode: u8,
+        l: Option<u8>,
+    },
     /// A 2-operand VEX op `v-op %src, %dst` (VEX.vvvv unused), src a register or
     /// memory operand. Covers vsqrtps/vsqrtpd/vrcpps/vrsqrtps, the packed
     /// int<->float conversions (0F map), and the broadcasts and packed integer
@@ -1737,8 +1746,31 @@ fn vex_requested(name: &str) -> Option<Mnemonic> {
     })
 }
 
+/// The narrowing packed converts as `(pp, opcode)`, and the vector length
+/// an AT&T `x` / `y` suffix on `name` states.
+pub(crate) fn vex_narrowing(name: &str) -> Option<(u8, u8, Option<u8>)> {
+    let base = |n: &str| match n {
+        "vcvtpd2ps" => Some((1u8, 0x5Au8)),
+        "vcvtpd2dq" => Some((3, 0xE6)),
+        "vcvttpd2dq" => Some((1, 0xE6)),
+        _ => None,
+    };
+    if let Some((pp, op)) = base(name) {
+        return Some((pp, op, None));
+    }
+    let (stem, l) = match name.as_bytes().last()? {
+        b'x' => (&name[..name.len() - 1], 0),
+        b'y' => (&name[..name.len() - 1], 1),
+        _ => return None,
+    };
+    base(stem).map(|(pp, op)| (pp, op, Some(l)))
+}
+
 fn vex_op(name: &str) -> Option<Mnemonic> {
     use VexWidth::{Vl, Xmm};
+    if let Some((pp, opcode, l)) = vex_narrowing(name) {
+        return Some(Mnemonic::VexNarrow { pp, opcode, l });
+    }
     let len = vex_len(name);
     // The upper-lane clears take no operands.
     if let Some(l) = match name {
@@ -5329,6 +5361,40 @@ fn encode_bespoke(
             }
             Ok(())
         }
+        Mnemonic::VexNarrow { pp, opcode, l } => {
+            let [src, dst] = two(ops)?;
+            let Some((d, false)) = vec_reg(&dst) else {
+                return Err(String::from(
+                    "inline asm: a narrowing convert's destination must be xmm",
+                ));
+            };
+            if let Some((s, ymm)) = vec_reg(&src) {
+                if l.is_some_and(|l| (l == 1) != ymm) {
+                    return Err(String::from(
+                        "inline asm: the `x` / `y` suffix disagrees with the source register",
+                    ));
+                }
+                emit_vex(code, d >= 8, false, s >= 8, 1, false, 0, u8::from(ymm), pp);
+                code.push(opcode);
+                code.push(modrm_reg(d & 7, s & 7));
+                return Ok(());
+            }
+            let Some(mr) = MemRm::of(&src) else {
+                return Err(String::from(
+                    "inline asm: a narrowing convert's source must be xmm/ymm or memory",
+                ));
+            };
+            // The xmm destination does not state the source's width.
+            let Some(l) = l else {
+                return Err(String::from(
+                    "inline asm: a memory source needs the `x` or `y` suffix",
+                ));
+            };
+            emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), 1, false, 0, l, pp);
+            code.push(opcode);
+            mr.emit(code, mode, addr, d & 7)?;
+            Ok(())
+        }
         Mnemonic::Vex2 {
             pp,
             map,
@@ -8627,6 +8693,55 @@ mod tests {
                 asm_bytes(tmpl),
                 *want,
                 "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// The narrowing converts take their source's width as VEX.L: a
+    /// register's own, a memory operand's from the AT&T `x` / `y` suffix,
+    /// which an unsuffixed memory source lacks. Bytes and refusals measured
+    /// with GNU as 2.47.
+    #[test]
+    fn narrowing_converts_take_the_sources_width() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"vcvtpd2psx (%%rax), %%xmm0", &[0xC5, 0xF9, 0x5A, 0x00]),
+            (b"vcvtpd2psy (%%rax), %%xmm0", &[0xC5, 0xFD, 0x5A, 0x00]),
+            (b"vcvtpd2dqx (%%rax), %%xmm0", &[0xC5, 0xFB, 0xE6, 0x00]),
+            (b"vcvtpd2dqy (%%rax), %%xmm0", &[0xC5, 0xFF, 0xE6, 0x00]),
+            (b"vcvttpd2dqx (%%rax), %%xmm0", &[0xC5, 0xF9, 0xE6, 0x00]),
+            (b"vcvttpd2dqy (%%rax), %%xmm0", &[0xC5, 0xFD, 0xE6, 0x00]),
+            (b"vcvtpd2ps %%xmm1, %%xmm0", &[0xC5, 0xF9, 0x5A, 0xC1]),
+            (b"vcvtpd2psy %%ymm1, %%xmm0", &[0xC5, 0xFD, 0x5A, 0xC1]),
+            (b"vcvtpd2dq %%ymm2, %%xmm1", &[0xC5, 0xFF, 0xE6, 0xCA]),
+            (b"vcvtpd2dqy 16(%%r9,%%r10,4), %%xmm11", &[0xC4, 0x01, 0x7F, 0xE6, 0x5C, 0x91, 0x10]),
+            (b"vcvttpd2dq %%ymm12, %%xmm9", &[0xC4, 0x41, 0x7D, 0xE6, 0xCC]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        let bits64 = super::super::table::Mode::Bits64;
+        for (tmpl, why) in [
+            (
+                &b"vcvtpd2ps (%%rax), %%xmm0"[..],
+                "needs the `x` or `y` suffix",
+            ),
+            (
+                b"vcvtpd2psx %%ymm1, %%xmm0",
+                "disagrees with the source register",
+            ),
+            (b"vcvtpd2ps %%ymm1, %%ymm0", "destination must be xmm"),
+        ] {
+            let err = mode_asm_bytes(bits64, tmpl).unwrap_err();
+            assert!(
+                err.contains(why),
+                "{}: {err}",
                 core::str::from_utf8(tmpl).unwrap()
             );
         }

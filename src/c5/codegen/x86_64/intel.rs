@@ -151,6 +151,13 @@ fn instruction(stmt: &str, consts: &BTreeSet<&str>) -> Result<String, String> {
         ("movsxd", [Op::Reg(dst), Op::Mem { .. }], _) if gpr_width(dst) == Some(8) => {
             mnem = String::from("movslq");
         }
+        // A narrowing convert's xmm destination does not state its source's
+        // width; AT&T syntax names it with `x` or `y`.
+        (m, _, Some(s @ (16 | 32)))
+            if super::asm::vex_narrowing(m).is_some_and(|n| n.2.is_none()) =>
+        {
+            mnem = format!("{m}{}", if s == 16 { 'x' } else { 'y' });
+        }
         (m, _, Some(s)) if !branch && takes_size_letter(m, &ops, s) => {
             if let Some(letter) = suffix(s) {
                 let sized = format!("{mnem}{letter}");

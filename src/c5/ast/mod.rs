@@ -1105,6 +1105,10 @@ pub(crate) enum ValueTest {
     Truncation { from: (u8, bool), to: (u8, bool) },
     /// A variable-length array bound: above 0, or not 0 for an unsigned one.
     Positive { signed: bool },
+    /// Not 0, reported with no value, or with the address of the data
+    /// object at `site` -- the `SourceLocation` a handler takes beside its
+    /// data.
+    NonZero { site: Option<i64> },
     /// A floating value converted to an integer type: above `lo` (or at it,
     /// `lo_inclusive`) and below `hi`, the bounds `f64` bit patterns; a
     /// `float` value (`single`) compared as the `double` it widens to.

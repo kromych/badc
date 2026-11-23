@@ -336,6 +336,61 @@ fn a_reached_unreachable_is_reported_and_ends_the_program() {
     }
 }
 
+const BUILTIN: &str = "#include <stdio.h>
+int a(unsigned x) { return __builtin_clz(x); }
+int b(unsigned x) { return __builtin_ctz( x - 1); }
+int c(unsigned long long x) { return __builtin_clzll(x) + __builtin_ctzll(x); }
+int main(int argc, char **argv) {
+    (void)argv;
+    printf(\"%d\\n\", a(16) + b(2) + c(4));
+    fflush(stdout);
+    a(argc - 1);
+    b(argc);
+    return c(argc - 1) * 0;
+}
+";
+
+/// `__builtin_clz` / `__builtin_ctz` and their wider forms of 0 report under
+/// `-fsanitize=builtin` at the operand, an operation's operator, as clang
+/// 21 reports them, naming the narrow builtin; a nonzero operand reports
+/// nothing.
+#[test]
+fn a_zero_count_operand_is_reported() {
+    let dir = TempDir::new("badc-sanitize-builtin");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, BUILTIN).unwrap();
+    let zero = |at: &str, name: &str| {
+        format!(
+            "{at}: runtime error: passing zero to __builtin_{name}(), which is not a valid argument"
+        )
+    };
+    let want = [
+        zero("2:42", "clz"),
+        zero("3:45", "ctz"),
+        zero("4:54", "clz"),
+        zero("4:75", "ctz"),
+    ];
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("builtin{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-w", opt, "-fsanitize=undefined", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        let out = String::from_utf8_lossy(&o.stdout).replace("\r\n", "\n");
+        assert_eq!(out, "90\n", "{opt}");
+        assert_eq!(reports(&o), want, "{opt}");
+    }
+}
+
 const VLA: &str = "#include <stdio.h>
 int main(int argc, char **argv) {
     (void)argv;

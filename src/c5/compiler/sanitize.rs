@@ -73,12 +73,15 @@ pub enum Check {
     /// An implicit conversion to a narrower integer type, either one
     /// signed, that changes the value (C17 6.3.1.3p2-p3).
     ImplicitSignedIntegerTruncation,
+    /// `__builtin_clz` or `__builtin_ctz`, or a wider form, of 0, whose
+    /// count gcc and clang leave undefined.
+    Builtin,
 }
 
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
     /// clang's checks of defined behavior.
-    pub const ALL: [Check; 18] = [
+    pub const ALL: [Check; 19] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -97,6 +100,7 @@ impl Check {
         Check::UnsignedIntegerOverflow,
         Check::ImplicitUnsignedIntegerTruncation,
         Check::ImplicitSignedIntegerTruncation,
+        Check::Builtin,
     ];
 
     /// The spelling `-fsanitize=` takes.
@@ -120,6 +124,7 @@ impl Check {
             Check::UnsignedIntegerOverflow => "unsigned-integer-overflow",
             Check::ImplicitUnsignedIntegerTruncation => "implicit-unsigned-integer-truncation",
             Check::ImplicitSignedIntegerTruncation => "implicit-signed-integer-truncation",
+            Check::Builtin => "builtin",
         }
     }
 
@@ -561,6 +566,28 @@ impl Compiler {
         checks.push(ValueCheck { check, test });
     }
 
+    /// Check the operand `arg` of `__builtin_clz` (`clz`) or `__builtin_ctz`,
+    /// or of a wider form, at `at`, under `-fsanitize=builtin`: not 0.
+    pub(super) fn sanitize_builtin(&mut self, arg: ExprId, clz: bool, at: (u32, u32)) {
+        let check = Check::Builtin;
+        if !self.sanitize.runs(check) {
+            return;
+        }
+        // `InvalidBuiltinData`: the location, then the kind (1 for clz).
+        let data = self.ubsan_site_at(at, &[]);
+        self.data.resize(self.data.len() + 8, 0);
+        self.data[data as usize + 16] = u8::from(clz);
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_invalid_builtin", 0);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        let test = ValueTest::NonZero { site: None };
+        let checks = self.ast.value_checks.entry(arg).or_default();
+        checks.push(ValueCheck { check, test });
+    }
+
     /// Report the `__builtin_unreachable()` call at node `id`, which begins
     /// at `at`, where it is reached, under `-fsanitize=unreachable`. Its
     /// handler ends the program, whatever the recovery: it has no form that
@@ -793,6 +820,7 @@ impl Compiler {
             return None;
         }
         let proto = match values {
+            0 => "void(void *)",
             1 => "void(void *, void *)",
             _ => "void(void *, void *, void *)",
         };
@@ -800,6 +828,7 @@ impl Compiler {
             (String::from(name), proto)
         } else {
             let noreturn = match values {
+                0 => "_Noreturn void(void *)",
                 1 => "_Noreturn void(void *, void *)",
                 _ => "_Noreturn void(void *, void *, void *)",
             };

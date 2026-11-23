@@ -534,6 +534,14 @@ impl<'a> Walker<'a> {
                 let zero = b.imm(0);
                 b.binop(if signed { BinOp::Le } else { BinOp::Eq }, value, zero)
             }
+            ValueTest::NonZero { site } => {
+                let zero = b.imm(0);
+                let flag = b.binop(BinOp::Eq, value, zero);
+                let at: alloc::vec::Vec<ValueId> =
+                    site.map(|s| b.imm_data(s)).into_iter().collect();
+                self.report_failed_check(b, check.check, flag, &at);
+                return;
+            }
             // The value as its own type reads it against the value the
             // narrower type keeps; the handler takes both.
             ValueTest::Truncation { from, to } => {

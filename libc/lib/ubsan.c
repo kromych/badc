@@ -73,6 +73,10 @@ struct __ubsan_vla_bound_data {
 struct __ubsan_unreachable_data {
     struct __ubsan_source_location loc;
 };
+struct __ubsan_invalid_builtin_data {
+    struct __ubsan_source_location loc;
+    unsigned char kind;
+};
 // Whether the site at `loc` reports now: the first failure claims it.
 static int __ubsan_claim(struct __ubsan_source_location *loc, uint32_t *column) {
     *column = __atomic_exchange_n(&loc->column, 0xffffffffu, __ATOMIC_RELAXED);
@@ -311,6 +315,24 @@ _Noreturn void __ubsan_handle_builtin_unreachable(struct __ubsan_unreachable_dat
                 d->loc.file, d->loc.line, column);
         __ubsan_summary(&d->loc, column);
     }
+    abort();
+}
+
+static void __ubsan_invalid_builtin(struct __ubsan_invalid_builtin_data *d) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    fprintf(stderr, "%s:%u:%u: runtime error: passing zero to %s, which is not a valid argument\n",
+            d->loc.file, d->loc.line, column, d->kind ? "__builtin_clz()" : "__builtin_ctz()");
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_invalid_builtin(struct __ubsan_invalid_builtin_data *d) {
+    __ubsan_invalid_builtin(d);
+}
+
+_Noreturn void __ubsan_handle_invalid_builtin_abort(struct __ubsan_invalid_builtin_data *d) {
+    __ubsan_invalid_builtin(d);
     abort();
 }
 

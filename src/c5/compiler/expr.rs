@@ -2710,7 +2710,32 @@ impl Compiler {
             } else {
                 Ty::Int as i64 | super::types::UNSIGNED_BIT
             };
+            let (start, before) = (self.lex.position(), self.operator_at);
             self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args, fn_name, 0)?;
+            let clz = match intr_kind {
+                Some(Intrinsic::Clz | Intrinsic::Clzll) => Some(true),
+                Some(Intrinsic::Ctz | Intrinsic::Ctzll) => Some(false),
+                _ => None,
+            };
+            if let (Some(clz), Some(&arg)) = (clz, ast_intrinsic_args.last()) {
+                // clang's location of the operand: an operator's for an
+                // operation, else where it begins.
+                let operation = match self.ast.expr(arg) {
+                    super::super::ast::Expr::Cast { child, .. } => matches!(
+                        self.ast.expr(*child),
+                        super::super::ast::Expr::Binary { .. }
+                            | super::super::ast::Expr::CheckedArith { .. }
+                            | super::super::ast::Expr::CompoundAssign { .. }
+                    ),
+                    _ => false,
+                };
+                let at = if operation && self.operator_at != before {
+                    self.operator_at
+                } else {
+                    start
+                };
+                self.sanitize_builtin(arg, clz, at);
+            }
         } else if is(Intrinsic::VaArg) {
             va_arg_result_ty = Some(self.parse_va_arg_operands(fn_name, &mut ast_intrinsic_args)?);
         } else if is(Intrinsic::VaStart) || is(Intrinsic::VaCopy) {

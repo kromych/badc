@@ -242,6 +242,34 @@ impl Opnd {
     }
 }
 
+/// The widths, as a mask of byte counts 1, 2, 4 and 8, the catalog gives a
+/// memory operand of `name` across its forms; none for an operand of no
+/// width (`lgdt`, `clflush`).
+fn memory_widths(name: &str) -> u8 {
+    let forms = super::isa_x86_table::FORMS;
+    let start = forms.partition_point(|f| f.mnemonic < name);
+    let generated = forms[start..].iter().take_while(|f| f.mnemonic == name);
+    let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnemonic == name);
+    let mut mask = 0;
+    for p in generated.chain(supplemental).flat_map(|f| f.ops) {
+        if let OpPat::Rm(w) | OpPat::Mem(w) = *p {
+            for opw in [1u8, 2, 4, 8] {
+                mask |= wbytes(w, opw).unwrap_or(0);
+            }
+        }
+    }
+    mask
+}
+
+/// The one width the catalog gives a memory operand of `name`, which an
+/// operand written without a size takes, as GNU as reads it. A sole 64-bit
+/// width is the branches' and stack ops', whose operand follows the mode's
+/// default, so it is none here.
+pub(crate) fn sole_memory_width(name: &str) -> Option<u8> {
+    let mask = memory_widths(name);
+    (mask.count_ones() == 1 && mask < 8).then_some(mask)
+}
+
 fn wbytes(w: W, opw: u8) -> Option<u8> {
     match w {
         W::B => Some(1),
@@ -917,8 +945,23 @@ fn encode_best(
 /// member that marks it a width class; the supplement spells it with the `66` a
 /// 16-bit-only legacy row carries. The stack-adjusting returns `ret imm16` (C2) and
 /// `retf imm16` (CA) are absent from the generated catalog; the immediate
-/// is 16-bit at every operand size, so each is one form.
+/// is 16-bit at every operand size, so each is one form. So is the
+/// immediate-count `shrd` (0F AC), the counterpart of `shld`'s 0F A4.
 static FORMS_SUPPLEMENT: &[Form] = &[
+    Form {
+        mnem: Mnem::Shrd,
+        mnemonic: "shrd",
+        ops: &[OpPat::Rm(W::V), OpPat::Reg(W::V), OpPat::Imm(ImmC::Ib)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xAC],
+        plus_r: false,
+        rexw: RexW::ByWidth,
+        reg: RegField::FromOp(1),
+        rm: 0,
+        imm: Some(ImmC::Ib),
+        imm_op: 2,
+    },
     Form {
         mnem: Mnem::Ret,
         mnemonic: "ret",

@@ -69,8 +69,6 @@ impl VexLen {
 /// out into [`AsmInsn::suffix`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mnemonic {
-    Shld,
-    Shrd,
     Shl,
     Shr,
     Sar,
@@ -1196,8 +1194,6 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         return Some(m);
     }
     Some(match name {
-        "shld" => Mnemonic::Shld,
-        "shrd" => Mnemonic::Shrd,
         "shl" | "sal" => Mnemonic::Shl,
         "shr" => Mnemonic::Shr,
         "sar" => Mnemonic::Sar,
@@ -2375,6 +2371,17 @@ pub(crate) fn fold_mnemonic_case(tok: &str) -> Option<alloc::string::String> {
     }
     let lower = tok.to_ascii_lowercase();
     split_mnemonic_exact(&lower).is_some().then_some(lower)
+}
+
+/// Whether `m` shifts or rotates by a count its first AT&T operand gives.
+pub(crate) fn shifts_by_count(m: Mnemonic) -> bool {
+    matches!(
+        m,
+        Mnemonic::Shl
+            | Mnemonic::Shr
+            | Mnemonic::Sar
+            | Mnemonic::Table("rol" | "ror" | "rcl" | "rcr" | "shld" | "shrd")
+    )
 }
 
 /// Resolve a mnemonic token to its base form plus any AT&T size suffix,
@@ -3854,25 +3861,6 @@ fn modrm_sib(
         1 => code.push(d8.unwrap_or_default() as u8),
         _ if base.is_none() || mod_ == 2 => code.extend_from_slice(&disp.to_le_bytes()),
         _ => {}
-    }
-}
-
-/// Emit any needed operand-size / REX prefix for an instruction whose
-/// operands are `size`-wide and use ModR/M.reg = `reg`, r/m = `rm`.
-/// The 16-bit operand-size prefix (0x66) precedes REX per the SDM.
-fn prefix_rex(code: &mut Vec<u8>, mode: super::table::Mode, size: AsmRegSize, reg: u8, rm: u8) {
-    // The operand-size prefix selects the width that is not the mode default.
-    if size != AsmRegSize::Byte && size != AsmRegSize::Quad && size.bytes() != mode.opsize() {
-        code.push(0x66);
-    }
-    let w = size == AsmRegSize::Quad;
-    let r = reg >= 8;
-    let b = rm >= 8;
-    // A byte operation naming spl/bpl/sil/dil (register numbers 4..8) needs
-    // a REX prefix to select the new byte registers rather than ah/ch/dh/bh.
-    let byte_rex = size == AsmRegSize::Byte && ((4..8).contains(&reg) || (4..8).contains(&rm));
-    if w || r || b || byte_rex {
-        code.push(rex(w, r, false, b));
     }
 }
 
@@ -5769,48 +5757,6 @@ fn encode_bespoke(
             }
             Ok(())
         }
-        Mnemonic::Shld | Mnemonic::Shrd => {
-            // AT&T `shld count, src, dst` -> Intel `SHLD dst, src, count`.
-            let [count, src, dst] = three(ops)?;
-            let (src_reg, ssz) = as_reg(src)?;
-            let (dst_reg, dsz) = as_reg(dst)?;
-            let size = suffix.unwrap_or(if dsz == AsmRegSize::Byte { ssz } else { dsz });
-            let (op_cl, op_imm) = if mnemonic == Mnemonic::Shld {
-                (0xA5u8, 0xA4u8)
-            } else {
-                (0xADu8, 0xACu8)
-            };
-            prefix_rex(code, mode, size, src_reg, dst_reg);
-            code.push(0x0F);
-            match count {
-                Concrete::Imm(v) => {
-                    code.push(op_imm);
-                    code.push(modrm_reg(src_reg, dst_reg));
-                    code.push((v & 0xFF) as u8);
-                }
-                Concrete::HighReg(_) => {
-                    return Err(String::from(
-                        "inline asm: double-shift count must be CL or an immediate",
-                    ));
-                }
-                Concrete::Reg { reg, .. } => {
-                    if reg != 1 {
-                        return Err(String::from(
-                            "inline asm: double-shift count must be CL or an immediate",
-                        ));
-                    }
-                    code.push(op_cl);
-                    code.push(modrm_reg(src_reg, dst_reg));
-                }
-                Concrete::Mem { .. }
-                | Concrete::AbsMem { .. }
-                | Concrete::RipRel { .. }
-                | Concrete::IndexMem { .. } => {
-                    return Err(String::from("inline asm: double-shift count in memory"));
-                }
-            }
-            Ok(())
-        }
         // Only control / debug / segment register moves reach here; the general
         // register / memory / immediate moves route through the table encoder.
         //   read  cr/dr -> gpr, seg -> r/m16 : 0F 20 / 0F 21 / 8C
@@ -6041,13 +5987,6 @@ fn two(ops: &[Concrete]) -> Result<[Concrete; 2], String> {
         return Err(String::from("inline asm: instruction needs two operands"));
     }
     Ok([ops[0], ops[1]])
-}
-
-fn three(ops: &[Concrete]) -> Result<[Concrete; 3], String> {
-    if ops.len() != 3 {
-        return Err(String::from("inline asm: instruction needs three operands"));
-    }
-    Ok([ops[0], ops[1], ops[2]])
 }
 
 #[cfg(test)]

@@ -3798,3 +3798,27 @@ fn every_layout_error_is_reported_at_its_line() {
         );
     }
 }
+
+/// AT&T `shld` and `shrd` take a memory destination and `shrd` an immediate
+/// count; an unsized memory operand takes the width of the register beside
+/// it but a shift's `%cl` count, or the one width the instruction has, as
+/// GNU as and clang read them.
+#[test]
+fn double_shifts_and_sole_width_memory_assemble() {
+    let d = dir("double-shift");
+    write(
+        &d,
+        "s.s",
+        ".text\nshldw %cl, %bx, (%rsi)\nshld %cl, %ebx, (%rsi)\nshrdq $5, %r9, 8(%rax)\n\
+         shrd $5, %r9, %r10\nsete (%rdx)\nsetnz 3(%rax)\n",
+    );
+    run_ok(&d, &["-q", "--target=linux-x64", "-c", "s.s", "-o", "s.o"]);
+    let text = text_bytes(&std::fs::read(d.join("s.o")).expect("read object"));
+    assert_eq!(
+        text,
+        [
+            0x66, 0x0f, 0xa5, 0x1e, 0x0f, 0xa5, 0x1e, 0x4c, 0x0f, 0xac, 0x48, 0x08, 0x05, 0x4d,
+            0x0f, 0xac, 0xca, 0x05, 0x0f, 0x94, 0x02, 0x0f, 0x95, 0x40, 0x03
+        ]
+    );
+}

@@ -22,8 +22,9 @@ pub(super) struct AsmGotoCtx<'a> {
 
 /// Access width of a template memory operand. A memory reference carries no
 /// width of its own: a `%N` size modifier wins, else the AT&T size suffix,
-/// else a GP register operand of the same instruction. `None` leaves the
-/// choice to the caller's default.
+/// else a GP register operand of the same instruction but a shift's count,
+/// `%cl`, else the one width the catalog gives the instruction's memory
+/// operand. `None` leaves the choice to the caller's default.
 fn asm_mem_size(
     modifier: Option<super::super::ir::AsmRegSize>,
     insn: &super::asm::AsmInsn,
@@ -32,22 +33,32 @@ fn asm_mem_size(
 ) -> Option<super::super::ir::AsmRegSize> {
     use super::super::ir::{AsmConstraint, AsmRegSize};
     use super::asm::AsmOpnd;
-    modifier.or(insn.suffix).or_else(|| {
-        insn.operands.iter().find_map(|o| match *o {
-            AsmOpnd::Reg { reg, size } if reg < super::asm::XMM_BASE => Some(size),
-            AsmOpnd::HighReg(_) | AsmOpnd::HighRef(_) => Some(AsmRegSize::Byte),
-            AsmOpnd::Ref { idx, size }
-                if op_reg.get(idx as usize).copied().flatten().is_some()
-                    && !matches!(
-                        operands[idx as usize].constraint,
-                        AsmConstraint::Fp | AsmConstraint::Mem
-                    ) =>
-            {
-                Some(size.unwrap_or(AsmRegSize::from_width(operands[idx as usize].width)))
+    let counted = super::asm::shifts_by_count(insn.mnemonic) && insn.operands.len() > 1;
+    let sizing = &insn.operands[usize::from(counted)..];
+    modifier
+        .or(insn.suffix)
+        .or_else(|| {
+            sizing.iter().find_map(|o| match *o {
+                AsmOpnd::Reg { reg, size } if reg < super::asm::XMM_BASE => Some(size),
+                AsmOpnd::HighReg(_) | AsmOpnd::HighRef(_) => Some(AsmRegSize::Byte),
+                AsmOpnd::Ref { idx, size }
+                    if op_reg.get(idx as usize).copied().flatten().is_some()
+                        && !matches!(
+                            operands[idx as usize].constraint,
+                            AsmConstraint::Fp | AsmConstraint::Mem
+                        ) =>
+                {
+                    Some(size.unwrap_or(AsmRegSize::from_width(operands[idx as usize].width)))
+                }
+                _ => None,
+            })
+        })
+        .or_else(|| match insn.mnemonic {
+            super::asm::Mnemonic::Table(name) => {
+                super::table::sole_memory_width(name).map(AsmRegSize::from_width)
             }
             _ => None,
         })
-    })
 }
 
 /// RIP-relative target of an inline-asm `%a` address operand: an

@@ -3714,6 +3714,16 @@ fn run_inline_asm(
             // an ahead-of-time / JIT construct, executed natively there.
             // The interpreter is single-threaded: a fence orders nothing.
             Mnemonic::Table("mfence" | "lfence" | "sfence") => {}
+            Mnemonic::Table(name @ ("shld" | "shrd")) => {
+                let (count, _) = value_of(&ops[0], &xregs);
+                let (src, _) = value_of(&ops[1], &xregs);
+                let (dst, dsz) = value_of(&ops[2], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let res = double_shift(name == "shld", dst, src, count, w);
+                if let Some(r) = dst_reg(&ops[2]) {
+                    xregs[r] = merge_width(xregs[r], res, w);
+                }
+            }
             Mnemonic::Table(name) | Mnemonic::ExtMov { name, .. } => {
                 return Err(C5Error::Runtime(alloc::format!(
                     "inline asm: `{name}` is not supported under --interp"
@@ -3908,16 +3918,6 @@ fn run_inline_asm(
                     }
                 } else {
                     xregs[0] = merge_width(xregs[0], dst, w);
-                }
-            }
-            Mnemonic::Shld | Mnemonic::Shrd => {
-                let (count, _) = value_of(&ops[0], &xregs);
-                let (src, _) = value_of(&ops[1], &xregs);
-                let (dst, dsz) = value_of(&ops[2], &xregs);
-                let w = insn.suffix.unwrap_or(dsz);
-                let res = double_shift(insn.mnemonic == Mnemonic::Shld, dst, src, count, w);
-                if let Some(r) = dst_reg(&ops[2]) {
-                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
             Mnemonic::Shl | Mnemonic::Shr | Mnemonic::Sar => {

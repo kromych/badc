@@ -399,6 +399,48 @@ fn a_zero_count_operand_is_reported() {
     }
 }
 
+/// A report past comments that hold a multi-byte character -- a header's
+/// leading comment over many lines and one in front of the operator -- names
+/// the source line and its byte column.
+#[test]
+fn a_report_past_multibyte_comments_names_its_line_and_column() {
+    let dir = TempDir::new("badc-sanitize-multibyte");
+    let lead: String = (0..20)
+        .map(|k| format!(" * line {k} \u{a9} text\n"))
+        .collect();
+    let header = format!(
+        "/*\n * Copyright \u{a9} 2011\n{lead} */\n\
+         static int add(int a, int b) {{ /* \u{a9} */ return a + b; }}\n"
+    );
+    std::fs::write(dir.join("h.h"), header).unwrap();
+    let src = dir.join("main.c");
+    std::fs::write(
+        &src,
+        "#include \"h.h\"\nint main(int argc, char **argv) {\n    (void)argv;\n    \
+         return add(2147483647, argc) != 0 ? 0 : 1;\n}\n",
+    )
+    .unwrap();
+    let exe = dir.join("multibyte");
+    let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .args(["-q", "-fsanitize=signed-integer-overflow", "-o"])
+        .arg(&exe)
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let o = run(&exe, &[]);
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("h.h:24:50: runtime error: signed integer overflow"),
+        "{err}"
+    );
+}
+
 const NONNULL: &str =
     "__attribute__((nonnull(2))) int f(int a, int *p, int *q) { return p ? *p : a; }
 __attribute__((nonnull)) int g(int *p, int *q) { return (p != 0) + (q != 0); }
@@ -470,6 +512,78 @@ fn a_null_argument_or_return_against_nonnull_is_reported() {
             })
             .collect();
         assert_eq!(got, notes, "{opt}");
+    }
+}
+
+const PLACED: &str = "#include <stddef.h>
+#include <limits.h>
+#include \"h.h\"
+#define ADD(a, b) ((a) + (b))
+#define TWICE(x) ADD(x, x)
+__attribute__((nonnull)) int g(int *p, int *q) { return (p != 0) + (q != 0); }
+int f1(int a, int b) { return /* a long comment here */ a + b; }
+int f2(int a) { return INT_MAX - 0 + a; }
+int f3(int a, int b) { return ADD(a, b); }
+int f4(int a) { return TWICE(a); }
+int f5(int a, int b) { /* first */ int c = 0; /* second
+ spans lines */ return a + b + c; }
+int f6(int a, int b) { return a \\
+   + b; }
+int main(void) {
+    int x = 1, m = INT_MAX;
+    int s = g(NULL, &x) + g(&x, NULL) + hh(&x, NULL);
+    s += f1(m, 1) + f2(1) + f3(m, 1) + f4(m) + f5(m, 1) + f6(m, 1);
+    return s != 0;
+}
+";
+
+const PLACED_HEADER: &str = "#define __nonnull(params) __attribute__ ((__nonnull__ params))
+extern int hh (int *__p, int *__q) __nonnull ((1, 2));
+int hh(int *p, int *q) { return p == q; }
+";
+
+/// A report's column is the source's (the expected values are clang 21's
+/// for the same program): after a
+/// comment, a multi-line one and a line splice; inside an object-like and
+/// a function-like expansion, at its use, a macro argument at its own
+/// spelling, and a nested one's at the outermost use; and a note's, at the
+/// use of a macro that spells the attribute in a header.
+#[test]
+fn a_report_names_the_source_column_past_comments_and_expansions() {
+    let dir = TempDir::new("badc-sanitize-placed");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, PLACED).unwrap();
+    std::fs::write(dir.join("h.h"), PLACED_HEADER).unwrap();
+    let at = |r: &str| {
+        r.split_once(": runtime error")
+            .map(|(a, _)| String::from(a))
+            .unwrap()
+    };
+    let want = [
+        "17:15", "17:33", "17:48", "7:59", "8:36", "18:19", "9:31", "10:24", "18:38", "12:26",
+        "14:4", "18:57", "18:7",
+    ];
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("placed{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-w", opt, "-fsanitize=undefined", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        let got: Vec<String> = reports(&o).iter().map(|r| at(r)).collect();
+        assert_eq!(got, want, "{opt}");
+        let err = String::from_utf8_lossy(&o.stderr);
+        assert!(
+            err.contains("h.h:2:36: note: nonnull attribute specified here"),
+            "{opt}: {err}"
+        );
     }
 }
 

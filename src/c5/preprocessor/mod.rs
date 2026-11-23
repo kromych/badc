@@ -285,6 +285,9 @@ pub(crate) struct Preprocessor {
     /// (via [`IncludeRecord::trace_line`]) and supplies the `-M`
     /// family's prerequisite list, so both read one list.
     pub include_records: Vec<IncludeRecord>,
+    /// Where text the output does not copy verbatim from its source stands
+    /// there, in output order: [`crate::c5::lexer::ColumnPlace`].
+    pub column_places: Vec<crate::c5::lexer::ColumnPlace>,
     /// The headers the bundled set or a system directory supplied, named
     /// as their line markers name them.
     pub system_headers: BTreeSet<String>,
@@ -494,6 +497,7 @@ pub(crate) struct PpReuse {
     warnings: Vec<Diagnostic>,
     unresolved_intrinsics: Vec<(String, Loc)>,
     include_records: Vec<IncludeRecord>,
+    column_places: Vec<crate::c5::lexer::ColumnPlace>,
 }
 
 // Test hook: how many times the source (as opposed to the preamble or
@@ -1354,6 +1358,7 @@ impl Preprocessor {
             source_label: "<source>".to_string(),
             sink: Sink::default(),
             include_records: Vec::new(),
+            column_places: Vec::new(),
             system_headers: BTreeSet::new(),
             track_includes: false,
             keep_pragmas: false,
@@ -1945,6 +1950,7 @@ impl Preprocessor {
         let n_warnings = self.sink.diagnostics().len();
         let n_unresolved = self.unresolved_intrinsics.len();
         let n_records = self.include_records.len();
+        let n_places = self.column_places.len();
         let entry_macros = self.macros.clone();
         let entry_fn_macros = self.fn_macros.clone();
         let entry_pushed = self.pushed_macros.clone();
@@ -1980,6 +1986,9 @@ impl Preprocessor {
             warnings: self.sink.diagnostics()[n_warnings..].to_vec(),
             unresolved_intrinsics: self.unresolved_intrinsics[n_unresolved..].to_vec(),
             include_records: self.include_records[n_records..].to_vec(),
+            column_places: (self.column_places[n_places..].iter())
+                .map(|p| p.moved(-(source_start as i64)))
+                .collect(),
         };
         self.fail_on_errors()?;
         Ok((out, cache))
@@ -2074,6 +2083,12 @@ impl Preprocessor {
             .extend((prior.unresolved_intrinsics.iter()).map(|(n, l)| (n.clone(), shift(l))));
         self.include_records
             .extend(prior.include_records.iter().cloned());
+        (self.column_places).extend(
+            prior
+                .column_places
+                .iter()
+                .map(|p| p.moved(out.len() as i64)),
+        );
         out.push_str(&prior.source_text);
         // A replayed diagnostic that resolved to an error has to fail
         // the unit; the caller's full pass reports it.
@@ -2181,10 +2196,15 @@ impl Preprocessor {
         // a surrounding comment. A blank line per consumed continuation
         // preserves the one-for-one line count that `__LINE__` and every
         // diagnostic depend on.
-        let stripped = unfold_and_strip(&source);
-        out.reserve(stripped.len());
+        let stripped = unfold_and_strip_placed(&source);
+        let placed = Placed {
+            stripped: &stripped,
+            source: &source,
+        };
+        out.reserve(stripped.text.len());
         self.open_files.push(filename.to_string());
-        let mut pass = LinePass::new(self, out, filename, &stripped);
+        let mut pass = LinePass::new(self, out, filename, &stripped.text);
+        pass.placed = Some(placed);
         let result = pass.run().and_then(|()| pass.finish());
         self.open_files.pop();
         result
@@ -2521,6 +2541,57 @@ struct LinePass<'p, 's> {
     /// Watches for the `#ifndef X` / `#endif` wrapper that lets a repeat
     /// `#include` of this file be dropped; see `include_guards`.
     guard: IncludeGuardScan,
+    /// Where the buffer's text stands in its source, for a buffer read
+    /// from one.
+    placed: Option<Placed<'s>>,
+    /// The places of the line being substituted, reused across lines.
+    places: Vec<expand::Place>,
+    /// Where [`Stripped::span_at`] stands in the buffer's spans.
+    span_cursor: usize,
+}
+
+/// Where a logical line stands: its offset in the buffer, the span holding
+/// it, its source offset, and whether it is one physical line no comment or
+/// splice interrupts.
+#[derive(Clone, Copy)]
+struct Stands {
+    start: u32,
+    span: Option<usize>,
+    from: usize,
+    simple: bool,
+}
+
+/// Where the text of a buffer phases 2 and 3 produced stands in its
+/// source: the retained spans, and the source.
+struct Placed<'s> {
+    stripped: &'s Stripped,
+    source: &'s str,
+}
+
+impl<'s> Placed<'s> {
+    /// The source offset of the text at `at`.
+    fn source_at(&self, at: u32) -> usize {
+        (self.stripped.source_offset(at) as usize).min(self.source.len())
+    }
+
+    /// How many source lines the text at `at` stands below the source
+    /// offset `from`, and its column.
+    fn locate(&self, from: usize, at: u32) -> (u32, u32) {
+        let src = self.source_at(at);
+        let bytes = self.source.as_bytes();
+        let line_start = bytes[..src]
+            .iter()
+            .rposition(|&b| b == b'\n')
+            .map_or(0, |p| p + 1);
+        let below = match from <= line_start {
+            true => bytes[from..line_start]
+                .iter()
+                .filter(|&&b| b == b'\n')
+                .count(),
+            false => 0,
+        };
+        (below as u32, (src - line_start + 1) as u32)
+    }
 }
 
 impl<'p, 's> LinePass<'p, 's> {
@@ -2547,6 +2618,9 @@ impl<'p, 's> LinePass<'p, 's> {
             cond: Vec::new(),
             active: true,
             guard: IncludeGuardScan::default(),
+            placed: None,
+            places: Vec::new(),
+            span_cursor: 0,
         }
     }
 
@@ -2938,6 +3012,100 @@ impl<'p, 's> LinePass<'p, 's> {
         );
     }
 
+    /// Where the logical line `buffer` (this buffer's, at `self.idx`)
+    /// stands in the source, for a buffer read from one.
+    fn line_stands(&mut self, buffer: &str) -> Option<Stands> {
+        let placed = self.placed.as_ref()?;
+        let line = self.lines[self.idx];
+        let start = (line.as_ptr() as usize - placed.stripped.text.as_ptr() as usize) as u32;
+        let span = placed.stripped.span_at(start, &mut self.span_cursor);
+        let from = (placed.stripped.offset_in(span, start) as usize).min(placed.source.len());
+        // A physical line no comment or splice interrupts stands at its own
+        // columns: its offsets locate without a search.
+        let simple = (from == 0 || placed.source.as_bytes()[from - 1] == b'\n')
+            && !buffer.contains('\n')
+            && (placed.stripped)
+                .starts_after(span, start + buffer.len() as u32)
+                .next()
+                .is_none();
+        Some(Stands {
+            start,
+            span,
+            from,
+            simple,
+        })
+    }
+
+    /// Record where the line [`Self::line_stands`] placed, written as `len`
+    /// bytes at `out_at`, stands in the source: an expanded line's tokens by
+    /// `places`, another line's text by the retained spans inside it. A
+    /// place is recorded only where the text stops following the last one,
+    /// so a line that stands at its own position records none.
+    fn place_columns(
+        &mut self,
+        stands: Stands,
+        out_at: usize,
+        len: usize,
+        places: Option<&[expand::Place]>,
+    ) {
+        use crate::c5::lexer::ColumnPlace;
+        let Some(placed) = &self.placed else {
+            return;
+        };
+        let Stands {
+            start,
+            span,
+            from,
+            simple,
+        } = stands;
+        let stripped = placed.stripped;
+        let locate = |at: u32| match simple {
+            true => (0, at - start + 1),
+            false => placed.locate(from, at),
+        };
+        // What the output line holds ahead of the text: the space a `#`
+        // an expansion put first takes.
+        let lead = (out_at - self.out[..out_at].rfind('\n').map_or(0, |p| p + 1)) as u32;
+        let column_places = &mut self.pp.column_places;
+        // The last place: its output offset, source line and column, and
+        // whether the text runs on from it.
+        let mut last: Option<(u32, (u32, u32), bool)> = None;
+        let mut put = |rel: u32, at: u32, linear: bool| {
+            let (line, column) = locate(at);
+            // Source text running on, or a replacement at the same place.
+            let follows = |(r, (l, c), lin): (u32, (u32, u32), bool)| match (lin, linear) {
+                (true, true) => l == line && column.checked_sub(c) == rel.checked_sub(r),
+                (false, false) => (l, c) == (line, column),
+                _ => false,
+            };
+            // The output line's own column, where no place precedes.
+            if last.map_or(linear && line == 0 && column == lead + rel + 1, follows) {
+                return;
+            }
+            last = Some((rel, (line, column), linear));
+            column_places.push(ColumnPlace {
+                at: out_at as u32 + rel,
+                line_delta: line,
+                column,
+                linear,
+            });
+        };
+        match places {
+            Some(places) => {
+                for &(rel, origin, own) in places {
+                    put(rel, start + origin, own);
+                }
+            }
+            None if simple && lead == 0 => {}
+            None => {
+                put(0, start, true);
+                for at in stripped.starts_after(span, start + len as u32) {
+                    put(at - start, at, true);
+                }
+            }
+        }
+    }
+
     /// A content line: join what a multi-line macro invocation spans,
     /// substitute, and resolve any `_Pragma` operator (C99 6.10.9).
     fn content(&mut self, line: &str) -> Result<(), C5Error> {
@@ -2956,9 +3124,18 @@ impl<'p, 's> LinePass<'p, 's> {
             // `__LINE__` and `__FILE__` give the presumed position, which a
             // `#line` can retarget (C99 6.10.4, 6.10.8); absent one it is the
             // physical one.
-            let (substituted, tail) =
-                self.pp
-                    .substitute_line(&buffer, &self.current_file, self.presumed);
+            let mut places = core::mem::take(&mut self.places);
+            let stands = self.line_stands(&buffer);
+            let runs = stands.is_some_and(|s| s.simple);
+            let (substituted, tail) = self.pp.substitute_line(
+                &buffer,
+                &self.current_file,
+                self.presumed,
+                expand::Placing {
+                    places: &mut places,
+                    runs,
+                },
+            );
             let more = match tail {
                 Tail::FnName => self
                     .paren_line(consumed)
@@ -2986,7 +3163,17 @@ impl<'p, 's> LinePass<'p, 's> {
             if processed.starts_with('#') && !self.pp.asm_source {
                 self.out.push(' ');
             }
+            let at = self.out.len();
             self.out.push_str(&processed);
+            // `_Pragma` resolved leaves text the places do not describe.
+            if let Some(stands) = stands
+                && matches!(processed, alloc::borrow::Cow::Borrowed(_))
+            {
+                let expanded = matches!(substituted, alloc::borrow::Cow::Owned(_));
+                let places = expanded.then_some(&places[..]);
+                self.place_columns(stands, at, processed.len(), places);
+            }
+            self.places = places;
             break;
         }
         // One newline for the line itself, one per joined continuation,
@@ -3125,4 +3312,4 @@ use directive::{
 use expand::{JoinScan, Tail};
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
 use pragma::{PragmaDirective, parse_pragma_directive};
-use text::{replace_trigraphs, unfold_and_strip};
+use text::{Stripped, replace_trigraphs, unfold_and_strip_placed};

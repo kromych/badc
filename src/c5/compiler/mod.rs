@@ -3464,6 +3464,7 @@ impl Compiler {
 
         let lex = {
             let mut l = Lexer::new(preprocessed);
+            l.column_places = core::mem::take(&mut pp.column_places);
             // Wide literals take their element width, and `L'...'` its
             // type, from the target's `wchar_t`.
             let wchar = target.wchar_type(opts.short_wchar);

@@ -204,6 +204,8 @@ pub(super) struct ExpScratch {
     hs_memo: Vec<(u32, u32)>,
     /// Emptied token vectors for reuse; capacity survives.
     pool: Vec<Vec<Tok>>,
+    /// [`Exp::note_origins`]'s record for the line.
+    origins: Vec<u32>,
 }
 
 /// Per-line expansion state: the scan needs the macro registries
@@ -235,6 +237,18 @@ struct Shadow {
     def: SavedMacro,
     pushed: Vec<SavedMacro>,
     popped: usize,
+}
+
+/// A token's place in a substituted line: its offset in the output, its
+/// origin in the line ([`Exp::note_origins`]), and whether its spelling is
+/// the source's.
+pub(super) type Place = (u32, u32, bool);
+
+/// Where a substitution notes its tokens' places, and whether only where
+/// they stop running on ([`Exp::serialize_placed`]).
+pub(super) struct Placing<'a> {
+    pub places: &'a mut Vec<Place>,
+    pub runs: bool,
 }
 
 /// Arena id of the line [`Exp`] substitutes, the first buffer it adds.
@@ -273,6 +287,7 @@ impl<'a> Exp<'a> {
         ar.bufs.clear();
         ar.hs_spans.clear();
         ar.hs_pool.clear();
+        ar.origins.clear();
         Exp {
             pp,
             filename,
@@ -473,7 +488,23 @@ impl<'a> Exp<'a> {
     /// (C99 6.10.3.3 reserves pasting for `##`): output that is lexed
     /// again needs the separator, while a header-name operand keeps
     /// the spellings verbatim (C99 6.10.2p4).
-    fn serialize_into(&self, toks: &[Tok], out: &mut String, relex_safe: bool) {
+    /// Serialize `toks` into `out`, noting where each token of the
+    /// outermost scan starts in `out` and its origin there
+    /// ([`Self::note_origins`]), with whether its spelling is the source's.
+    /// Under `runs`, a token is noted only where it does not run on from the
+    /// last: source text at the same distance, or the same replacement.
+    fn serialize_placed(
+        &self,
+        toks: &[Tok],
+        out: &mut String,
+        relex_safe: bool,
+        placing: Option<Placing<'_>>,
+    ) {
+        let (mut places, runs) = match placing {
+            Some(Placing { places, runs }) => (Some(places), runs),
+            None => (None, false),
+        };
+        let mut last: Option<Place> = None;
         let mut cap = toks.len();
         for &t in toks {
             cap += (t.end - t.start) as usize;
@@ -482,7 +513,7 @@ impl<'a> Exp<'a> {
         let first_at = out.len();
         let mut prev_kind = TokKind::Other;
         let mut prev_text: &[u8] = b"";
-        for &t in toks {
+        for (k, &t) in toks.iter().enumerate() {
             let text = self.text(t);
             if out.len() > first_at
                 && (t.space
@@ -495,6 +526,21 @@ impl<'a> Exp<'a> {
                         )))
             {
                 out.push(' ');
+            }
+            if let Some(p) = places.as_deref_mut()
+                && let Some(&origin) = self.ar.origins.get(k)
+            {
+                let place = (out.len() as u32, origin, t.buf == LINE_BUF);
+                let runs_on = runs
+                    && last.is_some_and(|(o, g, own)| match (own, place.2) {
+                        (true, true) => origin.checked_sub(g) == place.0.checked_sub(o),
+                        (false, false) => origin == g,
+                        _ => false,
+                    });
+                if !runs_on {
+                    p.push(place);
+                }
+                last = Some(place);
             }
             out.push_str(text);
             prev_kind = t.kind;
@@ -712,6 +758,9 @@ impl<'a> Exp<'a> {
         // Tokens of a `defined` operand still to pass through unexpanded.
         let mut operand = 0usize;
         while let Some(tok) = rest.pop() {
+            if depth == 0 {
+                self.note_origins(&out);
+            }
             if rest.len() < replaced {
                 replaced = usize::MAX;
                 if tok.buf == LINE_BUF {
@@ -836,7 +885,24 @@ impl<'a> Exp<'a> {
             self.put_vec(btoks);
         }
         self.put_vec(rest);
+        if depth == 0 {
+            self.note_origins(&out);
+        }
         out
+    }
+
+    /// Record, per token the outermost scan has added since the last
+    /// record, where it stands in the line's buffer while `src_pos` still
+    /// names the position it was produced at: a token of the line, a macro
+    /// argument's included, at its own offset, one a replacement produced
+    /// at the invocation's, the position the source shows for it.
+    fn note_origins(&mut self, out: &[Tok]) {
+        let pos = self.src_pos;
+        let new = &out[self.ar.origins.len().min(out.len())..];
+        (self.ar.origins).extend(
+            new.iter()
+                .map(|t| if t.buf == LINE_BUF { t.start } else { pos }),
+        );
     }
 
     /// How many of the next tokens form the operand, `NAME` or `( NAME )`,
@@ -1393,7 +1459,7 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
-        self.substitute_serialized(line, filename, line_no, LineUse::Operand)
+        self.substitute_serialized(line, filename, line_no, LineUse::Operand, None)
             .0
     }
 
@@ -1405,7 +1471,7 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
-        self.substitute_serialized(line, filename, line_no, LineUse::Condition)
+        self.substitute_serialized(line, filename, line_no, LineUse::Condition, None)
             .0
     }
 
@@ -1413,13 +1479,18 @@ impl Preprocessor {
     /// C99 6.10.3.4p1 rescans the replacement together with the rest of
     /// the source, so an invocation an expansion forms may take its `(` or
     /// its arguments from later lines.
+    /// The substituted line and how its rescan ended, with each token's
+    /// place in `places` for a line that changed, as
+    /// [`Exp::serialize_placed`] notes it.
     pub(super) fn substitute_line<'l>(
         &self,
         line: &'l str,
         filename: &str,
         line_no: usize,
+        placing: Placing<'_>,
     ) -> (Cow<'l, str>, Tail) {
-        self.substitute_serialized(line, filename, line_no, LineUse::Text)
+        placing.places.clear();
+        self.substitute_serialized(line, filename, line_no, LineUse::Text, Some(placing))
     }
 
     /// [`Self::substitute`] for a header-name operand (`#include` /
@@ -1435,7 +1506,7 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
-        self.substitute_serialized(line, filename, line_no, LineUse::HeaderName)
+        self.substitute_serialized(line, filename, line_no, LineUse::HeaderName, None)
             .0
     }
 
@@ -1445,6 +1516,7 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
         what: LineUse,
+        placing: Option<Placing<'_>>,
     ) -> (Cow<'l, str>, Tail) {
         if !self.line_mentions_macro(line) {
             return (Cow::Borrowed(line), Tail::Complete);
@@ -1467,7 +1539,7 @@ impl Preprocessor {
         // output quote it.
         let indent = &line[..line.len() - line.trim_start().len()];
         let mut out = String::from(indent);
-        ex.serialize_into(&expanded, &mut out, relex_safe);
+        ex.serialize_placed(&expanded, &mut out, relex_safe, placing);
         ex.put_vec(expanded);
         (Cow::Owned(out), ex.tail)
     }

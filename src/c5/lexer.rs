@@ -430,6 +430,29 @@ fn parse_pragma_fp_contract_line(body: &[u8]) -> Option<Option<bool>> {
 /// Snapshot of the lexer's positional state plus every attribute
 /// `next()` produces for the current token. See [`Lexer::snapshot`] /
 /// [`Lexer::restore`].
+/// Where output text the preprocessor did not copy verbatim stands in its
+/// source: from output offset `at`, the source line `line_delta` below the
+/// one the output line counts and the 1-based `column`, which advances
+/// with the text where `linear` -- source text -- and holds where not, for
+/// a macro's replacement located at its expansion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ColumnPlace {
+    pub at: u32,
+    pub line_delta: u32,
+    pub column: u32,
+    pub linear: bool,
+}
+
+impl ColumnPlace {
+    /// The place with its output offset moved by `by`.
+    pub(crate) fn moved(self, by: i64) -> Self {
+        ColumnPlace {
+            at: (i64::from(self.at) + by) as u32,
+            ..self
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct LexerSnapshot {
     pos: usize,
@@ -680,6 +703,8 @@ pub(crate) struct Lexer {
     /// The sections MSVC's segment pragmas name here. Scanned inline like
     /// `pack`.
     pub(crate) segments: crate::c5::segment_pragma::Segments,
+    /// The preprocessor's [`ColumnPlace`]s for the text, by offset.
+    pub(crate) column_places: Vec<ColumnPlace>,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -876,6 +901,7 @@ impl Lexer {
             fp_contract: true,
             fp_contract_default: true,
             segments: Default::default(),
+            column_places: Vec::new(),
         }
     }
 
@@ -1545,22 +1571,29 @@ impl Lexer {
 
     /// The current token's line and 1-based column.
     pub fn position(&self) -> (u32, u32) {
-        let at = self.tok_start.min(self.src.len());
-        let line_start = (self.src[..at].iter().rposition(|&c| c == b'\n')).map_or(0, |p| p + 1);
-        (self.line as u32, (at - line_start + 1) as u32)
+        self.position_at(self.tok_start)
     }
 
-    /// The 1-based line and column of byte offset `at`, at or before the
-    /// current token.
+    /// The 1-based line and column in the source of byte offset `at`, at
+    /// or before the current token: the output's own, or where
+    /// [`Self::column_places`] places text the preprocessor rewrote.
     pub fn position_at(&self, at: usize) -> (u32, u32) {
         let at = at.min(self.tok_start).min(self.src.len());
         let end = self.tok_start.min(self.src.len());
         let below = self.src[at..end].iter().filter(|&&c| c == b'\n').count() as u32;
         let line_start = (self.src[..at].iter().rposition(|&c| c == b'\n')).map_or(0, |p| p + 1);
-        (
-            (self.line as u32).saturating_sub(below),
-            (at - line_start + 1) as u32,
-        )
+        let line = (self.line as u32).saturating_sub(below);
+        let k = self.column_places.partition_point(|p| p.at as usize <= at);
+        match k.checked_sub(1).map(|k| self.column_places[k]) {
+            Some(p) if p.at as usize >= line_start => {
+                let column = match p.linear {
+                    true => p.column + (at - p.at as usize) as u32,
+                    false => p.column,
+                };
+                (line + p.line_delta, column)
+            }
+            _ => (line, (at - line_start + 1) as u32),
+        }
     }
 
     /// The source text from offset `start` up to the current token,

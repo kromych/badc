@@ -1133,6 +1133,26 @@ mod jit_impl {
         code_vmaddr: u64,
     }
 
+    /// How far apart `build`'s code and data may lie: the code addresses the
+    /// data pc-relatively -- a signed 32-bit displacement on x86-64, `adrp`'s
+    /// 4 GiB on AArch64 -- and a pc-relative word of the data image into the
+    /// code bounds the distance further.
+    fn code_data_reach(build: &Build) -> u64 {
+        let code_reach: u64 = if cfg!(target_arch = "x86_64") {
+            1 << 31
+        } else {
+            1 << 32
+        };
+        (build.data_pcrel_relocs.iter())
+            .filter(|r| !r.target_in_data)
+            .map(|r| match (r.branch26, r.width) {
+                (true, _) => 1u64 << 27,
+                (false, 4) => 1 << 31,
+                _ => u64::MAX,
+            })
+            .fold(code_reach, u64::min)
+    }
+
     /// Map `unit`'s data, and its code with the read-only blob at its tail.
     fn place_unit(unit: &BoundUnit) -> Result<PlacedUnit, C5Error> {
         let build = &unit.build;
@@ -1144,20 +1164,8 @@ mod jit_impl {
             None
         };
         let data_vmaddr = data.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
-        // A pc-relative word of the data image into the code bounds their
-        // distance.
-        let reach = build
-            .data_pcrel_relocs
-            .iter()
-            .filter(|r| !r.target_in_data)
-            .map(|r| match (r.branch26, r.width) {
-                (true, _) => 1u64 << 27,
-                (false, 4) => 1 << 31,
-                _ => u64::MAX,
-            })
-            .min()
-            .filter(|&r| r != u64::MAX);
-        let near = reach.filter(|_| data.is_some()).map(|reach| Near {
+        let reach = code_data_reach(build);
+        let near = data.is_some().then_some(reach).map(|reach| Near {
             data: data_vmaddr,
             span: build.data.len() as u64,
             reach,
@@ -3366,7 +3374,21 @@ mod jit_impl {
 
     #[cfg(test)]
     mod placement {
-        use super::{JitRegion, Near, page_size};
+        use super::{JitRegion, Near, code_data_reach, page_size};
+
+        /// The code addresses its data pc-relatively, so a data image with
+        /// no word into the code still bounds the distance: the signed
+        /// 32-bit displacement on x86-64, `adrp`'s reach on AArch64.
+        #[test]
+        fn code_is_mapped_within_its_own_reach_of_the_data() {
+            let build = crate::c5::codegen::Build::default();
+            let want: u64 = if cfg!(target_arch = "x86_64") {
+                1 << 31
+            } else {
+                1 << 32
+            };
+            assert_eq!(code_data_reach(&build), want);
+        }
 
         /// The code a data image branches into is mapped within the
         /// branch's 128 MiB of the data wherever the data lies: here an

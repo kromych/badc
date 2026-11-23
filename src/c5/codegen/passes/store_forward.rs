@@ -783,11 +783,13 @@ fn run_one(func: &mut FunctionSsa) {
                     let value = *value;
                     let kind = *kind;
                     let volatile = *volatile;
-                    // A frame write can alias a tracked pointer entry
-                    // (the pointer can be a `LocalAddr` of this slot),
-                    // so the pointer table clears as before.
-                    table.clear();
-                    indexed.clear();
+                    // A frame write aliases a tracked pointer entry only
+                    // where a `LocalAddr` of its slot is read: a slot no
+                    // pointer reaches keeps the pointer tables.
+                    if !slots.contains(&off) {
+                        table.clear();
+                        indexed.clear();
+                    }
                     let at = off * 8 + i64::from(disp);
                     let w = store_width(kind);
                     slot_table
@@ -3144,14 +3146,6 @@ mod tests {
             store_indexed(2, 1, 1, 2, StoreKind::I8),
             plain_store(false),
             plain_store(true),
-            Inst::StoreLocal {
-                disp: 0,
-                off: 8,
-                value: 2,
-                kind: StoreKind::I64,
-                volatile: false,
-                nsw: false,
-            },
             Inst::Mcpy {
                 dst: 2,
                 src: 0,
@@ -3191,6 +3185,39 @@ mod tests {
                     matches!(last, Inst::LoadIndexed { .. }),
                     "{first:?} forwarded across {barrier:?}: {last:?}"
                 );
+            }
+        }
+        // A frame store reaches the element only where a `LocalAddr` of its
+        // slot is read.
+        let slot_store = Inst::StoreLocal {
+            disp: 0,
+            off: 8,
+            value: 2,
+            kind: StoreKind::I64,
+            volatile: false,
+            nsw: false,
+        };
+        let addressed = alloc::vec![
+            Inst::LocalAddr(8),
+            Inst::StoreLocal {
+                disp: 0,
+                off: 8,
+                value: 4,
+                kind: StoreKind::I64,
+                volatile: false,
+                nsw: false,
+            },
+        ];
+        for (between, reaches) in [(alloc::vec![slot_store], false), (addressed, true)] {
+            for first in [
+                load_indexed(0, 1, 1, LoadKind::I8),
+                store_indexed(0, 1, 1, 2, StoreKind::I8),
+            ] {
+                // A forward redirects the read or rewrites the load in place.
+                let load = 4 + between.len() as u32;
+                let (v, last) = indexed_reload(first.clone(), between.clone(), LoadKind::I8);
+                let read = v == load && matches!(last, Inst::LoadIndexed { .. });
+                assert_eq!(read, reaches, "{first:?} across {between:?}: {last:?}");
             }
         }
     }

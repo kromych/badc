@@ -17,8 +17,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x20]
-               	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0x5
                	str	w1, [x0, #0x20]
                	mov	x0, x1

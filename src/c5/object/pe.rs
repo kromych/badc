@@ -602,7 +602,7 @@ impl<'a> PeWriter<'a> {
         let mut out = [0; IMAGE_TLS_DIRECTORY64_SIZE as usize];
         let fields = [
             start,
-            start + self.build.tls_data.len() as u64,
+            start + self.build.tls_len() as u64,
             va(self.tls_index_rva()),
             callbacks,
         ];
@@ -1959,6 +1959,7 @@ impl<'a> PeWriter<'a> {
                     &l.tls_sites,
                 )?;
                 out.extend_from_slice(&tls);
+                out.resize(out.len() + build.tls_zero_fill_len, 0);
             }
         }
         for n in &l.named_out {
@@ -2251,7 +2252,7 @@ struct TlsLayout {
 /// its TLS callbacks, or a unit naming `_tls_used`.
 fn tls_directory_present(build: &Build) -> bool {
     let f = &build.init_fini_arrays;
-    !build.tls_data.is_empty() || f.tls_callbacks.is_some() || f.tls_directory.is_some()
+    build.tls_len() > 0 || f.tls_callbacks.is_some() || f.tls_directory.is_some()
 }
 
 fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
@@ -2271,11 +2272,11 @@ fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
         None => IMAGE_TLS_DIRECTORY64_SIZE,
     };
     let tls_init_offset = directory_offset + own_directory;
-    // We emit the entire `tls_data` as the template (see the long comment
+    // We emit the entire block as the template (see the long comment
     // in `write` next to the IMAGE_TLS_DIRECTORY64 emission), so the .data
-    // tail contributed by TLS is `tls_data.len()` bytes regardless of
+    // tail contributed by TLS is `tls_len()` bytes regardless of
     // `tls_init_size`.
-    let total = tls_init_offset + build.tls_data.len() as u32;
+    let total = tls_init_offset + build.tls_len() as u32;
     TlsLayout {
         tls_blob_size: total - user_data_end,
         tls_index_offset_in_data: tls_index_offset,

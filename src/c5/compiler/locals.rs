@@ -1431,9 +1431,12 @@ impl Compiler {
                 DataStore::Static
             };
             let align = self.static_local_placement_align(loc_idx, ty, bytes);
-            let off = match !is_tls && self.takes_zero_region(loc_idx, ty) {
-                true => self.reserve_zero_bytes(align, bytes as usize),
-                false => self.reserve_data_bytes(store, align, bytes as usize),
+            let off = match (is_tls, staged || self.lex.tk == Token::Assign) {
+                (true, false) => self.reserve_thread_local_zero_bytes(align, bytes as usize),
+                (false, _) if self.takes_zero_region(loc_idx, ty) => {
+                    self.reserve_zero_bytes(align, bytes as usize)
+                }
+                _ => self.reserve_data_bytes(store, align, bytes as usize),
             };
             self.symbols[loc_idx].val = off;
             if !is_tls || staged {

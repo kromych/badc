@@ -211,6 +211,18 @@ fn return_zero() {
     assert_exit("int main() { return 0; }", "ret0", &[], 0);
 }
 
+/// The zero-filled thread-local storage past the template is the TLS
+/// directory's `SizeOfZeroFill`.
+#[test]
+fn zero_filled_thread_local_storage_runs() {
+    assert_exit(
+        super::zero_filled_thread_local_source(),
+        "zero_filled_tls",
+        &[],
+        0,
+    );
+}
+
 #[test]
 fn string_literal_store_faults() {
     // The literal lives in `.rdata`; the store hits a page mapped

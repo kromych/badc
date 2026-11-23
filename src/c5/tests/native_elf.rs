@@ -979,6 +979,20 @@ int check_other(void) {\n\
     );
 }
 
+/// The zero-filled thread-local storage past the template is in the block
+/// variant I places above the thread pointer, through the direct image and
+/// through a relocatable object's `.tbss`.
+#[test]
+fn zero_filled_thread_local_storage_runs() {
+    let src = super::zero_filled_thread_local_source();
+    assert_eq!(build_and_run(src, "zero_filled_tls"), 0);
+    #[cfg(feature = "linker")]
+    match link_and_run_outcome(src, "zero_filled_tls_linked") {
+        RunOutcome::Exit(0) => {}
+        other => panic!("the linked image must exit 0, got {other:?}"),
+    }
+}
+
 /// C11 6.7.5: 8 and 16 KiB objects land on their boundary through the single
 /// image, the linked executable (PIE and placed) and a two-unit link.
 #[test]

@@ -47,7 +47,7 @@ Disassembly of section .text:
                	str	x1, [x0, #0x10]
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x10
+               	add	x1, x1, #0x14
                	str	wzr, [x1]
                	ldr	x1, [x0, #0x8]
                	cmp	x1, #0x2
@@ -71,10 +71,10 @@ Disassembly of section .text:
                	str	x1, [x0, #0x8]
                	mrs	x2, TPIDR_EL0
                	add	x2, x2, #0x0, lsl #12   // =0x0
-               	add	x2, x2, #0x14
+               	add	x2, x2, #0x18
                	mrs	x3, TPIDR_EL0
                	add	x3, x3, #0x0, lsl #12   // =0x0
-               	add	x3, x3, #0x16
+               	add	x3, x3, #0x1a
                	mov	x1, #0x5                // =5
                	strb	w1, [x3]
                	strb	w1, [x2]

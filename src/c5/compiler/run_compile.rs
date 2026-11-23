@@ -3105,7 +3105,10 @@ impl Compiler {
         } else if reuse_prior_storage {
             self.symbols[id_idx].val
         } else if thread_local {
-            let off = self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize);
+            let off = match self.lex.tk == Token::Assign {
+                true => self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize),
+                false => self.reserve_thread_local_zero_bytes(align, bytes as usize),
+            };
             self.symbols[id_idx].val = off;
             self.symbols[id_idx].reserved_data_bytes = bytes;
             off
@@ -3301,7 +3304,7 @@ impl Compiler {
         }
         let fresh = if thread_local {
             self.check_thread_local_align(align, line)?;
-            self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize)
+            self.reserve_thread_local_zero_bytes(align, bytes as usize)
         } else {
             let s = &self.symbols[id_idx];
             let off = match s.storage_is_const || s.section_name.is_some() {

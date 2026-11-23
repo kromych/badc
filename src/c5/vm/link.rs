@@ -304,7 +304,7 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
         });
         pc += u.pc_extent();
         data += u.program.image_len() as u64;
-        tls += u.program.tls_data.len() as u64;
+        tls += u.program.tls_len() as u64;
         binding += u.binding_names.len() as i64;
     }
     let mut table = Table::new();

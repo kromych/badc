@@ -2220,7 +2220,7 @@ impl<'a> MachOWriter<'a> {
         } else {
             0
         };
-        l.thread_storage_size = build.tls_data.len() as u64;
+        l.thread_storage_size = build.tls_len() as u64;
         // dyld copies the template into a per-thread `malloc` block, so
         // the objects' alignment holds up to 16 by the allocation; the
         // section is placed and marked at the image's alignment, as ld64

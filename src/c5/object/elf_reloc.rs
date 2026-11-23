@@ -1284,7 +1284,7 @@ impl<'a> RelocWriter<'a> {
         target: super::Target,
     ) -> Self {
         let class = build.elf_class;
-        let has_tls = !program.tls_data.is_empty();
+        let has_tls = program.tls_len() > 0;
         let has_tls_relocs = !build.tls_data_relocs.is_empty()
             || !build.tls_extern_data_relocs.is_empty()
             || !build.tls_code_relocs.is_empty()
@@ -4862,7 +4862,7 @@ impl<'a> RelocWriter<'a> {
             out.place(tls(out.fixed_name(SHIDX_TDATA), SHT_PROGBITS), &tdata);
             out.place_nobits(
                 tls(out.fixed_name(SHIDX_TBSS), SHT_NOBITS),
-                (program.tls_data.len() - tls_init_size) as u64,
+                (program.tls_len() - tls_init_size) as u64,
             );
         }
         if !self.relocs.tdata.is_empty() {

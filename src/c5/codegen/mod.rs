@@ -2414,6 +2414,9 @@ pub(crate) struct Build {
     /// Number of `tls_data` bytes that are statically initialized.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
+    /// Zero-filled thread-local bytes past `tls_data`
+    /// ([`Program::tls_zero_fill_len`]).
+    pub tls_zero_fill_len: usize,
     /// Alignment of `tls_data`, at least 8: the ELF writer's `PT_TLS`
     /// `p_align`, and the rounding the thread-pointer-relative offsets
     /// take (variant II rounds the block size up to it, variant I the
@@ -2707,6 +2710,12 @@ pub(crate) struct Build {
 }
 
 impl Build {
+    /// The size of the thread-local block: the template and the
+    /// zero-filled storage past it.
+    pub fn tls_len(&self) -> usize {
+        self.tls_data.len() + self.tls_zero_fill_len
+    }
+
     /// Byte offset just past function `i`'s last instruction. Read from
     /// [`Self::func_ends`] when the producer recorded one; otherwise the
     /// next function's entry offset stands in, which is the same number
@@ -5559,7 +5568,7 @@ pub(crate) fn lower_for_with_prebuilt(
     // no libc function. A dylib entry needs no symbol binding in
     // scope, so this holds for sources that include no header at all;
     // relocatable objects record the list for the linker.
-    if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
+    if matches!(target, Target::MacOSAarch64) && program.tls_len() > 0 {
         imports.ensure_dylib("libSystem", program, target);
     }
     let mut build = lower_arch(program, target, options.clone(), &imports, prebuilt, mode)?;

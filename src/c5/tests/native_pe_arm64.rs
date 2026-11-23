@@ -203,6 +203,13 @@ fn return_zero() {
     assert_exit("int main() { return 0; }", "ret0", &[], 0);
 }
 
+/// The zero-filled thread-local storage past the template is the TLS
+/// directory's `SizeOfZeroFill`.
+#[test]
+fn zero_filled_thread_local_storage_runs() {
+    assert_exit(super::zero_filled_thread_local_source(), "zero_filled_tls", &[], 0);
+}
+
 #[test]
 fn return_42() {
     assert_exit("int main() { return 42; }", "ret42", &[], 42);

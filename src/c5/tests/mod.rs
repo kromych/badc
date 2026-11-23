@@ -1417,6 +1417,24 @@ pub fn zero_filled_storage_source() -> &'static str {
      }\n"
 }
 
+/// [`zero_filled_storage_source`] with thread storage duration: a large
+/// thread-local array, a tentative one, an initialized one between them and
+/// a block-scope one.
+pub fn zero_filled_thread_local_source() -> &'static str {
+    "_Thread_local char big[1 << 20];\n\
+     _Thread_local int tentative;\n\
+     _Thread_local int initialized = 5;\n\
+     static int bump(void) { static _Thread_local long n; return (int)++n; }\n\
+     int main(void) {\n\
+         big[7] = 3;\n\
+         tentative = 4;\n\
+         bump();\n\
+         if (big[7] != 3 || tentative != 4 || initialized != 5 || bump() != 2)\n\
+             return 1;\n\
+         return big[(1 << 20) - 1];\n\
+     }\n"
+}
+
 pub fn compile_str(src: &str) -> Program {
     Compiler::new(with_prelude(src)).compile().unwrap()
 }

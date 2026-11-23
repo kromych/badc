@@ -2408,8 +2408,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             // Variant II places the block at `tp - roundup(memsz, align)`.
             inputs
                 .program
-                .tls_data
-                .len()
+                .tls_len()
                 .next_multiple_of(crate::c5::layout::tls_image_align(inputs.program.tls_align)),
             &mut self.fn_unwind,
             inputs.name2entpc,

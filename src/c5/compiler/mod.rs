@@ -2777,6 +2777,8 @@ pub struct Compiler {
     data_align: usize,
     /// The static storage no initializer names, at provisional offsets.
     zero_region: crate::c5::layout::ZeroRegion,
+    /// The same for thread-local storage, at provisional template offsets.
+    tls_zero_region: crate::c5::layout::ZeroRegion,
     image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Alignment of the thread-local image, at least 8: the largest
     /// alignment among the objects reserved in it.
@@ -3628,6 +3630,7 @@ impl Compiler {
             msvc: opts.msvc && target.is_windows(),
             data_align: 8,
             zero_region: Default::default(),
+            tls_zero_region: Default::default(),
             image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             export_all_functions: opts.export_all_functions,
@@ -4425,6 +4428,7 @@ impl Compiler {
             .map_err(|e| self.failed(e))?;
         let (exports, exported_objects) = self.resolve_exports().map_err(|e| self.failed(e))?;
         self.lay_out_thread_locals();
+        let tls_zero_fill_len = self.place_thread_local_zero_region();
         let typedefs = self.typedef_layouts();
         let prototypes = if self.prototypes {
             self.function_prototypes()
@@ -4479,6 +4483,7 @@ impl Compiler {
             notes: self.notes,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
+            tls_zero_fill_len,
             tls_align: self.tls_align,
             exports,
             exported_objects,

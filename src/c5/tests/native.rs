@@ -125,6 +125,14 @@ fn zero_filled_static_storage_runs() {
     assert_eq!(build_and_run(src, "zero_filled_storage"), 0);
 }
 
+/// The zero-filled thread-local storage past the template is each thread's,
+/// zeroed, in the image's thread-local block.
+#[test]
+fn zero_filled_thread_local_storage_runs() {
+    let src = super::zero_filled_thread_local_source();
+    assert_eq!(build_and_run(src, "zero_filled_thread_local"), 0);
+}
+
 /// Return-address signing on the host CPU: every frame shape the
 /// signing decision distinguishes returns through `autiasp` and
 /// produces its value. The signature itself is inert in a plain arm64

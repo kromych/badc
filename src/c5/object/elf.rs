@@ -2184,7 +2184,7 @@ impl<'a> ElfImageWriter<'a> {
         let n_tls_relocs = self.tls_got_relocs().0.len() as u64;
         let dynamic = &self.dynamic;
         let seg = &mut self.seg;
-        seg.has_tls = !build.tls_data.is_empty();
+        seg.has_tls = build.tls_len() > 0;
         seg.ro_len = build.data_ro_len.min(build.data.len()) as u64;
         seg.relro_total = build
             .data_relro_len
@@ -2417,7 +2417,7 @@ impl<'a> ElfImageWriter<'a> {
             seg.data_off + seg.data_size
         };
         seg.tdata_size = build.tls_init_size as u64;
-        seg.tbss_size = build.tls_data.len() as u64 - seg.tdata_size;
+        seg.tbss_size = build.tls_len() as u64 - seg.tdata_size;
         seg.segment2_filesize = seg.tdata_off + seg.tdata_size - seg.segment2_off;
         seg.bss_align = crate::c5::layout::bss_image_align(build.data_align) as u64;
         seg.bss_off = seg.segment2_off + seg.segment2_filesize + seg.tbss_size;
@@ -5700,7 +5700,7 @@ mod tests {
         );
         assert_eq!(
             p_memsz,
-            build.tls_data.len() as u64,
+            build.tls_len() as u64,
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
         assert_eq!(p_memsz, 8, "two int TLS vars => 8 bytes per thread");
@@ -5760,7 +5760,7 @@ mod tests {
         );
         assert_eq!(
             p_memsz,
-            build.tls_data.len() as u64,
+            build.tls_len() as u64,
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
         assert_eq!(p_memsz, 4, "single int TLS var => 4 bytes per thread");
@@ -5788,7 +5788,7 @@ mod tests {
             let build =
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
-            assert_eq!((build.tls_data.len(), build.tls_align), (65, 32));
+            assert_eq!((build.tls_len(), build.tls_align), (65, 32));
             let bytes = write(&tiny_program(), &build, machine)
                 .expect("write ELF")
                 .image;

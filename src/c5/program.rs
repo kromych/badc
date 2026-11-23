@@ -334,6 +334,10 @@ pub struct Program {
     /// (`tls_data.len() - tls_init_size` bytes) is zero-init and
     /// goes into `.tbss`. Invariant: `tls_init_size <= tls_data.len()`.
     pub tls_init_size: usize,
+    /// Bytes of zero-filled thread-local storage past `tls_data`, which the
+    /// template does not hold: template offsets `[tls_data.len(),
+    /// tls_len())` name them.
+    pub tls_zero_fill_len: usize,
     /// Alignment of `tls_data`: the largest alignment among its objects,
     /// at least 8. The image writers place each thread's copy on it.
     pub tls_align: usize,
@@ -604,6 +608,12 @@ impl Program {
     /// zero-filled storage past them.
     pub fn image_len(&self) -> usize {
         self.data.len() + self.zero_fill_len
+    }
+
+    /// The size of the thread-local block: the template and the
+    /// zero-filled storage past it.
+    pub fn tls_len(&self) -> usize {
+        self.tls_data.len() + self.tls_zero_fill_len
     }
 
     /// Move the objects the parser placed in the zero region past `data`, on
@@ -908,7 +918,8 @@ impl DataOffsets for Program {
             notes: _,
             tls_data: _,      // separate image
             tls_init_size: _, // extent of `tls_data`
-            tls_align: _,     // an alignment, not an offset
+            tls_zero_fill_len: _,
+            tls_align: _, // an alignment, not an offset
             data_relocs,
             extern_data_relocs,
             code_relocs,
@@ -1063,6 +1074,7 @@ mod data_offset_tests {
             notes: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_zero_fill_len: 0,
             tls_align: 8,
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),

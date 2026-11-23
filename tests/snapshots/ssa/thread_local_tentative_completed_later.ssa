@@ -59,7 +59,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v35  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x1
     v36  Imm(3)                                           -> x1
     v37  Store { addr=v1, disp=16, value=v36, kind=I64 }  -> -
-    v38  TlsAddr(0)                                       -> x1
+    v38  TlsAddr(4)                                       -> x1
     v39  Imm(0)                                           -> x2
     v40  Store { addr=v38, disp=0, value=v39, kind=I32 }  -> -
     v41  Load { addr=v1, disp=8, kind=I64 }               -> x1
@@ -93,8 +93,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v61  BinopI { op=add, lhs=v60, rhs_imm=8 }            -> x1
     v62  Imm(4)                                           -> x1
     v63  Store { addr=v60, disp=8, value=v62, kind=I64 }  -> -
-    v64  TlsAddr(4)                                       -> x2
-    v65  TlsAddr(6)                                       -> x6
+    v64  TlsAddr(8)                                       -> x2
+    v65  TlsAddr(10)                                      -> x6
     v66  Imm(5)                                           -> x1
     v67  Store { addr=v65, disp=0, value=v66, kind=I8 }   -> -
     v68  Store { addr=v64, disp=0, value=v66, kind=I8 }   -> -

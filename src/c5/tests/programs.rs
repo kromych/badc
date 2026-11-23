@@ -6074,6 +6074,21 @@ fn static_storage_no_initializer_names_stays_out_of_the_image() {
     assert_eq!(run_str(src), 0);
 }
 
+/// Thread-local storage no initializer names stays out of the thread-local
+/// template: it is the block's zero-filled storage past it.
+#[test]
+fn thread_local_storage_no_initializer_names_stays_out_of_the_template() {
+    let src = super::zero_filled_thread_local_source();
+    let program = compile_str(src);
+    assert!(
+        program.tls_data.len() < 64,
+        "{} template bytes",
+        program.tls_data.len()
+    );
+    assert!(program.tls_len() > 1 << 20, "{}", program.tls_len());
+    assert_eq!(run_str(src), 0);
+}
+
 #[test]
 fn thread_local_tentative_array_is_completed_in_the_thread_local_image() {
     // C99 6.9.2p2: a tentative `T x[];` is completed to one element at the

@@ -541,6 +541,40 @@ impl Compiler {
         Ok(())
     }
 
+    /// Reserve `bytes` of thread-local storage no initializer names, on
+    /// `align`, in the thread-local zero region the template does not hold.
+    pub(super) fn reserve_thread_local_zero_bytes(&mut self, align: usize, bytes: usize) -> i64 {
+        self.tls_align = self.tls_align.max(align);
+        self.tls_zero_region.reserve(align, bytes)
+    }
+
+    /// Move the thread-local zero region past the template, on the block
+    /// alignment, and name its size: the symbols and the identifiers in
+    /// the parsed functions take its objects' final offsets.
+    pub(super) fn place_thread_local_zero_region(&mut self) -> usize {
+        let region = core::mem::take(&mut self.tls_zero_region);
+        if region.len == 0 {
+            return 0;
+        }
+        let len = self.tls_data.len();
+        let align = crate::c5::layout::tls_image_align(self.tls_align).max(region.align);
+        let base = len.next_multiple_of(align) as i64;
+        let place = |v: &mut i64| {
+            if crate::c5::layout::in_zero_region(*v) {
+                *v = *v - crate::c5::layout::ZERO_REGION_BASE + base;
+            }
+        };
+        for s in &mut self.symbols {
+            if s.is_thread_local {
+                place(&mut s.val);
+            }
+        }
+        for f in &mut self.finished_functions {
+            f.ast.remap_tls_offsets(&mut |v| place(v));
+        }
+        base as usize + region.len - len
+    }
+
     /// Order the thread-local template: the objects whose bytes or
     /// relocations initialize them first, as `.tdata`, then the all-zero
     /// ones, which join the `.tbss` zero fill whatever their declaration

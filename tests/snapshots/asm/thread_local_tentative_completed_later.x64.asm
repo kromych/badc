@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movq	$0x2, 0x8(%rax)
                	movq	$0x3, 0x10(%rax)
                	movq	%fs:0x0, %rcx
-               	addq	$-0x40, %rcx
+               	addq	$-0x3c, %rcx
                	movl	$0x0, (%rcx)
                	movq	0x8(%rax), %rcx
                	cmpq	$0x2, %rcx
@@ -72,9 +72,9 @@ Disassembly of section .text:
                	addq	$-0x10, %rax
                	movq	$0x4, 0x8(%rax)
                	movq	%fs:0x0, %rdx
-               	addq	$-0x3c, %rdx
+               	addq	$-0x38, %rdx
                	movq	%fs:0x0, %rsi
-               	addq	$-0x3a, %rsi
+               	addq	$-0x36, %rsi
                	movb	$0x5, (%rsi)
                	movb	$0x5, (%rdx)
                	testb	$0xf, %al

@@ -1444,19 +1444,19 @@ fn ret_part_reads(func: &FunctionSsa, target: Target) -> BTreeMap<ValueId, (u64,
 
 /// Per phi-class root, what keeping it in a caller-saved register across
 /// the calls it lives across ([`call_crossings`]) costs: a store and a
-/// load at each, by the call's loop weight, and by its frequency and size
-/// ([`cost_weights`]).
+/// load at each, by the call block's `weights` -- the units the coloring
+/// weighs spills in -- and by its frequency and size ([`cost_weights`]).
 fn call_save_costs(
     func: &FunctionSsa,
     crossings: &[(ValueId, Vec<ValueId>)],
     node_of: &[ValueId],
+    weights: &[u64],
 ) -> (Vec<u64>, Vec<u64>) {
     let mut cost = alloc::vec![0u64; func.insts.len()];
     let mut by_freq = alloc::vec![0u64; func.insts.len()];
     if crossings.is_empty() {
         return (cost, by_freq);
     }
-    let weights = block_weights(func);
     let freqs = cost_weights(func);
     let mut block_of = alloc::vec![0usize; func.insts.len()];
     for (b, block) in func.blocks.iter().enumerate() {
@@ -1898,9 +1898,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.call_forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
     }
-    let (save_costs, save_freqs) = call_save_costs(func, &crossings, &node_of);
+    // Every cost the coloring weighs against a spill is in these units: an
+    // instruction's executions and its size.
+    let freqs = cost_weights(func);
+    let (save_costs, save_freqs) = call_save_costs(func, &crossings, &node_of, &freqs);
     if save_costs.iter().any(|&c| c > 0) {
-        let defs = compute_def_weights(func, &node_of, &use_counts);
+        let defs = def_weights(func, &node_of, &use_counts, &freqs);
         for (root, c) in node_cons.iter_mut().enumerate() {
             if let Some(c) = c {
                 c.save_cost = save_costs[root];
@@ -1944,9 +1947,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
-    let spill_weights = compute_spill_weights(func, &node_of, &liveness);
+    let spill_weights = use_weights(func, &node_of, &liveness, &freqs);
     let loops = (!func.has_returns_twice_call)
-        .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &block_weights(func)))
+        .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &freqs))
         .flatten();
     let color = |node_cons: &[Option<NodeConstraints>]| {
         color_graph(
@@ -1975,13 +1978,16 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             .count() as u64;
         let early = super::early_exit::early_exit(func, &param_incoming_plan(func, target));
         let exits = exits - u64::from(early.is_some());
-        let defs = compute_def_weights(func, &node_of, &use_counts);
+        let defs = def_weights(func, &node_of, &use_counts, &freqs);
         let conv_banks = RegBanks::new(conv_target, fixed);
         let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
         let (asm_gpr, asm_fpr) =
             asm_callee_saved(func, &asm_live, &conv_banks, target, conv_target);
         let base = region_base.map_or(0, |r| 1u32 << r);
         let saved = [call_gpr | asm_gpr | base, call_fpr | asm_fpr].map(u64::from);
+        // A call runs the save and one restore, whichever exit it leaves
+        // by; each exit's restore lengthens the function.
+        let open = 2 * FREQ_ONE + (exits + 1) * STATIC_COST;
         let mut withheld = [0u64; 2];
         loop {
             let mut held = [[0u64; 64]; 2];
@@ -2000,7 +2006,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             for (bank, regs) in held.iter().enumerate() {
                 for (r, &cost) in regs.iter().enumerate() {
                     let free = (saved[bank] >> r) & 1 != 0 || (withheld[bank] >> r) & 1 != 0;
-                    if cost > 0 && cost < exits + 1 && !free {
+                    if cost > 0 && cost < open && !free {
                         withheld[bank] |= 1 << r;
                         more = true;
                     }
@@ -4135,22 +4141,23 @@ pub(crate) fn block_frequencies(func: &FunctionSsa) -> Vec<u64> {
         .collect()
 }
 
-/// Loop-depth-weighted use count per interference node, keyed by node
-/// id (the phi-congruence-class root). Each use site of any class
-/// member contributes `LOOP_WEIGHT^min(depth, cap)` for the depth of
-/// the block holding the use. `color_graph` colors highest-weight
-/// nodes first, so the coldest values are the ones that spill when a
-/// bank fills. Straight-line functions weight every use at depth 0, so
-/// the order degrades to raw use count.
+/// What spilling each interference node costs its uses, keyed by node id
+/// (the phi-congruence-class root): each use site of any class member
+/// contributes its block's [`cost_weights`], the reload's executions and
+/// its size. `color_graph` colors highest-weight nodes first, so the
+/// coldest values are the ones that spill when a bank fills. The
+/// allocator reads [`use_weights`] with the weights it shares out.
+#[cfg(test)]
 fn compute_spill_weights(
     func: &FunctionSsa,
     node_of: &[ValueId],
     liveness: &super::liveness::Liveness,
 ) -> Vec<u64> {
-    use_weights(func, node_of, liveness, &block_weights(func))
+    use_weights(func, node_of, liveness, &cost_weights(func))
 }
 
-/// [`compute_spill_weights`] by the per-block weights `block_weight`.
+/// What spilling each interference node costs its uses, by the per-block
+/// weights `block_weight`.
 fn use_weights(
     func: &FunctionSsa,
     node_of: &[ValueId],
@@ -4191,13 +4198,8 @@ fn use_weights(
     w
 }
 
-/// Loop-depth-weighted count of the emitted definitions per interference
-/// node: what storing its members to a spill slot costs.
-fn compute_def_weights(func: &FunctionSsa, node_of: &[ValueId], use_counts: &[u32]) -> Vec<u64> {
-    def_weights(func, node_of, use_counts, &block_weights(func))
-}
-
-/// [`compute_def_weights`] by the per-block weights `block_weight`.
+/// What storing each interference node's emitted definitions to a spill
+/// slot costs, by the per-block weights `block_weight`.
 fn def_weights(
     func: &FunctionSsa,
     node_of: &[ValueId],
@@ -6866,8 +6868,8 @@ int main(void) { return 0; }
     fn loop_depths_and_weights_reflect_nesting() {
         use crate::c5::codegen::passes::layout::loop_depths;
         // Straight-line function: no loop, every block at depth 0, and
-        // no use weight reaches the loop multiplier (weights are the
-        // raw use counts).
+        // no use weight reaches the loop multiplier (a use costs its
+        // reload's one execution and its size).
         let sl = lift("tests/fixtures/c/quicksort.c");
         let swap = sl.iter().find(|f| f.name == "swap").expect("swap");
         assert!(
@@ -6882,8 +6884,8 @@ int main(void) { return 0; }
                 &super::super::liveness::Liveness::compute(swap)
             )
             .iter()
-            .all(|&w| w < LOOP_WEIGHT),
-            "a loop-free function weights every use at depth 0 (raw use count)"
+            .all(|&w| w < LOOP_WEIGHT * FREQ_ONE),
+            "a loop-free function weights every use at depth 0"
         );
         // Loop function: the loop body sits at depth >= 1 and a
         // loop-carried value's weight reaches the loop multiplier.
@@ -6901,7 +6903,7 @@ int main(void) { return 0; }
                 &super::super::liveness::Liveness::compute(hot)
             )
             .iter()
-            .any(|&w| w >= LOOP_WEIGHT),
+            .any(|&w| w >= LOOP_WEIGHT * FREQ_ONE),
             "a loop-carried value must outweigh a function-scope value"
         );
     }

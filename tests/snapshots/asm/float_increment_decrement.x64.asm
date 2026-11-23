@@ -89,18 +89,18 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm0
-               	addsd	%xmm0, %xmm1
-               	movsd	%xmm1, -0x10(%rbp)
+               	movsd	<rip>, %xmm1
+               	addsd	%xmm1, %xmm0
+               	movsd	%xmm0, -0x10(%rbp)
                	movsd	-0x8(%rbp), %xmm2
                	vaddsd	<rip>, %xmm2, %xmm2
                	movsd	%xmm2, -0x8(%rbp)
                	movsd	<rip>, %xmm3
-               	ucomisd	%xmm3, %xmm1
+               	ucomisd	%xmm3, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	ucomisd	%xmm0, %xmm2
+               	ucomisd	%xmm1, %xmm2
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax

@@ -31,24 +31,24 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v19  Imm(0)                                           -> x1
     v20  Load { addr=v18, disp=0, kind=I64 }              -> x1
     v21  Imm(0)                                           -> x2
-    v22  Load { addr=v18, disp=8, kind=I64 }              -> x0
-    v23  Imm(0)                                           -> x2
-    v24  LocalAddr(-3)                                    -> x2
+    v22  Load { addr=v18, disp=8, kind=I64 }              -> x2
+    v23  Imm(0)                                           -> x0
+    v24  LocalAddr(-3)                                    -> x0
     v25  Imm(8)                                           -> x6
-    v26  Intrinsic { kind=VaArg, args=[v24, v25] }        -> x2
-    v27  Load { addr=v26, disp=0, kind=I64 }              -> x2
-    v28  Imm(0)                                           -> x6
-    v29  LocalAddr(-3)                                    -> x6
-    v30  Intrinsic { kind=VaEnd, args=[v29] }             -> x6
-    v31  Imm(0)                                           -> x6
-    v32  Imm(0)                                           -> x6
-    v33  BinopI { op=ne, lhs=v20, rhs_imm=111 }           -> x1
-    v34  Imm(0)                                           -> x6
+    v26  Intrinsic { kind=VaArg, args=[v24, v25] }        -> x0
+    v27  Load { addr=v26, disp=0, kind=I64 }              -> x6
+    v28  Imm(0)                                           -> x0
+    v29  LocalAddr(-3)                                    -> x0
+    v30  Intrinsic { kind=VaEnd, args=[v29] }             -> x0
+    v31  Imm(0)                                           -> x0
+    v32  Imm(0)                                           -> x0
+    v33  BinopI { op=ne, lhs=v20, rhs_imm=111 }           -> x0
+    v34  Imm(0)                                           -> x1
     terminator Bnz { cond=v33, target=b5, fall=b4 }   (exit_acc=v33)
   block 4  start_pc=0
-    v35  Imm(0)                                           -> x1
-    v36  Imm(0)                                           -> x1
-    v37  Imm(0)                                           -> x1
+    v35  Imm(0)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Imm(0)                                           -> x0
     v38  BinopI { op=ne, lhs=v22, rhs_imm=222 }           -> x0
     v39  Imm(0)                                           -> x1
     v40  Imm(0)                                           -> x1

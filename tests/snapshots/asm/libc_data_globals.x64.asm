@@ -31,19 +31,19 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x0, (%rax)
                	movq	<rip>, %rcx # <addr>
+               	movq	(%rcx), %rdx
+               	movq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
-               	movq	<rip>, %rdx # <addr>
-               	movq	(%rdx), %rdx
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	testq	%rdx, %rdx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

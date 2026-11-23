@@ -46,14 +46,14 @@ Disassembly of section .text:
                	sub	x0, x0, #0x1
                	strb	wzr, [x1, x0]
                	cbz	x0, <addr>
-               	sub	x2, x0, #0x1
-               	ldrb	w3, [x1, x2]
-               	cmp	w3, #0xa
+               	sub	x3, x0, #0x1
+               	ldrb	w2, [x1, x3]
+               	cmp	w2, #0xa
                	b.eq	<addr>
-               	cmp	w3, #0xd
+               	cmp	w2, #0xd
                	b.eq	<addr>
-               	sub	x3, x29, #0x40
-               	ldrb	w2, [x3, x2]
+               	sub	x2, x29, #0x40
+               	ldrb	w2, [x2, x3]
                	cmp	w2, #0x20
                	b.eq	<addr>
                	sub	x0, x29, #0x40

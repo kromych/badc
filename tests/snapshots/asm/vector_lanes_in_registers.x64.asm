@@ -379,28 +379,28 @@ Disassembly of section .text:
                	movl	$0xa6288ad0, 0x40(%rsp) # imm = 0xA6288AD0
                	movl	$0xdcd8c180, 0x44(%rsp) # imm = 0xDCD8C180
                	movl	$0x1388f830, 0x48(%rsp) # imm = 0x1388F830
-               	leaq	0x40(%rsp), %rdx
+               	leaq	0x40(%rsp), %r8
                	movl	$0x4a382ee0, 0x4c(%rsp) # imm = 0x4A382EE0
                	movq	$-0x3039, %rdi          # imm = 0xCFC7
-               	movq	%rdx, -0x28(%rbp)
-               	movq	%rdx, %r10
+               	movq	%r8, -0x28(%rbp)
+               	movq	%r8, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
                	callq	<addr>
-               	movq	-0x28(%rbp), %rdx
+               	movq	-0x28(%rbp), %r8
                	movups	%xmm0, 0x80(%rsp)
                	xorl	%eax, %eax
-               	movswq	0x80(%rsp,%rax,2), %rdi
+               	movswq	0x80(%rsp,%rax,2), %rsi
                	testl	%eax, %eax
                	je	<addr>
                	cmpl	$0x7, %eax
                	jne	<addr>
                	movq	$-0x3039, %rcx          # imm = 0xCFC7
-               	cmpl	%ecx, %edi
+               	cmpl	%ecx, %esi
                	je	<addr>
                	jmp	<addr>
                	movswq	0x40(%rsp,%rax,2), %rcx
-               	cmpl	%ecx, %edi
+               	cmpl	%ecx, %esi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x8, %eax

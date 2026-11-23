@@ -121,7 +121,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v189 Extend { value=v188, kind=I32, nsw }             -> x1
     v190 LifetimeEnd(0)                                   -> -
     v191 BinopI { op=mul, lhs=v189, rhs_imm=3 }           -> x1
-    v192 Binop { op=add, lhs=v152, rhs=v191 }             -> [spill 0]
+    v192 Binop { op=add, lhs=v152, rhs=v191 }             -> [spill 2]
     v193 Imm(0)                                           -> x0
     v194 Imm(0)                                           -> x0
     v195 Imm(0)                                           -> x2
@@ -130,8 +130,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v198 Imm(1)                                           -> x1
     v199 Imm(0)                                           -> x0
     v200 Imm(5)                                           -> x0
-    v201 Copy { value=v132, fp=false }                    -> [spill 1]
-    v202 Copy { value=v155, fp=false }                    -> [spill 2]
+    v201 Copy { value=v132, fp=false }                    -> [spill 0]
+    v202 Copy { value=v155, fp=false }                    -> [spill 1]
     v203 Imm(0)                                           -> x7
     terminator Jmp(b7)   (exit_acc=v200)
   block 5  start_pc=0

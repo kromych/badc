@@ -15,39 +15,39 @@ Disassembly of section .text:
 
 <forward>:
                	add	x2, x0, #0x1
-               	add	x3, x0, #0x2
-               	add	x4, x0, #0x3
-               	add	x5, x0, #0x4
-               	add	x6, x0, #0x5
-               	add	x7, x0, #0x6
-               	add	x8, x0, #0x7
-               	add	x9, x0, #0x8
+               	add	x13, x0, #0x2
+               	add	x3, x0, #0x3
+               	add	x4, x0, #0x4
+               	add	x14, x0, #0x5
+               	add	x5, x0, #0x6
+               	add	x6, x0, #0x7
+               	add	x7, x0, #0x8
                	add	x1, x0, #0x9
-               	add	x10, x0, #0xa
-               	add	x11, x0, #0xb
-               	add	x12, x0, #0xc
-               	add	x13, x0, #0xd
-               	add	x14, x0, #0xe
-               	add	x15, x0, #0xf
+               	add	x8, x0, #0xa
+               	add	x9, x0, #0xb
+               	add	x10, x0, #0xc
+               	add	x15, x0, #0xd
+               	add	x11, x0, #0xe
+               	add	x12, x0, #0xf
                	add	x0, x0, x2
+               	add	x0, x0, x3
                	add	x0, x0, x4
                	add	x0, x0, x5
+               	add	x0, x0, x6
                	add	x0, x0, x7
+               	add	x0, x0, x1
                	add	x0, x0, x8
                	add	x0, x0, x9
-               	add	x0, x0, x1
                	add	x0, x0, x10
                	add	x0, x0, x11
                	add	x0, x0, x12
-               	add	x0, x0, x14
-               	add	x0, x0, x15
                	cbnz	w0, <addr>
                	mov	x0, #-0x1               // =-1
                	ret
-               	add	x0, x3, x6, lsl #1
+               	add	x0, x13, x14, lsl #1
                	add	x1, x1, x1, lsl #1
                	add	x0, x0, x1
-               	add	x0, x0, x13, lsl #2
+               	add	x0, x0, x15, lsl #2
                	ret
 
 <main>:

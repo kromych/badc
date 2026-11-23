@@ -113,12 +113,12 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, <rip> # <addr>
                	movl	$0x2, <rip> # <addr>
-               	movl	<rip>, %edx # <addr>
-               	incq	%rdx
-               	movl	%edx, <rip> # <addr>
-               	movl	$0x1, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x2, %ecx
+               	incq	%rcx
+               	movl	%ecx, <rip> # <addr>
+               	movl	$0x1, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbp

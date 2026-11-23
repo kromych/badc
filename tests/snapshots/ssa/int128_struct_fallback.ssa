@@ -13,11 +13,11 @@ fn ent_pc=9 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=main
 fn ent_pc=10 n_params=0 variadic=false locals=0
-  spill_count=5 gpr_used=[] fp_used=[]
+  spill_count=2 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(-1)                                          -> x7
-    v2   Call { target_pc=9, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v2   Call { target_pc=9, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
@@ -28,23 +28,23 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v10  Imm(0)                                           -> x0
     v11  Imm(1)                                           -> x7
     v12  Call { target_pc=9, args=[v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v13  Imm(0)                                           -> x2
-    v14  Imm(0)                                           -> x2
-    v15  Imm(0)                                           -> x2
-    v16  Imm(0)                                           -> x2
-    v17  Imm(0)                                           -> x2
-    v18  Imm(0)                                           -> x2
-    v19  Imm(0)                                           -> x2
-    v20  Imm(0)                                           -> x2
-    v21  Imm(0)                                           -> x2
-    v22  Imm(0)                                           -> x2
-    v23  Imm(0)                                           -> x2
-    v24  Imm(0)                                           -> x2
-    v25  Imm(0)                                           -> x2
-    v26  Imm(0)                                           -> x2
-    v27  Imm(0)                                           -> x2
-    v28  Imm(0)                                           -> x2
-    v29  Binop { op=add, lhs=v2, rhs=v12 }                -> [spill 0]
+    v13  Imm(0)                                           -> x1
+    v14  Imm(0)                                           -> x1
+    v15  Imm(0)                                           -> x1
+    v16  Imm(0)                                           -> x1
+    v17  Imm(0)                                           -> x1
+    v18  Imm(0)                                           -> x1
+    v19  Imm(0)                                           -> x1
+    v20  Imm(0)                                           -> x1
+    v21  Imm(0)                                           -> x1
+    v22  Imm(0)                                           -> x1
+    v23  Imm(0)                                           -> x1
+    v24  Imm(0)                                           -> x1
+    v25  Imm(0)                                           -> x1
+    v26  Imm(0)                                           -> x1
+    v27  Imm(0)                                           -> x1
+    v28  Imm(0)                                           -> x1
+    v29  Binop { op=add, lhs=v2, rhs=v12 }                -> x3
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x0
@@ -54,7 +54,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
     v38  Imm(0)                                           -> x0
-    v39  Binop { op=ult, lhs=v29, rhs=v2 }                -> [spill 1]
+    v39  Binop { op=ult, lhs=v29, rhs=v2 }                -> x12
     v40  BinopI { op=add, lhs=v39, rhs_imm=0 }            -> x0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
@@ -102,9 +102,9 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     terminator Return(v73)   (exit_acc=v73)
   block 3  start_pc=0
     v80  Imm(0)                                           -> x7
-    v81  Call { target_pc=9, args=[v80], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 2]
+    v81  Call { target_pc=9, args=[v80], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v82  Imm(1)                                           -> x7
-    v83  Call { target_pc=9, args=[v82], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 3]
+    v83  Call { target_pc=9, args=[v82], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
     v84  Imm(0)                                           -> x0
     v85  Imm(0)                                           -> x0
     v86  Imm(0)                                           -> x0
@@ -432,7 +432,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
   block 15  start_pc=0
     v385 Imm(0)                                           -> x0
     v386 Imm(0)                                           -> x7
-    v387 Call { target_pc=9, args=[v386], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 2]
+    v387 Call { target_pc=9, args=[v386], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v388 Imm(1)                                           -> x7
     v389 Call { target_pc=9, args=[v388], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v390 Imm(0)                                           -> x1
@@ -463,7 +463,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     terminator Bz { cond=v622, target=b19, fall=b17 }   (low word)   (exit_acc=v627)
   block 17  start_pc=0
     v401 Imm(5)                                           -> x7
-    v402 Call { target_pc=9, args=[v401], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
+    v402 Call { target_pc=9, args=[v401], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
     v403 Imm(0)                                           -> x0
     v404 Imm(0)                                           -> x0
     v405 Imm(0)                                           -> x0
@@ -511,7 +511,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     terminator Bz { cond=v435, target=b19, fall=b18 }   (low word)   (exit_acc=v441)
   block 18  start_pc=0
     v447 Imm(9)                                           -> x7
-    v448 Call { target_pc=9, args=[v447], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
+    v448 Call { target_pc=9, args=[v447], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
     v449 Imm(0)                                           -> x0
     v450 Imm(0)                                           -> x0
     v451 Imm(0)                                           -> x0

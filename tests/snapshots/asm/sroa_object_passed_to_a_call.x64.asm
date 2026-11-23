@@ -49,10 +49,10 @@ Disassembly of section .text:
                	addq	$0x2, %rax
                	addq	$0x2, %rax
                	addq	$0x2, %rax
-               	addq	$0x7, %rax
+               	leaq	0x7(%rax), %rcx
                	cmpq	$0xf, %rbx
                	jne	<addr>
-               	cmpq	$0xf, %rax
+               	cmpq	$0xf, %rcx
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx

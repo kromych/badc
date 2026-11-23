@@ -92,7 +92,7 @@ Disassembly of section .text:
                	movl	-0x220(%rbp), %eax
                	cmpl	$0x258, %eax            # imm = 0x258
                	jne	<addr>
-               	leaq	-0x210(%rbp), %rsi
+               	leaq	-0x210(%rbp), %rcx
                	movl	-0x21c(%rbp), %eax
                	cmpl	$0x2bc, %eax            # imm = 0x2BC
                	jne	<addr>
@@ -121,18 +121,18 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	0x10(%rsi), %rcx
-               	leaq	0xb4(%rsi), %rdx
-               	addq	$0x158, %rsi            # imm = 0x158
-               	movl	(%rcx,%rax,4), %edi
+               	leaq	0x10(%rcx), %rdx
+               	leaq	0xb4(%rcx), %rsi
+               	addq	$0x158, %rcx            # imm = 0x158
+               	movl	(%rdx,%rax,4), %edi
                	leaq	0x3e8(%rax), %r8
                	cmpl	%r8d, %edi
                	jne	<addr>
-               	movl	(%rdx,%rax,4), %edi
+               	movl	(%rsi,%rax,4), %edi
                	leaq	0x7d0(%rax), %r8
                	cmpl	%r8d, %edi
                	jne	<addr>
-               	movl	(%rsi,%rax,4), %edi
+               	movl	(%rcx,%rax,4), %edi
                	leaq	0xbb8(%rax), %r8
                	cmpl	%r8d, %edi
                	jne	<addr>

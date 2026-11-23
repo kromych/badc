@@ -167,26 +167,26 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	sub	x8, x29, #0x20
                	bl	<addr>
-               	sub	x1, x29, #0x20
-               	ldur	x2, [x29, #-0x20]
-               	ldur	x3, [x29, #-0x18]
-               	ldur	x4, [x29, #-0x10]
-               	ldur	x5, [x29, #-0x8]
+               	sub	x5, x29, #0x20
+               	ldur	x1, [x29, #-0x20]
+               	ldur	x2, [x29, #-0x18]
+               	ldur	x3, [x29, #-0x10]
+               	ldur	x4, [x29, #-0x8]
                	mov	x0, #0x0                // =0
-               	cmp	x3, #0x2
-               	cset	x3, eq
-               	cmp	x2, #0x1
-               	csel	x2, x3, x0, eq
-               	cmp	x4, #0x3
-               	cset	x3, eq
-               	cmp	x2, #0x0
-               	csel	x2, x3, x0, ne
-               	cmp	x5, #0x4
-               	cset	x3, eq
-               	cmp	x2, #0x0
-               	csel	x2, x3, x0, ne
-               	cbz	x2, <addr>
-               	mov	x0, x1
+               	cmp	x2, #0x2
+               	cset	x2, eq
+               	cmp	x1, #0x1
+               	csel	x1, x2, x0, eq
+               	cmp	x3, #0x3
+               	cset	x2, eq
+               	cmp	x1, #0x0
+               	csel	x1, x2, x0, ne
+               	cmp	x4, #0x4
+               	cset	x2, eq
+               	cmp	x1, #0x0
+               	csel	x1, x2, x0, ne
+               	cbz	x1, <addr>
+               	mov	x0, x5
                	bl	<addr>
                	mov	x17, #0x10e1            // =4321
                	cmp	x0, x17
@@ -226,25 +226,26 @@ Disassembly of section .text:
                	stp	x16, x17, [x20, #0x10]
                	ldr	x0, [x20]
                	cmp	x0, #0x9
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	b.ne	<addr>
-               	ldr	x1, [x20, #0x8]
-               	cmp	x1, #0xa
-               	cset	x1, eq
-               	cbz	x1, <addr>
-               	ldr	x1, [x20, #0x10]
-               	cmp	x1, #0xb
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	ldr	x0, [x20, #0x8]
+               	cmp	x0, #0xa
+               	cset	x0, eq
+               	cbz	x0, <addr>
+               	ldr	x0, [x20, #0x10]
+               	cmp	x0, #0xb
+               	cset	x0, eq
+               	cbz	x0, <addr>
                	ldr	x0, [x20, #0x18]
                	cmp	x0, #0xc
-               	cset	x0, eq
+               	cset	x1, eq
+               	mov	x0, x1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	mov	x1, x0
+               	mov	x0, x1
                	b	<addr>
-               	mov	x1, x0
+               	mov	x0, x1
                	b	<addr>
 
 <escaped_to_global>:

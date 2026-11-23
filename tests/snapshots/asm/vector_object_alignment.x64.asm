@@ -31,26 +31,26 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	subq	$0xa0, %rsp
                	andq	$-0x20, %rsp
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %r10
-               	movq	%r10, (%rcx)
-               	leaq	0x20(%rsp), %rdx
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdx)
+               	leaq	-0x10(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
+               	leaq	0x20(%rsp), %rcx
+               	leaq	<rip>, %rdx
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
                	leaq	(%rsp), %rsi
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
+               	leaq	<rip>, %rdx
+               	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rsi)
-               	movups	0x10(%rax), %xmm14
+               	movups	0x10(%rdx), %xmm14
                	movups	%xmm14, 0x10(%rsi)
-               	leaq	0x30(%rsp), %rax
+               	leaq	0x30(%rsp), %rdx
                	leaq	<rip>, %rdi
                	movups	(%rdi), %xmm14
-               	movups	%xmm14, (%rax)
+               	movups	%xmm14, (%rdx)
                	movups	0x10(%rdi), %xmm14
-               	movups	%xmm14, 0x10(%rax)
+               	movups	%xmm14, 0x10(%rdx)
                	leaq	0x50(%rsp), %rdi
                	leaq	<rip>, %r8
                	movups	(%r8), %xmm14
@@ -63,12 +63,12 @@ Disassembly of section .text:
                	leaq	<rip>, %r8
                	movups	(%r8), %xmm14
                	movups	%xmm14, (%rdi)
-               	testb	$0x7, %cl
+               	testb	$0x7, %al
                	je	<addr>
                	movl	$0x1d, %eax
                	leave
                	retq
-               	testb	$0xf, %dl
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x1e, %eax
                	leave
@@ -78,9 +78,9 @@ Disassembly of section .text:
                	movl	$0x1f, %eax
                	leave
                	retq
-               	testb	$0xf, %al
+               	testb	$0xf, %dl
                	jne	<addr>
-               	addq	$0x10, %rax
+               	leaq	0x10(%rdx), %rax
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x20, %eax

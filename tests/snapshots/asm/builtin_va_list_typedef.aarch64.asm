@@ -246,7 +246,7 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	ldr	x1, [x0]
+               	ldr	x3, [x0]
                	sub	x0, x29, #0x20
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!
@@ -288,12 +288,12 @@ Disassembly of section .text:
                	mov	x0, x16
                	ldrsw	x2, [x0]
                	sub	x0, x29, #0x20
-               	ldr	x3, [x29, #0x10]
+               	ldr	x1, [x29, #0x10]
                	mov	x0, #0x0                // =0
-               	ldrb	w3, [x3]
-               	cmp	w3, #0x74
-               	b.ne	<addr>
                	ldrb	w1, [x1]
+               	cmp	w1, #0x74
+               	b.ne	<addr>
+               	ldrb	w1, [x3]
                	cmp	w1, #0x78
                	cset	x1, eq
                	cbz	x1, <addr>

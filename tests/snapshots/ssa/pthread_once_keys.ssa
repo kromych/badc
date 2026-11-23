@@ -122,10 +122,10 @@ fn ent_pc=14 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=use_keys
 fn ent_pc=15 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x3
+    v1   ParamRef(0, kind=I64)                            -> [spill 0]
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
@@ -241,7 +241,7 @@ fn ent_pc=18 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=19 ---
 ; name=main
 fn ent_pc=19 n_params=0 variadic=false locals=9
-  spill_count=1 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Undef                                            -> x0
@@ -513,7 +513,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=9
     terminator Return(v213)   (exit_acc=v213)
   block 31  start_pc=0
     v210 Imm(0)                                           -> x0
-    v211 Imm(0)                                           -> x8
+    v211 Imm(0)                                           -> x3
     v212 Imm(0)                                           -> x0
     terminator Jmp(b34)   (exit_acc=v211)
   block 32  start_pc=0
@@ -533,11 +533,11 @@ fn ent_pc=19 n_params=0 variadic=false locals=9
   block 33  start_pc=0
     v233 Imm(0)                                           -> x0
     v234 Extend { value=v216, kind=I32 }                  -> x0
-    v235 BinopI { op=add, lhs=v216, rhs_imm=1 }           -> x8
+    v235 BinopI { op=add, lhs=v216, rhs_imm=1 }           -> x3
     v236 Extend { value=v235, kind=I32, nsw }             -> x0
     terminator Jmp(b34)   (exit_acc=v235)
   block 34  start_pc=0
-    v216 Phi { incoming=[b31:v211, b33:v235], kind=I64 }  -> x8
+    v216 Phi { incoming=[b31:v211, b33:v235], kind=I64 }  -> x3
     v217 Extend { value=v216, kind=I32 }                  -> x0
     v218 BinopI { op=lt, lhs=v216, rhs_imm=2 }            -> x0
     terminator Bz { cond=v218, target=b35, fall=b32 }   (exit_acc=v218)

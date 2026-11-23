@@ -33,33 +33,33 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	q1, [x0]
-               	fadd	v0.4s, v0.4s, v1.4s
-               	fmov	d1, #8.00000000
-               	stur	d1, [x29, #-0x10]
+               	fadd	v1.4s, v0.4s, v1.4s
+               	fmov	d0, #8.00000000
+               	stur	d0, [x29, #-0x10]
                	ldur	d2, [x29, #-0x10]
-               	fcmp	d2, d1
+               	fcmp	d2, d0
                	mov	x1, #0x1                // =1
                	b.ne	<addr>
-               	ldur	d1, [x29, #-0x8]
+               	ldur	d0, [x29, #-0x8]
                	fmov	d2, #2.00000000
-               	fcmp	d1, d2
+               	fcmp	d0, d2
                	cset	x1, ne
-               	fmov	s1, #8.00000000
-               	stur	s1, [x29, #-0x18]
+               	fmov	s0, #8.00000000
+               	stur	s0, [x29, #-0x18]
                	ldur	s2, [x29, #-0x18]
-               	fcmp	s2, s1
+               	fcmp	s2, s0
                	mov	x0, #0x1                // =1
                	b.ne	<addr>
-               	ldur	s1, [x29, #-0x14]
+               	ldur	s0, [x29, #-0x14]
                	fmov	s2, #2.00000000
-               	fcmp	s1, s2
+               	fcmp	s0, s2
                	cset	x2, ne
                	add	x1, x1, x2
-               	mov	s1, v0.s[0]
+               	mov	s0, v1.s[0]
                	fmov	s2, #11.00000000
-               	fcmp	s1, s2
+               	fcmp	s0, s2
                	b.ne	<addr>
-               	mov	s0, v0.s[3]
+               	mov	s0, v1.s[3]
                	mov	x16, #0x42300000        // =1110441984
                	fmov	s1, w16
                	fcmp	s0, s1

@@ -6,22 +6,22 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmExtCode(binding=30)                           -> x6
     v2   Imm(0)                                           -> x0
-    v3   TlsAddr(0)                                       -> x1
-    v4   Load { addr=v3, disp=0, kind=I64 }               -> x2
+    v3   TlsAddr(0)                                       -> x2
+    v4   Load { addr=v3, disp=0, kind=I64 }               -> x1
     v5   ImmData(16)                                      -> x0
     v6   Load { addr=v5, disp=0, kind=I64 pc_rel }        -> x7
     v7   Binop { op=eq, lhs=v4, rhs=v6 }                  -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x8
     v10  Binop { op=eq, lhs=v4, rhs=v1 }                  -> x6
-    v11  Binop { op=eq, lhs=v4, rhs=v6 }                  -> x2
+    v11  Binop { op=eq, lhs=v4, rhs=v6 }                  -> x1
     v12  Select { cond=v11, a=v10, b=v8, kind=I64 }       -> x6
     terminator Jmp(b1)
   block 1  start_pc=0
-    v19  Copy { value=v12, fp=false }                     -> x2
-    v20  Imm(0)                                           -> x2
-    v21  Imm(0)                                           -> x2
-    v22  Imm(0)                                           -> x2
+    v19  Copy { value=v12, fp=false }                     -> x1
+    v20  Imm(0)                                           -> x1
+    v21  Imm(0)                                           -> x1
+    v22  Imm(0)                                           -> x1
     terminator Bz { cond=v12, target=b7, fall=b2 }   (exit_acc=v12)
   block 2  start_pc=0
     v23  ImmData(1)                                       -> x7

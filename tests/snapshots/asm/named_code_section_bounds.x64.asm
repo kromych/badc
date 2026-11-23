@@ -32,25 +32,25 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdx # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpq	%rax, %rdx
-               	jb	<addr>
                	leaq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rdx
-               	jae	<addr>
-               	leaq	<rip>, %rdx # <addr>
-               	cmpq	%rax, %rdx
+               	leaq	<rip>, %rax # <addr>
+               	cmpq	%rax, %rcx
                	jb	<addr>
-               	cmpq	%rcx, %rdx
+               	leaq	<rip>, %rdx # <addr>
+               	cmpq	%rdx, %rcx
+               	jae	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	cmpq	%rax, %rcx
+               	jb	<addr>
+               	cmpq	%rdx, %rcx
                	jb	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rdx # <addr>
-               	cmpq	%rax, %rdx
+               	leaq	-<rip>, %rcx # <addr>
+               	cmpq	%rax, %rcx
                	jb	<addr>
-               	cmpq	%rcx, %rdx
+               	cmpq	%rdx, %rcx
                	jae	<addr>
                	movl	$0x2, %eax
                	popq	%rbp

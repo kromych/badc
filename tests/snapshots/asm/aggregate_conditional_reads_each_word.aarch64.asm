@@ -71,21 +71,21 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	ldrsw	x2, [x0, #0x24]
-               	adrp	x1, <page>
+               	ldrsw	x1, [x0, #0x24]
+               	adrp	x2, <page>
                	mov	x3, #0x5                // =5
                	mov	x4, #0x0                // =0
-               	ldrsw	x5, [x1, #0x20]
+               	ldrsw	x5, [x2, #0x20]
                	cmp	w5, #0x0
                	csel	x3, x3, x4, ge
-               	eor	x2, x2, x3
-               	str	w2, [x0, #0x24]
-               	cmp	w2, #0x5
+               	eor	x1, x1, x3
+               	str	w1, [x0, #0x24]
+               	cmp	w1, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x1, #0x20]
+               	ldrsw	x0, [x2, #0x20]
                	cmp	w0, #0x0
                	b.lt	<addr>
                	mov	x0, #0x4                // =4

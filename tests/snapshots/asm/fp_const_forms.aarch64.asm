@@ -130,22 +130,22 @@ Disassembly of section .text:
                	fmul	d1, d8, d0
                	mov	x16, #-0x8000000000000000 // =-9223372036854775808
                	fmov	d2, x16
-               	fmul	d2, d8, d2
+               	fmul	d3, d8, d2
                	fmov	x0, d1
                	cbnz	x0, <addr>
-               	fmov	d3, #1.00000000
-               	fdiv	d1, d3, d1
+               	fmov	d2, #1.00000000
+               	fdiv	d1, d2, d1
                	fcmpe	d1, d0
                	b.hi	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
                	ldp	d8, d9, [sp], #0x30
                	ret
-               	fmov	x0, d2
+               	fmov	x0, d3
                	mov	x17, #-0x8000000000000000 // =-9223372036854775808
                	cmp	x0, x17
                	b.ne	<addr>
-               	fdiv	d1, d3, d2
+               	fdiv	d1, d2, d3
                	fcmpe	d1, d0
                	b.lt	<addr>
                	mov	x0, #0x2                // =2

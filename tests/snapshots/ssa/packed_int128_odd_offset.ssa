@@ -120,9 +120,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v114 Imm(0)                                           -> x0
     v115 Imm(0)                                           -> x0
     v116 ImmData(64)                                      -> x0
-    v117 Load { addr=v116, disp=0, kind=I64, align=1 pc_rel } -> x0
-    v118 BinopI { op=add, lhs=v116, rhs_imm=8 }           -> x1
-    v119 Load { addr=v116, disp=8, kind=I64, align=1 pc_rel } -> x1
+    v117 Load { addr=v116, disp=0, kind=I64, align=1 pc_rel } -> x1
+    v118 BinopI { op=add, lhs=v116, rhs_imm=8 }           -> x0
+    v119 Load { addr=v116, disp=8, kind=I64, align=1 pc_rel } -> x0
     v120 BinopI { op=eq, lhs=v119, rhs_imm=0 }            -> x2
     terminator Bz { cond=v119, target=b9, fall=b1 }   (exit_acc=v120)
   block 1  start_pc=0

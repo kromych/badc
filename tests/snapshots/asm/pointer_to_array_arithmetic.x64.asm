@@ -28,19 +28,19 @@ Disassembly of section .text:
 <main>:
                	leaq	<rip>, %rax # <addr>
                	leaq	0x10(%rax), %rcx
-               	movq	%rcx, %rsi
-               	subq	%rax, %rsi
-               	cmpq	$0x10, %rsi
+               	movq	%rcx, %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x10, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	0x8(%rax), %rdx
-               	subq	%rax, %rdx
-               	cmpq	$0x8, %rdx
+               	leaq	0x8(%rax), %rsi
+               	subq	%rax, %rsi
+               	cmpq	$0x8, %rsi
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	cmpq	$0x10, %rsi
+               	cmpq	$0x10, %rdx
                	je	<addr>
                	movl	$0x3, %eax
                	retq
@@ -52,10 +52,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	%rdx, %rax
+               	movq	%rsi, %rax
                	sarq	$0x3f, %rax
                	shrq	$0x3d, %rax
-               	addq	%rdx, %rax
+               	addq	%rsi, %rax
                	sarq	$0x3, %rax
                	cmpq	$0x1, %rax
                	je	<addr>

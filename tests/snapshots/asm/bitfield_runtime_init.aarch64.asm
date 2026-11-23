@@ -14,46 +14,46 @@ Disassembly of section .text:
                	brk	#0x1
 
 <build_packed>:
-               	and	x3, x0, #0xf
+               	and	x0, x0, #0xf
+               	and	x3, x1, #0xf
+               	orr	x1, x0, x3, lsl #4
+               	and	x4, x2, #0x1f
+               	orr	x1, x1, x4, lsl #8
                	and	x4, x1, #0xf
-               	orr	x0, x3, x4, lsl #4
-               	and	x1, x2, #0x1f
-               	orr	x0, x0, x1, lsl #8
-               	and	x1, x0, #0xf
-               	cmp	w1, w3
-               	mov	x1, #0x0                // =0
+               	cmp	w4, w0
+               	mov	x0, #0x0                // =0
                	b.ne	<addr>
-               	ubfx	x3, x0, #4, #4
-               	cmp	w3, w4
+               	ubfx	x4, x1, #4, #4
+               	cmp	w4, w3
                	cset	x3, eq
                	cbz	x3, <addr>
-               	sbfx	x0, x0, #8, #5
-               	cmp	w0, w2
-               	cset	x0, eq
+               	sbfx	x1, x1, #8, #5
+               	cmp	w1, w2
+               	cset	x1, eq
                	mov	x2, #0x1                // =1
-               	cmp	x0, #0x0
-               	csel	x0, x2, x1, ne
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	ret
-               	mov	x0, x1
+               	mov	x1, x0
                	b	<addr>
-               	mov	x3, x1
+               	mov	x3, x0
                	b	<addr>
 
 <build_mixed>:
                	and	x0, x0, #0xffff
                	and	x3, x1, #0x7
                	orr	x1, x0, x3, lsl #16
-               	and	x2, x2, #0x3ff
-               	orr	x1, x1, x2, lsl #19
-               	and	x4, x1, #0xffff
-               	cmp	w4, w0
+               	and	x4, x2, #0x3ff
+               	orr	x1, x1, x4, lsl #19
+               	and	x2, x1, #0xffff
+               	cmp	w2, w0
                	mov	x0, #0x0                // =0
                	b.ne	<addr>
-               	ubfx	x4, x1, #16, #3
-               	cmp	w4, w3
-               	cset	x3, eq
-               	cbz	x3, <addr>
-               	eor	x1, x2, x1, asr #19
+               	ubfx	x2, x1, #16, #3
+               	cmp	w2, w3
+               	cset	x2, eq
+               	cbz	x2, <addr>
+               	eor	x1, x4, x1, asr #19
                	cmp	w1, #0x0
                	cset	x1, eq
                	mov	x2, #0x1                // =1
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	ret
                	mov	x1, x0
                	b	<addr>
-               	mov	x3, x0
+               	mov	x2, x0
                	b	<addr>
 
 <main>:

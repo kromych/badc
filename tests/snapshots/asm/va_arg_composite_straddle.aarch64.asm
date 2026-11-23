@@ -89,9 +89,9 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
                	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
-               	sub	x2, x29, #0x20
-               	mov	x17, x2
+               	ldr	x2, [x0, #0x8]
+               	sub	x0, x29, #0x20
+               	mov	x17, x0
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
                	cmp	x16, #0x0
@@ -108,19 +108,19 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x2, x16
-               	ldr	x2, [x2]
-               	sub	x3, x29, #0x20
+               	mov	x0, x16
+               	ldr	x3, [x0]
+               	sub	x0, x29, #0x20
                	cmp	x1, #0x6f
                	b.ne	<addr>
-               	cmp	x0, #0xde
+               	cmp	x2, #0xde
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret
-               	cmp	x2, #0x309
+               	cmp	x3, #0x309
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20

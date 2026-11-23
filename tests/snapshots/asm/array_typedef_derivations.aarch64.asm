@@ -21,34 +21,34 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x2, [x1, #0x14]
-               	cmp	w2, #0x6
+               	ldrsw	x1, [x0, #0x14]
+               	cmp	w1, #0x6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x1, [x1, #0x4]
-               	cmp	w1, #0x2
+               	ldrsw	x0, [x0, #0x4]
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w2, #0x6
+               	cmp	w1, #0x6
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x1, [x0]
-               	cmp	w1, #0x4
+               	ldrsw	x0, [x3]
+               	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x0, #0x4]
+               	ldrsw	x0, [x3, #0x4]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

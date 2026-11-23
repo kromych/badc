@@ -38,7 +38,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
                	blr	x1
-               	sub	x2, x29, #0x18
+               	sub	x3, x29, #0x18
                	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
                	cmp	x0, x17
@@ -48,8 +48,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	w1, [x29, #-0x8]
-               	mov	x3, #0x7fffffffffffffff // =9223372036854775807
-               	sub	x0, x3, x0
+               	mov	x2, #0x7fffffffffffffff // =9223372036854775807
+               	sub	x0, x2, x0
                	cmp	x1, x0
                	csel	x0, x1, x0, lo
                	cmp	w0, #0x7
@@ -62,9 +62,9 @@ Disassembly of section .text:
                	str	w1, [x0, #0x38]
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x10]
-               	mov	x0, x2
+               	mov	x0, x3
                	blr	x1
-               	sub	x2, x29, #0x18
+               	sub	x3, x29, #0x18
                	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
                	cmp	x0, x17
@@ -74,8 +74,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	w1, [x29, #-0x8]
-               	mov	x3, #0x7fffffffffffffff // =9223372036854775807
-               	sub	x0, x3, x0
+               	mov	x2, #0x7fffffffffffffff // =9223372036854775807
+               	sub	x0, x2, x0
                	cmp	x1, x0
                	csel	x0, x1, x0, lo
                	cmp	w0, #0x3
@@ -86,7 +86,7 @@ Disassembly of section .text:
                	str	x1, [x0, #0x30]
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x10]
-               	mov	x0, x2
+               	mov	x0, x3
                	blr	x1
                	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807

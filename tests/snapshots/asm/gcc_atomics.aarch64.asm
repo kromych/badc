@@ -143,12 +143,12 @@ Disassembly of section .text:
                	cmp	w2, #0x7
                	cset	x3, eq
                	cmp	x3, #0x0
-               	csel	x2, x1, x2, ne
+               	csel	x4, x1, x2, ne
                	cbnz	w3, <addr>
-               	ldursw	x3, [x29, #-0x20]
-               	cmp	w3, #0x8
-               	b.ne	<addr>
+               	ldursw	x2, [x29, #-0x20]
                	cmp	w2, #0x8
+               	b.ne	<addr>
+               	cmp	w4, #0x8
                	b.eq	<addr>
                	adrp	x2, <page>
                	ldrsw	x3, [x2, #0x20]

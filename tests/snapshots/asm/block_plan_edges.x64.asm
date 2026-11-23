@@ -448,19 +448,19 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
-               	xorl	%edi, %edi
-               	movq	%rdi, %rcx
-               	movq	%rdi, %rdx
-               	shlq	$0x2, %rdx
+               	xorl	%edx, %edx
+               	movq	%rdx, %rcx
+               	movq	%rdx, %rsi
+               	shlq	$0x2, %rsi
                	xorl	%eax, %eax
-               	leaq	(%rdx,%rax), %rsi
-               	movslq	%esi, %rsi
-               	addq	%rsi, %rcx
+               	leaq	(%rsi,%rax), %rdi
+               	movslq	%edi, %rdi
+               	addq	%rdi, %rcx
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	incq	%rdi
-               	cmpl	$0x3, %edi
+               	incq	%rdx
+               	cmpl	$0x3, %edx
                	jl	<addr>
                	cmpq	$0x42, %rcx
                	je	<addr>

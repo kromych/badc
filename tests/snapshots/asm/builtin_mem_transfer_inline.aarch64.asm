@@ -75,54 +75,54 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x1]
                	cmp	w0, #0x5a
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrb	w0, [x1, #0x2]
-               	cmp	w0, #0x5a
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrb	w1, [x0, #0x2]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0x3]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0x3]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0x4]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0x4]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0x5]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0x5]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0x6]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0x6]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0x7]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0x7]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0x8]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0x8]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0x9]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0x9]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0xa]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0xa]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0xb]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0xb]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0xc]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0xc]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0xd]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0xd]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0xe]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0xe]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	ldrb	w0, [x1, #0xf]
-               	cmp	w0, #0x5a
+               	ldrb	w1, [x0, #0xf]
+               	cmp	w1, #0x5a
                	b.ne	<addr>
-               	mov	x0, #0x0                // =0
-               	strb	w0, [x1, x0]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x18
+               	mov	x1, #0x0                // =0
+               	strb	w1, [x0, x1]
+               	add	x1, x1, #0x1
+               	cmp	w1, #0x18
                	b.lt	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

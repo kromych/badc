@@ -65,29 +65,29 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x88(%rbp), %rcx
-               	movq	%rcx, <rip> # <addr>
+               	leaq	-0x88(%rbp), %rax
+               	movq	%rax, <rip> # <addr>
                	leaq	-0x80(%rbp), %rdx
                	movq	%rdx, <rip> # <addr>
-               	leaq	-0x68(%rbp), %rax
+               	leaq	-0x68(%rbp), %rcx
                	leaq	<rip>, %rsi
                	movq	(%rsi), %r10
-               	movq	%r10, (%rax)
+               	movq	%r10, (%rcx)
                	movq	<rip>, %rsi # <addr>
-               	cmpq	%rsi, %rcx
+               	cmpq	%rsi, %rax
                	je	<addr>
                	movl	$0xa, %eax
                	leave
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rdx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	%rax, %rdx
                	jne	<addr>
                	movabsq	$0x1111111111111111, %r11 # imm = 0x1111111111111111
-               	movq	%rax, %rcx
-               	cmpq	%r11, %rax
+               	movq	%rcx, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
-               	movq	%rax, -0x80(%rbp)
-               	testq	%rax, %rax
+               	movq	%rcx, -0x80(%rbp)
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0xb, %eax
                	leave

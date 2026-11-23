@@ -26,14 +26,14 @@ Disassembly of section .text:
                	pmull	v0.1q, v0.1d, v1.1d
                	mov	x5, v0.d[0]
                	mov	x6, v0.d[1]
-               	mov	x1, #0xcdef             // =52719
-               	movk	x1, #0x89ab, lsl #16
-               	movk	x1, #0x4567, lsl #32
-               	movk	x1, #0x123, lsl #48
-               	mov	x2, #0xff00             // =65280
-               	movk	x2, #0xddee, lsl #16
-               	movk	x2, #0xbbcc, lsl #32
-               	movk	x2, #0x99aa, lsl #48
+               	mov	x3, #0xcdef             // =52719
+               	movk	x3, #0x89ab, lsl #16
+               	movk	x3, #0x4567, lsl #32
+               	movk	x3, #0x123, lsl #48
+               	mov	x1, #0xff00             // =65280
+               	movk	x1, #0xddee, lsl #16
+               	movk	x1, #0xbbcc, lsl #32
+               	movk	x1, #0x99aa, lsl #48
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x10]
                	stur	x0, [x29, #-0x8]
@@ -41,19 +41,19 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.ge	<addr>
-               	lsr	x3, x2, x0
-               	tbz	w3, #0x0, <addr>
-               	ldur	x3, [x29, #-0x10]
-               	lsl	x4, x1, x0
-               	eor	x3, x3, x4
-               	stur	x3, [x29, #-0x10]
+               	lsr	x2, x1, x0
+               	tbz	w2, #0x0, <addr>
+               	ldur	x2, [x29, #-0x10]
+               	lsl	x4, x3, x0
+               	eor	x2, x2, x4
+               	stur	x2, [x29, #-0x10]
                	cbz	x0, <addr>
-               	ldur	x3, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x8]
                	mov	x4, #0x40               // =64
                	sub	x4, x4, x0
-               	lsr	x4, x1, x4
-               	eor	x3, x3, x4
-               	stur	x3, [x29, #-0x8]
+               	lsr	x4, x3, x4
+               	eor	x2, x2, x4
+               	stur	x2, [x29, #-0x8]
                	b	<addr>
                	ldur	x0, [x29, #-0x10]
                	mov	x17, #0xa500            // =42240

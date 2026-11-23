@@ -17,11 +17,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x2, #0xa                // =10
-               	stur	w2, [x29, #-0x8]
+               	mov	x3, #0xa                // =10
+               	stur	w3, [x29, #-0x8]
                	sub	x1, x29, #0x8
-               	mov	x3, #0x5                // =5
-               	ldaddal	w3, w0, [x1]
+               	mov	x2, #0x5                // =5
+               	ldaddal	w2, w0, [x1]
                	add	x0, x0, #0x5
                	cmp	w0, #0xf
                	b.eq	<addr>
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	eor	x0, x1, x0
                	cmp	w0, #0xe
                	b.eq	<addr>
-               	mov	x0, x3
+               	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -76,14 +76,14 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	sub	x1, x29, #0x10
                	mov	x0, #0x7                // =7
-               	ldaddal	x0, x3, [x1]
-               	add	x3, x3, #0x7
-               	cmp	x3, #0x6b
+               	ldaddal	x0, x2, [x1]
+               	add	x2, x2, #0x7
+               	cmp	x2, #0x6b
                	b.eq	<addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	neg	x16, x2
+               	neg	x16, x3
                	ldaddal	x16, x0, [x1]
                	sub	x0, x0, #0xa
                	cmp	x0, #0x61

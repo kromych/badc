@@ -24,28 +24,28 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x1, x0, #0x1
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	sub	x2, x2, x0
-               	cmp	x2, #0x1
-               	b.ne	<addr>
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	sub	x2, x2, x0
-               	cmn	x2, #0x2
-               	b.ne	<addr>
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	sub	x2, x2, x0
-               	cmp	x2, #0x3
-               	b.ne	<addr>
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	sub	x2, x2, x0
-               	cmp	x2, #0x1
-               	b.ne	<addr>
+               	add	x2, x0, #0x1
+               	adrp	x1, <page>
+               	ldr	x1, [x1, <lo12>]
                	sub	x1, x1, x0
+               	cmp	x1, #0x1
+               	b.ne	<addr>
+               	adrp	x1, <page>
+               	ldr	x1, [x1, <lo12>]
+               	sub	x1, x1, x0
+               	cmn	x1, #0x2
+               	b.ne	<addr>
+               	adrp	x1, <page>
+               	ldr	x1, [x1, <lo12>]
+               	sub	x1, x1, x0
+               	cmp	x1, #0x3
+               	b.ne	<addr>
+               	adrp	x1, <page>
+               	ldr	x1, [x1, <lo12>]
+               	sub	x1, x1, x0
+               	cmp	x1, #0x1
+               	b.ne	<addr>
+               	sub	x1, x2, x0
                	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

@@ -189,31 +189,31 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v189 Imm(65535)                                       -> x6
     v190 BinopI { op=add, lhs=v4, rhs_imm=65535 }         -> x6
     v191 Load { addr=v190, disp=0, kind=U8 }              -> x6
-    v192 Binop { op=add, lhs=v187, rhs=v191 }             -> x2
-    v193 Imm(0)                                           -> x6
-    v194 Imm(2)                                           -> x6
-    v195 BinopI { op=add, lhs=v4, rhs_imm=2 }             -> x6
-    v196 Load { addr=v4, disp=2, kind=U8 }                -> x6
+    v192 Binop { op=add, lhs=v187, rhs=v191 }             -> x6
+    v193 Imm(0)                                           -> x2
+    v194 Imm(2)                                           -> x2
+    v195 BinopI { op=add, lhs=v4, rhs_imm=2 }             -> x2
+    v196 Load { addr=v4, disp=2, kind=U8 }                -> x2
     v197 Imm(3)                                           -> x7
     v198 BinopI { op=add, lhs=v4, rhs_imm=3 }             -> x7
     v199 Load { addr=v4, disp=3, kind=U8 }                -> x0
-    v200 Binop { op=add, lhs=v196, rhs=v199 }             -> x0
-    v201 Imm(0)                                           -> x6
-    v202 Imm(0)                                           -> x6
-    v203 BinopI { op=eq, lhs=v183, rhs_imm=224 }          -> x1
-    v204 Imm(0)                                           -> x6
+    v200 Binop { op=add, lhs=v196, rhs=v199 }             -> x2
+    v201 Imm(0)                                           -> x0
+    v202 Imm(0)                                           -> x0
+    v203 BinopI { op=eq, lhs=v183, rhs_imm=224 }          -> x0
+    v204 Imm(0)                                           -> x1
     terminator Bz { cond=v203, target=b8, fall=b4 }   (exit_acc=v203)
   block 4  start_pc=0
-    v205 Imm(0)                                           -> x1
-    v206 BinopI { op=eq, lhs=v192, rhs_imm=8 }            -> x1
-    v207 BinopI { op=ne, lhs=v206, rhs_imm=0 }            -> x2
-    v208 Imm(0)                                           -> x2
-    v209 Imm(0)                                           -> x2
-    v210 Imm(0)                                           -> x2
-    v211 Imm(0)                                           -> x2
+    v205 Imm(0)                                           -> x0
+    v206 BinopI { op=eq, lhs=v192, rhs_imm=8 }            -> x0
+    v207 BinopI { op=ne, lhs=v206, rhs_imm=0 }            -> x1
+    v208 Imm(0)                                           -> x1
+    v209 Imm(0)                                           -> x1
+    v210 Imm(0)                                           -> x1
+    v211 Imm(0)                                           -> x1
     terminator Bz { cond=v206, target=b8, fall=b5 }   (exit_acc=v206)
   block 5  start_pc=0
-    v212 Imm(0)                                           -> x1
+    v212 Imm(0)                                           -> x0
     v213 BinopI { op=eq, lhs=v200, rhs_imm=7 }            -> x0
     v214 Imm(0)                                           -> x1
     v215 Imm(0)                                           -> x1

@@ -21,19 +21,19 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
+               	ldr	x2, [x1]
+               	adrp	x1, <page>
+               	ldr	x1, [x1, <lo12>]
                	ldr	x1, [x1]
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	ldr	x2, [x2]
                	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbnz	x1, <addr>
+               	cbnz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbnz	x2, <addr>
+               	cbnz	x1, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret

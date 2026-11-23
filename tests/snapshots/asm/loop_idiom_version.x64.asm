@@ -401,16 +401,16 @@ Disassembly of section .text:
                	xchgq	%rsi, %rdi
                	callq	<addr>
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x9(%rax), %rdx
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x20, %rax
                	addq	$0x9, %rax
+               	leaq	<rip>, %rcx # <addr>
+               	addq	$0x20, %rcx
+               	addq	$0x9, %rcx
                	leaq	<rip>, %rdi # <addr>
-               	leaq	0x9(%rdi), %rcx
-               	cmpq	%rcx, %rdx
+               	leaq	0x9(%rdi), %rdx
+               	cmpq	%rdx, %rax
                	jne	<addr>
-               	leaq	0x29(%rdi), %rcx
-               	cmpq	%rcx, %rax
+               	leaq	0x29(%rdi), %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
@@ -587,8 +587,8 @@ Disassembly of section .text:
                	movb	%dl, 0x1(%rax)
                	movzbq	0x2(%rcx), %rdx
                	movb	%dl, 0x2(%rax)
-               	leaq	0x3(%rax), %rdx
-               	leaq	0x3(%rcx), %rax
+               	addq	$0x3, %rax
+               	addq	$0x3, %rcx
                	jmp	<addr>
                	movl	$0xa, %eax
                	popq	%rbx

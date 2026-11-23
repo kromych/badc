@@ -195,31 +195,12 @@ Disassembly of section .text:
                	b	<addr>
 
 <f2>:
-               	adrp	x2, <page>
-               	ldr	x0, [x2, #0x10]
+               	adrp	x1, <page>
+               	ldr	x0, [x1, #0x10]
                	eor	x0, x0, x0, lsl #13
                	eor	x0, x0, x0, lsr #7
                	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	and	x1, x0, #0x7
-               	cbnz	w1, <addr>
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
-               	lsr	x0, x0, #8
-               	mov	x3, #0xaaab             // =43691
-               	movk	x3, #0xaaaa, lsl #16
-               	movk	x3, #0xaaaa, lsl #32
-               	movk	x3, #0xaaa, lsl #48
-               	umulh	x3, x0, x3
-               	mov	x17, #0x18              // =24
-               	mul	x3, x3, x17
-               	sub	x0, x0, x3
-               	ldr	w1, [x1, x0, lsl #2]
-               	ldr	x0, [x2, #0x10]
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
+               	str	x0, [x1, #0x10]
                	and	x2, x0, #0x7
                	cbnz	w2, <addr>
                	adrp	x2, <addr>
@@ -234,10 +215,42 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	sub	x0, x0, x3
                	ldr	w0, [x2, x0, lsl #2]
-               	mov	w1, w1
-               	orr	x0, x1, x0, lsl #32
+               	ldr	x2, [x1, #0x10]
+               	eor	x2, x2, x2, lsl #13
+               	eor	x2, x2, x2, lsr #7
+               	eor	x2, x2, x2, lsl #17
+               	str	x2, [x1, #0x10]
+               	and	x1, x2, #0x7
+               	cbnz	w1, <addr>
+               	adrp	x3, <addr>
+               	add	x3, x3, <lo12>
+               	lsr	x1, x2, #8
+               	mov	x2, #0xaaab             // =43691
+               	movk	x2, #0xaaaa, lsl #16
+               	movk	x2, #0xaaaa, lsl #32
+               	movk	x2, #0xaaa, lsl #48
+               	umulh	x2, x1, x2
+               	mov	x17, #0x18              // =24
+               	mul	x2, x2, x17
+               	sub	x1, x1, x2
+               	ldr	w1, [x3, x1, lsl #2]
+               	mov	w0, w0
+               	orr	x0, x0, x1, lsl #32
                	fmov	d0, x0
                	ret
+               	cmp	w1, #0x1
+               	b.ne	<addr>
+               	lsr	x1, x2, #32
+               	and	w1, w1, #0x80ffffff
+               	b	<addr>
+               	cmp	w1, #0x2
+               	b.ne	<addr>
+               	ubfx	x1, x2, #20, #25
+               	mov	x17, #0x3f000000        // =1056964608
+               	add	x1, x1, x17
+               	b	<addr>
+               	lsr	x1, x2, #16
+               	b	<addr>
                	cmp	w2, #0x1
                	b.ne	<addr>
                	lsr	x0, x0, #32
@@ -251,58 +264,45 @@ Disassembly of section .text:
                	b	<addr>
                	lsr	x0, x0, #16
                	b	<addr>
-               	cmp	w1, #0x1
-               	b.ne	<addr>
-               	lsr	x0, x0, #32
-               	and	w1, w0, #0x80ffffff
-               	b	<addr>
-               	cmp	w1, #0x2
-               	b.ne	<addr>
-               	ubfx	x0, x0, #20, #25
-               	mov	x17, #0x3f000000        // =1056964608
-               	add	x1, x0, x17
-               	b	<addr>
-               	lsr	x1, x0, #16
-               	b	<addr>
 
 <i32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
-               	mov	x3, #0x3e8              // =1000
-               	mov	x4, #0xf7cf             // =63439
-               	movk	x4, #0xe353, lsl #16
-               	movk	x4, #0x9ba5, lsl #32
-               	movk	x4, #0x20c4, lsl #48
+               	mov	x0, #0x0                // =0
+               	mov	x5, #0x3e8              // =1000
+               	mov	x6, #0xf7cf             // =63439
+               	movk	x6, #0xe353, lsl #16
+               	movk	x6, #0x9ba5, lsl #32
+               	movk	x6, #0x20c4, lsl #48
                	adrp	x2, <page>
                	b	<addr>
-               	str	w0, [x5, x1, lsl #2]
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x4
+               	str	w1, [x3, x0, lsl #2]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x4
                	b.ge	<addr>
-               	sub	x5, x29, #0x10
-               	ldr	x0, [x2, #0x10]
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	tbz	w0, #0x0, <addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
+               	sub	x3, x29, #0x10
+               	ldr	x1, [x2, #0x10]
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	tbz	w1, #0x0, <addr>
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
                	b	<addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	lsr	x6, x0, #3
-               	umulh	x6, x6, x4
-               	lsr	x6, x6, #4
-               	mul	x6, x6, x3
-               	sub	x0, x0, x6
-               	sub	x0, x0, #0x1f4
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	lsr	x4, x1, #3
+               	umulh	x4, x4, x6
+               	lsr	x4, x4, #4
+               	mul	x4, x4, x5
+               	sub	x1, x1, x4
+               	sub	x1, x1, #0x1f4
                	b	<addr>
                	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10
@@ -313,42 +313,42 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
-               	mov	x3, #0xc350             // =50000
-               	mov	x4, #0x86a0             // =34464
-               	movk	x4, #0x1, lsl #16
-               	mov	x5, #0x7843             // =30787
-               	movk	x5, #0x71b4, lsl #16
-               	movk	x5, #0x5ac4, lsl #32
-               	movk	x5, #0xa7c, lsl #48
+               	mov	x0, #0x0                // =0
+               	mov	x5, #0xc350             // =50000
+               	mov	x6, #0x86a0             // =34464
+               	movk	x6, #0x1, lsl #16
+               	mov	x7, #0x7843             // =30787
+               	movk	x7, #0x71b4, lsl #16
+               	movk	x7, #0x5ac4, lsl #32
+               	movk	x7, #0xa7c, lsl #48
                	adrp	x2, <page>
                	b	<addr>
-               	str	x0, [x6, x1, lsl #3]
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x2
+               	str	x1, [x3, x0, lsl #3]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x2
                	b.ge	<addr>
-               	sub	x6, x29, #0x10
-               	ldr	x0, [x2, #0x10]
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	tbz	w0, #0x0, <addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
+               	sub	x3, x29, #0x10
+               	ldr	x1, [x2, #0x10]
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	tbz	w1, #0x0, <addr>
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
                	b	<addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	lsr	x7, x0, #5
-               	umulh	x7, x7, x5
-               	lsr	x7, x7, #7
-               	mul	x7, x7, x4
-               	sub	x0, x0, x7
-               	sub	x0, x0, x3
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	lsr	x4, x1, #5
+               	umulh	x4, x4, x7
+               	lsr	x4, x4, #7
+               	mul	x4, x4, x6
+               	sub	x1, x1, x4
+               	sub	x1, x1, x5
                	b	<addr>
                	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10

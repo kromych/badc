@@ -92,28 +92,28 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x0, <page>
-               	ldr	x2, [x0, #0x10]
                	adrp	x1, <page>
-               	ldr	x3, [x1, #0x18]
-               	cmp	x2, x3
-               	cset	x2, lt
+               	ldr	x0, [x1, #0x10]
+               	adrp	x2, <page>
+               	ldr	x3, [x2, #0x18]
+               	cmp	x0, x3
+               	cset	x0, lt
                	adrp	x3, <page>
-               	str	w2, [x3, #0x58]
-               	cbz	x2, <addr>
-               	add	x2, x2, #0x1
-               	cmp	w2, #0x2
+               	str	w0, [x3, #0x58]
+               	cbz	x0, <addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldr	x2, [x0, #0x10]
-               	ldr	x3, [x1, #0x18]
-               	cmp	x2, x3
-               	ldr	x0, [x0, #0x10]
-               	ldr	x1, [x1, #0x18]
-               	add	x0, x0, x1
+               	ldr	x0, [x1, #0x10]
+               	ldr	x3, [x2, #0x18]
+               	cmp	x0, x3
+               	ldr	x1, [x1, #0x10]
+               	ldr	x2, [x2, #0x18]
+               	add	x1, x1, x2
                	b.ge	<addr>
-               	cmp	w0, #0xe
+               	cmp	w1, #0xe
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret

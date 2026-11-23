@@ -2269,15 +2269,15 @@ Disassembly of section .text:
                	movq	$0x0, -0xb8(%rbp)
                	movsd	-0xc0(%rbp), %xmm7
                	movsd	-0xb8(%rbp), %xmm8
-               	vaddsd	%xmm8, %xmm7, %xmm8
+               	vaddsd	%xmm8, %xmm7, %xmm9
                	vdppd	$0x12, %xmm1, %xmm0, %xmm7
-               	vpermilpd	$0x0, %xmm7, %xmm9 # xmm9 = xmm7[0,0]
-               	movq	%xmm9, %rax
+               	vpermilpd	$0x0, %xmm7, %xmm8 # xmm8 = xmm7[0,0]
+               	movq	%xmm8, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	vpermilpd	$0x1, %xmm7, %xmm7 # xmm7 = xmm7[1,0]
                	movq	%xmm7, %rax
-               	movq	%xmm8, %rcx
+               	movq	%xmm9, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x10, %ebx
@@ -3157,47 +3157,47 @@ Disassembly of section .text:
                	movups	0xa8(%rsp), %xmm14
                	vpinsrd	$0x1, %r11d, %xmm14, %xmm14
                	movups	%xmm14, 0xa8(%rsp)
-               	movsd	%xmm0, 0x60(%rsp)
+               	movsd	%xmm0, 0x68(%rsp)
                	callq	<addr>
                	vmovd	%xmm0, %r11d
                	movups	0xb8(%rsp), %xmm14
                	vpinsrd	$0x2, %r11d, %xmm14, %xmm14
                	movups	%xmm14, 0xb8(%rsp)
-               	movsd	%xmm0, 0x58(%rsp)
+               	movsd	%xmm0, 0x48(%rsp)
                	callq	<addr>
                	vmovd	%xmm0, %r11d
                	movups	0xa8(%rsp), %xmm14
                	vpinsrd	$0x2, %r11d, %xmm14, %xmm14
                	movups	%xmm14, 0xa8(%rsp)
-               	movsd	%xmm0, 0x50(%rsp)
+               	movsd	%xmm0, 0x60(%rsp)
                	callq	<addr>
                	vmovd	%xmm0, %r11d
                	movups	0xb8(%rsp), %xmm14
                	vpinsrd	$0x3, %r11d, %xmm14, %xmm14
                	movups	%xmm14, 0x90(%rsp)
-               	movsd	%xmm0, 0x48(%rsp)
+               	movsd	%xmm0, 0x40(%rsp)
                	callq	<addr>
                	vmovd	%xmm0, %r11d
                	movups	0xa8(%rsp), %xmm14
                	vpinsrd	$0x3, %r11d, %xmm14, %xmm14
                	movups	%xmm14, 0xb8(%rsp)
-               	movsd	%xmm0, 0x40(%rsp)
+               	movsd	%xmm0, 0x58(%rsp)
                	callq	<addr>
                	vmovq	%xmm0, %xmm14           # xmm14 = xmm0[0],zero
                	movups	%xmm14, 0xa8(%rsp)
                	callq	<addr>
                	vmovq	%xmm0, %xmm14           # xmm14 = xmm0[0],zero
-               	movups	%xmm14, 0x68(%rsp)
+               	movups	%xmm14, 0x70(%rsp)
                	movsd	%xmm0, 0xa0(%rsp)
                	callq	<addr>
                	vmovq	%xmm0, %r11
                	movups	0xa8(%rsp), %xmm14
                	vpinsrq	$0x1, %r11, %xmm14, %xmm14
                	movups	%xmm14, 0x80(%rsp)
-               	movsd	%xmm0, 0x78(%rsp)
+               	movsd	%xmm0, 0x50(%rsp)
                	callq	<addr>
                	vmovq	%xmm0, %r11
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpinsrq	$0x1, %r11, %xmm14, %xmm14
                	movups	%xmm14, 0xa8(%rsp)
                	movups	0x90(%rsp), %xmm14
@@ -3205,7 +3205,7 @@ Disassembly of section .text:
                	vroundss	$0x3, %xmm15, %xmm14, %xmm1
                	vpermilps	$0x0, %xmm1, %xmm2 # xmm2 = xmm1[0,0,0,0]
                	movsd	%xmm0, 0x30(%rsp)
-               	movups	%xmm1, 0x68(%rsp)
+               	movups	%xmm1, 0x70(%rsp)
                	movapd	%xmm2, %xmm0
                	callq	<addr>
                	movq	%rax, %r13
@@ -3216,7 +3216,7 @@ Disassembly of section .text:
                	cmpl	%eax, %r13d
                	setne	%r13b
                	movzbq	%r13b, %r13
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpermilps	$0x1, %xmm14, %xmm0 # xmm0 = xmm14[1,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
@@ -3226,21 +3226,21 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	orq	%rax, %r13
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
-               	movsd	0x58(%rsp), %xmm0
+               	movsd	0x48(%rsp), %xmm0
                	callq	<addr>
                	cmpl	%eax, %r14d
                	setne	%al
                	movzbq	%al, %rax
                	orq	%rax, %r13
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
-               	movsd	0x48(%rsp), %xmm0
+               	movsd	0x40(%rsp), %xmm0
                	callq	<addr>
                	cmpl	%eax, %r14d
                	setne	%al
@@ -3262,7 +3262,7 @@ Disassembly of section .text:
                	jne	<addr>
                	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
                	movq	%xmm0, %rax
-               	movsd	0x78(%rsp), %xmm0
+               	movsd	0x50(%rsp), %xmm0
                	movq	%xmm0, %rcx
                	cmpq	%rcx, %rax
                	setne	%al
@@ -3271,7 +3271,7 @@ Disassembly of section .text:
                	movups	0xb8(%rsp), %xmm14
                	roundps	$0x1, %xmm14, %xmm1
                	vpermilps	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0,0,0]
-               	movups	%xmm1, 0x68(%rsp)
+               	movups	%xmm1, 0x70(%rsp)
                	callq	<addr>
                	movq	%rax, %r14
                	movsd	0xc8(%rsp), %xmm0
@@ -3282,8 +3282,20 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	orq	%rax, %r13
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpermilps	$0x1, %xmm14, %xmm0 # xmm0 = xmm14[1,0,0,0]
+               	callq	<addr>
+               	movq	%rax, %r14
+               	movsd	0x68(%rsp), %xmm0
+               	movl	$0x1, %edi
+               	callq	<addr>
+               	callq	<addr>
+               	cmpl	%eax, %r14d
+               	setne	%al
+               	movzbq	%al, %rax
+               	orq	%rax, %r13
+               	movups	0x70(%rsp), %xmm14
+               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
                	movsd	0x60(%rsp), %xmm0
@@ -3294,23 +3306,11 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	orq	%rax, %r13
-               	movups	0x68(%rsp), %xmm14
-               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
-               	callq	<addr>
-               	movq	%rax, %r14
-               	movsd	0x50(%rsp), %xmm0
-               	movl	$0x1, %edi
-               	callq	<addr>
-               	callq	<addr>
-               	cmpl	%eax, %r14d
-               	setne	%al
-               	movzbq	%al, %rax
-               	orq	%rax, %r13
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
-               	movsd	0x40(%rsp), %xmm0
+               	movsd	0x58(%rsp), %xmm0
                	movl	$0x1, %edi
                	callq	<addr>
                	callq	<addr>
@@ -3321,7 +3321,7 @@ Disassembly of section .text:
                	movups	0xb8(%rsp), %xmm14
                	roundps	$0x2, %xmm14, %xmm1
                	vpermilps	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0,0,0]
-               	movups	%xmm1, 0x68(%rsp)
+               	movups	%xmm1, 0x70(%rsp)
                	callq	<addr>
                	movq	%rax, %r14
                	movsd	0xc8(%rsp), %xmm0
@@ -3332,8 +3332,20 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	orq	%rax, %r13
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpermilps	$0x1, %xmm14, %xmm0 # xmm0 = xmm14[1,0,0,0]
+               	callq	<addr>
+               	movq	%rax, %r14
+               	movsd	0x68(%rsp), %xmm0
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	callq	<addr>
+               	cmpl	%eax, %r14d
+               	setne	%al
+               	movzbq	%al, %rax
+               	orq	%rax, %r13
+               	movups	0x70(%rsp), %xmm14
+               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
                	movsd	0x60(%rsp), %xmm0
@@ -3344,23 +3356,11 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	orq	%rax, %r13
-               	movups	0x68(%rsp), %xmm14
-               	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
-               	callq	<addr>
-               	movq	%rax, %r14
-               	movsd	0x50(%rsp), %xmm0
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	callq	<addr>
-               	cmpl	%eax, %r14d
-               	setne	%al
-               	movzbq	%al, %rax
-               	orq	%rax, %r13
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
-               	movsd	0x40(%rsp), %xmm0
+               	movsd	0x58(%rsp), %xmm0
                	movl	$0x2, %edi
                	callq	<addr>
                	callq	<addr>
@@ -3395,7 +3395,7 @@ Disassembly of section .text:
                	movups	0xb8(%rsp), %xmm15
                	vroundss	$0x1, %xmm15, %xmm14, %xmm1
                	vpermilps	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0,0,0]
-               	movups	%xmm1, 0x68(%rsp)
+               	movups	%xmm1, 0x70(%rsp)
                	callq	<addr>
                	movq	%rax, %r14
                	movsd	0xc8(%rsp), %xmm0
@@ -3405,11 +3405,11 @@ Disassembly of section .text:
                	cmpl	%eax, %r14d
                	movl	$0x1, %eax
                	jne	<addr>
-               	movups	0x68(%rsp), %xmm14
+               	movups	0x70(%rsp), %xmm14
                	vpermilps	$0x3, %xmm14, %xmm0 # xmm0 = xmm14[3,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
-               	movsd	0x48(%rsp), %xmm0
+               	movsd	0x40(%rsp), %xmm0
                	callq	<addr>
                	cmpl	%eax, %r14d
                	setne	%al
@@ -3433,7 +3433,7 @@ Disassembly of section .text:
                	vpermilps	$0x2, %xmm14, %xmm0 # xmm0 = xmm14[2,0,0,0]
                	callq	<addr>
                	movq	%rax, %r14
-               	movsd	0x58(%rsp), %xmm0
+               	movsd	0x48(%rsp), %xmm0
                	callq	<addr>
                	cmpl	%eax, %r14d
                	setne	%al
@@ -3455,7 +3455,7 @@ Disassembly of section .text:
                	jne	<addr>
                	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
                	movq	%xmm0, %rax
-               	movsd	0x78(%rsp), %xmm0
+               	movsd	0x50(%rsp), %xmm0
                	movq	%xmm0, %rcx
                	cmpq	%rcx, %rax
                	setne	%al
@@ -3477,7 +3477,7 @@ Disassembly of section .text:
                	jne	<addr>
                	vpermilpd	$0x1, %xmm1, %xmm0 # xmm0 = xmm1[1,0]
                	movq	%xmm0, %rax
-               	movsd	0x78(%rsp), %xmm0
+               	movsd	0x50(%rsp), %xmm0
                	movq	%xmm0, %rcx
                	cmpq	%rcx, %rax
                	setne	%al

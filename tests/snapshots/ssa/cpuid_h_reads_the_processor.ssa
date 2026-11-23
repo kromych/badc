@@ -20,8 +20,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v14  Imm(0)                                           -> x1
     v15  Imm(0)                                           -> x1
     v16  Imm(0)                                           -> x1
-    v17  InlineAsm { template="cpuid", ops=4, args=[v9, -, v9, -] } -> x6
-    v18  AsmOut(1, kind=I64)                              -> x7
+    v17  InlineAsm { template="cpuid", ops=4, args=[v9, -, v9, -] } -> x7
+    v18  AsmOut(1, kind=I64)                              -> x9
     v19  AsmOut(2, kind=I64)                              -> x1
     v20  AsmOut(3, kind=I64)                              -> x2
     v21  BinopI { op=and, lhs=v17, rhs_imm=4294967295 }   -> x0
@@ -36,9 +36,9 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v30  BinopI { op=and, lhs=v20, rhs_imm=4294967295 }   -> x0
     v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x0
-    v33  LocalAddr(-5)                                    -> x8
+    v33  LocalAddr(-5)                                    -> x6
     v34  Imm(0)                                           -> x0
-    v35  InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v34] } -> [spill 0]
+    v35  InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v34] } -> x8
     v36  AsmOut(1, kind=I64)                              -> x3
     terminator Bz { cond=v33, target=b2, fall=b1 }   (exit_acc=v33)
   block 1  start_pc=0
@@ -112,38 +112,38 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v85  BinopI { op=add, lhs=v77, rhs_imm=8 }            -> x0
     v86  BinopI { op=and, lhs=v71, rhs_imm=4294967295 }   -> x0
     v87  StoreLocal { off=-4, disp=8, value=v71, kind=I32 } -> -
-    v88  LocalAddr(-4)                                    -> x8
-    v89  Imm(12)                                          -> x0
-    v90  BinopI { op=add, lhs=v88, rhs_imm=12 }           -> x0
+    v88  LocalAddr(-4)                                    -> x0
+    v89  Imm(12)                                          -> x7
+    v90  BinopI { op=add, lhs=v88, rhs_imm=12 }           -> x7
     v91  StoreLocal { off=-4, disp=12, value=v68, kind=I8 } -> -
-    v92  Imm(0)                                           -> x0
+    v92  Imm(0)                                           -> x7
     terminator Jmp(b10)   (exit_acc=v68)
   block 7  start_pc=0
-    v99  LocalAddr(-4)                                    -> x0
-    v100 Extend { value=v93, kind=I32 }                   -> x0
-    v101 Binop { op=add, lhs=v88, rhs=v93 }               -> x0
+    v99  LocalAddr(-4)                                    -> x7
+    v100 Extend { value=v93, kind=I32 }                   -> x7
+    v101 Binop { op=add, lhs=v88, rhs=v93 }               -> x7
     v102 LoadIndexed { base=v88, index=v93, scale=1, kind=I8 } -> x7
     v103 BinopI { op=lt, lhs=v102, rhs_imm=32 }           -> x9
-    v104 Imm(0)                                           -> x0
+    v104 Imm(0)                                           -> x3
     terminator Bnz { cond=v103, target=b52, fall=b8 }   (exit_acc=v103)
   block 8  start_pc=0
-    v117 LocalAddr(-4)                                    -> x0
-    v118 Extend { value=v93, kind=I32 }                   -> x0
-    v119 Binop { op=add, lhs=v88, rhs=v93 }               -> x0
-    v120 LoadIndexed { base=v88, index=v93, scale=1, kind=I8 } -> x0
+    v117 LocalAddr(-4)                                    -> x9
+    v118 Extend { value=v93, kind=I32 }                   -> x9
+    v119 Binop { op=add, lhs=v88, rhs=v93 }               -> x9
+    v120 LoadIndexed { base=v88, index=v93, scale=1, kind=I8 } -> x9
     v121 BinopI { op=gt, lhs=v102, rhs_imm=126 }          -> x7
-    v122 Imm(0)                                           -> x0
-    v123 Imm(0)                                           -> x0
-    v124 Imm(0)                                           -> x0
+    v122 Imm(0)                                           -> x9
+    v123 Imm(0)                                           -> x9
+    v124 Imm(0)                                           -> x9
     terminator Bz { cond=v121, target=b9, fall=b52 }   (exit_acc=v121)
   block 9  start_pc=0
-    v96  Extend { value=v93, kind=I32 }                   -> x0
+    v96  Extend { value=v93, kind=I32 }                   -> x7
     v97  BinopI { op=add, lhs=v93, rhs_imm=1 }            -> x6
-    v98  Extend { value=v97, kind=I32, nsw }              -> x0
+    v98  Extend { value=v97, kind=I32, nsw }              -> x7
     terminator Jmp(b10)   (exit_acc=v97)
   block 10  start_pc=0
     v93  Phi { incoming=[b6:v68, b9:v97], kind=I64 }      -> x6
-    v94  Extend { value=v93, kind=I32 }                   -> x0
+    v94  Extend { value=v93, kind=I32 }                   -> x7
     v95  BinopI { op=lt, lhs=v93, rhs_imm=12 }            -> x7
     terminator Bz { cond=v95, target=b11, fall=b7 }   (exit_acc=v95)
   block 11  start_pc=0
@@ -283,8 +283,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v234 BinopI { op=and, lhs=v231, rhs_imm=4294967295 }  -> x0
     v235 Imm(0)                                           -> x0
     v236 BinopI { op=and, lhs=v231, rhs_imm=4294967295 }  -> x0
-    v237 BinopI { op=ult, lhs=v231, rhs_imm=2147483649 }  -> x0
-    v238 Imm(0)                                           -> x1
+    v237 BinopI { op=ult, lhs=v231, rhs_imm=2147483649 }  -> x1
+    v238 Imm(0)                                           -> x0
     terminator Bnz { cond=v237, target=b23, fall=b22 }   (exit_acc=v237)
   block 22  start_pc=0
     v239 BinopI { op=and, lhs=v231, rhs_imm=4294967295 }  -> x0
@@ -318,7 +318,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v263 InlineAsm { template="cpuid", ops=4, args=[v261, -, v262, -] } -> x0
     v264 AsmOut(1, kind=I64)                              -> x3
     v265 AsmOut(2, kind=I64)                              -> x7
-    v266 AsmOut(3, kind=I64)                              -> x8
+    v266 AsmOut(3, kind=I64)                              -> x9
     v267 BinopI { op=and, lhs=v263, rhs_imm=4294967295 }  -> x0
     v268 Imm(0)                                           -> x0
     v269 Imm(0)                                           -> x0

@@ -114,51 +114,51 @@ Disassembly of section .text:
                	movk	x0, #0x3344, lsl #32
                	movk	x0, #0x1122, lsl #48
                	stur	x0, [x29, #-0x8]
-               	sub	x1, x29, #0x8
-               	adrp	x0, <page>
-               	str	x1, [x0, #0x28]
-               	ldr	x5, [x1]
+               	sub	x0, x29, #0x8
+               	adrp	x1, <page>
+               	str	x0, [x1, #0x28]
+               	ldr	x5, [x0]
                	eor	x5, x5, #0x1
-               	str	x5, [x1]
-               	ldr	x0, [x0, #0x28]
-               	ldr	x0, [x0]
-               	add	x0, x3, x0
+               	str	x5, [x0]
+               	ldr	x1, [x1, #0x28]
+               	ldr	x1, [x1]
+               	add	x1, x3, x1
                	mov	x3, #0x9                // =9
                	stur	w3, [x29, #-0x8]
-               	str	x1, [x2, #0x20]
-               	ldrsw	x3, [x1]
+               	str	x0, [x2, #0x20]
+               	ldrsw	x3, [x0]
                	add	x3, x3, #0x1
-               	str	w3, [x1]
+               	str	w3, [x0]
                	ldursw	x3, [x29, #-0x8]
-               	add	x0, x0, x3
+               	add	x1, x1, x3
                	mov	x17, #0x77a1            // =30625
                	movk	x17, #0x5566, lsl #16
                	movk	x17, #0x3344, lsl #32
                	movk	x17, #0x1122, lsl #48
-               	cmp	x0, x17
+               	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, x4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	mov	x3, x0
-               	stur	w0, [x29, #-0x8]
-               	str	x1, [x2, #0x20]
-               	ldrsw	x4, [x1]
+               	mov	x1, #0x0                // =0
+               	mov	x3, x1
+               	stur	w1, [x29, #-0x8]
+               	str	x0, [x2, #0x20]
+               	ldrsw	x4, [x0]
                	add	x4, x4, #0x1
-               	str	w4, [x1]
+               	str	w4, [x0]
                	ldursw	x4, [x29, #-0x8]
                	add	x3, x3, x4
-               	stur	w0, [x29, #-0x8]
-               	str	x1, [x2, #0x20]
-               	ldrsw	x4, [x1]
+               	stur	w1, [x29, #-0x8]
+               	str	x0, [x2, #0x20]
+               	ldrsw	x4, [x0]
                	add	x4, x4, #0x2
-               	str	w4, [x1]
+               	str	w4, [x0]
                	ldursw	x4, [x29, #-0x8]
                	add	x3, x3, x4
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x3
+               	add	x1, x1, #0x1
+               	cmp	w1, #0x3
                	b.lt	<addr>
                	cmp	w3, #0xf
                	b.eq	<addr>

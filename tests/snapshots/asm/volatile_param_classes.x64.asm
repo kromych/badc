@@ -44,7 +44,7 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movsd	<rip>, %xmm0
-               	movl	$0x1, %eax
+               	movl	$0x1, %ecx
                	movsd	%xmm0, -0x38(%rbp)
                	movsd	-0x10(%rbp), %xmm0
                	movsd	%xmm0, -0x40(%rbp)
@@ -85,5 +85,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
+               	movq	%rcx, %rax
                	leave
                	retq

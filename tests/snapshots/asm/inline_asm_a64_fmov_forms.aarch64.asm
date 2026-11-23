@@ -36,7 +36,7 @@ Disassembly of section .text:
                	fmov	x7, v6.d[1]
                	fmov	v7.d[1], x0
                	fmov	s7, w0
-               	fmov	x0, v7.d[1]
+               	fmov	x8, v7.d[1]
                	mov	x17, #0xcdef            // =52719
                	movk	x17, #0x89ab, lsl #16
                	movk	x17, #0x4567, lsl #32
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	cbz	x0, <addr>
+               	cbz	x8, <addr>
                	mov	x0, #0x8                // =8
                	ret
                	mov	x0, #0x2a               // =42

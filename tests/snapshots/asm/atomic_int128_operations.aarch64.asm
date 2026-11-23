@@ -219,18 +219,18 @@ Disassembly of section .text:
                	add	sp, sp, #0x220
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	x2, [x3]
-               	ldr	x3, [x3, #0x8]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x3, [x2]
+               	ldr	x2, [x2, #0x8]
                	ldr	x5, [x1]
                	ldr	x6, [x1, #0x8]
                	sub	x4, x29, #0xf0
                	stur	x5, [x29, #-0xf0]
                	stur	x6, [x29, #-0xe8]
                	sub	x5, x29, #0x1d0
-               	str	x2, [sp, #0x50]
-               	str	x3, [sp, #0x58]
+               	str	x3, [sp, #0x50]
+               	str	x2, [sp, #0x58]
                	stp	x9, x10, [sp, #-0x40]!
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]

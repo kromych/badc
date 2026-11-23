@@ -26,9 +26,9 @@ Disassembly of section .text:
                	int3
 
 <file_scope_boundaries>:
-               	movq	%fs:0x0, %rcx
-               	addq	$-0xf8, %rcx
-               	testb	$0x7, %cl
+               	movq	%fs:0x0, %rax
+               	addq	$-0xf8, %rax
+               	testb	$0x7, %al
                	je	<addr>
                	movl	$0xb, %eax
                	retq
@@ -38,54 +38,54 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xc, %eax
                	retq
-               	movq	%fs:0x0, %rax
-               	addq	$-0xc0, %rax
-               	testb	$0xf, %al
+               	movq	%fs:0x0, %rcx
+               	addq	$-0xc0, %rcx
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0xd, %eax
                	retq
-               	leaq	0x10(%rax), %rsi
+               	leaq	0x10(%rcx), %rsi
                	testb	$0xf, %sil
                	je	<addr>
                	movl	$0xe, %eax
                	retq
                	movsd	<rip>, %xmm0
-               	movsd	%xmm0, (%rcx)
+               	movsd	%xmm0, (%rax)
                	movq	$0x1, (%rdx)
                	movq	$0x2, 0x8(%rdx)
-               	movq	$0x3, 0x10(%rax)
-               	movq	$0x4, 0x18(%rax)
-               	movq	%fs:0x0, %rax
-               	addq	$-0x100, %rax
-               	movb	$0x1, (%rax)
+               	movq	$0x3, 0x10(%rcx)
+               	movq	$0x4, 0x18(%rcx)
+               	movq	%fs:0x0, %rcx
+               	addq	$-0x100, %rcx
+               	movb	$0x1, (%rcx)
                	movq	%fs:0x0, %rsi
                	addq	$-0xf0, %rsi
                	movb	$0x2, (%rsi)
                	movq	%fs:0x0, %rdi
                	addq	$-0xd0, %rdi
                	movb	$0x3, (%rdi)
-               	movsd	(%rcx), %xmm1
+               	movsd	(%rax), %xmm1
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0xf, %eax
                	retq
-               	movq	%fs:0x0, %rcx
-               	addq	$-0xe0, %rcx
-               	movq	(%rcx), %rdx
-               	movq	0x8(%rcx), %rcx
-               	addq	%rcx, %rdx
-               	movq	%fs:0x0, %rcx
-               	addq	$-0xc0, %rcx
-               	movq	0x10(%rcx), %rdi
+               	movq	%fs:0x0, %rax
+               	addq	$-0xe0, %rax
+               	movq	(%rax), %rdx
+               	movq	0x8(%rax), %rax
+               	addq	%rax, %rdx
+               	movq	%fs:0x0, %rax
+               	addq	$-0xc0, %rax
+               	movq	0x10(%rax), %rdi
                	addq	%rdi, %rdx
-               	movq	0x18(%rcx), %rcx
-               	addq	%rdx, %rcx
-               	cmpq	$0xa, %rcx
+               	movq	0x18(%rax), %rax
+               	addq	%rdx, %rax
+               	cmpq	$0xa, %rax
                	je	<addr>
                	movl	$0x10, %eax
                	retq
-               	movsbq	(%rax), %rax
+               	movsbq	(%rcx), %rax
                	movsbq	(%rsi), %rcx
                	addq	%rcx, %rax
                	addq	$0x3, %rax

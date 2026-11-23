@@ -325,13 +325,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v7   StoreLocal { off=-2, disp=8, value=v4, kind=I64 } -> -
     v8   LocalAddr(-2)                                    -> x0
     v9   Imm(0)                                           -> x0
-    v10  LoadLocal { off=-2, kind=U32 }                   -> [spill 13]
+    v10  LoadLocal { off=-2, kind=U32 }                   -> [spill 0]
     v11  Imm(0)                                           -> x0
-    v12  LoadLocal { off=-2, disp=4, kind=U32 }           -> [spill 14]
+    v12  LoadLocal { off=-2, disp=4, kind=U32 }           -> [spill 5]
     v13  Imm(0)                                           -> x0
     v14  LoadLocal { off=-2, disp=8, kind=U32 }           -> [spill 15]
     v15  Imm(0)                                           -> x0
-    v16  LoadLocal { off=-2, disp=12, kind=U32 }          -> [spill 0]
+    v16  LoadLocal { off=-2, disp=12, kind=U32 }          -> [spill 1]
     v17  Imm(0)                                           -> x0
     v18  LifetimeEnd(-2)                                  -> -
     v19  Imm(0)                                           -> x7
@@ -344,13 +344,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v26  StoreLocal { off=-2, disp=8, value=v23, kind=I64 } -> -
     v27  LocalAddr(-2)                                    -> x0
     v28  Imm(0)                                           -> x0
-    v29  LoadLocal { off=-2, kind=U32 }                   -> [spill 4]
+    v29  LoadLocal { off=-2, kind=U32 }                   -> [spill 6]
     v30  Imm(0)                                           -> x0
-    v31  LoadLocal { off=-2, disp=4, kind=U32 }           -> [spill 5]
+    v31  LoadLocal { off=-2, disp=4, kind=U32 }           -> [spill 7]
     v32  Imm(0)                                           -> x0
-    v33  LoadLocal { off=-2, disp=8, kind=U32 }           -> [spill 6]
+    v33  LoadLocal { off=-2, disp=8, kind=U32 }           -> [spill 8]
     v34  Imm(0)                                           -> x0
-    v35  LoadLocal { off=-2, disp=12, kind=U32 }          -> [spill 1]
+    v35  LoadLocal { off=-2, disp=12, kind=U32 }          -> [spill 2]
     v36  Imm(0)                                           -> x0
     v37  LifetimeEnd(-2)                                  -> -
     v38  Imm(254)                                         -> x7
@@ -365,7 +365,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v47  StoreLocal { off=-2, disp=8, value=v44, kind=I64 } -> -
     v48  LocalAddr(-2)                                    -> x0
     v49  Imm(0)                                           -> x0
-    v50  LoadLocal { off=-2, kind=U32 }                   -> [spill 2]
+    v50  LoadLocal { off=-2, kind=U32 }                   -> [spill 3]
     v51  Imm(0)                                           -> x0
     v52  LoadLocal { off=-2, disp=4, kind=U32 }           -> [spill 16]
     v53  Imm(0)                                           -> x0
@@ -386,7 +386,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v68  StoreLocal { off=-2, disp=8, value=v65, kind=I64 } -> -
     v69  LocalAddr(-2)                                    -> x0
     v70  Imm(0)                                           -> x0
-    v71  LoadLocal { off=-2, kind=U32 }                   -> [spill 3]
+    v71  LoadLocal { off=-2, kind=U32 }                   -> [spill 4]
     v72  Imm(0)                                           -> x0
     v73  LoadLocal { off=-2, disp=4, kind=U32 }           -> [spill 19]
     v74  Imm(0)                                           -> x0
@@ -451,7 +451,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v133 Imm(0)                                           -> x0
     v134 LoadLocal { off=-2, kind=U8 }                    -> [spill 32]
     v135 Imm(0)                                           -> x0
-    v136 LoadLocal { off=-2, disp=1, kind=U8 }            -> [spill 7]
+    v136 LoadLocal { off=-2, disp=1, kind=U8 }            -> [spill 9]
     v137 Imm(0)                                           -> x0
     v138 LifetimeEnd(-2)                                  -> -
     v139 Imm(255)                                         -> x7
@@ -468,7 +468,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v150 Imm(0)                                           -> x0
     v151 LoadLocal { off=-2, kind=U8 }                    -> [spill 33]
     v152 Imm(0)                                           -> x0
-    v153 LoadLocal { off=-2, disp=1, kind=U8 }            -> [spill 8]
+    v153 LoadLocal { off=-2, disp=1, kind=U8 }            -> [spill 10]
     v154 Imm(0)                                           -> x0
     v155 LifetimeEnd(-2)                                  -> -
     v156 Imm(255)                                         -> x7
@@ -483,9 +483,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v165 StoreLocal { off=-2, disp=8, value=v162, kind=I64 } -> -
     v166 LocalAddr(-2)                                    -> x0
     v167 Imm(0)                                           -> x0
-    v168 LoadLocal { off=-2, kind=U8 }                    -> [spill 9]
+    v168 LoadLocal { off=-2, kind=U8 }                    -> [spill 11]
     v169 Imm(0)                                           -> x0
-    v170 LoadLocal { off=-2, disp=1, kind=U8 }            -> [spill 10]
+    v170 LoadLocal { off=-2, disp=1, kind=U8 }            -> [spill 12]
     v171 Imm(0)                                           -> x0
     v172 LifetimeEnd(-2)                                  -> -
     v173 Imm(255)                                         -> x7
@@ -500,9 +500,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v182 StoreLocal { off=-2, disp=8, value=v179, kind=I64 } -> -
     v183 LocalAddr(-2)                                    -> x0
     v184 Imm(0)                                           -> x0
-    v185 LoadLocal { off=-2, kind=U8 }                    -> [spill 11]
+    v185 LoadLocal { off=-2, kind=U8 }                    -> [spill 13]
     v186 Imm(0)                                           -> x0
-    v187 LoadLocal { off=-2, disp=1, kind=U8 }            -> [spill 12]
+    v187 LoadLocal { off=-2, disp=1, kind=U8 }            -> [spill 14]
     v188 Imm(0)                                           -> x0
     v189 LifetimeEnd(-2)                                  -> -
     v190 Imm(255)                                         -> x7

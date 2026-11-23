@@ -21,15 +21,15 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
-               	ldr	x0, [x0, #0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x0, [x1]
+               	ldr	x1, [x1, #0x8]
                	b	<addr>
-               	add	x1, x1, #0x1
-               	cmp	x1, #0xa
+               	add	x0, x0, #0x1
+               	cmp	x0, #0xa
                	b.ne	<addr>
-               	cmp	x0, #0x16
+               	cmp	x1, #0x16
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2a               // =42
                	ret
-               	add	x0, x0, #0x2
+               	add	x1, x1, #0x2
                	b	<addr>
                	mov	x0, #0x2                // =2
                	ret

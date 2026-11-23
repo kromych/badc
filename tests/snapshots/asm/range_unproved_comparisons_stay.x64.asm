@@ -57,54 +57,53 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	movl	$0x5, %eax
-               	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movq	-0x8(%rbp), %rcx
-               	cmpq	$0x64, %rcx
+               	movl	$0x5, %ecx
+               	movq	%rcx, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movq	%rax, <rip> # <addr>
+               	movq	-0x8(%rbp), %rax
+               	cmpq	$0x64, %rax
                	jge	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	$0x100, (%rcx)          # imm = 0x100
-               	movq	-0x8(%rbp), %rcx
-               	cmpq	$0x64, %rcx
+               	movq	<rip>, %rax # <addr>
+               	movq	$0x100, (%rax)          # imm = 0x100
+               	movq	-0x8(%rbp), %rax
+               	cmpq	$0x64, %rax
                	jge	<addr>
-               	movl	$0x3, %ecx
-               	testl	%ecx, %ecx
-               	je	<addr>
-               	movq	%rcx, %rax
-               	leave
-               	retq
-               	movq	<rip>, %rcx # <addr>
-               	testq	%rcx, %rcx
-               	jbe	<addr>
-               	addq	$-0x11, %rcx
-               	cmpq	$-0x11, %rcx
-               	jbe	<addr>
-               	movl	$0x4, %ecx
-               	testl	%ecx, %ecx
-               	je	<addr>
-               	movq	%rcx, %rax
-               	leave
-               	retq
-               	movq	<rip>, %rcx # <addr>
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	shlq	$0x37, %rcx
-               	testq	%rcx, %rcx
-               	jl	<addr>
+               	movl	$0x3, %eax
                	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
-               	xorl	%eax, %eax
+               	movq	<rip>, %rax # <addr>
+               	testq	%rax, %rax
+               	jbe	<addr>
+               	addq	$-0x11, %rax
+               	cmpq	$-0x11, %rax
+               	jbe	<addr>
+               	movl	$0x4, %eax
+               	testl	%eax, %eax
+               	je	<addr>
+               	leave
+               	retq
+               	movq	<rip>, %rax # <addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	shlq	$0x37, %rax
+               	testq	%rax, %rax
+               	jl	<addr>
+               	testl	%ecx, %ecx
+               	je	<addr>
+               	movq	%rcx, %rax
                	leave
                	retq
                	xorl	%eax, %eax
-               	jmp	<addr>
+               	leave
+               	retq
                	xorl	%ecx, %ecx
                	jmp	<addr>
-               	xorl	%ecx, %ecx
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	xorl	%eax, %eax
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

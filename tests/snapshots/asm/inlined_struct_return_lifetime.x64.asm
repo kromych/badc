@@ -69,21 +69,20 @@ Disassembly of section .text:
 <check_three>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
-               	pushq	%rbx
-               	leaq	<rip>, %rsi # <addr>
+               	subq	$0x20, %rsp
+               	leaq	<rip>, %rax # <addr>
                	movw	$0xa, <rip> # <addr>
-               	movswq	<rip>, %rbx # <addr>
-               	testl	%ebx, %ebx
+               	movswq	<rip>, %r8 # <addr>
+               	testl	%r8d, %r8d
                	jg	<addr>
                	movq	$0x1, -0x18(%rbp)
                	movq	$0x2, -0x10(%rbp)
                	movq	$0x3, -0x8(%rbp)
-               	leaq	-0x18(%rbp), %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rsi)
-               	movq	0x10(%rax), %r10
-               	movq	%r10, 0x10(%rsi)
+               	leaq	-0x18(%rbp), %rcx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movq	0x10(%rcx), %r10
+               	movq	%r10, 0x10(%rax)
                	movq	<rip>, %rax # <addr>
                	imulq	$0x64, %rax, %rax
                	movq	<rip>, %rcx # <addr>
@@ -91,11 +90,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
-               	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rbx # <addr>
-               	movq	%rbx, -0x20(%rbp)
+               	leaq	<rip>, %r8 # <addr>
+               	movq	%r8, -0x20(%rbp)
                	testl	%edi, %edi
                	je	<addr>
                	movq	$0x4, -0x18(%rbp)

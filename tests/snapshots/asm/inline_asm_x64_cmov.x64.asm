@@ -31,24 +31,26 @@ Disassembly of section .text:
                	cmpq	%r10, %rax
                	cmovlq	%r10, %rax
                	movl	$0x2a, %ecx
+               	movq	%rcx, %rdx
                	movl	$0xa, %r10d
-               	cmpq	%r10, %rcx
-               	cmovlq	%r10, %rcx
-               	movl	$0x64, %edx
-               	movl	$0x2a, %r10d
                	cmpq	%r10, %rdx
-               	cmovgq	%r10, %rdx
-               	movl	$0x2a, %esi
-               	movl	$0x63, %r10d
+               	cmovlq	%r10, %rdx
+               	movl	$0x64, %ecx
+               	movq	%rcx, %rsi
+               	movl	$0x2a, %r10d
                	cmpq	%r10, %rsi
                	cmovgq	%r10, %rsi
+               	movl	$0x2a, %ecx
+               	movl	$0x63, %r10d
+               	cmpq	%r10, %rcx
+               	cmovgq	%r10, %rcx
                	cmpq	$0x2a, %rax
-               	jne	<addr>
-               	cmpq	$0x2a, %rcx
                	jne	<addr>
                	cmpq	$0x2a, %rdx
                	jne	<addr>
                	cmpq	$0x2a, %rsi
+               	jne	<addr>
+               	cmpq	$0x2a, %rcx
                	jne	<addr>
                	movl	$0x2a, %eax
                	retq

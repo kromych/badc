@@ -709,8 +709,8 @@ Disassembly of section .text:
                	cpuid
                	cmpl	$0x7, %eax
                	jae	<addr>
-               	xorl	%r12d, %r12d
-               	cmpl	$0x1, %r12d
+               	xorl	%r9d, %r9d
+               	cmpl	$0x1, %r9d
                	jge	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
@@ -865,11 +865,11 @@ Disassembly of section .text:
                	vpxor	%ymm1, %ymm3, %ymm3
                	vmovdqa	%ymm3, <rip> # <addr>
                	vzeroupper
-               	xorl	%r9d, %r9d
+               	xorl	%ebx, %ebx
                	leaq	<rip>, %rax # <addr>
-               	movzbq	(%rax,%r9), %rbx
+               	movzbq	(%rax,%rbx), %r12
                	leaq	<rip>, %rax # <addr>
-               	movzbq	(%rax,%r9), %rax
+               	movzbq	(%rax,%rbx), %rax
                	movl	$0xc3, %ecx
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
@@ -888,12 +888,12 @@ Disassembly of section .text:
                	shrq	%rcx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	cmpl	%edx, %ebx
+               	cmpl	%edx, %r12d
                	jne	<addr>
-               	incq	%r9
-               	cmpl	$0x100, %r9d            # imm = 0x100
+               	incq	%rbx
+               	cmpl	$0x100, %ebx            # imm = 0x100
                	jb	<addr>
-               	cmpl	$0x2, %r12d
+               	cmpl	$0x2, %r9d
                	jge	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
@@ -1101,33 +1101,33 @@ Disassembly of section .text:
                	vpxorq	%zmm1, %zmm3, %zmm3
                	vmovdqa64	%zmm3, <rip> # <addr>
                	vzeroupper
-               	xorl	%r9d, %r9d
+               	xorl	%edi, %edi
                	leaq	<rip>, %rax # <addr>
-               	movzbq	(%rax,%r9), %rbx
+               	movzbq	(%rax,%rdi), %rbx
                	leaq	<rip>, %rax # <addr>
-               	movzbq	(%rax,%r9), %rax
+               	movzbq	(%rax,%rdi), %rax
                	movl	$0xc3, %ecx
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
-               	movq	%rdx, %rdi
-               	xorq	%rax, %rdi
+               	movq	%rdx, %r8
+               	xorq	%rax, %r8
                	testb	$0x1, %cl
-               	cmovneq	%rdi, %rdx
-               	movq	%rax, %rdi
-               	shlq	%rdi
-               	movl	$0x1d, %r8d
+               	cmovneq	%r8, %rdx
+               	movq	%rax, %r8
+               	shlq	%r8
+               	movl	$0x1d, %r9d
                	testb	$-0x80, %al
-               	cmoveq	%rsi, %r8
-               	movq	%rdi, %rax
-               	xorq	%r8, %rax
+               	cmoveq	%rsi, %r9
+               	movq	%r8, %rax
+               	xorq	%r9, %rax
                	andq	$0xff, %rax
                	shrq	%rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	cmpl	%edx, %ebx
                	jne	<addr>
-               	incq	%r9
-               	cmpl	$0x100, %r9d            # imm = 0x100
+               	incq	%rdi
+               	cmpl	$0x100, %edi            # imm = 0x100
                	jb	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
@@ -1176,7 +1176,7 @@ Disassembly of section .text:
                	cpuid
                	testl	$0x8000000, %ecx        # imm = 0x8000000
                	jne	<addr>
-               	xorl	%r12d, %r12d
+               	xorl	%r9d, %r9d
                	jmp	<addr>
                	xorl	%ecx, %ecx
                	xgetbv
@@ -1185,14 +1185,14 @@ Disassembly of section .text:
                	andq	$0x6, %rax
                	cmpl	$0x6, %eax
                	je	<addr>
-               	xorl	%r12d, %r12d
+               	xorl	%r9d, %r9d
                	jmp	<addr>
                	movl	$0x7, %eax
                	xorl	%ecx, %ecx
                	cpuid
                	testb	$0x20, %bl
                	jne	<addr>
-               	xorl	%r12d, %r12d
+               	xorl	%r9d, %r9d
                	jmp	<addr>
                	testl	$0x10000, %ebx          # imm = 0x10000
                	je	<addr>
@@ -1201,7 +1201,7 @@ Disassembly of section .text:
                	andq	$0xe0, %rsi
                	cmpl	$0xe0, %esi
                	jne	<addr>
-               	movl	$0x2, %r12d
+               	movl	$0x2, %r9d
                	jmp	<addr>
-               	movl	$0x1, %r12d
+               	movl	$0x1, %r9d
                	jmp	<addr>

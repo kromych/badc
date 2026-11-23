@@ -255,25 +255,25 @@ Disassembly of section .text:
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x2, x29, #0x10
-               	sub	x3, x29, #0x40
+               	sub	x6, x29, #0x40
                	ldur	q0, [x29, #-0x40]
-               	sub	x4, x29, #0xa0
+               	sub	x7, x29, #0xa0
                	ldur	q1, [x29, #-0xa0]
-               	sub	x5, x29, #0x90
+               	sub	x3, x29, #0x90
                	ldur	q2, [x29, #-0x90]
                	tbx	v0.16b, { v1.16b }, v2.16b
                	stur	q0, [x29, #-0x10]
                	mov	x0, #0x0                // =0
-               	ldrb	w6, [x2, x0]
-               	ldrb	w1, [x5, x0]
+               	ldrb	w4, [x2, x0]
+               	ldrb	w1, [x3, x0]
                	cmp	w1, #0x10
                	b.ge	<addr>
-               	ldrb	w1, [x4, x1]
-               	cmp	w6, w1
+               	ldrb	w1, [x7, x1]
+               	cmp	w4, w1
                	b.eq	<addr>
                	b	<addr>
-               	ldrb	w1, [x3, x0]
-               	cmp	w6, w1
+               	ldrb	w1, [x6, x0]
+               	cmp	w4, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

@@ -217,20 +217,20 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v242 Imm(0)                                           -> x0
     v243 Imm(0)                                           -> x0
     v244 Imm(0)                                           -> x0
-    v245 LoadLocal { off=-1, kind=I8 }                    -> x0
-    v246 Imm(0)                                           -> x2
-    v247 Imm(0)                                           -> x2
-    v248 Imm(0)                                           -> x2
-    v249 Imm(0)                                           -> x2
-    v250 Imm(0)                                           -> x2
-    v251 Imm(0)                                           -> x2
-    v252 Extend { value=v212, kind=I32 }                  -> x2
-    v253 BinopI { op=ne, lhs=v212, rhs_imm=6 }            -> x1
-    v254 Imm(0)                                           -> x2
+    v245 LoadLocal { off=-1, kind=I8 }                    -> x2
+    v246 Imm(0)                                           -> x0
+    v247 Imm(0)                                           -> x0
+    v248 Imm(0)                                           -> x0
+    v249 Imm(0)                                           -> x0
+    v250 Imm(0)                                           -> x0
+    v251 Imm(0)                                           -> x0
+    v252 Extend { value=v212, kind=I32 }                  -> x0
+    v253 BinopI { op=ne, lhs=v212, rhs_imm=6 }            -> x0
+    v254 Imm(0)                                           -> x1
     terminator Bnz { cond=v253, target=b6, fall=b5 }   (exit_acc=v253)
   block 5  start_pc=0
-    v255 Imm(0)                                           -> x1
-    v256 Extend { value=v245, kind=I8 }                   -> x1
+    v255 Imm(0)                                           -> x0
+    v256 Extend { value=v245, kind=I8 }                   -> x0
     v257 BinopI { op=ne, lhs=v245, rhs_imm=120 }          -> x0
     v258 Imm(0)                                           -> x1
     v259 Imm(0)                                           -> x1

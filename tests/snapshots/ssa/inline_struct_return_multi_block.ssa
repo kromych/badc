@@ -508,40 +508,40 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v470 Imm(0)                                           -> x0
     v471 Imm(32)                                          -> x0
     v472 StoreLocal { off=-1, value=v471, kind=I32, volatile } -> -
-    v473 ImmData(112)                                     -> x2
+    v473 ImmData(112)                                     -> x6
     v474 LoadLocal { off=-1, kind=U32, volatile }         -> x0
     v475 Imm(0)                                           -> x1
     v476 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x1
     v477 ImmData(16)                                      -> x1
-    v478 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x6
-    v479 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x6
+    v478 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x2
+    v479 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x2
     v480 BinopI { op=shru, lhs=v474, rhs_imm=5 }          -> x0
-    v481 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x6
-    v482 BinopI { op=eq, lhs=v480, rhs_imm=9 }            -> x6
+    v481 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x2
+    v482 BinopI { op=eq, lhs=v480, rhs_imm=9 }            -> x2
     terminator Bz { cond=v482, target=b2, fall=b1 }   (exit_acc=v482)
   block 1  start_pc=0
-    v598 ImmData(128)                                     -> x6
-    v599 Imm(1)                                           -> x6
+    v598 ImmData(128)                                     -> x2
+    v599 Imm(1)                                           -> x2
     v600 Store { addr=v598, disp=0, value=v599, kind=I32 pc_rel } -> -
     terminator Jmp(b2)
   block 2  start_pc=0
-    v595 Imm(0)                                           -> x6
-    v596 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x6
-    v597 BinopI { op=uge, lhs=v480, rhs_imm=4 }           -> x6
+    v595 Imm(0)                                           -> x2
+    v596 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x2
+    v597 BinopI { op=uge, lhs=v480, rhs_imm=4 }           -> x2
     terminator Bz { cond=v597, target=b4, fall=b3 }   (exit_acc=v597)
   block 3  start_pc=0
-    v608 ImmData(128)                                     -> x6
-    v609 Imm(1)                                           -> x6
+    v608 ImmData(128)                                     -> x2
+    v609 Imm(1)                                           -> x2
     v610 Store { addr=v608, disp=0, value=v609, kind=I32 pc_rel } -> -
     terminator Jmp(b4)
   block 4  start_pc=0
-    v601 Imm(0)                                           -> x6
-    v602 ImmData(16)                                      -> x6
-    v603 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x6
+    v601 Imm(0)                                           -> x2
+    v602 ImmData(16)                                      -> x2
+    v603 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x2
     v604 BinopI { op=mul, lhs=v480, rhs_imm=24 }          -> x0
     v605 Binop { op=add, lhs=v477, rhs=v604 }             -> x0
     v606 Load { addr=v605, disp=0, kind=U32 }             -> x1
-    v607 BinopI { op=eq, lhs=v606, rhs_imm=0 }            -> x6
+    v607 BinopI { op=eq, lhs=v606, rhs_imm=0 }            -> x2
     terminator Bnz { cond=v606, target=b6, fall=b5 }   (low word)   (exit_acc=v607)
   block 5  start_pc=0
     v647 ImmData(128)                                     -> x1
@@ -555,8 +555,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v614 BinopI { op=mul, lhs=v480, rhs_imm=24 }          -> x1
     v615 Binop { op=add, lhs=v477, rhs=v604 }             -> x1
     v616 Load { addr=v605, disp=0, kind=U32 }             -> x1
-    v617 Imm(0)                                           -> x6
-    v618 Load { addr=v605, disp=4, kind=U32 }             -> x6
+    v617 Imm(0)                                           -> x2
+    v618 Load { addr=v605, disp=4, kind=U32 }             -> x2
     v619 Imm(0)                                           -> x7
     v620 Load { addr=v605, disp=8, kind=U16 }             -> x7
     v621 Imm(0)                                           -> x8

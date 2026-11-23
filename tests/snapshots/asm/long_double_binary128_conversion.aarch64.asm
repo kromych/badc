@@ -210,12 +210,12 @@ Disassembly of section .text:
                	bl	<addr>
                	ldur	x4, [x29, #-0x20]
                	ldur	x5, [x29, #-0x18]
-               	and	x3, x20, #0x8000000000000000
+               	and	x0, x20, #0x8000000000000000
                	ubfx	x2, x20, #52, #11
                	and	x1, x20, #0xfffffffffffff
                	cmp	w2, #0x7ff
                	b.ne	<addr>
-               	orr	x0, x3, #0x7fff000000000000
+               	orr	x0, x0, #0x7fff000000000000
                	orr	x0, x0, x1, lsr #4
                	mov	x2, #0x800000000000     // =140737488355328
                	mov	x3, #0x0                // =0
@@ -237,21 +237,21 @@ Disassembly of section .text:
                	ret
                	cbnz	w2, <addr>
                	cbnz	x1, <addr>
-               	stur	x3, [x29, #-0x10]
+               	stur	x0, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
                	b	<addr>
                	mov	x2, #0x1                // =1
-               	lsr	x0, x1, #52
-               	cbnz	w0, <addr>
+               	lsr	x3, x1, #52
+               	cbnz	w3, <addr>
                	lsl	x1, x1, #1
                	sub	x2, x2, #0x1
-               	lsr	x0, x1, #52
-               	cbz	w0, <addr>
+               	lsr	x3, x1, #52
+               	cbz	w3, <addr>
                	and	x1, x1, #0xfffffffffffff
-               	sub	x0, x2, #0x3ff
+               	sub	x2, x2, #0x3ff
                	mov	x17, #0x3fff            // =16383
-               	add	x0, x0, x17
-               	orr	x0, x3, x0, lsl #48
+               	add	x2, x2, x17
+               	orr	x0, x0, x2, lsl #48
                	orr	x0, x0, x1, lsr #4
                	stur	x0, [x29, #-0x10]
                	lsl	x0, x1, #60
@@ -342,7 +342,7 @@ Disassembly of section .text:
                	add	x23, x23, #0x1
                	cmp	w23, #0x10
                	b.lo	<addr>
-               	mov	x22, #0x0               // =0
+               	mov	x21, #0x0               // =0
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x10]
                	eor	x1, x1, x1, lsl #13
@@ -350,10 +350,10 @@ Disassembly of section .text:
                	eor	x20, x1, x1, lsl #17
                	eor	x1, x20, x20, lsl #13
                	eor	x1, x1, x1, lsr #7
-               	eor	x21, x1, x1, lsl #17
-               	str	x21, [x0, #0x10]
+               	eor	x22, x1, x1, lsl #17
+               	str	x22, [x0, #0x10]
                	sub	x0, x29, #0x10
-               	stur	x21, [x29, #-0x10]
+               	stur	x22, [x29, #-0x10]
                	stur	x20, [x29, #-0x8]
                	bl	<addr>
                	fmov	x23, d0
@@ -363,7 +363,7 @@ Disassembly of section .text:
                	mov	x17, #0x7fff            // =32767
                	cmp	w3, w17
                	b.ne	<addr>
-               	orr	x2, x1, x21
+               	orr	x2, x1, x22
                	cbnz	x2, <addr>
                	orr	x0, x0, #0x7ff0000000000000
                	cmp	x23, x0
@@ -371,13 +371,13 @@ Disassembly of section .text:
                	b	<addr>
                	orr	x0, x0, #0x7ff8000000000000
                	orr	x0, x0, x1, lsl #4
-               	orr	x0, x0, x21, lsr #60
+               	orr	x0, x0, x22, lsr #60
                	b	<addr>
                	cbz	w3, <addr>
                	lsl	x1, x1, #15
                	orr	x1, x1, #0x8000000000000000
-               	orr	x1, x1, x21, lsr #49
-               	and	x2, x21, #0x1ffffffffffff
+               	orr	x1, x1, x22, lsr #49
+               	and	x2, x22, #0x1ffffffffffff
                	cmp	x2, #0x0
                	cset	x2, ne
                	mov	x17, #0x3fff            // =16383
@@ -386,9 +386,9 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
-               	add	x22, x22, #0x1
+               	add	x21, x21, #0x1
                	mov	x17, #0x1000            // =4096
-               	cmp	w22, w17
+               	cmp	w21, w17
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>

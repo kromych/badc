@@ -36,52 +36,52 @@ Disassembly of section .text:
                	mov	x2, x3
                	sub	x3, x2, #0x1
                	cbnz	w2, <addr>
-               	mov	x1, #0x0                // =0
-               	sub	x0, x29, #0x8
-               	ldurb	w2, [x29, #-0x8]
-               	cmp	w2, #0x8
+               	mov	x0, #0x0                // =0
+               	sub	x2, x29, #0x8
+               	ldurb	w1, [x29, #-0x8]
+               	cmp	w1, #0x8
                	b.eq	<addr>
-               	add	x0, x1, #0xa
+               	add	x0, x0, #0xa
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
-               	ldurb	w2, [x29, #-0x7]
-               	cmp	w2, #0x7
+               	mov	x0, #0x1                // =1
+               	ldurb	w1, [x29, #-0x7]
+               	cmp	w1, #0x7
                	b.ne	<addr>
-               	mov	x1, #0x2                // =2
-               	ldurb	w2, [x29, #-0x6]
-               	cmp	w2, #0x6
+               	mov	x0, #0x2                // =2
+               	ldurb	w1, [x29, #-0x6]
+               	cmp	w1, #0x6
                	b.ne	<addr>
-               	mov	x1, #0x3                // =3
-               	ldurb	w2, [x29, #-0x5]
-               	cmp	w2, #0x5
+               	mov	x0, #0x3                // =3
+               	ldurb	w1, [x29, #-0x5]
+               	cmp	w1, #0x5
                	b.ne	<addr>
-               	mov	x1, #0x4                // =4
-               	ldurb	w2, [x29, #-0x4]
-               	cmp	w2, #0x4
+               	mov	x0, #0x4                // =4
+               	ldurb	w1, [x29, #-0x4]
+               	cmp	w1, #0x4
                	b.ne	<addr>
-               	mov	x1, #0x5                // =5
-               	ldurb	w2, [x29, #-0x3]
-               	cmp	w2, #0x3
+               	mov	x0, #0x5                // =5
+               	ldurb	w1, [x29, #-0x3]
+               	cmp	w1, #0x3
                	b.ne	<addr>
-               	mov	x1, #0x6                // =6
-               	ldurb	w2, [x29, #-0x2]
-               	cmp	w2, #0x2
+               	mov	x0, #0x6                // =6
+               	ldurb	w1, [x29, #-0x2]
+               	cmp	w1, #0x2
                	b.ne	<addr>
-               	mov	x1, #0x7                // =7
-               	ldurb	w2, [x29, #-0x1]
-               	cmp	w2, #0x1
+               	mov	x0, #0x7                // =7
+               	ldurb	w1, [x29, #-0x1]
+               	cmp	w1, #0x1
                	b.ne	<addr>
-               	sub	x1, x29, #0x10
-               	mov	x2, #0x8                // =8
-               	sub	x3, x2, #0x1
-               	add	x0, x0, #0x1
-               	ldrb	w2, [x1], #0x1
-               	sturb	w2, [x0, #-0x1]
-               	mov	x2, x3
-               	sub	x3, x2, #0x1
-               	cbnz	w2, <addr>
+               	sub	x0, x29, #0x10
+               	mov	x1, #0x8                // =8
+               	sub	x3, x1, #0x1
+               	add	x2, x2, #0x1
+               	ldrb	w1, [x0], #0x1
+               	sturb	w1, [x2, #-0x1]
+               	mov	x1, x3
+               	sub	x3, x1, #0x1
+               	cbnz	w1, <addr>
                	mov	x0, #0x0                // =0
                	ldurb	w1, [x29, #-0x8]
                	cmp	w1, #0x1

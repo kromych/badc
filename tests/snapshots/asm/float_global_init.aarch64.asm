@@ -41,38 +41,38 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	s3, [x0, #0x14]
-               	fcvt	d4, s3
-               	fmov	d3, #2.50000000
-               	fsub	d4, d4, d3
-               	fcmpe	d4, d0
+               	fcvt	d3, s3
+               	fmov	d4, #2.50000000
+               	fsub	d3, d3, d4
+               	fcmpe	d3, d0
                	b.pl	<addr>
-               	fcmpe	d4, d1
+               	fcmpe	d3, d1
                	b.gt	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
-               	ldr	s4, [x0, #0x18]
-               	fcvt	d4, s4
-               	fsub	d4, d4, d2
-               	fcmpe	d4, d0
+               	ldr	s3, [x0, #0x18]
+               	fcvt	d3, s3
+               	fsub	d3, d3, d2
+               	fcmpe	d3, d0
                	b.pl	<addr>
-               	fcmpe	d4, d1
+               	fcmpe	d3, d1
                	b.gt	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
-               	ldr	s4, [x0, #0x1c]
-               	fcvt	d4, s4
-               	fsub	d4, d4, d2
-               	fcmpe	d4, d0
+               	ldr	s3, [x0, #0x1c]
+               	fcvt	d3, s3
+               	fsub	d3, d3, d2
+               	fcmpe	d3, d0
                	b.pl	<addr>
-               	fcmpe	d4, d1
+               	fcmpe	d3, d1
                	b.gt	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x0, <page>
-               	ldr	d4, [x0, #0x20]
-               	fsub	d2, d4, d2
+               	ldr	d3, [x0, #0x20]
+               	fsub	d2, d3, d2
                	fcmpe	d2, d0
                	b.pl	<addr>
                	fcmpe	d2, d1
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	d2, [x0, #0x28]
-               	fsub	d2, d2, d3
+               	fsub	d2, d2, d4
                	fcmpe	d2, d0
                	b.pl	<addr>
                	fcmpe	d2, d1

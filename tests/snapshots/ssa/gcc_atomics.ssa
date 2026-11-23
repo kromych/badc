@@ -319,26 +319,26 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v224 AtomicCas { addr=v137, expected=v189, desired=v223, width=4, order=SeqCst } -> x0
     v225 Imm(7)                                           -> x6
     v226 BinopI { op=eq, lhs=v224, rhs_imm=7 }            -> x6
-    v227 Select { cond=v226, a=v189, b=v224, kind=I64 }   -> x0
+    v227 Select { cond=v226, a=v189, b=v224, kind=I64 }   -> x7
     terminator Jmp(b37)
   block 37  start_pc=0
-    v258 Copy { value=v227, fp=false }                    -> x7
-    v259 BinopI { op=eq, lhs=v226, rhs_imm=0 }            -> x7
-    v260 Imm(0)                                           -> x7
-    v261 Imm(0)                                           -> x7
+    v258 Copy { value=v227, fp=false }                    -> x0
+    v259 BinopI { op=eq, lhs=v226, rhs_imm=0 }            -> x0
+    v260 Imm(0)                                           -> x0
+    v261 Imm(0)                                           -> x0
     terminator Bnz { cond=v226, target=b40, fall=b38 }   (low word)   (exit_acc=v259)
   block 38  start_pc=0
-    v262 LoadLocal { off=-4, kind=I32 }                   -> x6
-    v263 BinopI { op=eq, lhs=v262, rhs_imm=8 }            -> x6
-    v264 BinopI { op=ne, lhs=v263, rhs_imm=0 }            -> x7
-    v265 Imm(0)                                           -> x7
-    v266 Imm(0)                                           -> x7
-    v267 Imm(0)                                           -> x7
-    v268 Imm(0)                                           -> x7
-    v269 Imm(0)                                           -> x7
+    v262 LoadLocal { off=-4, kind=I32 }                   -> x0
+    v263 BinopI { op=eq, lhs=v262, rhs_imm=8 }            -> x0
+    v264 BinopI { op=ne, lhs=v263, rhs_imm=0 }            -> x6
+    v265 Imm(0)                                           -> x6
+    v266 Imm(0)                                           -> x6
+    v267 Imm(0)                                           -> x6
+    v268 Imm(0)                                           -> x6
+    v269 Imm(0)                                           -> x6
     terminator Bz { cond=v263, target=b40, fall=b39 }   (exit_acc=v263)
   block 39  start_pc=0
-    v270 Extend { value=v227, kind=I32 }                  -> x6
+    v270 Extend { value=v227, kind=I32 }                  -> x0
     v271 BinopI { op=eq, lhs=v227, rhs_imm=8 }            -> x0
     v272 BinopI { op=ne, lhs=v271, rhs_imm=0 }            -> x6
     v273 Imm(0)                                           -> x6

@@ -78,15 +78,15 @@ Disassembly of section .text:
                	rdtscp
                	movl	%eax, %eax
                	shlq	$0x20, %rdx
-               	orq	%rdx, %rax
-               	movl	-0x8(%rbp), %edx
-               	cmpl	$0xdeadbeef, %edx       # imm = 0xDEADBEEF
+               	orq	%rax, %rdx
+               	movl	-0x8(%rbp), %eax
+               	cmpl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
                	je	<addr>
                	cmpl	$0xdeadbeef, %ecx       # imm = 0xDEADBEEF
                	je	<addr>
                	testq	%rsi, %rsi
                	jne	<addr>
-               	testq	%rax, %rax
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbx

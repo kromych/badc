@@ -66,18 +66,18 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x18]
                	ldr	x2, [sp, #0x20]
                	stp	x1, x2, [x0]
-               	sub	x0, x29, #0x50
-               	ldur	x1, [x29, #-0x20]
-               	cmp	x1, #0x3c
+               	sub	x1, x29, #0x50
+               	ldur	x0, [x29, #-0x20]
+               	cmp	x0, #0x3c
                	b.ne	<addr>
-               	ldur	x1, [x29, #-0x18]
-               	cmp	x1, #0x46
+               	ldur	x0, [x29, #-0x18]
+               	cmp	x0, #0x46
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x0, #0x10
+               	add	x0, x1, #0x10
                	sub	x1, x29, #0x10
                	sub	x2, x29, #0x8
                	stp	x9, x10, [sp, #-0x40]!

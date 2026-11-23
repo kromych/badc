@@ -485,52 +485,52 @@ Disassembly of section .text:
                	str	w8, [x3, #0x20]
                	b	<addr>
                	movi	d0, #0000000000000000
-               	adrp	x0, <page>
+               	adrp	x3, <page>
                	b	<addr>
-               	smov	x3, v0.s[0]
-               	add	x3, x3, #0x1
-               	mov	v0.s[0], w3
-               	smov	x3, v0.s[0]
-               	cmp	x3, #0x2
+               	smov	x0, v0.s[0]
+               	add	x0, x0, #0x1
+               	mov	v0.s[0], w0
+               	smov	x0, v0.s[0]
+               	cmp	x0, #0x2
                	b.ge	<addr>
-               	smov	x3, v0.s[0]
-               	ldr	s1, [x6, x3, lsl #2]
-               	ldr	s2, [x1, x3, lsl #2]
+               	smov	x0, v0.s[0]
+               	ldr	s1, [x6, x0, lsl #2]
+               	ldr	s2, [x1, x0, lsl #2]
                	fneg	s2, s2
-               	ldr	s3, [x2, x3, lsl #2]
+               	ldr	s3, [x2, x0, lsl #2]
                	fmov	s4, #2.00000000
                	fmadd	s2, s2, s3, s4
                	fcmp	s1, s2
                	b.eq	<addr>
-               	ldrsw	x3, [x0, #0x20]
-               	orr	x3, x3, #0x4
-               	str	w3, [x0, #0x20]
-               	smov	x3, v0.s[0]
-               	ldr	s1, [x7, x3, lsl #2]
-               	add	x3, x3, #0x2
-               	ldr	s2, [x1, w3, sxtw #2]
+               	ldrsw	x0, [x3, #0x20]
+               	orr	x0, x0, #0x4
+               	str	w0, [x3, #0x20]
+               	smov	x0, v0.s[0]
+               	ldr	s1, [x7, x0, lsl #2]
+               	add	x0, x0, #0x2
+               	ldr	s2, [x1, w0, sxtw #2]
                	fneg	s2, s2
-               	ldr	s3, [x2, w3, sxtw #2]
+               	ldr	s3, [x2, w0, sxtw #2]
                	fmov	s4, #3.00000000
                	fmadd	s2, s2, s3, s4
                	fmov	s3, #0.50000000
                	fmul	s2, s2, s3
                	fcmp	s1, s2
                	b.eq	<addr>
-               	ldrsw	x3, [x0, #0x20]
-               	orr	x3, x3, #0x8
-               	str	w3, [x0, #0x20]
+               	ldrsw	x0, [x3, #0x20]
+               	orr	x0, x0, #0x8
+               	str	w0, [x3, #0x20]
                	b	<addr>
-               	sub	x2, x29, #0x90
+               	sub	x1, x29, #0x90
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	sub	x2, x29, #0x80
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x2]
-               	sub	x3, x29, #0x80
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x3]
                	ldur	q0, [x29, #-0x90]
                	ldr	q1, [x0]
                	frecps	v1.2d, v0.2d, v1.2d
@@ -541,35 +541,35 @@ Disassembly of section .text:
                	sub	x5, x29, #0x60
                	stur	q0, [x29, #-0x60]
                	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
+               	adrp	x3, <page>
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.ge	<addr>
                	ldr	d0, [x4, x0, lsl #3]
-               	ldr	d1, [x2, x0, lsl #3]
+               	ldr	d1, [x1, x0, lsl #3]
                	fneg	d1, d1
-               	ldr	d2, [x3, x0, lsl #3]
+               	ldr	d2, [x2, x0, lsl #3]
                	fmov	d3, #2.00000000
                	fmadd	d1, d1, d2, d3
                	fcmp	d0, d1
                	b.eq	<addr>
-               	ldrsw	x6, [x1, #0x20]
+               	ldrsw	x6, [x3, #0x20]
                	orr	x6, x6, #0x4
-               	str	w6, [x1, #0x20]
+               	str	w6, [x3, #0x20]
                	ldr	d0, [x5, x0, lsl #3]
-               	ldr	d1, [x2, x0, lsl #3]
+               	ldr	d1, [x1, x0, lsl #3]
                	fneg	d1, d1
-               	ldr	d2, [x3, x0, lsl #3]
+               	ldr	d2, [x2, x0, lsl #3]
                	fmov	d3, #3.00000000
                	fmadd	d1, d1, d2, d3
                	fmov	d2, #0.50000000
                	fmul	d1, d1, d2
                	fcmp	d0, d1
                	b.eq	<addr>
-               	ldrsw	x6, [x1, #0x20]
+               	ldrsw	x6, [x3, #0x20]
                	orr	x6, x6, #0x8
-               	str	w6, [x1, #0x20]
+               	str	w6, [x3, #0x20]
                	b	<addr>
                	adrp	x0, <addr>
                	ldr	d1, [x0, #0x60]

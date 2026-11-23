@@ -326,7 +326,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, w3
                	b.ge	<addr>
-               	mov	x4, sp
+               	mov	x5, sp
                	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x7, sp
@@ -338,14 +338,14 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x7
-               	and	x5, x1, #0xff
-               	strb	w5, [x7]
-               	str	w5, [x6, #0x28]
+               	and	x4, x1, #0xff
+               	strb	w4, [x7]
+               	str	w4, [x6, #0x28]
                	tbz	w1, #0x0, <addr>
-               	mov	sp, x4
+               	mov	sp, x5
                	b	<addr>
                	add	x0, x0, #0x1
-               	mov	sp, x4
+               	mov	sp, x5
                	b	<addr>
                	mov	x1, #0x0                // =0
                	adrp	x5, <page>
@@ -375,7 +375,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, w3
                	b.ge	<addr>
-               	mov	x4, sp
+               	mov	x5, sp
                	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x7, sp
@@ -387,14 +387,14 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x7
-               	and	x5, x1, #0xff
-               	strb	w5, [x7]
-               	str	w5, [x6, #0x28]
+               	and	x4, x1, #0xff
+               	strb	w4, [x7]
+               	str	w4, [x6, #0x28]
                	tbz	w1, #0x0, <addr>
-               	mov	sp, x4
+               	mov	sp, x5
                	b	<addr>
                	add	x0, x0, #0x1
-               	mov	sp, x4
+               	mov	sp, x5
                	b	<addr>
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10

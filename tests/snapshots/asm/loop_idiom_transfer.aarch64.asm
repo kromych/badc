@@ -92,15 +92,15 @@ Disassembly of section .text:
                	mov	x1, #0x7f               // =127
                	mov	x2, #0x40               // =64
                	bl	<addr>
-               	sub	x0, x29, #0x40
-               	mov	x1, #0x505              // =1285
-               	movk	x1, #0x505, lsl #16
-               	stur	w1, [x29, #-0x3c]
-               	stur	w1, [x29, #-0x38]
-               	ldurb	w1, [x29, #-0x3d]
-               	cmp	w1, #0x7f
+               	sub	x1, x29, #0x40
+               	mov	x0, #0x505              // =1285
+               	movk	x0, #0x505, lsl #16
+               	stur	w0, [x29, #-0x3c]
+               	stur	w0, [x29, #-0x38]
+               	ldurb	w0, [x29, #-0x3d]
+               	cmp	w0, #0x7f
                	b.ne	<addr>
-               	add	x1, x0, #0x4
+               	add	x1, x1, #0x4
                	mov	x0, #0x0                // =0
                	ldrb	w2, [x1, x0]
                	cmp	w2, #0x5

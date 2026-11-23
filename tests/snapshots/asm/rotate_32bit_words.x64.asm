@@ -149,46 +149,46 @@ Disassembly of section .text:
                	movl	-0x10(%rbp), %esi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	-0x10(%rbp), %esi
+               	movl	-0x10(%rbp), %edi
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
                	jmp	<addr>
                	incq	%rcx
                	cmpl	$0x20, %ecx
                	jge	<addr>
-               	shrxq	%rcx, %rbx, %rdi
-               	testb	$0x1, %dil
+               	shrxq	%rcx, %rbx, %rsi
+               	testb	$0x1, %sil
                	je	<addr>
-               	movl	$0x1, %edi
+               	movl	$0x1, %esi
                	movq	%rcx, %r8
-               	subq	%rsi, %r8
+               	subq	%rdi, %r8
                	andq	$0x1f, %r8
-               	shlxq	%r8, %rdi, %rdi
-               	orq	%rdi, %rdx
+               	shlxq	%r8, %rsi, %rsi
+               	orq	%rsi, %rdx
                	jmp	<addr>
                	cmpl	%edx, %eax
                	jne	<addr>
                	movl	-0x10(%rbp), %esi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	$0x20, %esi
+               	movl	$0x20, %edi
                	movl	-0x10(%rbp), %ecx
-               	subq	%rcx, %rsi
+               	subq	%rcx, %rdi
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
                	jmp	<addr>
                	incq	%rcx
                	cmpl	$0x20, %ecx
                	jge	<addr>
-               	shrxq	%rcx, %rbx, %rdi
-               	testb	$0x1, %dil
+               	shrxq	%rcx, %rbx, %rsi
+               	testb	$0x1, %sil
                	je	<addr>
-               	movl	$0x1, %edi
+               	movl	$0x1, %esi
                	movq	%rcx, %r8
-               	subq	%rsi, %r8
+               	subq	%rdi, %r8
                	andq	$0x1f, %r8
-               	shlxq	%r8, %rdi, %rdi
-               	orq	%rdi, %rdx
+               	shlxq	%r8, %rsi, %rsi
+               	orq	%rsi, %rdx
                	jmp	<addr>
                	cmpl	%edx, %eax
                	jne	<addr>

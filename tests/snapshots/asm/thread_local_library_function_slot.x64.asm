@@ -29,20 +29,20 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	<rip>, %rsi # <addr>
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x8, %rcx
-               	movq	(%rcx), %rdx
+               	movq	%fs:0x0, %rdx
+               	addq	$-0x8, %rdx
+               	movq	(%rdx), %rcx
                	movq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	cmpq	%rsi, %rdx
+               	cmpq	%rsi, %rcx
                	sete	%sil
                	movzbq	%sil, %rsi
-               	cmpq	%rdi, %rdx
+               	cmpq	%rdi, %rcx
                	cmovneq	%rax, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movq	(%rcx), %rax
+               	movq	(%rdx), %rax
                	callq	*%rax
                	cmpq	$0x3, %rax
                	sete	%al

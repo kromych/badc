@@ -40,34 +40,34 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	xorl	%ecx, %ecx
-               	movl	%ecx, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rdx
-               	cmpq	$0x8, %rdx
+               	xorl	%edx, %edx
+               	movl	%edx, -0x8(%rbp)
+               	movslq	-0x8(%rbp), %rcx
+               	cmpq	$0x8, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
-               	movq	(%r11,%rdx,8), %r10
+               	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
                	movl	$0x7, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rdx
-               	cmpq	$0x8, %rdx
+               	movslq	-0x8(%rbp), %rcx
+               	cmpq	$0x8, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
-               	movq	(%r11,%rdx,8), %r10
+               	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
                	movl	$0x4, %eax
                	leave
                	retq
                	movl	$0x9, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rdx
-               	cmpq	$0x8, %rdx
+               	movslq	-0x8(%rbp), %rcx
+               	cmpq	$0x8, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
-               	movq	(%r11,%rdx,8), %r10
+               	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
                	leave
                	retq
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	leave
                	retq
                	movl	$0x3, %eax

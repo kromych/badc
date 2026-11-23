@@ -84,8 +84,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
   block 2  start_pc=0
     v76  Phi { incoming=[b0:v47, b1:v173], kind=I64 }     -> x2
     v77  Phi { incoming=[b0:v47, b1:v176], kind=I64 }     -> x7
-    v78  Phi { incoming=[b0:v47, b1:v89], kind=I64 }      -> x8
-    v79  Phi { incoming=[b0:v47, b1:v85], kind=I64 }      -> x9
+    v78  Phi { incoming=[b0:v47, b1:v89], kind=I64 }      -> x9
+    v79  Phi { incoming=[b0:v47, b1:v85], kind=I64 }      -> x8
     v80  Imm(0)                                           -> x0
     v81  Imm(0)                                           -> x0
     v82  BinopI { op=ult, lhs=v76, rhs_imm=100 }          -> x0
@@ -100,11 +100,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     terminator Bz { cond=v100, target=b13, fall=b4 }   (exit_acc=v100)
   block 4  start_pc=0
     v84  Imm(0)                                           -> x0
-    v85  BinopI { op=add, lhs=v79, rhs_imm=1 }            -> x9
+    v85  BinopI { op=add, lhs=v79, rhs_imm=1 }            -> x8
     v86  Imm(0)                                           -> x0
     v87  Imm(0)                                           -> x0
     v88  Imm(0)                                           -> x0
-    v89  Binop { op=add, lhs=v78, rhs=v76 }               -> x8
+    v89  Binop { op=add, lhs=v78, rhs=v76 }               -> x9
     v90  Imm(0)                                           -> x0
     v91  LocalAddr(-2)                                    -> x6
     v92  Imm(0)                                           -> x0

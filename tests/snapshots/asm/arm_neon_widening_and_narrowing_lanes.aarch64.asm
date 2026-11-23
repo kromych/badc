@@ -45,8 +45,8 @@ Disassembly of section .text:
                	ldur	d2, [x29, #-0x78]
                	ldur	q3, [x29, #-0x68]
                	ldur	q1, [x29, #-0x58]
-               	ldur	q4, [x29, #-0x48]
-               	ldr	q5, [x0]
+               	ldur	q5, [x29, #-0x48]
+               	ldr	q4, [x0]
                	saddl	v6.8h, v0.8b, v2.8b
                	str	q6, [sp]
                	saddl2	v6.8h, v3.16b, v1.16b
@@ -63,31 +63,31 @@ Disassembly of section .text:
                	str	q6, [sp, #0x60]
                	sabdl2	v6.8h, v3.16b, v1.16b
                	str	q6, [sp, #0x70]
-               	saddw	v6.8h, v4.8h, v0.8b
+               	saddw	v6.8h, v5.8h, v0.8b
                	str	q6, [sp, #0x80]
-               	saddw2	v6.8h, v4.8h, v1.16b
+               	saddw2	v6.8h, v5.8h, v1.16b
                	str	q6, [sp, #0x90]
-               	ssubw	v6.8h, v4.8h, v0.8b
+               	ssubw	v6.8h, v5.8h, v0.8b
                	str	q6, [sp, #0xa0]
-               	ssubw2	v6.8h, v4.8h, v1.16b
+               	ssubw2	v6.8h, v5.8h, v1.16b
                	stur	q6, [x29, #-0x100]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlal	v6.8h, v0.8b, v2.8b
                	stur	q6, [x29, #-0xf0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlal2	v6.8h, v3.16b, v1.16b
                	stur	q6, [x29, #-0xe0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlsl	v6.8h, v0.8b, v2.8b
                	stur	q6, [x29, #-0xd0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlsl2	v6.8h, v3.16b, v1.16b
                	stur	q6, [x29, #-0xc0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	sabal	v16.8h, v0.8b, v2.8b
                	mov	v2.16b, v16.16b
                	stur	q2, [x29, #-0xb0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	sabal2	v16.8h, v3.16b, v1.16b
                	mov	v1.16b, v16.16b
                	stur	q1, [x29, #-0xa0]
@@ -219,8 +219,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x8
                	b.lt	<addr>
-               	xtn	v0.8b, v4.8h
-               	sqxtn	v1.8b, v4.8h
+               	xtn	v0.8b, v5.8h
+               	sqxtn	v1.8b, v5.8h
                	sub	x3, x29, #0x30
                	stur	d0, [x29, #-0x30]
                	sub	x4, x29, #0x8
@@ -247,7 +247,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
-               	sqxtun	v0.8b, v4.8h
+               	sqxtun	v0.8b, v5.8h
                	sub	x3, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	mov	x2, #0x0                // =0
@@ -319,8 +319,8 @@ Disassembly of section .text:
                	ldur	d2, [x29, #-0x78]
                	ldur	q3, [x29, #-0x68]
                	ldur	q1, [x29, #-0x58]
-               	ldur	q4, [x29, #-0x48]
-               	ldr	q5, [x0]
+               	ldur	q5, [x29, #-0x48]
+               	ldr	q4, [x0]
                	uaddl	v6.8h, v0.8b, v2.8b
                	str	q6, [sp]
                	uaddl2	v6.8h, v3.16b, v1.16b
@@ -337,31 +337,31 @@ Disassembly of section .text:
                	str	q6, [sp, #0x60]
                	uabdl2	v6.8h, v3.16b, v1.16b
                	str	q6, [sp, #0x70]
-               	uaddw	v6.8h, v4.8h, v0.8b
+               	uaddw	v6.8h, v5.8h, v0.8b
                	str	q6, [sp, #0x80]
-               	uaddw2	v6.8h, v4.8h, v1.16b
+               	uaddw2	v6.8h, v5.8h, v1.16b
                	str	q6, [sp, #0x90]
-               	usubw	v6.8h, v4.8h, v0.8b
+               	usubw	v6.8h, v5.8h, v0.8b
                	str	q6, [sp, #0xa0]
-               	usubw2	v6.8h, v4.8h, v1.16b
+               	usubw2	v6.8h, v5.8h, v1.16b
                	stur	q6, [x29, #-0x100]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlal	v6.8h, v0.8b, v2.8b
                	stur	q6, [x29, #-0xf0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlal2	v6.8h, v3.16b, v1.16b
                	stur	q6, [x29, #-0xe0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlsl	v6.8h, v0.8b, v2.8b
                	stur	q6, [x29, #-0xd0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlsl2	v6.8h, v3.16b, v1.16b
                	stur	q6, [x29, #-0xc0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	uabal	v16.8h, v0.8b, v2.8b
                	mov	v2.16b, v16.16b
                	stur	q2, [x29, #-0xb0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	uabal2	v16.8h, v3.16b, v1.16b
                	mov	v1.16b, v16.16b
                	stur	q1, [x29, #-0xa0]
@@ -466,8 +466,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x8
                	b.lt	<addr>
-               	xtn	v0.8b, v4.8h
-               	uqxtn	v1.8b, v4.8h
+               	xtn	v0.8b, v5.8h
+               	uqxtn	v1.8b, v5.8h
                	sub	x2, x29, #0x30
                	stur	d0, [x29, #-0x30]
                	sub	x3, x29, #0x8
@@ -533,8 +533,8 @@ Disassembly of section .text:
                	ldur	d2, [x29, #-0xa0]
                	ldur	q3, [x29, #-0x90]
                	ldur	q1, [x29, #-0x80]
-               	ldur	q4, [x29, #-0x70]
-               	ldr	q5, [x0]
+               	ldur	q5, [x29, #-0x70]
+               	ldr	q4, [x0]
                	saddl	v6.4s, v0.4h, v2.4h
                	str	q6, [sp]
                	saddl2	v6.4s, v3.8h, v1.8h
@@ -551,31 +551,31 @@ Disassembly of section .text:
                	str	q6, [sp, #0x60]
                	sabdl2	v6.4s, v3.8h, v1.8h
                	str	q6, [sp, #0x70]
-               	saddw	v6.4s, v4.4s, v0.4h
+               	saddw	v6.4s, v5.4s, v0.4h
                	str	q6, [sp, #0x80]
-               	saddw2	v6.4s, v4.4s, v1.8h
+               	saddw2	v6.4s, v5.4s, v1.8h
                	str	q6, [sp, #0x90]
-               	ssubw	v6.4s, v4.4s, v0.4h
+               	ssubw	v6.4s, v5.4s, v0.4h
                	str	q6, [sp, #0xa0]
-               	ssubw2	v6.4s, v4.4s, v1.8h
+               	ssubw2	v6.4s, v5.4s, v1.8h
                	str	q6, [sp, #0xb0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlal	v6.4s, v0.4h, v2.4h
                	str	q6, [sp, #0xc0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlal2	v6.4s, v3.8h, v1.8h
                	str	q6, [sp, #0xd0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlsl	v6.4s, v0.4h, v2.4h
                	stur	q6, [x29, #-0x100]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlsl2	v6.4s, v3.8h, v1.8h
                	stur	q6, [x29, #-0xf0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	sabal	v16.4s, v0.4h, v2.4h
                	mov	v2.16b, v16.16b
                	stur	q2, [x29, #-0xe0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	sabal2	v16.4s, v3.8h, v1.8h
                	mov	v1.16b, v16.16b
                	stur	q1, [x29, #-0xd0]
@@ -676,55 +676,55 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x4
                	b.lt	<addr>
-               	xtn	v0.4h, v4.4s
-               	sqxtn	v1.4h, v4.4s
+               	xtn	v0.4h, v5.4s
+               	sqxtn	v1.4h, v5.4s
                	sub	x3, x29, #0x58
                	stur	d0, [x29, #-0x58]
                	sub	x4, x29, #0x8
                	stur	d1, [x29, #-0x8]
                	mov	x0, #0x0                // =0
                	mov	x5, #-0x8000            // =-32768
-               	mov	x6, #0x7fff             // =32767
+               	mov	x7, #0x7fff             // =32767
                	sub	x1, x29, #0x70
                	ldrsw	x1, [x1, x0, lsl #2]
                	cmp	w1, w5
                	b.ge	<addr>
                	mov	x2, #-0x8000            // =-32768
-               	ldrsh	x7, [x3, x0, lsl #1]
+               	ldrsh	x6, [x3, x0, lsl #1]
                	sxth	x1, w1
-               	cmp	w7, w1
+               	cmp	w6, w1
                	b.ne	<addr>
                	ldrsh	x1, [x4, x0, lsl #1]
                	cmp	w1, w2
                	b.eq	<addr>
                	b	<addr>
                	mov	x2, #0x7fff             // =32767
-               	cmp	w1, w6
+               	cmp	w1, w7
                	csel	x2, x2, x1, gt
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
-               	sqxtun	v0.4h, v4.4s
+               	sqxtun	v0.4h, v5.4s
                	sub	x3, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	mov	x2, #0x0                // =0
-               	mov	x4, #0xffff             // =65535
+               	mov	x5, #0xffff             // =65535
                	mov	x0, x2
                	sub	x1, x29, #0x70
                	ldrsw	x1, [x1, x0, lsl #2]
                	cmp	w1, #0x0
                	b.ge	<addr>
                	mov	x1, x2
-               	ldrh	w5, [x3, x0, lsl #1]
-               	cmp	w5, w1
+               	ldrh	w4, [x3, x0, lsl #1]
+               	cmp	w4, w1
                	b.eq	<addr>
                	b	<addr>
-               	mov	x5, #0xffff             // =65535
-               	cmp	w1, w4
-               	csel	x1, x5, x1, gt
-               	ldrh	w5, [x3, x0, lsl #1]
-               	cmp	w5, w1
+               	mov	x4, #0xffff             // =65535
+               	cmp	w1, w5
+               	csel	x1, x4, x1, gt
+               	ldrh	w4, [x3, x0, lsl #1]
+               	cmp	w4, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -778,8 +778,8 @@ Disassembly of section .text:
                	ldur	d2, [x29, #-0xa0]
                	ldur	q3, [x29, #-0x90]
                	ldur	q1, [x29, #-0x80]
-               	ldur	q4, [x29, #-0x70]
-               	ldr	q5, [x0]
+               	ldur	q5, [x29, #-0x70]
+               	ldr	q4, [x0]
                	uaddl	v6.4s, v0.4h, v2.4h
                	str	q6, [sp]
                	uaddl2	v6.4s, v3.8h, v1.8h
@@ -796,31 +796,31 @@ Disassembly of section .text:
                	str	q6, [sp, #0x60]
                	uabdl2	v6.4s, v3.8h, v1.8h
                	str	q6, [sp, #0x70]
-               	uaddw	v6.4s, v4.4s, v0.4h
+               	uaddw	v6.4s, v5.4s, v0.4h
                	str	q6, [sp, #0x80]
-               	uaddw2	v6.4s, v4.4s, v1.8h
+               	uaddw2	v6.4s, v5.4s, v1.8h
                	str	q6, [sp, #0x90]
-               	usubw	v6.4s, v4.4s, v0.4h
+               	usubw	v6.4s, v5.4s, v0.4h
                	str	q6, [sp, #0xa0]
-               	usubw2	v6.4s, v4.4s, v1.8h
+               	usubw2	v6.4s, v5.4s, v1.8h
                	str	q6, [sp, #0xb0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlal	v6.4s, v0.4h, v2.4h
                	str	q6, [sp, #0xc0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlal2	v6.4s, v3.8h, v1.8h
                	str	q6, [sp, #0xd0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlsl	v6.4s, v0.4h, v2.4h
                	stur	q6, [x29, #-0x100]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlsl2	v6.4s, v3.8h, v1.8h
                	stur	q6, [x29, #-0xf0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	uabal	v16.4s, v0.4h, v2.4h
                	mov	v2.16b, v16.16b
                	stur	q2, [x29, #-0xe0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	uabal2	v16.4s, v3.8h, v1.8h
                	mov	v1.16b, v16.16b
                	stur	q1, [x29, #-0xd0]
@@ -921,8 +921,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x4
                	b.lt	<addr>
-               	xtn	v0.4h, v4.4s
-               	uqxtn	v1.4h, v4.4s
+               	xtn	v0.4h, v5.4s
+               	uqxtn	v1.4h, v5.4s
                	sub	x2, x29, #0x58
                	stur	d0, [x29, #-0x58]
                	sub	x3, x29, #0x8
@@ -989,8 +989,8 @@ Disassembly of section .text:
                	ldur	d2, [x29, #-0xe8]
                	ldur	q3, [x29, #-0xd8]
                	ldur	q1, [x29, #-0xc8]
-               	ldur	q4, [x29, #-0xb8]
-               	ldr	q5, [x0]
+               	ldur	q5, [x29, #-0xb8]
+               	ldr	q4, [x0]
                	saddl	v6.2d, v0.2s, v2.2s
                	str	q6, [sp]
                	saddl2	v6.2d, v3.4s, v1.4s
@@ -1007,31 +1007,31 @@ Disassembly of section .text:
                	str	q6, [sp, #0x60]
                	sabdl2	v6.2d, v3.4s, v1.4s
                	str	q6, [sp, #0x70]
-               	saddw	v6.2d, v4.2d, v0.2s
+               	saddw	v6.2d, v5.2d, v0.2s
                	str	q6, [sp, #0x80]
-               	saddw2	v6.2d, v4.2d, v1.4s
+               	saddw2	v6.2d, v5.2d, v1.4s
                	str	q6, [sp, #0x90]
-               	ssubw	v6.2d, v4.2d, v0.2s
+               	ssubw	v6.2d, v5.2d, v0.2s
                	str	q6, [sp, #0xa0]
-               	ssubw2	v6.2d, v4.2d, v1.4s
+               	ssubw2	v6.2d, v5.2d, v1.4s
                	str	q6, [sp, #0xb0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlal	v6.2d, v0.2s, v2.2s
                	str	q6, [sp, #0xc0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlal2	v6.2d, v3.4s, v1.4s
                	str	q6, [sp, #0xd0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlsl	v6.2d, v0.2s, v2.2s
                	str	q6, [sp, #0xe0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	smlsl2	v6.2d, v3.4s, v1.4s
                	str	q6, [sp, #0xf0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	sabal	v16.2d, v0.2s, v2.2s
                	mov	v2.16b, v16.16b
                	str	q2, [sp, #0x100]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	sabal2	v16.2d, v3.4s, v1.4s
                	mov	v1.16b, v16.16b
                	str	q1, [sp, #0x110]
@@ -1132,54 +1132,54 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x2
                	b.lt	<addr>
-               	xtn	v0.2s, v4.2d
-               	sqxtn	v1.2s, v4.2d
+               	xtn	v0.2s, v5.2d
+               	sqxtn	v1.2s, v5.2d
                	sub	x3, x29, #0xa0
                	stur	d0, [x29, #-0xa0]
                	sub	x4, x29, #0x8
                	stur	d1, [x29, #-0x8]
                	mov	x0, #0x0                // =0
                	mov	x5, #-0x80000000        // =-2147483648
-               	mov	x6, #0x7fffffff         // =2147483647
+               	mov	x7, #0x7fffffff         // =2147483647
                	sub	x1, x29, #0xb8
                	ldr	x1, [x1, x0, lsl #3]
                	cmp	x1, x5
                	b.ge	<addr>
                	mov	x2, #-0x80000000        // =-2147483648
-               	ldrsw	x7, [x3, x0, lsl #2]
-               	cmp	w7, w1
+               	ldrsw	x6, [x3, x0, lsl #2]
+               	cmp	w6, w1
                	b.ne	<addr>
                	ldrsw	x1, [x4, x0, lsl #2]
                	cmp	w1, w2
                	b.eq	<addr>
                	b	<addr>
                	mov	x2, #0x7fffffff         // =2147483647
-               	cmp	x1, x6
+               	cmp	x1, x7
                	csel	x2, x2, x1, gt
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
-               	sqxtun	v0.2s, v4.2d
+               	sqxtun	v0.2s, v5.2d
                	sub	x3, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	mov	x2, #0x0                // =0
-               	mov	x4, #0xffffffff         // =4294967295
+               	mov	x5, #0xffffffff         // =4294967295
                	mov	x0, x2
                	sub	x1, x29, #0xb8
                	ldr	x1, [x1, x0, lsl #3]
                	cmp	x1, #0x0
                	b.ge	<addr>
                	mov	x1, x2
-               	ldr	w5, [x3, x0, lsl #2]
-               	cmp	w5, w1
+               	ldr	w4, [x3, x0, lsl #2]
+               	cmp	w4, w1
                	b.eq	<addr>
                	b	<addr>
-               	mov	x5, #0xffffffff         // =4294967295
-               	cmp	x1, x4
-               	csel	x1, x5, x1, gt
-               	ldr	w5, [x3, x0, lsl #2]
-               	cmp	w5, w1
+               	mov	x4, #0xffffffff         // =4294967295
+               	cmp	x1, x5
+               	csel	x1, x4, x1, gt
+               	ldr	w4, [x3, x0, lsl #2]
+               	cmp	w4, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
@@ -1233,8 +1233,8 @@ Disassembly of section .text:
                	ldur	d2, [x29, #-0xe8]
                	ldur	q3, [x29, #-0xd8]
                	ldur	q1, [x29, #-0xc8]
-               	ldur	q4, [x29, #-0xb8]
-               	ldr	q5, [x0]
+               	ldur	q5, [x29, #-0xb8]
+               	ldr	q4, [x0]
                	uaddl	v6.2d, v0.2s, v2.2s
                	str	q6, [sp]
                	uaddl2	v6.2d, v3.4s, v1.4s
@@ -1251,31 +1251,31 @@ Disassembly of section .text:
                	str	q6, [sp, #0x60]
                	uabdl2	v6.2d, v3.4s, v1.4s
                	str	q6, [sp, #0x70]
-               	uaddw	v6.2d, v4.2d, v0.2s
+               	uaddw	v6.2d, v5.2d, v0.2s
                	str	q6, [sp, #0x80]
-               	uaddw2	v6.2d, v4.2d, v1.4s
+               	uaddw2	v6.2d, v5.2d, v1.4s
                	str	q6, [sp, #0x90]
-               	usubw	v6.2d, v4.2d, v0.2s
+               	usubw	v6.2d, v5.2d, v0.2s
                	str	q6, [sp, #0xa0]
-               	usubw2	v6.2d, v4.2d, v1.4s
+               	usubw2	v6.2d, v5.2d, v1.4s
                	str	q6, [sp, #0xb0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlal	v6.2d, v0.2s, v2.2s
                	str	q6, [sp, #0xc0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlal2	v6.2d, v3.4s, v1.4s
                	str	q6, [sp, #0xd0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlsl	v6.2d, v0.2s, v2.2s
                	str	q6, [sp, #0xe0]
-               	mov	v6.16b, v5.16b
+               	mov	v6.16b, v4.16b
                	umlsl2	v6.2d, v3.4s, v1.4s
                	str	q6, [sp, #0xf0]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	uabal	v16.2d, v0.2s, v2.2s
                	mov	v2.16b, v16.16b
                	str	q2, [sp, #0x100]
-               	mov	v16.16b, v5.16b
+               	mov	v16.16b, v4.16b
                	uabal2	v16.2d, v3.4s, v1.4s
                	mov	v1.16b, v16.16b
                	str	q1, [sp, #0x110]
@@ -1376,8 +1376,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x2
                	b.lt	<addr>
-               	xtn	v0.2s, v4.2d
-               	uqxtn	v1.2s, v4.2d
+               	xtn	v0.2s, v5.2d
+               	uqxtn	v1.2s, v5.2d
                	sub	x2, x29, #0xa0
                	stur	d0, [x29, #-0xa0]
                	sub	x3, x29, #0x8

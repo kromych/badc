@@ -33,13 +33,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	retq
-               	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %rcx # <addr>
                	jmp	<addr>
-               	incq	%rcx
-               	cmpq	$0xa, %rcx
+               	incq	%rax
+               	cmpq	$0xa, %rax
                	jne	<addr>
-               	cmpq	$0x16, %rax
+               	cmpq	$0x16, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x2a, %eax
                	retq
-               	addq	$0x2, %rax
+               	addq	$0x2, %rcx
                	jmp	<addr>
                	movl	$0x2, %eax
                	retq

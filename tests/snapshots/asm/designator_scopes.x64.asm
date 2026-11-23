@@ -121,25 +121,25 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0xe, %eax
                	jmp	<addr>
-               	movl	<rip>, %edx # <addr>
                	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rdx
-               	movl	<rip>, %esi # <addr>
-               	addq	%rdx, %rsi
                	movl	<rip>, %edx # <addr>
-               	addq	%rdx, %rsi
+               	addq	%rdx, %rcx
+               	movl	<rip>, %esi # <addr>
+               	addq	%rcx, %rsi
+               	movl	<rip>, %ecx # <addr>
+               	addq	%rcx, %rsi
                	cmpl	$0x17, %esi
                	je	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
                	testq	%rax, %rax
                	jne	<addr>
-               	testl	%edx, %edx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x9, %eax
                	jne	<addr>
-               	cmpl	$0x9, %ecx
+               	cmpl	$0x9, %edx
                	je	<addr>
                	movl	$0x6, %eax
                	jmp	<addr>

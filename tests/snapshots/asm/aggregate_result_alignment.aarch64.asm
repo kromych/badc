@@ -266,21 +266,21 @@ Disassembly of section .text:
                	sub	x1, x1, #0x2
                	add	x0, x0, x1
                	mov	x1, sp
-               	mov	x2, #0x2                // =2
-               	mov	x3, #0x202020202020202  // =144680345676153346
-               	str	x3, [sp]
-               	str	x3, [sp, #0x8]
-               	str	x3, [sp, #0x10]
-               	str	x3, [sp, #0x18]
+               	mov	x3, #0x2                // =2
+               	mov	x2, #0x202020202020202  // =144680345676153346
+               	str	x2, [sp]
+               	str	x2, [sp, #0x8]
+               	str	x2, [sp, #0x10]
+               	str	x2, [sp, #0x18]
                	and	x1, x1, #0xf
                	add	x0, x0, x1
                	add	x1, sp, #0x40
-               	str	x3, [sp, #0x40]
-               	str	x3, [sp, #0x48]
+               	str	x2, [sp, #0x40]
+               	str	x2, [sp, #0x48]
                	and	x1, x1, #0xf
                	add	x0, x0, x1
                	cbz	w0, <addr>
-               	mov	x0, x2
+               	mov	x0, x3
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

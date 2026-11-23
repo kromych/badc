@@ -32,45 +32,45 @@ Disassembly of section .text:
                	subq	$0x60, %rsp
                	andq	$-0x20, %rsp
                	movl	$0x1, 0x10(%rsp)
-               	leaq	0x20(%rsp), %rax
+               	leaq	0x20(%rsp), %rcx
                	movb	$0x2, 0x20(%rsp)
-               	leaq	(%rsp), %rcx
+               	leaq	(%rsp), %rdx
                	movb	$0x3, (%rsp)
-               	leaq	0x30(%rsp), %rdx
+               	leaq	0x30(%rsp), %rsi
                	movb	$0x4, 0x30(%rsp)
-               	leaq	0x40(%rsp), %rsi
+               	leaq	0x40(%rsp), %rdi
                	movl	$0x5, 0x40(%rsp)
-               	leaq	0x50(%rsp), %rdi
+               	leaq	0x50(%rsp), %r8
                	movb	$0x6, 0x50(%rsp)
                	movb	$0x7, -0x8(%rbp)
                	movl	$0x8, -0x7(%rbp)
-               	leaq	0x10(%rsp), %r8
-               	testb	$0xf, %r8b
+               	leaq	0x10(%rsp), %rax
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x1e, %eax
                	leave
                	retq
-               	testb	$0xf, %al
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x1f, %eax
                	leave
                	retq
-               	testb	$0x1f, %cl
+               	testb	$0x1f, %dl
                	je	<addr>
                	movl	$0x20, %eax
                	leave
                	retq
-               	testb	$0xf, %dl
+               	testb	$0xf, %sil
                	je	<addr>
                	movl	$0x21, %eax
                	leave
                	retq
-               	testb	$0xf, %sil
+               	testb	$0xf, %dil
                	je	<addr>
                	movl	$0x22, %eax
                	leave
                	retq
-               	testb	$0xf, %dil
+               	testb	$0xf, %r8b
                	je	<addr>
                	movl	$0x23, %eax
                	leave

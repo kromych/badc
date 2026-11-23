@@ -32,25 +32,25 @@ Disassembly of section .text:
                	movl	$0xa, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	movl	-0x8(%rbp), %ecx
-               	incq	%rcx
-               	movl	-0x8(%rbp), %edx
-               	addq	$0x2, %rdx
-               	movl	-0x8(%rbp), %esi
-               	addq	$0x3, %rsi
-               	movl	-0x8(%rbp), %edi
-               	addq	$0x64, %rdi
+               	leaq	0x1(%rcx), %rdx
+               	movl	-0x8(%rbp), %ecx
+               	leaq	0x2(%rcx), %rsi
+               	movl	-0x8(%rbp), %ecx
+               	leaq	0x3(%rcx), %rdi
+               	movl	-0x8(%rbp), %ecx
+               	addq	$0x64, %rcx
                	cmpl	$0xa, %eax
                	jne	<addr>
-               	cmpl	$0xb, %ecx
+               	cmpl	$0xb, %edx
                	jne	<addr>
-               	cmpl	$0xc, %edx
+               	cmpl	$0xc, %esi
                	jne	<addr>
-               	cmpl	$0xd, %esi
+               	cmpl	$0xd, %edi
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	cmpl	$0x6e, %edi
+               	cmpl	$0x6e, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave

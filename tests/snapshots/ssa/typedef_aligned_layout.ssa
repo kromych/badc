@@ -15,32 +15,32 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v9   Imm(0)                                           -> x0
     v10  Imm(1)                                           -> x0
     v11  StoreLocal { off=-13, value=v10, kind=I32 }      -> -
-    v12  LocalAddr(-14)                                   -> x0
-    v13  Imm(2)                                           -> x1
+    v12  LocalAddr(-14)                                   -> x1
+    v13  Imm(2)                                           -> x0
     v14  StoreLocal { off=-14, value=v13, kind=I8 }       -> -
-    v15  LocalAddr(-12)                                   -> x1
-    v16  Imm(3)                                           -> x2
+    v15  LocalAddr(-12)                                   -> x2
+    v16  Imm(3)                                           -> x0
     v17  StoreLocal { off=-12, value=v16, kind=I8 }       -> -
-    v18  LocalAddr(-15)                                   -> x2
-    v19  Imm(4)                                           -> x6
+    v18  LocalAddr(-15)                                   -> x6
+    v19  Imm(4)                                           -> x0
     v20  StoreLocal { off=-15, value=v19, kind=I8 }       -> -
-    v21  LocalAddr(-16)                                   -> x6
-    v22  Imm(5)                                           -> x7
+    v21  LocalAddr(-16)                                   -> x7
+    v22  Imm(5)                                           -> x0
     v23  StoreLocal { off=-16, value=v22, kind=I32 }      -> -
-    v24  LocalAddr(-17)                                   -> x7
-    v25  Imm(0)                                           -> x8
-    v26  Imm(6)                                           -> x8
+    v24  LocalAddr(-17)                                   -> x8
+    v25  Imm(0)                                           -> x0
+    v26  Imm(6)                                           -> x0
     v27  StoreLocal { off=-17, value=v26, kind=I8 }       -> -
-    v28  LocalAddr(-1)                                    -> x8
-    v29  Imm(7)                                           -> x8
+    v28  LocalAddr(-1)                                    -> x0
+    v29  Imm(7)                                           -> x0
     v30  StoreLocal { off=-1, value=v29, kind=I8 }        -> -
-    v31  LocalAddr(-1)                                    -> x8
-    v32  BinopI { op=add, lhs=v28, rhs_imm=1 }            -> x8
-    v33  Imm(8)                                           -> x8
+    v31  LocalAddr(-1)                                    -> x0
+    v32  BinopI { op=add, lhs=v28, rhs_imm=1 }            -> x0
+    v33  Imm(8)                                           -> x0
     v34  StoreLocal { off=-1, disp=1, value=v33, kind=I32 } -> -
-    v35  LocalAddr(-13)                                   -> x8
+    v35  LocalAddr(-13)                                   -> x0
     v36  Imm(16)                                          -> x9
-    v37  BinopI { op=and, lhs=v35, rhs_imm=15 }           -> x8
+    v37  BinopI { op=and, lhs=v35, rhs_imm=15 }           -> x0
     v38  BinopI { op=ne, lhs=v37, rhs_imm=0 }             -> x9
     terminator Bz { cond=v37, target=b2, fall=b1 }   (low word)   (exit_acc=v38)
   block 1  start_pc=0
@@ -54,10 +54,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v46  LifetimeEnd(-13)                                 -> -
     terminator Return(v39)   (exit_acc=v39)
   block 2  start_pc=0
-    v47  LocalAddr(-14)                                   -> x8
-    v48  Imm(16)                                          -> x8
-    v49  BinopI { op=and, lhs=v12, rhs_imm=15 }           -> x0
-    v50  BinopI { op=ne, lhs=v49, rhs_imm=0 }             -> x8
+    v47  LocalAddr(-14)                                   -> x0
+    v48  Imm(16)                                          -> x0
+    v49  BinopI { op=and, lhs=v12, rhs_imm=15 }           -> x1
+    v50  BinopI { op=ne, lhs=v49, rhs_imm=0 }             -> x0
     terminator Bz { cond=v49, target=b4, fall=b3 }   (low word)   (exit_acc=v50)
   block 3  start_pc=0
     v51  Imm(31)                                          -> x0
@@ -72,7 +72,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   block 4  start_pc=0
     v59  LocalAddr(-12)                                   -> x0
     v60  Imm(32)                                          -> x0
-    v61  BinopI { op=and, lhs=v15, rhs_imm=31 }           -> x1
+    v61  BinopI { op=and, lhs=v15, rhs_imm=31 }           -> x2
     v62  BinopI { op=ne, lhs=v61, rhs_imm=0 }             -> x0
     terminator Bz { cond=v61, target=b6, fall=b5 }   (low word)   (exit_acc=v62)
   block 5  start_pc=0
@@ -88,7 +88,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   block 6  start_pc=0
     v71  LocalAddr(-15)                                   -> x0
     v72  Imm(16)                                          -> x0
-    v73  BinopI { op=and, lhs=v18, rhs_imm=15 }           -> x2
+    v73  BinopI { op=and, lhs=v18, rhs_imm=15 }           -> x6
     v74  BinopI { op=ne, lhs=v73, rhs_imm=0 }             -> x0
     terminator Bz { cond=v73, target=b8, fall=b7 }   (low word)   (exit_acc=v74)
   block 7  start_pc=0
@@ -104,7 +104,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   block 8  start_pc=0
     v83  LocalAddr(-16)                                   -> x0
     v84  Imm(16)                                          -> x0
-    v85  BinopI { op=and, lhs=v21, rhs_imm=15 }           -> x6
+    v85  BinopI { op=and, lhs=v21, rhs_imm=15 }           -> x7
     v86  BinopI { op=ne, lhs=v85, rhs_imm=0 }             -> x0
     terminator Bz { cond=v85, target=b10, fall=b9 }   (low word)   (exit_acc=v86)
   block 9  start_pc=0
@@ -120,7 +120,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   block 10  start_pc=0
     v95  LocalAddr(-17)                                   -> x0
     v96  Imm(16)                                          -> x0
-    v97  BinopI { op=and, lhs=v24, rhs_imm=15 }           -> x7
+    v97  BinopI { op=and, lhs=v24, rhs_imm=15 }           -> x8
     v98  BinopI { op=ne, lhs=v97, rhs_imm=0 }             -> x0
     terminator Bz { cond=v97, target=b12, fall=b11 }   (low word)   (exit_acc=v98)
   block 11  start_pc=0

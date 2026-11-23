@@ -22,7 +22,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	mov	x21, x0
+               	mov	x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -30,7 +30,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	mov	x20, x0
+               	mov	x21, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -40,9 +40,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x24, x0
                	stur	wzr, [x29, #-0x10]
-               	cbz	x21, <addr>
-               	cbz	x22, <addr>
                	cbz	x20, <addr>
+               	cbz	x22, <addr>
+               	cbz	x21, <addr>
                	cbz	x23, <addr>
                	cbnz	x24, <addr>
                	mov	x0, #0x1                // =1
@@ -66,12 +66,12 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x60
                	ret
                	mov	x0, #0x61               // =97
-               	mov	x1, x21
+               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x31               // =49
-               	mov	x1, x21
+               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -98,17 +98,17 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x60
                	ret
                	mov	x0, #0x20               // =32
-               	mov	x1, x20
+               	mov	x1, x21
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
-               	mov	x1, x20
+               	mov	x1, x21
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xa                // =10
-               	mov	x1, x20
+               	mov	x1, x21
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

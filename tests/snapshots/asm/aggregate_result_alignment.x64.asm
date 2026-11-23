@@ -288,22 +288,22 @@ Disassembly of section .text:
                	subq	$0x2, %rcx
                	addq	%rcx, %rax
                	leaq	(%rsp), %rcx
-               	movl	$0x2, %edx
-               	movabsq	$0x202020202020202, %rsi # imm = 0x202020202020202
-               	movq	%rsi, (%rsp)
-               	movq	%rsi, 0x8(%rsp)
-               	movq	%rsi, 0x10(%rsp)
-               	movq	%rsi, 0x18(%rsp)
+               	movl	$0x2, %esi
+               	movabsq	$0x202020202020202, %rdx # imm = 0x202020202020202
+               	movq	%rdx, (%rsp)
+               	movq	%rdx, 0x8(%rsp)
+               	movq	%rdx, 0x10(%rsp)
+               	movq	%rdx, 0x18(%rsp)
                	andq	$0xf, %rcx
                	addq	%rcx, %rax
                	leaq	0x40(%rsp), %rcx
-               	movq	%rsi, 0x40(%rsp)
-               	movq	%rsi, 0x48(%rsp)
+               	movq	%rdx, 0x40(%rsp)
+               	movq	%rdx, 0x48(%rsp)
                	andq	$0xf, %rcx
                	addq	%rcx, %rax
                	testl	%eax, %eax
                	je	<addr>
-               	movq	%rdx, %rax
+               	movq	%rsi, %rax
                	leave
                	retq
                	movl	$0x3, %edi

@@ -571,58 +571,58 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	sub	x2, x29, #0x10
+               	sub	x7, x29, #0x10
                	ldr	x16, [x0]
-               	str	x16, [x2]
-               	sub	x3, x29, #0x60
+               	str	x16, [x7]
+               	sub	x8, x29, #0x60
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x3]
+               	stp	x16, x17, [x8]
                	ldur	q0, [x29, #-0x70]
                	rev16	v1.16b, v0.16b
-               	sub	x4, x29, #0x50
+               	sub	x2, x29, #0x50
                	stur	q1, [x29, #-0x50]
                	rev32	v1.16b, v0.16b
-               	sub	x5, x29, #0x40
+               	sub	x3, x29, #0x40
                	stur	q1, [x29, #-0x40]
                	rev64	v0.16b, v0.16b
-               	sub	x6, x29, #0x30
+               	sub	x4, x29, #0x30
                	stur	q0, [x29, #-0x30]
                	ldur	d0, [x29, #-0x10]
                	rev32	v0.4h, v0.4h
-               	sub	x7, x29, #0x8
+               	sub	x9, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	ldur	q0, [x29, #-0x60]
                	rev64	v0.4s, v0.4s
-               	sub	x8, x29, #0x20
+               	sub	x10, x29, #0x20
                	stur	q0, [x29, #-0x20]
                	mov	x0, #0x0                // =0
-               	ldrsb	x9, [x4, x0]
-               	eor	x10, x0, #0x1
-               	ldrsb	x10, [x1, x10]
-               	cmp	w9, w10
+               	ldrsb	x5, [x2, x0]
+               	eor	x6, x0, #0x1
+               	ldrsb	x6, [x1, x6]
+               	cmp	w5, w6
                	b.ne	<addr>
-               	ldrsb	x9, [x5, x0]
-               	eor	x10, x0, #0x3
-               	ldrsb	x10, [x1, x10]
-               	cmp	w9, w10
+               	ldrsb	x5, [x3, x0]
+               	eor	x6, x0, #0x3
+               	ldrsb	x6, [x1, x6]
+               	cmp	w5, w6
                	b.ne	<addr>
-               	ldrsb	x9, [x6, x0]
-               	eor	x10, x0, #0x7
-               	ldrsb	x10, [x1, x10]
-               	cmp	w9, w10
+               	ldrsb	x5, [x4, x0]
+               	eor	x6, x0, #0x7
+               	ldrsb	x6, [x1, x6]
+               	cmp	w5, w6
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	ldrsh	x4, [x7, x0, lsl #1]
+               	ldrsh	x2, [x9, x0, lsl #1]
                	eor	x1, x0, #0x1
-               	ldrsh	x5, [x2, x1, lsl #1]
-               	cmp	w4, w5
+               	ldrsh	x3, [x7, x1, lsl #1]
+               	cmp	w2, w3
                	b.ne	<addr>
-               	ldrsw	x4, [x8, x0, lsl #2]
-               	ldrsw	x1, [x3, x1, lsl #2]
-               	cmp	w4, w1
+               	ldrsw	x2, [x10, x0, lsl #2]
+               	ldrsw	x1, [x8, x1, lsl #2]
+               	cmp	w2, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4

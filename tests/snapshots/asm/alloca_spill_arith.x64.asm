@@ -162,15 +162,15 @@ Disassembly of section .text:
                	movzbq	(%rax), %rdx
                	leaq	0xffff(%rax), %rsi
                	movzbq	(%rsi), %rsi
-               	addq	%rsi, %rdx
-               	movzbq	0x2(%rax), %rsi
+               	addq	%rdx, %rsi
+               	movzbq	0x2(%rax), %rdx
                	movzbq	0x3(%rax), %rax
-               	addq	%rsi, %rax
+               	addq	%rax, %rdx
                	cmpq	$0xe0, %rcx
                	jne	<addr>
-               	cmpl	$0x8, %edx
+               	cmpl	$0x8, %esi
                	jne	<addr>
-               	cmpl	$0x7, %eax
+               	cmpl	$0x7, %edx
                	jne	<addr>
                	movl	$0x2a, %eax
                	leaq	-0x70(%rbp), %rsp

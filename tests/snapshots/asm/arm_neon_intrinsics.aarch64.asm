@@ -150,21 +150,21 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x50
-               	ldrb	w4, [x1, x2]
+               	ldrb	w6, [x1, x2]
                	mov	x1, x0
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.ge	<addr>
-               	ldrb	w5, [x3, x2]
-               	mov	x6, #0x1                // =1
-               	lsl	x6, x6, x0
-               	sxtw	x6, w6
-               	and	x5, x5, x6
-               	cbz	x5, <addr>
-               	lsl	x5, x4, x0
-               	and	x5, x5, #0xff
-               	eor	x1, x1, x5
+               	ldrb	w4, [x3, x2]
+               	mov	x5, #0x1                // =1
+               	lsl	x5, x5, x0
+               	sxtw	x5, w5
+               	and	x4, x4, x5
+               	cbz	x4, <addr>
+               	lsl	x4, x6, x0
+               	and	x4, x4, #0xff
+               	eor	x1, x1, x4
                	b	<addr>
                	sub	x0, x29, #0x20
                	ldrb	w0, [x0, x2]

@@ -155,13 +155,14 @@ Disassembly of section .text:
                	sete	%sil
                	movzbq	%sil, %rsi
                	testq	%rsi, %rsi
-               	cmovneq	%rcx, %rax
+               	movq	%rax, %rdi
+               	cmovneq	%rcx, %rdi
                	testl	%esi, %esi
                	jne	<addr>
-               	movl	-0x20(%rbp), %esi
-               	cmpl	$0x8, %esi
-               	jne	<addr>
+               	movl	-0x20(%rbp), %eax
                	cmpl	$0x8, %eax
+               	jne	<addr>
+               	cmpl	$0x8, %edi
                	je	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>

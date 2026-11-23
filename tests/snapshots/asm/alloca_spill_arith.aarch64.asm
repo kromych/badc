@@ -111,15 +111,15 @@ Disassembly of section .text:
                	add	x1, x14, x1
                	ldrb	w2, [x0]
                	ldrb	w3, [x12]
-               	add	x2, x2, x3
-               	ldrb	w3, [x0, #0x2]
+               	add	x3, x2, x3
+               	ldrb	w2, [x0, #0x2]
                	ldrb	w0, [x0, #0x3]
-               	add	x0, x3, x0
+               	add	x2, x2, x0
                	cmp	x1, #0xe0
                	b.ne	<addr>
-               	cmp	w2, #0x8
+               	cmp	w3, #0x8
                	b.ne	<addr>
-               	cmp	w0, #0x7
+               	cmp	w2, #0x7
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sub	sp, x29, #0x20

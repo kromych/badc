@@ -34,20 +34,20 @@ Disassembly of section .text:
                	ldr	x3, [x0, x6, lsl #3]
                	ldursw	x0, [x29, #-0x10]
                	ror	x7, x3, x0
-               	ldursw	x4, [x29, #-0x10]
+               	ldursw	x5, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.ge	<addr>
-               	lsl	x5, x2, x0
-               	and	x5, x3, x5
-               	cbz	x5, <addr>
-               	sub	x5, x0, x4
-               	and	x5, x5, #0x3f
-               	lsl	x5, x2, x5
-               	orr	x1, x1, x5
+               	lsl	x4, x2, x0
+               	and	x4, x3, x4
+               	cbz	x4, <addr>
+               	sub	x4, x0, x5
+               	and	x4, x4, #0x3f
+               	lsl	x4, x2, x4
+               	orr	x1, x1, x4
                	b	<addr>
                	cmp	x7, x1
                	b.ne	<addr>

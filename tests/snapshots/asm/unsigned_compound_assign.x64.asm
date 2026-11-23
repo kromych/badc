@@ -99,11 +99,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x20(%rbp), %rax
-               	xorl	%ecx, %ecx
-               	movabsq	$0xa00000000, %rdx      # imm = 0xA00000000
-               	movq	%rdx, -0x20(%rbp)
-               	movabsq	$0x1e00000014, %rdx     # imm = 0x1E00000014
-               	movq	%rdx, -0x18(%rbp)
+               	xorl	%edx, %edx
+               	movabsq	$0xa00000000, %rcx      # imm = 0xA00000000
+               	movq	%rcx, -0x20(%rbp)
+               	movabsq	$0x1e00000014, %rcx     # imm = 0x1E00000014
+               	movq	%rcx, -0x18(%rbp)
                	movl	$0x28, -0x10(%rbp)
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
@@ -116,6 +116,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	leave
                	retq

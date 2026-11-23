@@ -160,23 +160,23 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-0x50(%rbp), %rax
-               	movq	-0x50(%rbp), %rcx
-               	cmpq	$0x1, %rcx
+               	leaq	-0x50(%rbp), %rcx
+               	movq	-0x50(%rbp), %rax
+               	cmpq	$0x1, %rax
                	jne	<addr>
-               	movq	-0x30(%rbp), %rcx
-               	cmpq	$0x5, %rcx
+               	movq	-0x30(%rbp), %rax
+               	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rcx)
-               	movq	0x20(%rax), %r10
-               	movq	%r10, 0x20(%rcx)
+               	leaq	<rip>, %rax # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	0x10(%rcx), %xmm14
+               	movups	%xmm14, 0x10(%rax)
+               	movq	0x20(%rcx), %r10
+               	movq	%r10, 0x20(%rax)
                	callq	<addr>
                	cmpq	$0x3039, %rax           # imm = 0x3039
                	je	<addr>

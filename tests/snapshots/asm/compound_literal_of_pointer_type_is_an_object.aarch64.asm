@@ -28,20 +28,20 @@ Disassembly of section .text:
                	str	w16, [x0]
                	mov	x1, #0x7                // =7
                	stur	w1, [x29, #-0x40]
-               	sub	x2, x29, #0x38
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w16, [x1]
-               	str	w16, [x2]
+               	sub	x1, x29, #0x38
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	w16, [x2]
+               	str	w16, [x1]
                	stur	x0, [x29, #-0x30]
                	sub	x5, x29, #0x30
                	add	x3, x0, #0x1
                	stur	x3, [x29, #-0x28]
                	stur	x0, [x29, #-0x20]
-               	sub	x1, x29, #0x40
-               	stur	x1, [x29, #-0x18]
+               	sub	x2, x29, #0x40
+               	stur	x2, [x29, #-0x18]
                	sub	x6, x29, #0x18
-               	stur	x2, [x29, #-0x10]
+               	stur	x1, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
                	cmp	x5, x0
                	b.eq	<addr>
@@ -55,14 +55,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x1]
+               	ldrsw	x0, [x2]
                	cmp	w0, #0x7
                	b.ne	<addr>
-               	ldrsw	x0, [x2]
+               	ldrsw	x0, [x1]
                	cmp	w0, #0x9
                	b.ne	<addr>
-               	stur	x1, [x29, #-0x8]
-               	ldrsw	x0, [x1]
+               	stur	x2, [x29, #-0x8]
+               	ldrsw	x0, [x2]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

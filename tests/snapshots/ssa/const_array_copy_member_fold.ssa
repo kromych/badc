@@ -401,20 +401,20 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v283 Imm(0)                                           -> x2
     v284 Load { addr=v282, disp=0, kind=U8 }              -> x2
     v285 Imm(0)                                           -> x7
-    v286 Load { addr=v282, disp=2, kind=U8 }              -> x1
-    v287 Imm(0)                                           -> x7
-    v288 Imm(0)                                           -> x7
-    v289 BinopI { op=and, lhs=v284, rhs_imm=255 }         -> x7
-    v290 BinopI { op=ne, lhs=v284, rhs_imm=60 }           -> x2
-    v291 BinopI { op=and, lhs=v290, rhs_imm=4294967295 }  -> x7
-    v292 BinopI { op=eq, lhs=v284, rhs_imm=60 }           -> x7
-    v293 Imm(0)                                           -> x7
-    v294 Imm(0)                                           -> x7
+    v286 Load { addr=v282, disp=2, kind=U8 }              -> x7
+    v287 Imm(0)                                           -> x1
+    v288 Imm(0)                                           -> x1
+    v289 BinopI { op=and, lhs=v284, rhs_imm=255 }         -> x1
+    v290 BinopI { op=ne, lhs=v284, rhs_imm=60 }           -> x1
+    v291 BinopI { op=and, lhs=v290, rhs_imm=4294967295 }  -> x2
+    v292 BinopI { op=eq, lhs=v284, rhs_imm=60 }           -> x2
+    v293 Imm(0)                                           -> x2
+    v294 Imm(0)                                           -> x2
     terminator Bnz { cond=v290, target=b6, fall=b5 }   (exit_acc=v292)
   block 5  start_pc=0
-    v299 Imm(0)                                           -> x2
-    v300 Imm(0)                                           -> x2
-    v301 BinopI { op=and, lhs=v286, rhs_imm=255 }         -> x2
+    v299 Imm(0)                                           -> x1
+    v300 Imm(0)                                           -> x1
+    v301 BinopI { op=and, lhs=v286, rhs_imm=255 }         -> x1
     v302 BinopI { op=ne, lhs=v286, rhs_imm=1 }            -> x1
     v303 BinopI { op=and, lhs=v302, rhs_imm=4294967295 }  -> x2
     v304 BinopI { op=eq, lhs=v286, rhs_imm=1 }            -> x2

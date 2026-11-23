@@ -157,30 +157,30 @@ Disassembly of section .text:
                	csel	x4, x7, x4, eq
                	b	<addr>
                	ldur	q20, [x29, #-0xa0]
-               	mov	x4, #0x0                // =0
+               	mov	x3, #0x0                // =0
                	b	<addr>
-               	str	x3, [x6, x4, lsl #3]
-               	add	x4, x4, #0x1
-               	cmp	w4, #0x2
+               	str	x4, [x6, x3, lsl #3]
+               	add	x3, x3, #0x1
+               	cmp	w3, #0x2
                	b.ge	<addr>
-               	ldr	x3, [x2, #0x10]
-               	eor	x3, x3, x3, lsl #13
-               	eor	x3, x3, x3, lsr #7
-               	eor	x3, x3, x3, lsl #17
-               	str	x3, [x2, #0x10]
+               	ldr	x4, [x2, #0x10]
+               	eor	x4, x4, x4, lsl #13
+               	eor	x4, x4, x4, lsr #7
+               	eor	x4, x4, x4, lsl #17
+               	str	x4, [x2, #0x10]
                	sub	x6, x29, #0x90
-               	and	x5, x3, #0x7
+               	and	x5, x4, #0x7
                	cbnz	w5, <addr>
-               	mov	x3, #-0x8000000000000000 // =-9223372036854775808
+               	mov	x4, #-0x8000000000000000 // =-9223372036854775808
                	b	<addr>
                	cmp	w5, #0x1
                	b.ne	<addr>
-               	mov	x3, #0x7fffffffffffffff // =9223372036854775807
+               	mov	x4, #0x7fffffffffffffff // =9223372036854775807
                	b	<addr>
-               	eor	x3, x3, x3, lsl #13
-               	eor	x3, x3, x3, lsr #7
-               	eor	x3, x3, x3, lsl #17
-               	str	x3, [x2, #0x10]
+               	eor	x4, x4, x4, lsl #13
+               	eor	x4, x4, x4, lsr #7
+               	eor	x4, x4, x4, lsl #17
+               	str	x4, [x2, #0x10]
                	b	<addr>
                	ldur	q21, [x29, #-0x90]
                	mov	d4, v1.d[0]

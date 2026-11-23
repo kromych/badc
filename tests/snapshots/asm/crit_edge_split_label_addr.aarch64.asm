@@ -14,17 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <probe>:
-               	mov	x2, x0
+               	mov	x3, x0
                	mov	x0, #0xa                // =10
-               	adrp	x3, <page>
-               	ldrsw	x3, [x3, #0x28]
-               	cbz	x3, <addr>
+               	adrp	x2, <page>
+               	ldrsw	x2, [x2, #0x28]
+               	cbz	x2, <addr>
                	adr	x0, <addr>
                	adrp	x1, <page>
                	str	x0, [x1, #0x20]
                	mov	x0, #-0x1               // =-1
                	ret
-               	and	x2, x2, #0xf
+               	and	x2, x3, #0xf
                	mov	x17, #0x5               // =5
                	eor	x2, x2, x17
                	cbnz	w2, <addr>

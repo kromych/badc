@@ -214,7 +214,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x15
     v4   Imm(0)                                           -> x0
-    v5   Imm(1)                                           -> x12
+    v5   Imm(1)                                           -> x3
     v6   Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v5)
   block 1  start_pc=0
@@ -226,11 +226,11 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v91  Imm(0)                                           -> x0
     v92  Intrinsic { kind=AllocaRestore, args=[v11] }     -> x0
     v93  Extend { value=v7, kind=I32 }                    -> x0
-    v94  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x12
+    v94  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x3
     v95  Extend { value=v94, kind=I32, nsw }              -> x0
     terminator Jmp(b2)   (exit_acc=v94)
   block 2  start_pc=0
-    v7   Phi { incoming=[b0:v5, b1:v94], kind=I64 }       -> x12
+    v7   Phi { incoming=[b0:v5, b1:v94], kind=I64 }       -> x3
     v8   Phi { incoming=[b0:v3, b1:v88], kind=I64 }       -> x15
     v9   Extend { value=v7, kind=I32 }                    -> x0
     v10  BinopI { op=le, lhs=v7, rhs_imm=4 }              -> x0
@@ -242,7 +242,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v14  BinopI { op=mul, lhs=v7, rhs_imm=5 }             -> x0
     v15  Extend { value=v14, kind=I32, nsw }              -> x1
     v16  BinopI { op=add, lhs=v14, rhs_imm=1 }            -> x0
-    v17  Extend { value=v16, kind=I32, nsw }              -> x3
+    v17  Extend { value=v16, kind=I32, nsw }              -> x12
     v18  Imm(0)                                           -> x0
     v19  Intrinsic { kind=Alloca, args=[v17] }            -> x13
     v20  Imm(0)                                           -> x0

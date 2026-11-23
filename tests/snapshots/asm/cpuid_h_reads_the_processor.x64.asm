@@ -34,23 +34,21 @@ Disassembly of section .text:
                	movl	%eax, -0x28(%rbp)
                	movq	%rax, %rcx
                	cpuid
-               	movq	%rax, %rsi
-               	movq	%rbx, %rdi
-               	leaq	-0x28(%rbp), %r8
+               	movq	%rax, %rdi
+               	movq	%rbx, %r9
+               	leaq	-0x28(%rbp), %rsi
                	xorl	%eax, %eax
                	cpuid
-               	movq	%rax, -0x38(%rbp)
-               	testq	%r8, %r8
+               	movq	%rax, %r8
+               	testq	%rsi, %rsi
                	je	<addr>
                	movl	%ebx, -0x28(%rbp)
-               	movq	0x28(%rsp), %r10
-               	testl	%r10d, %r10d
+               	testl	%r8d, %r8d
                	je	<addr>
-               	movq	0x28(%rsp), %rax
-               	cmpl	%esi, %eax
+               	cmpl	%edi, %r8d
                	jne	<addr>
                	movl	-0x28(%rbp), %eax
-               	cmpl	%edi, %eax
+               	cmpl	%r9d, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -75,19 +73,23 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x20(%rbp), %rdi
                	leaq	<rip>, %rsi
+               	movq	%r8, 0x28(%rsp)
                	movq	%rcx, 0x20(%rsp)
                	movq	%rdx, 0x18(%rsp)
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rax, %rbx
+               	movq	0x28(%rsp), %r8
                	movq	0x20(%rsp), %rcx
                	movq	0x18(%rsp), %rdx
                	leaq	-0x20(%rbp), %rdi
                	leaq	<rip>, %rsi
+               	movq	%r8, 0x28(%rsp)
                	movq	%rcx, 0x20(%rsp)
                	movq	%rdx, 0x18(%rsp)
                	callq	<addr>
                	movslq	%eax, %rax
+               	movq	0x28(%rsp), %r8
                	movq	0x20(%rsp), %rcx
                	movq	0x18(%rsp), %rdx
                	testq	%rbx, %rbx
@@ -135,7 +137,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	cpuid
                	movq	%rcx, %rdi
-               	movq	%rdx, %r8
+               	movq	%rdx, %r9
                	xorl	%eax, %eax
                	cpuid
                	testl	%eax, %eax
@@ -145,7 +147,7 @@ Disassembly of section .text:
                	movl	%ebx, -0x8(%rbp)
                	cmpl	%edi, %ecx
                	jne	<addr>
-               	cmpl	%r8d, %edx
+               	cmpl	%r9d, %edx
                	jne	<addr>
                	testl	$0x4000000, %edx        # imm = 0x4000000
                	jne	<addr>
@@ -168,8 +170,7 @@ Disassembly of section .text:
                	movl	%ebx, -0x8(%rbp)
                	testl	$0x20000000, %edx       # imm = 0x20000000
                	je	<addr>
-               	movq	0x28(%rsp), %rdi
-               	incq	%rdi
+               	leaq	0x1(%r8), %rdi
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	andq	%rdi, %rax
                	cpuid
@@ -185,8 +186,7 @@ Disassembly of section .text:
                	je	<addr>
                	cmpl	%esi, %eax
                	jae	<addr>
-               	movq	0x28(%rsp), %rax
-               	cmpl	$0x7, %eax
+               	cmpl	$0x7, %r8d
                	jb	<addr>
                	movl	$0x7, %eax
                	xorl	%ecx, %ecx

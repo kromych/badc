@@ -60,28 +60,28 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	sub	x1, x29, #0x40
-               	stp	xzr, xzr, [x1]
-               	stp	xzr, xzr, [x1, #0x10]
-               	stp	xzr, xzr, [x1, #0x20]
-               	stp	xzr, xzr, [x1, #0x30]
-               	mov	x2, #0x0                // =0
-               	mov	x0, x2
+               	sub	x4, x29, #0x40
+               	stp	xzr, xzr, [x4]
+               	stp	xzr, xzr, [x4, #0x10]
+               	stp	xzr, xzr, [x4, #0x20]
+               	stp	xzr, xzr, [x4, #0x30]
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
                	b	<addr>
-               	str	x4, [x3]
-               	add	x4, x0, x0, lsl #3
-               	and	x4, x4, #0xff
-               	strb	w4, [x3, #0x9]
+               	str	x3, [x2]
+               	add	x3, x0, x0, lsl #3
+               	and	x3, x3, #0xff
+               	strb	w3, [x2, #0x9]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	add	x3, x1, x0, lsl #4
+               	add	x2, x4, x0, lsl #4
                	cmp	w0, #0x3
                	b.ge	<addr>
-               	add	x4, x0, #0x1
-               	add	x4, x1, x4, lsl #4
+               	add	x3, x0, #0x1
+               	add	x3, x4, x3, lsl #4
                	b	<addr>
-               	mov	x4, x2
+               	mov	x3, x1
                	b	<addr>
                	sub	x0, x29, #0x40
                	bl	<addr>

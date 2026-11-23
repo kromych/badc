@@ -56,10 +56,10 @@ Disassembly of section .text:
                	cmp	x22, x0
                	cset	x0, lo
                	ldr	x16, [sp, #0x28]
-               	sub	x0, x16, x0
+               	sub	x2, x16, x0
                	cmn	x1, #0x1
                	b.ne	<addr>
-               	cbz	x0, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x22, [sp, #0x10]

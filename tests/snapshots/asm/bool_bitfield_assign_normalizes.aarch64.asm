@@ -14,19 +14,19 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x0, <page>
-               	ldrb	w1, [x0, #0xc]
-               	and	x2, x1, #0x1
+               	adrp	x1, <page>
+               	ldrb	w0, [x1, #0xc]
+               	and	x2, x0, #0x1
                	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	ret
-               	ubfx	x1, x1, #1, #1
-               	cmp	w1, #0x1
+               	ubfx	x0, x0, #1, #1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x13               // =19
                	ret
-               	ldr	w0, [x0, #0xc]
+               	ldr	w0, [x1, #0xc]
                	ubfx	x1, x0, #2, #3
                	cmp	w1, #0x1
                	b.eq	<addr>

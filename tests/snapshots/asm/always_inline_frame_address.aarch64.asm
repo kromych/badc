@@ -53,38 +53,38 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
+               	adrp	x2, <page>
+               	ldr	x0, [x2, #0x30]
+               	cbz	x0, <addr>
                	adrp	x1, <page>
-               	ldr	x2, [x1, #0x30]
-               	cbz	x2, <addr>
-               	adrp	x0, <page>
-               	ldr	x0, [x0, <lo12>]
-               	cbnz	x0, <addr>
+               	ldr	x1, [x1, <lo12>]
+               	cbnz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x3, <page>
                	ldr	x3, [x3, <lo12>]
-               	cmp	x2, x3
+               	cmp	x0, x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	cmp	x0, x2
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	cmp	x0, x2
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x1, #0x30]
-               	cmp	x1, x0
+               	ldr	x0, [x2, #0x30]
+               	cmp	x0, x1
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10

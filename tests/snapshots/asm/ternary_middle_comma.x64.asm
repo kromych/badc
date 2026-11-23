@@ -37,12 +37,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x18, %rsp
+               	pushq	%rbx
                	movl	$0x2a, %edi
                	callq	<addr>
-               	cmpl	$0x80, %eax
+               	movq	%rax, %rbx
+               	cmpl	$0x80, %ebx
                	jae	<addr>
-               	movq	%rax, %rdx
+               	movq	%rbx, %rdx
                	andq	$0xff, %rdx
                	movl	$0x1, %esi
                	cmpl	$0x2a, %edx
@@ -51,24 +53,19 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
+               	popq	%rbx
                	leave
                	retq
                	xorl	%edi, %edi
-               	movq	%rax, 0x8(%rsp)
                	callq	<addr>
                	movq	%rax, 0x18(%rsp)
-               	movq	0x8(%rsp), %rax
                	xorl	%edi, %edi
-               	movq	%rax, 0x8(%rsp)
                	callq	<addr>
                	movq	%rax, 0x10(%rsp)
-               	movq	0x8(%rsp), %rax
                	xorl	%edi, %edi
-               	movq	%rax, 0x8(%rsp)
                	callq	<addr>
                	movq	%rax, %r8
-               	movq	0x8(%rsp), %rax
-               	testl	%eax, %eax
+               	testl	%ebx, %ebx
                	jle	<addr>
                	movl	$0xc8, %edi
                	callq	<addr>
@@ -81,9 +78,11 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax
+               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
+               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rdi
@@ -93,6 +92,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x4, %eax
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x63, %esi

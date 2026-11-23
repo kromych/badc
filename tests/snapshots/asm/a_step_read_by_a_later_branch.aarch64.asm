@@ -14,29 +14,29 @@ Disassembly of section .text:
                	brk	#0x1
 
 <separators>:
-               	mov	x1, x0
-               	add	x0, x1, #0x2
-               	mov	x2, #0xaaab             // =43691
-               	movk	x2, #0xaaaa, lsl #16
-               	movk	x2, #0xaaaa, lsl #32
-               	movk	x2, #0xaaaa, lsl #48
-               	umulh	x2, x0, x2
-               	lsr	x2, x2, #1
-               	add	x2, x2, x2, lsl #1
-               	sub	x2, x0, x2
+               	mov	x2, x0
+               	add	x0, x2, #0x2
+               	mov	x1, #0xaaab             // =43691
+               	movk	x1, #0xaaaa, lsl #16
+               	movk	x1, #0xaaaa, lsl #32
+               	movk	x1, #0xaaaa, lsl #48
+               	umulh	x1, x0, x1
+               	lsr	x1, x1, #1
+               	add	x1, x1, x1, lsl #1
+               	sub	x1, x0, x1
                	mov	x0, #0x0                // =0
-               	subs	x1, x1, #0x1
+               	subs	x2, x2, #0x1
                	b.lo	<addr>
-               	sub	x3, x2, #0x1
-               	cbnz	x2, <addr>
-               	cbz	x1, <addr>
+               	sub	x3, x1, #0x1
+               	cbnz	x1, <addr>
+               	cbz	x2, <addr>
                	add	x0, x0, #0x1
-               	mov	x2, #0x2                // =2
+               	mov	x1, #0x2                // =2
                	b	<addr>
-               	mov	x2, x3
+               	mov	x1, x3
                	b	<addr>
-               	mov	x2, x3
-               	subs	x1, x1, #0x1
+               	mov	x1, x3
+               	subs	x2, x2, #0x1
                	b.hs	<addr>
                	ret
 

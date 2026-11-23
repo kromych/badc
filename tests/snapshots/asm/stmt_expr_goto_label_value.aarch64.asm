@@ -24,16 +24,16 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	mov	x2, #0x0                // =0
                	mov	x4, x2
-               	mov	x6, x2
                	mov	x5, x2
+               	mov	x6, x2
                	b	<addr>
                	add	x4, x4, #0x1
                	cmp	w2, #0x64
                	b.hs	<addr>
                	cmp	w4, #0xc8
                	b.hs	<addr>
-               	add	x6, x6, #0x1
-               	add	x5, x5, x2
+               	add	x5, x5, #0x1
+               	add	x6, x6, x2
                	sub	x3, x29, #0x10
                	add	x1, x2, #0x1
                	mov	x2, #0x64               // =100
@@ -58,13 +58,13 @@ Disassembly of section .text:
                	cmp	x0, #0x64
                	csel	x2, x2, x0, hi
                	b	<addr>
-               	cmp	x6, #0x5
+               	cmp	x5, #0x5
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x5, #0xcb
+               	cmp	x6, #0xcb
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10

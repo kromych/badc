@@ -96,13 +96,13 @@ Disassembly of section .text:
                	movl	$0x7f, %esi
                	movl	$0x40, %edx
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x40(%rbp), %rcx
                	movl	$0x5050505, -0x3c(%rbp) # imm = 0x5050505
                	movl	$0x5050505, -0x38(%rbp) # imm = 0x5050505
-               	movsbq	-0x3d(%rbp), %rcx
-               	cmpl	$0x7f, %ecx
+               	movsbq	-0x3d(%rbp), %rax
+               	cmpl	$0x7f, %eax
                	jne	<addr>
-               	leaq	0x4(%rax), %rcx
+               	addq	$0x4, %rcx
                	xorl	%eax, %eax
                	movsbq	(%rcx,%rax), %rdx
                	cmpl	$0x5, %edx

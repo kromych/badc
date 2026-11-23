@@ -80,9 +80,9 @@ Disassembly of section .text:
                	addq	$0x10, 0x8(%r11)
                	movq	%r10, %rax
                	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
-               	leaq	-0x18(%rbp), %rdx
-               	movq	%rdx, %r11
+               	movq	0x8(%rax), %rdx
+               	leaq	-0x18(%rbp), %rax
+               	movq	%rax, %r11
                	movl	(%r11), %r10d
                	cmpq	$0x30, %r10
                	jae	<addr>
@@ -91,17 +91,17 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
-               	movq	%r10, %rdx
-               	movq	(%rdx), %rdx
-               	leaq	-0x18(%rbp), %rsi
+               	movq	%r10, %rax
+               	movq	(%rax), %rsi
+               	leaq	-0x18(%rbp), %rax
                	cmpq	$0x6f, %rcx
                	jne	<addr>
-               	cmpq	$0xde, %rax
+               	cmpq	$0xde, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	cmpq	$0x309, %rdx            # imm = 0x309
+               	cmpq	$0x309, %rsi            # imm = 0x309
                	je	<addr>
                	movl	$0x2, %eax
                	leave

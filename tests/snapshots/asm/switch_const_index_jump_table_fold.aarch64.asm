@@ -30,41 +30,41 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
-               	ldursw	x2, [x29, #-0x8]
-               	cmp	x2, #0x8
-               	b.hs	<addr>
-               	adrp	x17, <page>
-               	add	x17, x17, <lo12>
-               	ldr	x17, [x17, x2, lsl #3]
-               	br	x17
-               	mov	x2, #0x7                // =7
+               	mov	x2, #0x0                // =0
                	stur	w2, [x29, #-0x8]
-               	ldursw	x2, [x29, #-0x8]
-               	cmp	x2, #0x8
+               	ldursw	x1, [x29, #-0x8]
+               	cmp	x1, #0x8
                	b.hs	<addr>
                	adrp	x17, <page>
                	add	x17, x17, <lo12>
-               	ldr	x17, [x17, x2, lsl #3]
+               	ldr	x17, [x17, x1, lsl #3]
+               	br	x17
+               	mov	x1, #0x7                // =7
+               	stur	w1, [x29, #-0x8]
+               	ldursw	x1, [x29, #-0x8]
+               	cmp	x1, #0x8
+               	b.hs	<addr>
+               	adrp	x17, <page>
+               	add	x17, x17, <lo12>
+               	ldr	x17, [x17, x1, lsl #3]
                	br	x17
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x9                // =9
-               	stur	w2, [x29, #-0x8]
-               	ldursw	x2, [x29, #-0x8]
-               	cmp	x2, #0x8
+               	mov	x1, #0x9                // =9
+               	stur	w1, [x29, #-0x8]
+               	ldursw	x1, [x29, #-0x8]
+               	cmp	x1, #0x8
                	b.hs	<addr>
                	adrp	x17, <page>
                	add	x17, x17, <lo12>
-               	ldr	x17, [x17, x2, lsl #3]
+               	ldr	x17, [x17, x1, lsl #3]
                	br	x17
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x1
+               	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -48,16 +48,16 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x10]
                	add	x0, x0, x1
                	ldr	x1, [sp, #0x18]
-               	add	x0, x0, x1
-               	ldrb	w1, [sp, #0x20]
-               	cmp	w1, #0x1
+               	add	x1, x0, x1
+               	ldrb	w0, [sp, #0x20]
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x1, lsl #12   // =0x1000
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x0, #0x32
+               	sub	x0, x1, #0x32
                	add	sp, sp, #0x1, lsl #12   // =0x1000
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

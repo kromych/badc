@@ -22,42 +22,42 @@ Disassembly of section .text:
                	ldr	d0, [x0]
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fsub	d2, d0, d1
+               	fsub	d1, d0, d1
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x8]
-               	fcmpe	d2, d0
+               	fcmpe	d1, d0
                	b.pl	<addr>
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x10]
-               	fcmpe	d2, d1
+               	ldr	d2, [x16, #0x10]
+               	fcmpe	d1, d2
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	d2, [x0, #0x8]
+               	ldr	d1, [x0, #0x8]
                	adrp	x16, <page>
                	ldr	d3, [x16, #0x18]
-               	fsub	d2, d2, d3
-               	fcmpe	d2, d0
+               	fsub	d1, d1, d3
+               	fcmpe	d1, d0
                	b.pl	<addr>
-               	fcmpe	d2, d1
+               	fcmpe	d1, d2
                	b.gt	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	d2, [x0, #0x10]
+               	ldr	d1, [x0, #0x10]
                	fmov	d3, #1.00000000
-               	fsub	d2, d2, d3
-               	fcmpe	d2, d0
+               	fsub	d1, d1, d3
+               	fcmpe	d1, d0
                	b.pl	<addr>
-               	fcmpe	d2, d1
+               	fcmpe	d1, d2
                	b.gt	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldr	d2, [x0, #0x18]
+               	ldr	d1, [x0, #0x18]
                	fmov	d3, #-2.00000000
-               	fsub	d2, d2, d3
-               	fcmpe	d2, d0
+               	fsub	d1, d1, d3
+               	fcmpe	d1, d0
                	b.pl	<addr>
-               	fcmpe	d2, d1
+               	fcmpe	d1, d2
                	b.gt	<addr>
                	mov	x0, #0x4                // =4
                	ret

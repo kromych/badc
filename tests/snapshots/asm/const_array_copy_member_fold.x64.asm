@@ -82,10 +82,10 @@ Disassembly of section .text:
                	shlq	$0x2, %rcx
                	addq	%rsi, %rcx
                	movzbq	(%rcx), %rdx
-               	movzbq	0x2(%rcx), %rcx
+               	movzbq	0x2(%rcx), %rdi
                	cmpl	$0x3c, %edx
                	jne	<addr>
-               	cmpl	$0x1, %ecx
+               	cmpl	$0x1, %edi
                	je	<addr>
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx

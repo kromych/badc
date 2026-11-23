@@ -18,16 +18,16 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	w1, [x0]
-               	lsl	x2, x1, #6
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	w0, [x1]
+               	lsl	x2, x0, #6
                	sxtw	x2, w2
-               	asr	x2, x2, #6
-               	mov	x3, #0x5                // =5
-               	eor	x1, x3, x1, lsr #26
-               	cbnz	w1, <addr>
-               	add	x0, x0, x2, lsl #2
+               	asr	x3, x2, #6
+               	mov	x2, #0x5                // =5
+               	eor	x0, x2, x0, lsr #26
+               	cbnz	w0, <addr>
+               	add	x0, x1, x3, lsl #2
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cmp	x0, x1

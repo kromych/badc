@@ -34,20 +34,20 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xbad1, %eax           # imm = 0xBAD1
                	retq
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x8, %rcx
-               	movq	(%rcx), %rdx
+               	movq	%fs:0x0, %rdx
+               	addq	$-0x8, %rdx
+               	movq	(%rdx), %rcx
                	leaq	<rip>, %rsi # <addr>
                	addq	$0x8, %rsi
-               	cmpq	%rsi, %rdx
+               	cmpq	%rsi, %rcx
                	jne	<addr>
-               	movl	(%rdx), %edx
-               	cmpl	$0x3, %edx
+               	movl	(%rcx), %ecx
+               	cmpl	$0x3, %ecx
                	je	<addr>
                	movl	$0xbad2, %eax           # imm = 0xBAD2
                	retq
                	movq	$0x0, (%rax)
-               	movq	$0x0, (%rcx)
+               	movq	$0x0, (%rdx)
                	movl	$0x63, %eax
                	retq
 

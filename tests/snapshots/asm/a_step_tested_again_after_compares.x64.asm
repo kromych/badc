@@ -81,32 +81,32 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	leaq	-0x40(%rbp), %rcx
+               	leaq	-0x40(%rbp), %rdi
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
-               	movups	%xmm14, 0x10(%rcx)
-               	movups	%xmm14, 0x20(%rcx)
-               	movups	%xmm14, 0x30(%rcx)
-               	xorl	%edx, %edx
-               	movq	%rdx, %rax
+               	movups	%xmm14, (%rdi)
+               	movups	%xmm14, 0x10(%rdi)
+               	movups	%xmm14, 0x20(%rdi)
+               	movups	%xmm14, 0x30(%rdi)
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rax
                	jmp	<addr>
-               	movq	%rdi, (%rsi)
-               	leaq	(%rax,%rax,8), %rdi
-               	andq	$0xff, %rdi
-               	movb	%dil, 0x9(%rsi)
+               	movq	%rsi, (%rdx)
+               	leaq	(%rax,%rax,8), %rsi
+               	andq	$0xff, %rsi
+               	movb	%sil, 0x9(%rdx)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movq	%rax, %rsi
-               	shlq	$0x4, %rsi
-               	addq	%rcx, %rsi
+               	movq	%rax, %rdx
+               	shlq	$0x4, %rdx
+               	addq	%rdi, %rdx
                	cmpl	$0x3, %eax
                	jge	<addr>
-               	leaq	0x1(%rax), %rdi
-               	shlq	$0x4, %rdi
-               	addq	%rcx, %rdi
+               	leaq	0x1(%rax), %rsi
+               	shlq	$0x4, %rsi
+               	addq	%rdi, %rsi
                	jmp	<addr>
-               	movq	%rdx, %rdi
+               	movq	%rcx, %rsi
                	jmp	<addr>
                	leaq	-0x40(%rbp), %rdi
                	callq	<addr>

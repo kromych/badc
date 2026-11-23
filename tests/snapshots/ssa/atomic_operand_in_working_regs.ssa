@@ -12,37 +12,37 @@ fn ent_pc=0 n_params=8 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   ParamRef(3, kind=I64)                            -> [spill 1]
     v8   Imm(0)                                           -> x0
-    v9   ParamRef(4, kind=I64)                            -> x8
+    v9   ParamRef(4, kind=I64)                            -> [spill 2]
     v10  Imm(0)                                           -> x0
     v11  ParamRef(5, kind=I64)                            -> x9
     v12  Imm(0)                                           -> x0
     v13  Imm(100)                                         -> x0
     v14  Imm(0)                                           -> x1
-    v15  ImmData(8)                                       -> x2
-    v16  Imm(0)                                           -> x1
-    v17  Imm(5)                                           -> x1
+    v15  ImmData(8)                                       -> x1
+    v16  Imm(0)                                           -> x2
+    v17  Imm(5)                                           -> x2
     v18  AtomicCas { addr=v15, expected=v13, desired=v17, width=8, order=SeqCst } -> x1
     v19  BinopI { op=eq, lhs=v18, rhs_imm=100 }           -> x2
-    v20  Select { cond=v19, a=v13, b=v18, kind=I64 }      -> x0
+    v20  Select { cond=v19, a=v13, b=v18, kind=I64 }      -> x8
     terminator Jmp(b1)
   block 1  start_pc=0
-    v22  Copy { value=v20, fp=false }                     -> x1
-    v23  Imm(0)                                           -> x1
-    v24  ImmData(8)                                       -> x1
-    v25  Imm(0)                                           -> [spill 2]
-    v26  Imm(0)                                           -> [spill 2]
-    v27  Binop { op=add, lhs=v1, rhs=v3 }                 -> [spill 2]
+    v22  Copy { value=v20, fp=false }                     -> x0
+    v23  Imm(0)                                           -> x0
+    v24  ImmData(8)                                       -> x0
+    v25  Imm(0)                                           -> x1
+    v26  Imm(0)                                           -> x1
+    v27  Binop { op=add, lhs=v1, rhs=v3 }                 -> x1
     v28  AtomicRmw { op=Add, addr=v24, value=v27, width=8, order=SeqCst } -> x1
-    v29  Imm(0)                                           -> [spill 2]
-    v30  Extend { value=v19, kind=I32 }                   -> [spill 2]
-    v31  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> [spill 2]
+    v29  Imm(0)                                           -> x0
+    v30  Extend { value=v19, kind=I32 }                   -> x0
+    v31  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x0
     terminator Bz { cond=v19, target=b3, fall=b2 }   (exit_acc=v19)
   block 2  start_pc=0
     v32  Imm(1)                                           -> x0
     v33  LifetimeEnd(0)                                   -> -
     terminator Return(v32)   (exit_acc=v32)
   block 3  start_pc=0
-    v34  Imm(0)                                           -> x2
+    v34  Imm(0)                                           -> x0
     v35  BinopI { op=ne, lhs=v20, rhs_imm=9 }             -> x0
     terminator Bz { cond=v35, target=b5, fall=b4 }   (exit_acc=v35)
   block 4  start_pc=0

@@ -81,14 +81,14 @@ Disassembly of section .text:
                	movq	-0x10(%rbp), %rcx
                	addq	%rcx, %rax
                	movq	-0x8(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movq	0x8(%rsp), %rcx
-               	cmpq	$0x1c, %rcx
+               	addq	%rax, %rcx
+               	movq	0x8(%rsp), %rax
+               	cmpq	$0x1c, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	cmpq	$-0x2, %rax
+               	cmpq	$-0x2, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	leave

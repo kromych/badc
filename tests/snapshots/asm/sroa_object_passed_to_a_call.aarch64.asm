@@ -38,10 +38,10 @@ Disassembly of section .text:
                	add	x0, x0, #0x2
                	add	x0, x0, #0x2
                	add	x0, x0, #0x2
-               	add	x0, x0, #0x7
+               	add	x1, x0, #0x7
                	cmp	x20, #0xf
                	b.ne	<addr>
-               	cmp	x0, #0xf
+               	cmp	x1, #0xf
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x40]

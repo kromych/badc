@@ -56,11 +56,11 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x7]
                	ldrb	w1, [x0, #0x4]
                	ldrb	w2, [x0, #0x5]
-               	ldrb	w0, [x0, #0x6]
+               	ldrb	w3, [x0, #0x6]
                	cmp	w1, #0x4
                	b.ne	<addr>
                	cbnz	w2, <addr>
-               	cmp	w0, #0x1
+               	cmp	w3, #0x1
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
@@ -69,10 +69,10 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x8]
                	add	x2, x1, x2, lsl #2
                	ldrb	w3, [x2]
-               	ldrb	w2, [x2, #0x2]
+               	ldrb	w4, [x2, #0x2]
                	cmp	w3, #0x3c
                	b.ne	<addr>
-               	cmp	w2, #0x1
+               	cmp	w4, #0x1
                	b.eq	<addr>
                	adrp	x2, <page>
                	ldrsw	x3, [x2, #0x30]

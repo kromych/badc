@@ -69,10 +69,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x5, x1
-               	ldr	x6, [x5]
+               	mov	x6, x1
+               	ldr	x5, [x6]
                	str	x0, [sp]
-               	str	x6, [sp, #0x8]
+               	str	x5, [sp, #0x8]
                	str	x2, [sp, #0x10]
                	ldr	x2, [sp]
                	ldr	x3, [sp, #0x8]
@@ -82,11 +82,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	stxr	w1, x4, [x2]
                	cbnz	w1, <addr>
-               	cmp	x0, x6
-               	cset	x1, eq
-               	cbnz	w1, <addr>
-               	str	x0, [x5]
-               	mov	x0, x1
+               	mov	x2, x0
+               	cmp	x2, x5
+               	cset	x0, eq
+               	cbnz	w0, <addr>
+               	str	x2, [x6]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

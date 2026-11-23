@@ -24,22 +24,22 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xbad1             // =47825
                	ret
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x18
-               	ldr	x2, [x1]
+               	mrs	x2, TPIDR_EL0
+               	add	x2, x2, #0x0, lsl #12   // =0x0
+               	add	x2, x2, #0x18
+               	ldr	x1, [x2]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	add	x3, x3, #0x8
-               	cmp	x2, x3
+               	cmp	x1, x3
                	b.ne	<addr>
-               	ldrsw	x2, [x2]
-               	cmp	w2, #0x3
+               	ldrsw	x1, [x1]
+               	cmp	w1, #0x3
                	b.eq	<addr>
                	mov	x0, #0xbad2             // =47826
                	ret
                	str	xzr, [x0]
-               	str	xzr, [x1]
+               	str	xzr, [x2]
                	mov	x0, #0x63               // =99
                	ret
 

@@ -155,22 +155,24 @@ Disassembly of section .text:
                	movabsq	$0x3837363534333231, %r10 # imm = 0x3837363534333231
                	crc32q	%r10, %rax
                	movl	%esi, %edx
-               	movl	$0x39, %r10d
-               	crc32b	%r10b, %edx
-               	movl	%edi, %esi
+               	movq	%rdx, %rsi
                	movl	$0x39, %r10d
                	crc32b	%r10b, %esi
-               	movl	%eax, %eax
+               	movl	%edi, %edx
                	movl	$0x39, %r10d
-               	crc32b	%r10b, %eax
+               	crc32b	%r10b, %edx
+               	movl	%eax, %eax
+               	movq	%rax, %rdi
+               	movl	$0x39, %r10d
+               	crc32b	%r10b, %edi
                	xorq	$-0x1, %rcx
                	cmpl	$0xe3069283, %ecx       # imm = 0xE3069283
                	jne	<addr>
-               	xorq	$-0x1, %rdx
-               	cmpl	$0xe3069283, %edx       # imm = 0xE3069283
-               	jne	<addr>
                	xorq	$-0x1, %rsi
                	cmpl	$0xe3069283, %esi       # imm = 0xE3069283
+               	jne	<addr>
+               	xorq	$-0x1, %rdx
+               	cmpl	$0xe3069283, %edx       # imm = 0xE3069283
                	je	<addr>
                	movl	$0x2f, %eax
                	popq	%rbx
@@ -179,6 +181,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
+               	movq	%rdi, %rax
                	xorq	$-0x1, %rax
                	cmpl	$0xe3069283, %eax       # imm = 0xE3069283
                	je	<addr>

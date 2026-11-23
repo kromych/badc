@@ -56,13 +56,13 @@ Disassembly of section .text:
                	movq	-0x1010(%rbp), %rcx
                	addq	%rcx, %rax
                	movq	-0x1008(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movsbq	-0x1000(%rbp), %rcx
-               	cmpl	$0x1, %ecx
+               	addq	%rax, %rcx
+               	movsbq	-0x1000(%rbp), %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	subq	$0x32, %rax
+               	leaq	-0x32(%rcx), %rax
                	leave
                	retq

@@ -573,43 +573,43 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%r10d, %r10d
                	movq	%r10, -0x2a8(%rbp)
-               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
                	leaq	-0x240(%rbp), %r9
-               	movl	-0x240(%rbp,%rdx,4), %eax
-               	movl	0xa0(%rsp,%rdx,4), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0x240(%rbp,%rdx,4)
+               	movl	-0x240(%rbp,%rcx,4), %eax
+               	movl	0xa0(%rsp,%rcx,4), %edx
+               	addq	%rdx, %rax
+               	movl	%eax, -0x240(%rbp,%rcx,4)
                	movl	$0x1, %eax
                	jmp	<addr>
                	leaq	-0x240(%rbp), %rsi
                	addq	%rdi, %rsi
-               	movl	%ecx, (%rsi,%rdx,4)
+               	movl	%edx, (%rsi,%rcx,4)
                	incq	%rax
                	cmpl	$0x12, %eax
                	jge	<addr>
                	movq	%rax, %rdi
                	shlq	$0x5, %rdi
-               	leaq	(%r9,%rdi), %rcx
-               	movl	(%rcx,%rdx,4), %ecx
+               	leaq	(%r9,%rdi), %rdx
+               	movl	(%rdx,%rcx,4), %edx
                	leaq	-0x240(%rbp), %rsi
                	leaq	-0x1(%rax), %r8
                	shlq	$0x5, %r8
                	addq	%r8, %rsi
-               	movl	(%rsi,%rdx,4), %esi
+               	movl	(%rsi,%rcx,4), %esi
                	movq	%rax, %r8
                	andq	$0x3, %r8
                	cmpl	$0x3, %r8d
                	jl	<addr>
-               	subq	%rsi, %rcx
+               	subq	%rsi, %rdx
                	jmp	<addr>
                	cmpl	$0x1, %r8d
                	je	<addr>
-               	addq	%rsi, %rcx
+               	addq	%rsi, %rdx
                	jmp	<addr>
-               	xorq	%rsi, %rcx
+               	xorq	%rsi, %rdx
                	jmp	<addr>
-               	incq	%rdx
-               	cmpl	$0x8, %edx
+               	incq	%rcx
+               	cmpl	$0x8, %ecx
                	jl	<addr>
                	addq	$0x1, -0x2a8(%rbp)
                	movq	-0x2a8(%rbp), %rax

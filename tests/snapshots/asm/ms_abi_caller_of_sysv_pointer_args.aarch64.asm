@@ -97,16 +97,16 @@ Disassembly of section .text:
                	ldr	x3, [x1, #0x20]
                	add	x21, x3, #0x4
                	ldr	x3, [x1, #0x28]
-               	add	x22, x3, #0x5
+               	add	x23, x3, #0x5
                	ldr	x3, [x1, #0x30]
                	add	x5, x3, #0x6
                	ldr	x1, [x1, #0x38]
-               	add	x23, x1, #0x7
+               	add	x22, x1, #0x7
                	adrp	x7, <page>
                	add	x7, x7, <lo12>
                	mov	x1, x20
-               	mov	x6, x23
-               	mov	x4, x22
+               	mov	x6, x22
+               	mov	x4, x23
                	mov	x3, x21
                	bl	<addr>
                	mov	x1, #0x1                // =1
@@ -128,7 +128,7 @@ Disassembly of section .text:
                	cmp	x2, x3
                	b.ne	<addr>
                	ldr	x2, [x0, #0x10]
-               	add	x3, x22, x22, lsl #3
+               	add	x3, x23, x23, lsl #3
                	add	x3, x3, #0x2
                	cmp	x2, x3
                	b.eq	<addr>
@@ -141,7 +141,7 @@ Disassembly of section .text:
                	cmp	x4, x2
                	csel	x1, x3, x1, ne
                	ldr	x2, [x0, #0x20]
-               	add	x3, x23, #0x1
+               	add	x3, x22, #0x1
                	add	x3, x3, x3, lsl #1
                	add	x3, x3, #0x6
                	cmp	x2, x3

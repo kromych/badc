@@ -3910,6 +3910,13 @@ f:
     jne 1f
     xor eax, eax
 1:  cvtsi2sd xmm0, dword ptr [rax]
+    fld qword ptr [rax]
+    fild word ptr [rsi + 8]
+    fistp qword ptr [rdi]
+    fsub st(3), st
+    fdivp st(2), st
+    fsubp
+    fadd st, st(1)
     vpaddd ymm0, ymm1, ymmword ptr [rax]
     vcvtpd2ps xmm0, ymmword ptr [rax]
     vcvttpd2dq xmm1, xmmword ptr [rax + 8]
@@ -3956,6 +3963,13 @@ f:
     jne 1f
     xor %eax, %eax
 1:  cvtsi2sdl (%rax), %xmm0
+    fldl (%rax)
+    filds 8(%rsi)
+    fistpll (%rdi)
+    fsubr %st, %st(3)
+    fdivrp %st, %st(2)
+    fsubrp
+    fadd %st(1), %st
     vpaddd (%rax), %ymm1, %ymm0
     vcvtpd2psy (%rax), %xmm0
     vcvttpd2dqx 8(%rax), %xmm1

@@ -3872,9 +3872,8 @@ fn run_inline_asm(
             // forms have no register-model equivalent. Rejecting keeps the VM
             // from silently skipping a memory effect the caller depends on.
             Mnemonic::Fixed(_)
-            | Mnemonic::Fsubp
+            | Mnemonic::X87 { .. }
             | Mnemonic::StringOp { .. }
-            | Mnemonic::MemExt { .. }
             | Mnemonic::MemExt0F { .. }
             | Mnemonic::FarBranch { .. }
             | Mnemonic::InvMem { .. } => {

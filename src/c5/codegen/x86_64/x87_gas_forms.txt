@@ -1,0 +1,218 @@
+# x87 and string-instruction forms with the bytes GNU as 2.47 assembles them to,
+# one per line: the AT&T statement, a tab, the bytes in hex.
+fadds (%rax)	d8 00
+faddl (%rax)	dc 00
+fadd (%rax)	d8 00
+fmuls (%rax)	d8 08
+fmull (%rax)	dc 08
+fmul (%rax)	d8 08
+fcoms (%rax)	d8 10
+fcoml (%rax)	dc 10
+fcom (%rax)	d8 10
+fcomps (%rax)	d8 18
+fcompl (%rax)	dc 18
+fcomp (%rax)	d8 18
+fsubs (%rax)	d8 20
+fsubl (%rax)	dc 20
+fsub (%rax)	d8 20
+fsubrs (%rax)	d8 28
+fsubrl (%rax)	dc 28
+fsubr (%rax)	d8 28
+fdivs (%rax)	d8 30
+fdivl (%rax)	dc 30
+fdiv (%rax)	d8 30
+fdivrs (%rax)	d8 38
+fdivrl (%rax)	dc 38
+fdivr (%rax)	d8 38
+flds (%rax)	d9 00
+fldl (%rax)	dd 00
+fldt (%rax)	db 28
+fld (%rax)	d9 00
+fsts (%rax)	d9 10
+fstl (%rax)	dd 10
+fst (%rax)	d9 10
+fstps (%rax)	d9 18
+fstpl (%rax)	dd 18
+fstpt (%rax)	db 38
+fstp (%rax)	d9 18
+fiadds (%rax)	de 00
+fiaddl (%rax)	da 00
+fiadd (%rax)	de 00
+fimuls (%rax)	de 08
+fimull (%rax)	da 08
+fimul (%rax)	de 08
+ficoms (%rax)	de 10
+ficoml (%rax)	da 10
+ficom (%rax)	de 10
+ficomps (%rax)	de 18
+ficompl (%rax)	da 18
+ficomp (%rax)	de 18
+fisubs (%rax)	de 20
+fisubl (%rax)	da 20
+fisub (%rax)	de 20
+fisubrs (%rax)	de 28
+fisubrl (%rax)	da 28
+fisubr (%rax)	de 28
+fidivs (%rax)	de 30
+fidivl (%rax)	da 30
+fidiv (%rax)	de 30
+fidivrs (%rax)	de 38
+fidivrl (%rax)	da 38
+fidivr (%rax)	de 38
+filds (%rax)	df 00
+fildl (%rax)	db 00
+fildll (%rax)	df 28
+fildq (%rax)	df 28
+fild (%rax)	df 00
+fists (%rax)	df 10
+fistl (%rax)	db 10
+fist (%rax)	df 10
+fistps (%rax)	df 18
+fistpl (%rax)	db 18
+fistpll (%rax)	df 38
+fistpq (%rax)	df 38
+fistp (%rax)	df 18
+fisttps (%rax)	df 08
+fisttpl (%rax)	db 08
+fisttpll (%rax)	dd 08
+fisttpq (%rax)	dd 08
+fisttp (%rax)	df 08
+fbld (%rax)	df 20
+fbstp (%rax)	df 30
+fldcw (%rax)	d9 28
+fnstcw (%rax)	d9 38
+fstcw (%rax)	9b d9 38
+fldenv (%rax)	d9 20
+fnstenv (%rax)	d9 30
+fstenv (%rax)	9b d9 30
+fnsave (%rax)	dd 30
+fsave (%rax)	9b dd 30
+frstor (%rax)	dd 20
+fnstsw (%rax)	dd 38
+fstsw (%rax)	9b dd 38
+fnstsw %ax	df e0
+fstsw %ax	9b df e0
+fld (%r9)	41 d9 01
+fldt 8(%r12,%r13,4)	43 db 6c ac 08
+fistpll (%r8)	41 df 38
+fstps 0x12345678(%rbx)	d9 9b 78 56 34 12
+fadd %st(3), %st	d8 c3
+fadd %st, %st(3)	dc c3
+faddp %st, %st(3)	de c3
+faddp	de c1
+fadd %st(3)	d8 c3
+fmul %st(3), %st	d8 cb
+fmul %st, %st(3)	dc cb
+fmulp %st, %st(3)	de cb
+fmulp	de c9
+fmul %st(3)	d8 cb
+fsub %st(3), %st	d8 e3
+fsub %st, %st(3)	dc e3
+fsubp %st, %st(3)	de e3
+fsubp	de e1
+fsub %st(3)	d8 e3
+fsubr %st(3), %st	d8 eb
+fsubr %st, %st(3)	dc eb
+fsubrp %st, %st(3)	de eb
+fsubrp	de e9
+fsubr %st(3)	d8 eb
+fdiv %st(3), %st	d8 f3
+fdiv %st, %st(3)	dc f3
+fdivp %st, %st(3)	de f3
+fdivp	de f1
+fdiv %st(3)	d8 f3
+fdivr %st(3), %st	d8 fb
+fdivr %st, %st(3)	dc fb
+fdivrp %st, %st(3)	de fb
+fdivrp	de f9
+fdivr %st(3)	d8 fb
+fcom %st(3)	d8 d3
+fcom	d8 d1
+fcomp %st(3)	d8 db
+fcomp	d8 d9
+fucom %st(3)	dd e3
+fucom	dd e1
+fucomp %st(3)	dd eb
+fucomp	dd e9
+fcompp	de d9
+fucompp	da e9
+fcomi %st(3), %st	db f3
+fcomi %st(3)	db f3
+fcomip %st(3), %st	df f3
+fcomip %st(3)	df f3
+fucomi %st(3), %st	db eb
+fucomi %st(3)	db eb
+fucomip %st(3), %st	df eb
+fucomip %st(3)	df eb
+fcompi %st(3), %st	df f3
+fcompi %st(3)	df f3
+fucompi %st(3), %st	df eb
+fucompi %st(3)	df eb
+fld %st(3)	d9 c3
+fst %st(3)	dd d3
+fstp %st(3)	dd db
+fxch %st(3)	d9 cb
+ffree %st(3)	dd c3
+ffreep %st(3)	df c3
+fxch	d9 c9
+fcmovb %st(3), %st	da c3
+fcmove %st(3), %st	da cb
+fcmovbe %st(3), %st	da d3
+fcmovu %st(3), %st	da db
+fcmovnb %st(3), %st	db c3
+fcmovne %st(3), %st	db cb
+fcmovnbe %st(3), %st	db d3
+fcmovnu %st(3), %st	db db
+fchs	d9 e0
+fabs	d9 e1
+ftst	d9 e4
+fxam	d9 e5
+fld1	d9 e8
+fldl2t	d9 e9
+fldl2e	d9 ea
+fldpi	d9 eb
+fldlg2	d9 ec
+fldln2	d9 ed
+fldz	d9 ee
+f2xm1	d9 f0
+fyl2x	d9 f1
+fptan	d9 f2
+fpatan	d9 f3
+fxtract	d9 f4
+fprem1	d9 f5
+fdecstp	d9 f6
+fincstp	d9 f7
+fprem	d9 f8
+fyl2xp1	d9 f9
+fsqrt	d9 fa
+fsincos	d9 fb
+frndint	d9 fc
+fscale	d9 fd
+fsin	d9 fe
+fcos	d9 ff
+fnop	d9 d0
+fnclex	db e2
+fclex	9b db e2
+fninit	db e3
+finit	9b db e3
+fwait	9b
+wait	9b
+movs (%rsi), (%rdi)	a5
+movs %es:(%rdi), (%rsi)	26 a5
+movsb (%rsi), (%rdi)	a4
+lods (%rsi)	ad
+lods (%rsi), %al	ac
+lods (%rsi), %eax	ad
+lodsq	48 ad
+stos %al, (%rdi)	aa
+stos %rax, %es:(%rdi)	48 ab
+stos (%rdi)	ab
+scas (%rdi), %al	ae
+scas (%rdi)	af
+cmps (%rdi), (%rsi)	a7
+cmpsw (%rdi), (%rsi)	66 a7
+ins (%dx), (%rdi)	6d
+outs (%rsi), (%dx)	6f
+rep movsb	f3 a4
+rep stos %al, (%rdi)	f3 aa
+movsl	a5

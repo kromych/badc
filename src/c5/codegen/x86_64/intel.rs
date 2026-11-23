@@ -135,6 +135,17 @@ fn instruction(stmt: &str, consts: &BTreeSet<&str>) -> Result<String, String> {
         ops.push(operand(text, branch, consts)?);
         decors.push(decor);
     }
+    // AT&T names the x87 subtractions and divisions into `st(i)` by the
+    // reversed operation (the AT&T convention): Intel's `fsub st(i), st`
+    // is AT&T's `fsubr %st, %st(i)`, and so is the bare popping form.
+    let into_sti = match ops.as_slice() {
+        [Op::Reg(dst), _] => dst.starts_with("st(") && dst != "st(0)",
+        [] => mnem.ends_with('p'),
+        _ => false,
+    };
+    if into_sti && let Some(m) = super::x87::reversed(&mnem) {
+        mnem = String::from(m);
+    }
     // A memory operand's `ptr` size names the operation width where nothing
     // else does, as an AT&T suffix; the extending moves take both widths.
     let mem_size = ops.iter().find_map(|o| match o {
@@ -150,6 +161,10 @@ fn instruction(stmt: &str, consts: &BTreeSet<&str>) -> Result<String, String> {
         }
         ("movsxd", [Op::Reg(dst), Op::Mem { .. }], _) if gpr_width(dst) == Some(8) => {
             mnem = String::from("movslq");
+        }
+        // An x87 memory operand's width is the mnemonic's suffix.
+        (m, _, Some(s)) if !branch && let Some(x) = super::x87::suffix(m, s) => {
+            mnem = format!("{m}{x}");
         }
         // A narrowing convert's xmm destination does not state its source's
         // width; AT&T syntax names it with `x` or `y`.

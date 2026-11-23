@@ -373,9 +373,12 @@ pub(crate) enum Mnemonic {
     Prefix(u8),
     /// An operandless instruction with a fixed encoding, such as `fninit`.
     Fixed(&'static [u8]),
-    /// x87 subtract-and-pop: `fsubp [%st, %st(i)]` encodes DE E0+i under
-    /// GNU as operand order; the bare form is `%st, %st(1)`.
-    Fsubp,
+    /// An x87 instruction ([`super::x87`]), with the memory width its
+    /// suffix names.
+    X87 {
+        op: &'static super::x87::X87,
+        width: Option<u8>,
+    },
     /// SSE4.2 accumulate-CRC32 (F2 0F 38 F0 / F1 /r). The accumulator is a
     /// general register in ModR/M.reg and the source the r/m; the AT&T size
     /// suffix is the source width, and only `q` widens the accumulator.
@@ -385,19 +388,11 @@ pub(crate) enum Mnemonic {
     /// size suffix alone picks the opcode and the operand-size prefix.
     StringOp {
         opcode: u8,
-        /// Operand width in bytes the size letter names.
+        /// Operand width in bytes the size letter names, 0 for an unsuffixed
+        /// mnemonic, whose accumulator operand states it, else `l`.
         opw: u8,
-    },
-    /// A single-memory-operand instruction encoded as one opcode byte and a
-    /// ModR/M whose reg field is the opcode extension: `fnstsw` / `fnstcw`
-    /// (x87 status / control word).
-    /// `osz` emits the 0x66 operand-size prefix; REX.W comes from `rex_w`
-    /// and REX.B from the base register.
-    MemExt {
-        opcode: u8,
-        ext: u8,
-        osz: bool,
-        rex_w: bool,
+        /// Whether the operation has a 64-bit form.
+        quad: bool,
     },
     /// A far branch, `lcall` / `ljmp`. Two forms share the mnemonic: the
     /// indirect `*m16:N` through a ModR/M (FF /3, /5) and the direct
@@ -1182,6 +1177,13 @@ fn sized_nullary(name: &str) -> Option<Mnemonic> {
 }
 
 fn string_op(name: &str) -> Option<Mnemonic> {
+    if let Some(&(_, opcode, quad)) = STRING_OPS.iter().find(|(n, ..)| *n == name) {
+        return Some(Mnemonic::StringOp {
+            opcode,
+            opw: 0,
+            quad,
+        });
+    }
     let (base, suffix) = name.split_at(name.len().checked_sub(1)?);
     let &(_, op, quad) = STRING_OPS.iter().find(|(n, ..)| *n == base)?;
     let (opcode, opw) = match suffix {
@@ -1191,10 +1193,13 @@ fn string_op(name: &str) -> Option<Mnemonic> {
         "q" if quad => (op + 1, 8),
         _ => return None,
     };
-    Some(Mnemonic::StringOp { opcode, opw })
+    Some(Mnemonic::StringOp { opcode, opw, quad })
 }
 
 pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
+    if let Some((op, width)) = super::x87::lookup(name) {
+        return Some(Mnemonic::X87 { op, width });
+    }
     // The flag / general-register stack pushes and the interrupt / far return
     // spell their operand size in the mnemonic and take no operands; the
     // catalog is generated for long mode and carries only some of the
@@ -1258,116 +1263,8 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         // Protection-key register write (the read form is cataloged).
         "wrpkru" => Mnemonic::Fixed(&[0x0F, 0x01, 0xEF]),
         "crc32" => Mnemonic::Crc32,
-        "fninit" => Mnemonic::Fixed(&[0xDB, 0xE3]),
-        // x87 wait-for-pending-exceptions (WAIT/FWAIT) and clear-exceptions.
-        "fwait" | "wait" => Mnemonic::Fixed(&[0x9B]),
-        "fnclex" => Mnemonic::Fixed(&[0xDB, 0xE2]),
-        // x87 constant loads (D9 E8+i): 1, log2(10), log2(e), pi, log10(2),
-        // ln(2) and 0.
-        "fld1" => Mnemonic::Fixed(&[0xD9, 0xE8]),
-        "fldl2t" => Mnemonic::Fixed(&[0xD9, 0xE9]),
-        "fldl2e" => Mnemonic::Fixed(&[0xD9, 0xEA]),
-        "fldpi" => Mnemonic::Fixed(&[0xD9, 0xEB]),
-        "fldlg2" => Mnemonic::Fixed(&[0xD9, 0xEC]),
-        "fldln2" => Mnemonic::Fixed(&[0xD9, 0xED]),
-        "fldz" => Mnemonic::Fixed(&[0xD9, 0xEE]),
         // MMX state clear.
         "emms" => Mnemonic::Fixed(&[0x0F, 0x77]),
-        // x87 subtract-and-pop register form; AT&T operand order (GNU as
-        // encodes `fsubp %st, %st(i)` as DE E0+i).
-        "fsubp" => Mnemonic::Fsubp,
-        // x87 store status / control word to memory (DD /7, D9 /7).
-        "fnstsw" => Mnemonic::MemExt {
-            opcode: 0xDD,
-            ext: 7,
-            osz: false,
-            rex_w: false,
-        },
-        "fnstcw" => Mnemonic::MemExt {
-            opcode: 0xD9,
-            ext: 7,
-            osz: false,
-            rex_w: false,
-        },
-        // x87 divide / multiply by a 64-bit float in memory (DC /6, DC /1)
-        // and integer store-and-pop to a 32-bit memory slot (DB /3).
-        "fdivl" => Mnemonic::MemExt {
-            opcode: 0xDC,
-            ext: 6,
-            osz: false,
-            rex_w: false,
-        },
-        "fmull" => Mnemonic::MemExt {
-            opcode: 0xDC,
-            ext: 1,
-            osz: false,
-            rex_w: false,
-        },
-        "fistpl" => Mnemonic::MemExt {
-            opcode: 0xDB,
-            ext: 3,
-            osz: false,
-            rex_w: false,
-        },
-        "fildl" => Mnemonic::MemExt {
-            opcode: 0xDB,
-            ext: 0,
-            osz: false,
-            rex_w: false,
-        },
-        // x87 load / store-and-pop of a 64-bit float in memory (DD /0, DD /3);
-        // the AT&T `l` suffix selects the m64 operand.
-        "fldl" => Mnemonic::MemExt {
-            opcode: 0xDD,
-            ext: 0,
-            osz: false,
-            rex_w: false,
-        },
-        "fstpl" => Mnemonic::MemExt {
-            opcode: 0xDD,
-            ext: 3,
-            osz: false,
-            rex_w: false,
-        },
-        // The same at the other widths the suffix names: a 32-bit float
-        // (`s`: D9 /0, /2, /3), the 64-bit store that keeps the value
-        // (DD /2) and the 80-bit extended value (`t`: DB /5, /7).
-        "flds" => Mnemonic::MemExt {
-            opcode: 0xD9,
-            ext: 0,
-            osz: false,
-            rex_w: false,
-        },
-        "fsts" => Mnemonic::MemExt {
-            opcode: 0xD9,
-            ext: 2,
-            osz: false,
-            rex_w: false,
-        },
-        "fstps" => Mnemonic::MemExt {
-            opcode: 0xD9,
-            ext: 3,
-            osz: false,
-            rex_w: false,
-        },
-        "fstl" => Mnemonic::MemExt {
-            opcode: 0xDD,
-            ext: 2,
-            osz: false,
-            rex_w: false,
-        },
-        "fldt" => Mnemonic::MemExt {
-            opcode: 0xDB,
-            ext: 5,
-            osz: false,
-            rex_w: false,
-        },
-        "fstpt" => Mnemonic::MemExt {
-            opcode: 0xDB,
-            ext: 7,
-            osz: false,
-            rex_w: false,
-        },
         // SSE control/status register load / store (0F AE /2, /3).
         "ldmxcsr" => Mnemonic::MemExt0F {
             opcode: 0xAE,
@@ -3358,6 +3255,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         }
         let mut operands = Vec::new();
         let mut seg: Option<u8> = None;
+        let mut seg_at = 0usize;
         // Displacement and immediate expressions the operands name by index.
         let mut sym_exprs: Vec<String> = Vec::new();
         // `{%kN}` / `{z}` / `{1toN}` decorate an operand but encode as EVEX
@@ -3372,6 +3270,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
                 // displacement.
                 let tok = match split_seg_prefix(op) {
                     Some((byte, rem)) => {
+                        seg_at = operands.len();
                         if seg.is_some_and(|s| s != byte) {
                             return Err(String::from("inline asm: conflicting segment overrides"));
                         }
@@ -3456,6 +3355,20 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
             }
             false => resolve_evex(mnemonic, mnem_tok, &operands, decor)?,
         };
+        // A string operation's `%rdi` operand is always in the ES segment,
+        // which no prefix overrides: an `%es:` written on it is dropped.
+        if let Mnemonic::StringOp { opcode, .. } = mnemonic
+            && seg == Some(0x26)
+        {
+            let fixed = match opcode & !1 {
+                0xA4 | 0xAA | 0x6C => operands.len().checked_sub(1),
+                0xA6 | 0xAE => Some(0),
+                _ => None,
+            };
+            if fixed == Some(seg_at) {
+                seg = None;
+            }
+        }
         insns.push(AsmInsn {
             mnemonic,
             suffix,
@@ -4399,25 +4312,67 @@ fn encode_bespoke(
             }
             Ok(())
         }
-        Mnemonic::Fsubp => {
-            let i = match ops {
-                [] => Some(1),
-                [Concrete::Reg { reg: s, .. }, Concrete::Reg { reg: d, .. }] if *s == ST_BASE => {
-                    d.checked_sub(ST_BASE).filter(|&i| i < 8)
+        Mnemonic::X87 { op, width } => {
+            use super::x87::{Encoding, Operand};
+            let mut operands = Vec::with_capacity(ops.len());
+            for o in ops {
+                operands.push(match *o {
+                    Concrete::Reg { reg, .. } if (ST_BASE..ST_BASE + 8).contains(&reg) => {
+                        Operand::St(reg - ST_BASE)
+                    }
+                    Concrete::Reg {
+                        reg: 0,
+                        size: AsmRegSize::Word,
+                    } => Operand::Ax,
+                    _ if MemRm::of(o).is_some() => Operand::Memory,
+                    _ => {
+                        return Err(format!(
+                            "inline asm: `{}` does not take these operands",
+                            op.name
+                        ));
+                    }
+                });
+            }
+            match super::x87::encode(op, width, &operands)? {
+                Encoding::Bytes(bytes) => code.extend_from_slice(&bytes),
+                Encoding::Memory(opcode, reg) => {
+                    let mr = ops.iter().find_map(MemRm::of).expect("a memory operand");
+                    // A `wait` ahead of the opcode is an instruction of its
+                    // own; REX belongs to the opcode.
+                    let (wait, opcode) = opcode.split_at(opcode.len() - 1);
+                    code.extend_from_slice(wait);
+                    if mr.rex_x() || mr.rex_b() {
+                        code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
+                    }
+                    code.push(opcode[0]);
+                    mr.emit(code, mode, addr, reg)?;
                 }
-                _ => None,
-            };
-            let Some(i) = i else {
-                return Err(String::from(
-                    "inline asm: `fsubp` takes `%st, %st(i)` or no operands",
-                ));
-            };
-            code.extend_from_slice(&[0xDE, 0xE0 + i]);
+            }
             Ok(())
         }
-        Mnemonic::StringOp { opcode, opw } => {
-            // The size letter alone fixes the operand width; the prefix
-            // selects it when it is not the mode default.
+        Mnemonic::StringOp { opcode, opw, quad } => {
+            // The size letter fixes the operand width; unsuffixed, the
+            // accumulator operand does, else `l`.
+            let (opcode, opw) = match opw {
+                0 => {
+                    // `ins` / `outs` name the port `(%dx)`, which is no width.
+                    let port = matches!(opcode, 0x6C | 0x6E);
+                    let w = (ops.iter())
+                        .find_map(|o| match *o {
+                            Concrete::Reg { reg, size } if reg < 16 && !port => Some(size.bytes()),
+                            _ => None,
+                        })
+                        .unwrap_or(4);
+                    if w == 8 && !quad {
+                        return Err(String::from(
+                            "inline asm: this string operation has no 64-bit form",
+                        ));
+                    }
+                    (if w == 1 { opcode } else { opcode + 1 }, w)
+                }
+                w => (opcode, w),
+            };
+            // The prefix selects the width when it is not the mode default.
             if opw == 2 || opw == 4 {
                 if opw != mode.opsize() {
                     code.push(0x66);
@@ -4426,27 +4381,6 @@ fn encode_bespoke(
                 code.push(rex(true, false, false, false));
             }
             code.push(opcode);
-            Ok(())
-        }
-        Mnemonic::MemExt {
-            opcode,
-            ext,
-            osz,
-            rex_w,
-        } => {
-            let Some(mr) = ops.first().and_then(MemRm::of) else {
-                return Err(String::from(
-                    "inline asm: this instruction takes a memory operand",
-                ));
-            };
-            if osz {
-                code.push(0x66);
-            }
-            if rex_w || mr.rex_x() || mr.rex_b() {
-                code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
-            }
-            code.push(opcode);
-            mr.emit(code, mode, addr, ext)?;
             Ok(())
         }
         Mnemonic::FarBranch { ext, far, opw } => {
@@ -7487,6 +7421,26 @@ mod tests {
                 "{text}: {e}"
             );
         }
+    }
+
+    #[test]
+    fn x87_and_string_forms_assemble_as_gnu_as_does() {
+        // Every x87 mnemonic at each memory width and unsuffixed, its stack
+        // register forms both ways and its operand-free form, and the
+        // string operations unsuffixed and with their operands, as GNU as
+        // 2.47 assembles them.
+        let forms = include_str!("x87_gas_forms.txt");
+        let mut n = 0;
+        for line in forms.lines().filter(|l| !l.starts_with('#')) {
+            let (insn, bytes) = line.split_once('\t').expect("statement and bytes");
+            let want: Vec<u8> = (bytes.split(' '))
+                .map(|b| u8::from_str_radix(b, 16).expect("hex byte"))
+                .collect();
+            let tmpl = insn.replace('%', "%%");
+            assert_eq!(asm_bytes(tmpl.as_bytes()), want, "{insn}");
+            n += 1;
+        }
+        assert_eq!(n, 216);
     }
 
     #[test]

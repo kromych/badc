@@ -29,7 +29,7 @@ Disassembly of section .text:
                	and	x1, x1, #0xfff
                	cbz	w1, <addr>
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	and	x1, x0, #0x3f
                	cbz	w1, <addr>
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	and	x1, x0, #0x7f
                	cbz	w1, <addr>

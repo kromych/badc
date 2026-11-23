@@ -303,7 +303,7 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
             binding,
         });
         pc += u.pc_extent();
-        data += u.program.data.len() as u64;
+        data += u.program.image_len() as u64;
         tls += u.program.tls_data.len() as u64;
         binding += u.binding_names.len() as i64;
     }

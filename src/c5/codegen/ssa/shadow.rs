@@ -572,7 +572,7 @@ pub(crate) enum Node {
 /// both the liveness walk and the compaction that applies its result.
 pub(crate) fn data_object_starts(program: &Program) -> Vec<i64> {
     use crate::c5::token::Token;
-    let data_len = program.data.len() as i64;
+    let data_len = program.image_len() as i64;
     let mut start_set: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     start_set.insert(0);
     for &s in &program.data_object_starts {
@@ -624,7 +624,7 @@ impl<'p> ReachGraph<'p> {
         let mut graph = ReachGraph {
             program,
             asm_format: target.binary_format(),
-            data_len: program.data.len() as i64,
+            data_len: program.image_len() as i64,
             starts,
             named: alloc::collections::BTreeMap::new(),
             code_edges: alloc::vec![Vec::new(); n],
@@ -1076,7 +1076,7 @@ impl DataMap {
     /// straight onto the new layout.
     pub(crate) fn identity(program: &Program) -> DataMap {
         let starts = data_object_starts(program);
-        let data_len = program.data.len() as i64;
+        let data_len = program.image_len() as i64;
         let obj_lens: Vec<i64> = (0..starts.len())
             .map(|i| if i + 1 < starts.len() { starts[i + 1] } else { data_len } - starts[i])
             .collect();
@@ -1120,11 +1120,17 @@ pub(crate) fn compact_program_data(
     segregate: bool,
     optimize: bool,
 ) -> Result<Compaction, C5Error> {
-    let unchanged = || Compaction {
-        program: program.clone(),
-        bss_size: 0,
+    // Without segregation the image is one file-backed region.
+    let unchanged = || {
+        let mut program = program.clone();
+        if !segregate {
+            program.data.resize(program.image_len(), 0);
+            program.zero_fill_len = 0;
+        }
+        let bss_size = program.zero_fill_len as i64;
+        Compaction { program, bss_size }
     };
-    let data_len = program.data.len() as i64;
+    let data_len = program.image_len() as i64;
     if data_len == 0 || program.finished_functions.is_empty() {
         return Ok(unchanged());
     }
@@ -1167,6 +1173,13 @@ fn all_zero(bytes: &[u8]) -> bool {
     chunks.iter().all(|c| c.iter().fold(0, |a, &b| a | b) == 0) && rest.iter().all(|&b| b == 0)
 }
 
+/// The image bytes `[lo, hi)`: the file-backed ones in `data`, and how many
+/// zero-filled ones follow them past its end.
+fn image_bytes(data: &[u8], lo: usize, hi: usize) -> (&[u8], usize) {
+    let end = hi.min(data.len()).max(lo.min(data.len()));
+    (&data[lo.min(end)..end], hi - end.max(lo))
+}
+
 /// Rewrite `out` in place to hold only the data objects `sets` marks live
 /// and only the functions in `live_func_pcs`, packing `.data` and mapping
 /// every offset surface -- symbol values, relocation slots, relocation
@@ -1204,7 +1217,7 @@ pub(crate) fn apply_data_liveness(
     image: bool,
     ssa: Option<(&mut [FunctionSsa], &DataMap)>,
 ) -> (Program, i64, DataMap) {
-    let data_len = out.data.len() as i64;
+    let data_len = out.image_len() as i64;
     let starts = &sets.starts;
     let live = &sets.data_live;
     debug_assert_eq!(*starts, data_object_starts(&out));
@@ -1374,7 +1387,7 @@ pub(crate) fn apply_data_liveness(
                 && live[i]
                 && !has_reloc_slot[i]
                 && !is_readonly[i]
-                && all_zero(&out.data[starts[i] as usize..obj_end(i) as usize])
+                && all_zero(image_bytes(&out.data, starts[i] as usize, obj_end(i) as usize).0)
         })
         .collect();
     let is_bss = |i: usize| bss[i];
@@ -1476,7 +1489,9 @@ pub(crate) fn apply_data_liveness(
             }
             new_base[i] = new_data.len() as i64;
             let at = starts[i] as usize;
-            new_data.extend_from_slice(&out.data[at..at + obj_len[i] as usize]);
+            let (bytes, zeros) = image_bytes(&out.data, at, at + obj_len[i] as usize);
+            new_data.extend_from_slice(bytes);
+            new_data.resize(new_data.len() + zeros, 0);
         }
         // Each region ends on an `img_align` boundary so the next one's
         // packed residues hold at any aligned placement of it. A section
@@ -1606,7 +1621,7 @@ fn measure_dead_data(funcs: &[FunctionSsa], graph: &ReachGraph) {
     let Ok(log_path) = std::env::var("BADC_DATA_DCE_LOG") else {
         return;
     };
-    let data_len = program.data.len() as i64;
+    let data_len = program.image_len() as i64;
     if data_len == 0 {
         return;
     }

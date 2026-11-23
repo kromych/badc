@@ -436,6 +436,23 @@ impl Compiler {
         }
     }
 
+    /// Whether the static object `idx` being declared, of type `ty`, takes
+    /// the zero region: no initializer follows, and neither `const` (read-only
+    /// pages hold its bytes) nor a named section (which carves its bytes from
+    /// `.data`) keeps it in the image.
+    pub(super) fn takes_zero_region(&self, idx: usize, ty: i64) -> bool {
+        self.lex.tk != Token::Assign
+            && !self.declared_object_is_const(ty)
+            && self.symbols[idx].section_name.is_none()
+    }
+
+    /// Reserve `bytes` of static storage no initializer names, on `align`,
+    /// in the zero region: its bytes stay out of `.data`, which the unit's
+    /// image places them past.
+    pub(super) fn reserve_zero_bytes(&mut self, align: usize, bytes: usize) -> i64 {
+        self.zero_region.reserve(align, bytes)
+    }
+
     /// Reserve `bytes` zeroed bytes in `.data` for a template a block copy
     /// reads into a frame slot. The copy transfers in units up to 8 bytes,
     /// so the template starts on the same boundary.

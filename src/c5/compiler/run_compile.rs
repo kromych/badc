@@ -2863,6 +2863,7 @@ impl Compiler {
         let off = if was_tentative_glo
             && aligned <= self.symbols[id_idx].reserved_data_bytes
             && self.symbols[id_idx].val % obj_align == 0
+            && !crate::c5::layout::in_zero_region(self.symbols[id_idx].val)
         {
             self.symbols[id_idx].val
         } else {
@@ -2985,6 +2986,7 @@ impl Compiler {
         let off = if was_tentative_glo
             && needed <= self.symbols[id_idx].reserved_data_bytes
             && self.symbols[id_idx].val % obj_align == 0
+            && !crate::c5::layout::in_zero_region(self.symbols[id_idx].val)
         {
             self.symbols[id_idx].val
         } else {
@@ -3074,9 +3076,13 @@ impl Compiler {
         // outgrows. Otherwise the object moves to a fresh slot
         // below, as the deferred-size array paths do, and the
         // references already emitted are rebased onto it.
+        // A zero-region slot serves only an object that still takes the
+        // region: an initializer, `const` or a section puts it in `.data`.
+        let prior_zero = crate::c5::layout::in_zero_region(self.symbols[id_idx].val);
         let reuse_prior_storage = reuse_eligible
             && self.symbols[id_idx].val % obj_align == 0
-            && bytes <= self.symbols[id_idx].reserved_data_bytes;
+            && bytes <= self.symbols[id_idx].reserved_data_bytes
+            && !(prior_zero && !self.takes_zero_region(id_idx, ty));
         // `extern _Thread_local T x;` (no initializer) is a
         // pure reference, not a definition: it must not
         // reserve TLS storage. The defining unit owns the
@@ -3103,10 +3109,16 @@ impl Compiler {
             self.symbols[id_idx].reserved_data_bytes = bytes;
             off
         } else {
-            let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
+            let off = match self.takes_zero_region(id_idx, ty) {
+                true => self.reserve_zero_bytes(align, bytes as usize),
+                false => self.reserve_data_bytes(DataStore::Static, align, bytes as usize),
+            };
             // The fallback slot of an `extern` declaration is an object of its
             // own, which the image drops when the declaration binds elsewhere.
-            if was_extern_only_decl && !self.symbols[id_idx].defined_here {
+            if was_extern_only_decl
+                && !self.symbols[id_idx].defined_here
+                && !crate::c5::layout::in_zero_region(off)
+            {
                 self.data_object_starts.push(off);
             }
             self.note_global_relocated(id_idx, reuse_eligible, off);
@@ -3118,7 +3130,7 @@ impl Compiler {
             self.symbols[id_idx].reserved_data_bytes = bytes;
             // A move off a misaligned slot keeps the bytes a
             // prior defining declaration wrote there.
-            if reuse_eligible && prior.1 > 0 {
+            if reuse_eligible && prior.1 > 0 && !prior_zero {
                 let n = prior.1.min(bytes) as usize;
                 for k in 0..n {
                     self.data[off as usize + k] = self.data[prior.0 as usize + k];
@@ -3290,7 +3302,11 @@ impl Compiler {
             self.check_thread_local_align(align, line)?;
             self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize)
         } else {
-            let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
+            let s = &self.symbols[id_idx];
+            let off = match s.storage_is_const || s.section_name.is_some() {
+                true => self.reserve_data_bytes(DataStore::Static, align, bytes as usize),
+                false => self.reserve_zero_bytes(align, bytes as usize),
+            };
             self.note_global_relocated(id_idx, true, off);
             off
         };

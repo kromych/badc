@@ -20,7 +20,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	bl	<addr>
                	adrp	x1, <page>
-               	str	x0, [x1, #0x20]
+               	str	x0, [x1, #0x80]
                	add	x0, x20, #0x1
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

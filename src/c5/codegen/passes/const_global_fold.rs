@@ -132,7 +132,7 @@ impl<'a> ConstData<'a> {
         // `__func__` arrays, and staged local-initializer templates.
         // Nothing can write them; their image is their value.
         intervals.extend(program.const_data_ranges.iter().copied());
-        let data_len = program.data.len() as i64;
+        let data_len = program.image_len() as i64;
         // A data symbol's address by link name, as the walker resolves a
         // reference: this unit's definition, else the extern declaration.
         let mut by_name: BTreeMap<&str, AddrConst> = BTreeMap::new();

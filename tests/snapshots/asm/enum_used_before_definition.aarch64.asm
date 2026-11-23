@@ -28,7 +28,7 @@ Disassembly of section .text:
 <store>:
                	adrp	x1, <page>
                	mov	w0, w0
-               	str	x0, [x1, #0x78]
+               	str	x0, [x1, #0x68]
                	ret
 
 <id>:
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x80000000         // =2147483648
                	adrp	x1, <page>
-               	ldr	w1, [x1, #0x30]
+               	ldr	w1, [x1, #0xc]
                	cmp	w1, w0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x60]
+               	str	x1, [x0, #0x50]
                	bl	<addr>
                	mov	x1, #0x80000000         // =2147483648
                	cmp	w0, w1
@@ -72,20 +72,20 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x68]
+               	str	x1, [x0, #0x58]
                	mov	x0, #0x80000000         // =2147483648
                	bl	<addr>
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x78]
+               	ldr	x1, [x0, #0x68]
                	mov	x2, #0x80000000         // =2147483648
                	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	b	<addr>
                	mov	x1, #0x80000000         // =2147483648
-               	str	x1, [x0, #0x78]
+               	str	x1, [x0, #0x68]
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x10]
+               	ldr	x1, [x0, #0x18]
                	ldr	w0, [x1]
                	mov	x2, #0x80000000         // =2147483648
                	cmp	w0, w2
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	b	<addr>
                	adrp	x0, <page>
-               	str	xzr, [x0, #0x78]
+               	str	xzr, [x0, #0x68]
                	mov	x0, #0x80000000         // =2147483648
                	bl	<addr>
                	adrp	x0, <page>
@@ -117,7 +117,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x70]
+               	str	x1, [x0, #0x60]
                	bl	<addr>
                	mov	x1, x0
                	mov	x0, #0x80000000         // =2147483648
@@ -129,7 +129,7 @@ Disassembly of section .text:
                	b	<addr>
                	adrp	x0, <page>
                	mov	x1, #0x80000000         // =2147483648
-               	str	w1, [x0, #0x80]
+               	str	w1, [x0, #0x70]
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]

@@ -133,7 +133,7 @@ pub(crate) fn data_object_aligns(
     starts: &[i64],
     cap: usize,
 ) -> alloc::vec::Vec<i64> {
-    let data_len = program.data.len() as i64;
+    let data_len = program.image_len() as i64;
     let cap = bss_image_align(cap) as i64;
     let mut aligns = alloc::vec![1i64; starts.len()];
     let mut note = |off: i64, a: i64| {
@@ -309,6 +309,81 @@ pub(crate) trait DataRemap {
     /// whole -- it names a dropped object, or straddles an object boundary
     /// whose two sides no longer sit together.
     fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)>;
+}
+
+/// The parser's offsets for static storage no initializer names start
+/// here, past any `.data` offset, until the unit's image is complete and
+/// [`crate::c5::program::Program::place_zero_region`] moves them past
+/// `data` as its zero-filled storage. Their bytes are never materialized.
+pub(crate) const ZERO_REGION_BASE: i64 = 1 << 40;
+
+/// The objects the parser placed in the zero region: its length and
+/// alignment, and the starts, padding and alignment marks of the objects in
+/// it, kept apart from `.data`'s, which a parse rollback truncates by offset.
+#[derive(Debug, Default)]
+pub(crate) struct ZeroRegion {
+    pub len: usize,
+    pub align: usize,
+    pub starts: alloc::vec::Vec<i64>,
+    pub pads: alloc::vec::Vec<(i64, i64)>,
+    pub marks: alloc::vec::Vec<(i64, i64)>,
+}
+
+impl ZeroRegion {
+    /// A provisional offset for `bytes` on `align`.
+    pub(crate) fn reserve(&mut self, align: usize, bytes: usize) -> i64 {
+        let at = self.len.next_multiple_of(align.max(1));
+        if at > self.len {
+            self.pads.push((
+                ZERO_REGION_BASE + self.len as i64,
+                ZERO_REGION_BASE + at as i64,
+            ));
+        }
+        if align > 1 {
+            self.marks
+                .push((ZERO_REGION_BASE + at as i64, align as i64));
+        }
+        self.len = at + bytes;
+        self.align = self.align.max(align);
+        self.starts.push(ZERO_REGION_BASE + at as i64);
+        ZERO_REGION_BASE + at as i64
+    }
+}
+
+/// Whether `off` is a provisional offset in the zero region.
+pub(crate) fn in_zero_region(off: i64) -> bool {
+    off >= ZERO_REGION_BASE
+}
+
+/// The move of the zero region to `base`, past `data_len` bytes of `.data`
+/// that stay where they are.
+pub(crate) struct ZeroRegionPlacement {
+    pub data_len: i64,
+    pub len: i64,
+    pub base: i64,
+}
+
+impl DataRemap for ZeroRegionPlacement {
+    fn in_data(&self, off: i64) -> bool {
+        (0..=self.data_len).contains(&off)
+            || (ZERO_REGION_BASE..=ZERO_REGION_BASE + self.len).contains(&off)
+    }
+
+    fn remap(&self, off: i64, _anchor: i64) -> Option<i64> {
+        Some(match in_zero_region(off) {
+            true => off - ZERO_REGION_BASE + self.base,
+            false => off,
+        })
+    }
+
+    fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)> {
+        (in_zero_region(lo) == in_zero_region(hi)).then(|| {
+            (
+                self.remap(lo, lo).unwrap_or(lo),
+                self.remap(hi, lo).unwrap_or(hi),
+            )
+        })
+    }
 }
 
 /// Every stored byte offset into `Program::data`.

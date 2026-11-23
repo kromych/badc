@@ -2775,6 +2775,8 @@ pub struct Compiler {
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
     data_align: usize,
+    /// The static storage no initializer names, at provisional offsets.
+    zero_region: crate::c5::layout::ZeroRegion,
     image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Alignment of the thread-local image, at least 8: the largest
     /// alignment among the objects reserved in it.
@@ -3625,6 +3627,7 @@ impl Compiler {
             prototypes: opts.prototypes,
             msvc: opts.msvc && target.is_windows(),
             data_align: 8,
+            zero_region: Default::default(),
             image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             export_all_functions: opts.export_all_functions,
@@ -4449,7 +4452,8 @@ impl Compiler {
                 addend,
             });
         }
-        Ok(Program {
+        let zero_region = self.zero_region;
+        let mut program = Program {
             target: self.target,
             data: self.data,
             file_asm: self.file_asm,
@@ -4541,7 +4545,9 @@ impl Compiler {
             extern_function_imports: extern_imports,
             init_funcs: self.init_funcs,
             function_aliases,
-        })
+        };
+        program.place_zero_region(zero_region);
+        Ok(program)
     }
 }
 

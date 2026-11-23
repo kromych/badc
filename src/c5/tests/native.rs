@@ -117,6 +117,14 @@ fn return_42() {
     assert_eq!(build_and_run("int main() { return 42; }", "ret42"), 42);
 }
 
+/// The zero-filled storage past `.data` reaches the image as `.bss` and
+/// holds what the program stores.
+#[test]
+fn zero_filled_static_storage_runs() {
+    let src = super::zero_filled_storage_source();
+    assert_eq!(build_and_run(src, "zero_filled_storage"), 0);
+}
+
 /// Return-address signing on the host CPU: every frame shape the
 /// signing decision distinguishes returns through `autiasp` and
 /// produces its value. The signature itself is inert in a plain arm64

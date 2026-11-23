@@ -1391,6 +1391,32 @@ int main(void) {
 }
 
 /// Compile inline source.
+/// Static storage no initializer names, in each form a unit declares it:
+/// a large array, a tentative definition, one a later initialized
+/// definition completes, an `extern` declaration a tentative one defines,
+/// a block-scope static, and pointers initialized into them. Exits 0 when every object
+/// reads as zero and holds what the program stores.
+pub fn zero_filled_storage_source() -> &'static str {
+    "static char big[1 << 26];\n\
+     int tentative[8];\n\
+     int later[4];\n\
+     int later[4] = {1, 2, 3, 4};\n\
+     extern long fallback;\n\
+     long fallback;\n\
+     char *into = &big[5];\n\
+     int *pt = &tentative[3];\n\
+     static int bump(void) { static long n; return (int)++n; }\n\
+     int main(void) {\n\
+         big[5] = 7;\n\
+         tentative[3] = 9;\n\
+         fallback = 3;\n\
+         bump();\n\
+         if (*into != 7 || *pt != 9 || later[2] != 3 || bump() != 2 || fallback != 3)\n\
+             return 1;\n\
+         return big[(1 << 26) - 1] + tentative[0];\n\
+     }\n"
+}
+
 pub fn compile_str(src: &str) -> Program {
     Compiler::new(with_prelude(src)).compile().unwrap()
 }

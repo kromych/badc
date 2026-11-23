@@ -4031,7 +4031,9 @@ mod tests {
                 let segname = &bytes[p + 8..p + 24];
                 if segname.starts_with(b"__DATA\0") {
                     let nsects = read_u32(&bytes, p + 64) as usize;
-                    assert_eq!(nsects, 4, "__DATA must have 4 sections when TLV present");
+                    // `__bss` joins them when the image has zero-filled storage.
+                    let bss = usize::from(build.bss_size > 0);
+                    assert_eq!(nsects, 4 + bss, "__DATA's sections when TLV present");
                     let mut sect_p = p + 72;
                     for _ in 0..nsects {
                         let sect_name = &bytes[sect_p..sect_p + 16];

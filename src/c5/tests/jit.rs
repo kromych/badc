@@ -2275,6 +2275,13 @@ fn jit_fixture(name: &str) -> i32 {
     jit_exit(&src, &[name])
 }
 
+/// The zero-filled storage past `.data` is mapped, zeroed and addressed
+/// under the JIT.
+#[test]
+fn zero_filled_static_storage_runs() {
+    assert_eq!(jit_exit(super::zero_filled_storage_source(), &[]), 0);
+}
+
 /// A construct the JIT declines must fail to load with a diagnostic
 /// naming it, on every JIT host. Left undriven, the combination
 /// regressed to a fault in the generated code instead: nothing in the

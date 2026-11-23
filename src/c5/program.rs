@@ -600,6 +600,65 @@ pub struct Program {
 }
 
 impl Program {
+    /// The extent of the data image: the file-backed bytes and the
+    /// zero-filled storage past them.
+    pub fn image_len(&self) -> usize {
+        self.data.len() + self.zero_fill_len
+    }
+
+    /// Move the objects the parser placed in the zero region past `data`, on
+    /// the region's alignment, as the image's zero-filled storage.
+    pub(crate) fn place_zero_region(&mut self, region: crate::c5::layout::ZeroRegion) {
+        let crate::c5::layout::ZeroRegion {
+            len,
+            align,
+            starts,
+            pads,
+            marks,
+        } = region;
+        if len == 0 {
+            return;
+        }
+        self.data_object_starts.extend(starts);
+        self.data_pad_ranges.extend(pads);
+        self.data_align_marks.extend(marks);
+        let data_len = self.data.len();
+        let base = data_len.next_multiple_of(align.max(1));
+        let placement = crate::c5::layout::ZeroRegionPlacement {
+            data_len: data_len as i64,
+            len: len as i64,
+            base: base as i64,
+        };
+        // A pointer slot's bytes hold its target's offset, which the remap
+        // below moves in the relocation record alone.
+        let moved = |r: &DataReloc| crate::c5::layout::in_zero_region(r.target_offset as i64);
+        let slots = |relocs: &[DataReloc]| -> BTreeSet<u64> {
+            relocs
+                .iter()
+                .filter(|r| moved(r))
+                .map(|r| r.data_offset)
+                .collect()
+        };
+        let (data_slots, tls_slots) = (slots(&self.data_relocs), slots(&self.tls_data_relocs));
+        DataOffsets::remap_data_offsets(self, &placement);
+        let rewrite = |image: &mut [u8], relocs: &[DataReloc], slots: &BTreeSet<u64>| {
+            for r in relocs.iter().filter(|r| slots.contains(&r.data_offset)) {
+                let at = r.data_offset as usize;
+                image[at..at + 8].copy_from_slice(&r.target_offset.to_le_bytes());
+            }
+        };
+        rewrite(&mut self.data, &self.data_relocs, &data_slots);
+        rewrite(&mut self.tls_data, &self.tls_data_relocs, &tls_slots);
+        if base > data_len {
+            self.data_pad_ranges.push((data_len as i64, base as i64));
+        }
+        self.data_pad_ranges.sort_unstable();
+        self.data_align_marks.sort_unstable();
+        self.data_object_starts.sort_unstable();
+        self.data_align = self.data_align.max(align);
+        self.zero_fill_len = base + len - data_len;
+    }
+
     /// Each file-scope enumeration constant and its value.
     pub fn enumerators(&self) -> impl Iterator<Item = (&str, i64)> {
         (self.symbols.iter())

@@ -3918,7 +3918,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             .data_relro_len
             .clamp(program.data_ro_len, program.data.len()),
         data_align: program.data_align,
-        bss_size: 0,
+        bss_size: program.zero_fill_len as i64,
         init_fini_arrays: Default::default(),
         entry_offset,
         got_fixups: st.got_fixups,

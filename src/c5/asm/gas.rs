@@ -788,8 +788,7 @@ fn gas_cond_region_is_diagnostic_only(
         }
         match split_first_token(s).0 {
             ".endif" => return Some(n + 1),
-            // TODO: `.warning`, once the layout reports warnings.
-            ".error" | ".else" | ".elseif" => {}
+            ".error" | ".warning" | ".else" | ".elseif" => {}
             _ => return None,
         }
     }

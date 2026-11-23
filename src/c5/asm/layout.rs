@@ -1564,6 +1564,7 @@ pub(crate) fn materialize_asm_sections(
             published,
             non_local: sink_non_local,
             weak: sink_weak,
+            warnings: sink_warnings,
             ..
         } = &mut *sink;
         let sink_labels = &AsmSinkNames {
@@ -1886,9 +1887,13 @@ pub(crate) fn materialize_asm_sections(
                                 gas_if_relation(&arm.tok, v)?
                             };
                             if taken {
-                                if let Some((at, msg)) = &arm.error {
-                                    line = *at;
-                                    return Err(alloc::format!("inline asm: `.error` {msg}"));
+                                for (at, code, msg) in &arm.diags {
+                                    if *code == crate::c5::diag::Code::ASSEMBLER {
+                                        line = *at;
+                                        return Err(alloc::format!("inline asm: `.error` {msg}"));
+                                    }
+                                    let text = alloc::format!("`.warning` {msg}");
+                                    sink_warnings.push(AsmError::coded(*code, *at, text));
                                 }
                                 break;
                             }

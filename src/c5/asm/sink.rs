@@ -45,6 +45,8 @@ pub(crate) struct AsmSectionSink {
     /// the section and offset it reached. Turned into frame tables by
     /// [`Self::emit_cfi_sections`] once every section is laid out.
     pub(crate) cfi: alloc::vec::Vec<cfi::CfiRecord>,
+    /// The warnings laying the sections out raised, for the caller to report.
+    pub(crate) warnings: alloc::vec::Vec<super::AsmError>,
 }
 
 /// Section name -> the identity keys the sink holds under it.
@@ -454,6 +456,7 @@ impl AsmSectionSink {
             len: self.sections.len(),
             decls: self.sym_decls.clone(),
             cfi: self.cfi.len(),
+            warnings: self.warnings.len(),
             per_section: self
                 .sections
                 .all()
@@ -488,6 +491,8 @@ impl AsmSectionSink {
             }
         }
         self.cfi.truncate(snap.cfi.min(self.cfi.len()));
+        self.warnings
+            .truncate(snap.warnings.min(self.warnings.len()));
         let keep = snap.len.min(self.sections.len());
         for (i, s) in self.sections.drain_from(keep).enumerate() {
             let key = section_key_of(&s);

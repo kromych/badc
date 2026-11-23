@@ -233,7 +233,7 @@ pub(crate) enum AsmSectionItem {
     /// A `.if` whose condition reads section labels and whose branches emit
     /// no bytes, so the layout that values the condition cannot depend on the
     /// outcome. Evaluated after layout; the first arm whose condition holds
-    /// raises its `.error`.
+    /// raises its diagnostics.
     CondDiag(alloc::vec::Vec<AsmCondArm>),
     /// A `.cfi_*` directive. It deposits no bytes; the section offset it
     /// reaches is the point its unwind rule takes effect from, so the
@@ -316,13 +316,14 @@ impl From<AsmSectionItem> for Encoded {
 }
 
 /// One branch of a deferred conditional. `tok` is the `.if`-family directive
-/// that opened the branch, empty for `.else`; `error` is the line and the
-/// diagnostic the branch raises, absent when it raises none.
+/// that opened the branch, empty for `.else`; `diags` are the line, code and
+/// text of each diagnostic the branch raises, in order: its `.warning`s and
+/// its first `.error`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmCondArm {
     pub tok: alloc::string::String,
     pub cond: alloc::string::String,
-    pub error: Option<(u32, alloc::string::String)>,
+    pub diags: alloc::vec::Vec<(u32, crate::c5::diag::Code, alloc::string::String)>,
 }
 
 /// One AArch64 literal-pool entry. `label` is the synthetic symbol the
@@ -932,6 +933,7 @@ pub(crate) struct AsmSectionsSnapshot {
     /// Recorded `.cfi_*` directives at the snapshot, so a re-laid-out
     /// function does not describe its frame twice.
     pub(crate) cfi: usize,
+    pub(crate) warnings: usize,
     /// Per section: bytes, relocs, labels, alignment, instruction-boundary
     /// state, mapping state.
     pub(crate) per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool, Option<MapClass>)>,

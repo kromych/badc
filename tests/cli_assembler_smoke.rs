@@ -3832,7 +3832,8 @@ fn a_defaulted_memory_operand_width_is_reported_with_the_form_encoded() {
     assert!(!ok && text.contains("w.s:4: error"), "{text}");
 }
 
-/// `.warning` reports its text at its line and assembly goes on; `.error`
+/// `.warning` reports its text at its line and assembly goes on, also in a
+/// conditional over section labels, which the layout values; `.error`
 /// reports its text and fails the unit.
 #[test]
 fn warning_and_error_directives_report_their_text() {
@@ -3842,6 +3843,15 @@ fn warning_and_error_directives_report_their_text() {
         assert_eq!(error_positions(&warnings), ["w.s:4: warning"], "{target}");
         assert!(
             warnings[0].ends_with("`.warning` check the table [B5004] [-Wasm-warning]"),
+            "{target}: {}",
+            warnings[0]
+        );
+        let body = "\t.text\n\t.globl f\nf:\n\tnop\n1:\n\t.if 1b - f > 0\n\
+                    \t.warning \"past the start\"\n\t.endif\n\tret\n";
+        let warnings = assembly_warnings(target, "d.s", body, &[]);
+        assert_eq!(error_positions(&warnings), ["d.s:7: warning"], "{target}");
+        assert!(
+            warnings[0].contains("`.warning` past the start"),
             "{target}: {}",
             warnings[0]
         );

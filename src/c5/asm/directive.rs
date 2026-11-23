@@ -416,13 +416,18 @@ fn extract_asm_sections_impl(
                     ".else" | ".elseif" => arms.push(AsmCondArm {
                         tok: alloc::string::String::from(if tok == ".else" { "" } else { ".if" }),
                         cond: alloc::string::String::from(rest.trim()),
-                        error: None,
+                        diags: alloc::vec::Vec::new(),
                     }),
-                    ".error" => {
+                    ".error" | ".warning" => {
+                        use crate::c5::diag::Code;
                         let arm = arms.last_mut().expect("an arm is open");
-                        if arm.error.is_none() {
+                        let code = match tok {
+                            ".error" => Code::ASSEMBLER,
+                            _ => Code::ASM_WARNING,
+                        };
+                        if !arm.diags.iter().any(|d| d.1 == Code::ASSEMBLER) {
                             let msg = alloc::string::String::from(rest.trim().trim_matches('"'));
-                            arm.error = Some((line, msg));
+                            arm.diags.push((line, code, msg));
                         }
                     }
                     _ => {
@@ -442,7 +447,7 @@ fn extract_asm_sections_impl(
                     alloc::vec![AsmCondArm {
                         tok: alloc::string::String::from(tok),
                         cond: alloc::string::String::from(rest.trim()),
-                        error: None,
+                        diags: alloc::vec::Vec::new(),
                     }],
                 ));
                 return Ok(());

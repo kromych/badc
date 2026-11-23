@@ -3935,6 +3935,9 @@ impl AsmPass<'_> {
             Ok(d) => d,
             Err(m) => return fail(alloc::string::String::from(m)),
         };
+        let warnings = core::mem::take(&mut out.cx.asm_sections.warnings);
+        let site = self.stmt.site;
+        (out.cx.asm_warnings).extend(warnings.into_iter().map(|w| (site, w.code, w.text)));
         let label_name = |num: u32| -> Option<alloc::string::String> {
             if num >= super::asm::NAMED_LABEL_BASE {
                 self.label_names

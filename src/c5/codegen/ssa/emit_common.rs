@@ -2747,6 +2747,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         &mut st.asm_sections,
     )
     .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
+    // The unit's validation reported the warnings this layout repeats.
+    st.asm_sections.warnings.clear();
 
     // Where the lowering reports. A codegen diagnostic has no position in
     // the translation unit, so the pragmas never apply to one and the

@@ -2516,6 +2516,8 @@ fn lower_inline_asm(
             syms,
             &goto_block,
         )?;
+        let warnings = core::mem::take(&mut out.asm_sections.warnings);
+        (out.asm_warnings).extend(warnings.into_iter().map(|w| (site, w.code, w.text)));
     }
     // The fall-through exit: outputs are stored on every exit path (GCC 11
     // output semantics), so the sequence repeats on each goto trampoline.

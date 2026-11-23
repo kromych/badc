@@ -405,6 +405,7 @@ impl Compiler {
         {
             later.extend(e.0);
         }
+        later.append(&mut self.asm_validate_sink.warnings);
         // In source statement order; an expansion error first on a tie.
         for mut e in later {
             let read = e.line.checked_sub(1).unwrap_or(u32::MAX);

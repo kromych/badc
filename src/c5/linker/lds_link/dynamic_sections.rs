@@ -15,12 +15,12 @@ use super::plt::{GOTPLT_RESERVED, PLT_ENTRY_SIZE, plt_header_size};
 use super::preempt::Reach;
 use super::symtab::most_constraining;
 use super::{
-    Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS,
-    SHN_UNDEF, SHT_PREINIT_ARRAY, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FUNC,
-    STT_NOTYPE, STT_OBJECT, STT_TLS, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC,
-    SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT,
-    SYNTH_REL, SYNTH_RELA, SYNTH_RELAPLT, SYNTH_RELPLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM,
-    ScriptSym, SecFate, machine_uses_rela,
+    Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_WRITE, SHN_ABS, SHN_UNDEF,
+    SHT_PREINIT_ARRAY, SHT_REL, SHT_RELA, STB_GLOBAL, STB_WEAK, STT_FUNC, STT_NOTYPE, STT_OBJECT,
+    STT_TLS, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM,
+    SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT, SYNTH_REL, SYNTH_RELA,
+    SYNTH_RELAPLT, SYNTH_RELPLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate,
+    machine_uses_rela,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -268,18 +268,6 @@ impl<'a> LdsLinker<'a> {
         self.dyn_relas = relas;
         self.relr_addrs = relr;
         // Update synthetic section sizes.
-        let nones = match self.dyn_nones {
-            Some(n) => n,
-            None => {
-                let n = if pic {
-                    self.count_reserved_none_slots()
-                } else {
-                    0
-                };
-                self.dyn_nones = Some(n);
-                n
-            }
-        };
         self.build_dyn_tables(&|_| 1);
         let dyn_sizes = self.dyn_table_sizes();
         // `_GLOBAL_OFFSET_TABLE_[0]` is reserved once the link either
@@ -305,7 +293,7 @@ impl<'a> LdsLinker<'a> {
                 continue;
             }
             if sec.name == rela_name {
-                sec.size = (nones + self.dyn_relas.len() as u64) * rela_ent;
+                sec.size = self.dyn_relas.len() as u64 * rela_ent;
                 continue;
             }
             if sec.name == plt_rel_name {
@@ -760,42 +748,5 @@ impl<'a> LdsLinker<'a> {
         sites
             .into_iter()
             .any(|a| ro.iter().any(|&(lo, hi)| a >= lo && a < hi))
-    }
-
-    /// bfd sizes dynamic reloc sections at check_relocs time: every
-    /// 64-bit absolute reloc against a non-local symbol in an
-    /// allocated section reserves a slot, with no discard check on the
-    /// global-symbol path. A slot whose section the script discards is
-    /// never written (the section is not relocated) and never
-    /// reclaimed by RELR packing, so it survives as a zeroed
-    /// R_*_NONE entry. Reserve the same slots for size parity.
-    fn count_reserved_none_slots(&self) -> u64 {
-        let abs_addr = self.dyn_reloc_types().0;
-        let mut n = 0u64;
-        for i in 0..self.insecs.len() {
-            if self.fates[i] != SecFate::Discarded {
-                continue;
-            }
-            let id = self.insecs[i];
-            // A group the dedup dropped is gone before bfd reaches
-            // check_relocs, so it reserves nothing.
-            if self.comdat_dropped.contains(&(id.obj, id.sec)) {
-                continue;
-            }
-            let s = &self.objects[id.obj].sections[id.sec];
-            if s.flags & SHF_ALLOC == 0 {
-                continue;
-            }
-            for r in &s.relocs {
-                if r.rtype != abs_addr {
-                    continue;
-                }
-                let sym = &self.objects[id.obj].symbols[r.sym as usize];
-                if sym.binding() != STB_LOCAL {
-                    n += 1;
-                }
-            }
-        }
-        n
     }
 }

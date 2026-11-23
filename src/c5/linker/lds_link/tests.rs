@@ -3355,12 +3355,10 @@ fn eh_frame_drops_a_cie_no_fde_names() {
     assert_eq!(eh_frame::count_fdes(&body), 1);
 }
 
-/// An ABS64 against a non-local symbol in an allocated section the
-/// script discards reserves a `.rela.dyn` slot that is never
-/// written (bfd sizes the global path without a discard check);
-/// local-target relocs in the same section reserve nothing.
+/// A relocation in a section the script discards needs no dynamic
+/// relocation: `.rela.dyn` holds only the live sections' entries.
 #[test]
-fn discarded_alloc_relocs_reserve_none_slots() {
+fn discarded_alloc_relocs_reserve_no_dynamic_slots() {
     let script = parse_linker_script(
         r#"
 SECTIONS {
@@ -3400,13 +3398,11 @@ SECTIONS {
     };
     let res = link_with_script(&script, objs, &opts).expect("links");
     let secs = readelf_sections(&res.image);
-    let rela = secs.iter().find(|s| s.0 == ".rela.dyn").expect("rela");
-    // One reserved slot for the discarded global-target reloc; the
-    // local-target one reserves nothing; the live .data slot packs
-    // into RELR.
-    assert_eq!(rela.3, 24, "one zeroed reservation");
-    let off = section_file_off(&res.image, rela.2);
-    assert_eq!(&res.image[off..off + 24], &[0u8; 24], "slot reads R_*_NONE");
+    let rela = secs.iter().find(|s| s.0 == ".rela.dyn");
+    assert!(
+        rela.is_none_or(|r| r.3 == 0),
+        "no slot for the discarded section"
+    );
     let relr = secs.iter().find(|s| s.0 == ".relr.dyn").expect("relr");
     assert!(relr.3 > 0, "live slot packed into RELR");
 }

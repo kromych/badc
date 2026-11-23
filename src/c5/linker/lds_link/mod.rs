@@ -787,9 +787,6 @@ pub struct LdsLinker<'a> {
     /// `objects`): index of the pseudo object.
     synth_obj: usize,
     dyn_relas: Vec<DynReloc>,
-    /// Reserved-but-never-written `.rela.dyn` slots (see
-    /// `count_reserved_none_slots`), computed once per link.
-    dyn_nones: Option<u64>,
     relr_addrs: Vec<u64>,
     /// GOT slots, keyed by the symbol each holds (a GOT reference to an
     /// undefined symbol still needs a slot).
@@ -1096,7 +1093,6 @@ impl<'a> LdsLinker<'a> {
             referenced: HashSet::new(),
             synth_obj,
             dyn_relas: Vec::new(),
-            dyn_nones: None,
             relr_addrs: Vec::new(),
             got_slots: Vec::new(),
             got_map: HashMap::new(),

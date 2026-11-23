@@ -237,7 +237,7 @@ impl<'a> LdsLinker<'a> {
         let dyn_section_addr = self.dyn_section_addr();
         let class = self.class;
         let dynamic_bytes = dynamic::build_dynamic(&addrs, class);
-        let (rela_name, _, rela_ent) = self.dyn_reloc_kind();
+        let (rela_name, _, _) = self.dyn_reloc_kind();
         let plt_rel_name = self.plt_reloc_name();
         let slot = class.addr_size();
         let aw = slot as usize;
@@ -255,9 +255,6 @@ impl<'a> LdsLinker<'a> {
             let off = self.placements[i].off as usize;
             let mut bytes: Vec<u8> = Vec::new();
             if name == rela_name {
-                // Reserved slots stay zeroed (R_*_NONE) ahead of the
-                // live entries.
-                bytes.resize(self.dyn_nones.unwrap_or(0) as usize * rela_ent as usize, 0);
                 for d in &self.dyn_relas {
                     let sym = d.sym.as_deref().map_or(0, |n| self.dynsym_index(n));
                     if sym == 0

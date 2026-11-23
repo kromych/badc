@@ -289,6 +289,12 @@ pub(crate) fn unsized_memory_width(name: &str, mode: Mode) -> Option<u8> {
     Some(mode.opsize())
 }
 
+/// Whether [`unsized_memory_width`] picks a width for `name`: more than
+/// one, none of them the stack and near-branch group's.
+pub(crate) fn memory_width_is_defaulted(name: &str) -> bool {
+    memory_widths(name).count_ones() > 1 && !memory_forms(name).any(|f| f.rexw == RexW::Default64)
+}
+
 /// Whether the catalog gives `name` a memory operand of `bytes`.
 pub(crate) fn memory_width_of(name: &str, bytes: u32) -> bool {
     u32::from(memory_widths(name)) & bytes != 0 && bytes.is_power_of_two() && bytes <= 8

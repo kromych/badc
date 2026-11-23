@@ -1246,6 +1246,16 @@ impl Compiler {
         }
     }
 
+    /// [`Self::ast_src_pos`] of a construct that began at `at`.
+    pub(super) fn ast_src_pos_at(&mut self, at: super::Site) -> SrcPos {
+        let pos = self.ast_src_pos();
+        SrcPos {
+            line: at.line as u32,
+            offset: at.offset.unwrap_or(pos.offset),
+            ..pos
+        }
+    }
+
     /// Push an integer-literal expression and stash it in
     /// `ast_acc`. Called at the integer-literal / enum-constant /
     /// `Token::Num`-class identifier sites.

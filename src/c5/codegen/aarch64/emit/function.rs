@@ -1242,6 +1242,7 @@ impl FunctionEmitter<'_, '_> {
             self.text_map_state,
             self.asm_text_labels,
             self.asm_section_text_refs,
+            self.cx.asm_warnings,
             Some(AsmGotoCtxA64 {
                 row: &func.jump_tables[table as usize],
                 branch_fixups: &mut self.branch_fixups,

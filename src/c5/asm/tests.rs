@@ -23,6 +23,15 @@ fn block_of(blocks: &[AsmSectionBlock], label: &str) -> alloc::string::String {
 /// the pushed section and leaves the stack depth alone: a macro that
 /// emits a table entry through `.section` / `.previous` inside a
 /// `.pushsection`-bracketed function.
+/// The expansion's text alone.
+fn gas_text(
+    text: &str,
+    inst_width: usize,
+    subst: &dyn Fn(&str) -> Option<alloc::string::String>,
+) -> Result<Option<alloc::string::String>, alloc::string::String> {
+    expand_asm_gas_macros(text, inst_width, subst).map(|e| e.text)
+}
+
 #[test]
 fn previous_returns_to_the_section_a_section_directive_left() {
     let text = ".pushsection .noinstr.text,\"ax\"\ninner:\n.section \"a\",\"a\"\nexported:\n\
@@ -1230,7 +1239,7 @@ fn asm_conditionals_keep_the_taken_branch() {
     // result keeps the branch. A true comparison is -1.
     // `.else` / `.elseif` select the live arm, and a dropped branch takes
     // its `.pushsection` with it.
-    let reduce = |t: &str| expand_asm_gas_macros(t, 4, &|_| None).unwrap().unwrap();
+    let reduce = |t: &str| gas_text(t, 4, &|_| None).unwrap().unwrap();
     assert_eq!(reduce(".if 1 == 1\nnop\n.endif\n"), "nop\n");
     assert_eq!(reduce(".if (1 == 1) == -1\nnop\n.endif\n"), "nop\n");
     assert_eq!(reduce(".if 1 != 1\nbad\n.else\ngood\n.endif\n"), "good\n");
@@ -1253,21 +1262,15 @@ fn asm_conditionals_keep_the_taken_branch() {
     };
     let distinct =
         alloc::format!("{table}.if .L__gpr_num_%0 == .L__gpr_num_%1\nsame\n.else\napart\n.endif\n");
-    let out = expand_asm_gas_macros(&distinct, 4, &subst)
-        .unwrap()
-        .unwrap();
+    let out = gas_text(&distinct, 4, &subst).unwrap().unwrap();
     assert!(out.contains("apart") && !out.contains("same"), "{out}");
     let one = alloc::format!("{table}.if .L__gpr_num_%0 == .L__gpr_num_%0\nsame\n.endif\n");
-    let out = expand_asm_gas_macros(&one, 4, &subst).unwrap().unwrap();
+    let out = gas_text(&one, 4, &subst).unwrap().unwrap();
     assert!(out.contains("same"), "{out}");
     // Non-constant conditions are rejected; a template with neither a
     // conditional nor a macro directive is left untouched.
-    assert!(expand_asm_gas_macros(".if x\nnop\n.endif\n", 4, &|_| None).is_err());
-    assert!(
-        expand_asm_gas_macros("nop\n", 4, &|_| None)
-            .unwrap()
-            .is_none()
-    );
+    assert!(gas_text(".if x\nnop\n.endif\n", 4, &|_| None).is_err());
+    assert!(gas_text("nop\n", 4, &|_| None).unwrap().is_none());
 }
 
 #[test]
@@ -1910,7 +1913,7 @@ fn gas_macro_sysreg_read_folds_to_inst_word() {
         "\t.purgem\tmrs_s\n",
     );
     let subst = |t: &str| (t == "%0").then(|| alloc::string::String::from("x1"));
-    let out = expand_asm_gas_macros(text, 4, &subst).unwrap().unwrap();
+    let out = gas_text(text, 4, &subst).unwrap().unwrap();
     // sys_reg(3,0,0,0,0) is 0x180000, mrs base 0xd5200000, Rt=1: 0xd5380001.
     assert_eq!(
         out.trim(),
@@ -1928,7 +1931,7 @@ fn gas_macro_empty_arguments_bind_like_gnu_as() {
     let expand = |invocation: &str, params: &str| {
         let text =
             alloc::format!(".macro m {params}\n.ascii \"[\\a][\\b][\\c]\"\n.endm\n{invocation}\n");
-        expand_asm_gas_macros(&text, 4, &|_| None)
+        gas_text(&text, 4, &|_| None)
             .unwrap()
             .unwrap()
             .trim()
@@ -1979,7 +1982,7 @@ fn gas_macro_expansions_are_independent_per_call() {
             sreg = sreg
         );
         let subst = move |t: &str| (t == "%0").then(|| alloc::string::String::from(reg));
-        expand_asm_gas_macros(&text, 4, &subst)
+        gas_text(&text, 4, &subst)
             .unwrap()
             .unwrap()
             .trim()
@@ -2010,7 +2013,7 @@ fn gas_macro_extable_short_resolves_register_field() {
         "\t.popsection\n",
     );
     let subst = |t: &str| (t == "%w0").then(|| alloc::string::String::from("w2"));
-    let out = expand_asm_gas_macros(text, 4, &subst).unwrap().unwrap();
+    let out = gas_text(text, 4, &subst).unwrap().unwrap();
     assert!(out.contains(".short (((2) << 0) | ((31) << 5))"), "{out}");
     assert!(out.contains(".pushsection __ex_table"), "{out}");
 }
@@ -2033,7 +2036,7 @@ fn gas_macro_repeated_extable_leaves_no_assignment_in_the_stream() {
         "\t.popsection\n",
     );
     let subst = |t: &str| (t == "%w0").then(|| alloc::string::String::from("w2"));
-    let out = expand_asm_gas_macros(&alloc::format!("{block}{block}"), 4, &subst)
+    let out = gas_text(&alloc::format!("{block}{block}"), 4, &subst)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -2056,7 +2059,7 @@ fn gas_macro_keeps_an_assignment_an_earlier_statement_read() {
         "\t.popsection\n",
         "\t.set textsize, 0x1234\n",
     );
-    let out = expand_asm_gas_macros(text, 4, &|_| None).unwrap().unwrap();
+    let out = gas_text(text, 4, &|_| None).unwrap().unwrap();
     assert!(out.contains(".long textsize"), "{out}");
     assert!(out.contains(".set textsize, 4660"), "{out}");
 }
@@ -2065,26 +2068,22 @@ fn gas_macro_keeps_an_assignment_an_earlier_statement_read() {
 fn gas_macro_malformed_forms_are_rejected() {
     let none = |_: &str| None;
     // No directives at all: not this pass's business.
-    assert!(
-        expand_asm_gas_macros("add x0, x0, x1\n", 4, &none)
-            .unwrap()
-            .is_none()
-    );
+    assert!(gas_text("add x0, x0, x1\n", 4, &none).unwrap().is_none());
     // `.purgem` of a macro that was never defined.
     assert!(
-        expand_asm_gas_macros(".purgem foo\n", 4, &none)
+        gas_text(".purgem foo\n", 4, &none)
             .unwrap_err()
             .contains("purgem")
     );
     // `.macro` with no closing `.endm`.
     assert!(
-        expand_asm_gas_macros(".macro foo\nnop\n", 4, &none)
+        gas_text(".macro foo\nnop\n", 4, &none)
             .unwrap_err()
             .contains(".endm")
     );
     // A non-constant `.inst` value is rejected, never mis-encoded.
     assert!(
-        expand_asm_gas_macros(".inst (0xd5200000 | undefined_sym)\n", 4, &none)
+        gas_text(".inst (0xd5200000 | undefined_sym)\n", 4, &none)
             .unwrap_err()
             .contains(".inst")
     );
@@ -2099,7 +2098,7 @@ fn gas_macro_spaced_qualifiers_bind_like_gnu_as() {
     let text = ".macro m1, a : req\nadd x0, x0, \\a\n.endm\n\
                 .macro m2, b = x7\nadd x1, x1, \\b\n.endm\n\
                 m1 x5\nm2\nm2 x9\n";
-    let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
+    let out = gas_text(text, 4, &none).unwrap().unwrap();
     let body: alloc::vec::Vec<&str> = out
         .lines()
         .map(str::trim)
@@ -2109,7 +2108,7 @@ fn gas_macro_spaced_qualifiers_bind_like_gnu_as() {
     // A default is only bound when the invocation omits the argument, so a
     // spaced default never leaks into a supplied one.
     let text = ".macro m3, p = 64\n.if \\p == 32\nnop\n.else\nret\n.endif\n.endm\nm3\nm3 32\n";
-    let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
+    let out = gas_text(text, 4, &none).unwrap().unwrap();
     assert!(out.contains("ret") && out.contains("nop"), "{out}");
 }
 
@@ -2122,7 +2121,7 @@ fn gas_macro_spaced_qualifiers_bind_like_gnu_as() {
 fn gas_ifdef_sees_definitions_like_gnu_as() {
     let none = |_: &str| None;
     let body = |text: &str| -> alloc::vec::Vec<alloc::string::String> {
-        expand_asm_gas_macros(text, 4, &none)
+        gas_text(text, 4, &none)
             .unwrap()
             .unwrap()
             .lines()
@@ -2189,7 +2188,7 @@ fn altmacro_percent_arguments_evaluate_like_gnu_as() {
                 .purgem _for__body\n\
                 .endm\n\
                 _for n, 0, 7, add x0, x0, #\\n\n";
-    let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
+    let out = gas_text(text, 4, &none).unwrap().unwrap();
     let body: alloc::vec::Vec<&str> = out
         .lines()
         .map(str::trim)
@@ -2203,7 +2202,7 @@ fn altmacro_percent_arguments_evaluate_like_gnu_as() {
     );
     // Without `.altmacro` the `%` is not an evaluation marker.
     let text = ".macro m a\n.byte \\a\n.endm\nm %1+2\n";
-    let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
+    let out = gas_text(text, 4, &none).unwrap().unwrap();
     assert!(out.contains("%1+2"), "{out}");
 }
 
@@ -2215,7 +2214,7 @@ fn altmacro_percent_arguments_evaluate_like_gnu_as() {
 #[test]
 fn gas_assignments_bind_constants_and_registers() {
     let expand = |text: &str| {
-        expand_asm_gas_macros(text, 4, &|_| None)
+        gas_text(text, 4, &|_| None)
             .unwrap()
             .expect("an assignment triggers the pass")
             .trim()
@@ -2241,14 +2240,14 @@ fn gas_assignments_bind_constants_and_registers() {
     assert_eq!(expand("alias = target\nnop\n"), ".set alias, target\nnop");
     // A comparison is not an assignment, so it triggers nothing.
     assert!(
-        expand_asm_gas_macros("cmpl $1, %eax\nsete %al\n", 4, &|_| None)
+        gas_text("cmpl $1, %eax\nsete %al\n", 4, &|_| None)
             .unwrap()
             .is_none()
     );
 }
 
 fn rept(text: &str) -> Result<alloc::string::String, alloc::string::String> {
-    Ok(expand_asm_gas_macros(text, 4, &|_| None)?.expect("`.rept` triggers the pass"))
+    Ok(gas_text(text, 4, &|_| None)?.expect("`.rept` triggers the pass"))
 }
 
 /// The repeat directive is `.rept` or `.rep`, and `.irpc` iterates the
@@ -2342,11 +2341,7 @@ fn macro_expansion_rescans_substituted_statements() {
 #[test]
 fn rept_expands_repeats_and_rejects_malformed() {
     // No `.rept` and no other macro directive: not this pass's business.
-    assert!(
-        expand_asm_gas_macros("nop\nret\n", 4, &|_| None)
-            .unwrap()
-            .is_none()
-    );
+    assert!(gas_text("nop\nret\n", 4, &|_| None).unwrap().is_none());
     // `.rept 3` repeats the body three times (a replacement's nop
     // padding); `.rept 0` drops it; nested counts multiply.
     let out = rept("swpb w0, w1, [x2]\n.rept 3\nnop\n.endr\n").unwrap();

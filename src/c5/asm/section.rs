@@ -262,28 +262,57 @@ pub(crate) struct AsmLineItem {
 }
 
 /// Replace a `Code` item with what `encode` makes of its text. A bad
-/// instruction's error goes to `errors` and leaves the item with no bytes.
+/// instruction's error goes to `errors` and leaves the item with no bytes;
+/// a width the encoding defaulted goes there as a warning.
 pub(crate) fn encode_code_item(
     item: &mut AsmSectionItem,
     line: u32,
     errors: &mut alloc::vec::Vec<AsmError>,
-    encode: impl FnOnce(&str) -> Result<AsmSectionItem, alloc::string::String>,
+    encode: impl FnOnce(&str) -> Result<Encoded, alloc::string::String>,
 ) {
     let AsmSectionItem::Code(text) = item else {
         return;
     };
-    let encoded = encode(text).unwrap_or_else(|m| {
-        errors.push(AsmError::at(
-            line,
-            alloc::format!("{m} (instruction `{text}`)"),
-        ));
-        AsmSectionItem::CodeBytes {
-            bytes: alloc::vec::Vec::new(),
-            relocs: alloc::vec::Vec::new(),
-            short: None,
+    let encoded = match encode(text) {
+        Ok(Encoded { item, warning }) => {
+            if let Some(text) = warning {
+                errors.push(AsmError::coded(
+                    crate::c5::diag::Code::ASM_OPERAND_SIZE,
+                    line,
+                    text,
+                ));
+            }
+            item
         }
-    });
+        Err(m) => {
+            errors.push(AsmError::at(
+                line,
+                alloc::format!("{m} (instruction `{text}`)"),
+            ));
+            AsmSectionItem::CodeBytes {
+                bytes: alloc::vec::Vec::new(),
+                relocs: alloc::vec::Vec::new(),
+                short: None,
+            }
+        }
+    };
     *item = encoded;
+}
+
+/// An encoded statement, and the warning its encoding raised: a memory
+/// operand width it chose by default.
+pub(crate) struct Encoded {
+    pub item: AsmSectionItem,
+    pub warning: Option<alloc::string::String>,
+}
+
+impl From<AsmSectionItem> for Encoded {
+    fn from(item: AsmSectionItem) -> Self {
+        Encoded {
+            item,
+            warning: None,
+        }
+    }
 }
 
 /// One branch of a deferred conditional. `tok` is the `.if`-family directive

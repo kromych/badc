@@ -226,8 +226,19 @@ impl Compiler {
                 "file-scope asm template is not valid UTF-8",
             )
         })?;
-        self.ingest_file_scope_asm(text, true)
-            .map_err(|e| self.compile_err_at(Code::ASSEMBLER, line, String::from(e)))
+        let (warnings, error) = match self.ingest_file_scope_asm(text, true) {
+            Ok(warnings) => (warnings, None),
+            Err(rows) => {
+                let error = self.compile_err_at(Code::ASSEMBLER, line, String::from(rows.clone()));
+                (rows.0, Some(error))
+            }
+        };
+        // The template's lines are not the source's: each warning is at the
+        // statement's.
+        for w in warnings.into_iter().filter(|w| !w.is_error()) {
+            self.warn_at(w.code, Site::line(line), w.text);
+        }
+        error.map_or(Ok(()), Err)
     }
 
     /// Record a `.set` alias of the unit, a later assignment to the same name
@@ -251,7 +262,7 @@ impl Compiler {
         &mut self,
         text: &str,
         globl_shortcut: bool,
-    ) -> Result<(), crate::c5::asm::AsmErrors> {
+    ) -> Result<Vec<crate::c5::asm::AsmError>, crate::c5::asm::AsmErrors> {
         if !cfg!(feature = "assembler") {
             return Err(crate::c5::asm::NO_ASSEMBLER.into());
         }
@@ -372,16 +383,17 @@ impl Compiler {
         // sections under the emit target's conventions. The sink spans the unit
         // so a template resolves the labels its predecessors defined, matching
         // the codegen materialization, which shares one sink per unit.
-        if let Err(e) = crate::c5::codegen::encode_file_asm_section_code(
+        match crate::c5::codegen::encode_file_asm_section_code(
             &mut blocks,
             self.target,
             self.elf_class,
         ) {
-            later.extend(e.0);
+            Ok(warnings) => later.extend(warnings),
+            Err(e) => later.extend(e.0),
         }
         // The layout reads every statement's size: it needs all of them.
-        if errors.is_empty()
-            && later.is_empty()
+        if !errors.iter().any(|(_, e)| e.is_error())
+            && !later.iter().any(AsmError::is_error)
             && let Err(e) = crate::c5::asm::materialize_asm_sections(
                 &blocks,
                 &crate::c5::asm::AsmOperandResolver::NONE,
@@ -400,9 +412,9 @@ impl Compiler {
             errors.push((read, e));
         }
         errors.sort_by_key(|&(read, _)| read);
-        AsmErrors::check(errors.into_iter().map(|(_, e)| e).collect())?;
+        let warnings = AsmErrors::split(errors.into_iter().map(|(_, e)| e).collect())?;
         self.file_asm.push(prepared);
-        Ok(())
+        Ok(warnings)
     }
 
     /// Whether the declared object is itself `const` (C99 6.7.3): as spelled,

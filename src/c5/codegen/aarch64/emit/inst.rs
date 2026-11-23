@@ -634,6 +634,7 @@ pub(super) fn emit_inst(
             text_map_state,
             asm_text_labels,
             asm_section_text_refs,
+            cx.asm_warnings,
             None,
         ),
         // `BlockAddr` is lowered in the block walk and `TailExt` is a

@@ -488,6 +488,11 @@ struct AsmSink<'a> {
     text_align: &'a mut usize,
     asm_text_labels: &'a mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &'a mut Vec<super::AsmSectionTextRef>,
+    asm_warnings: &'a mut Vec<(
+        super::super::ir::ValueId,
+        crate::c5::diag::Code,
+        alloc::string::String,
+    )>,
 }
 
 /// The unit's symbol tables a statement resolves names against.
@@ -2319,6 +2324,11 @@ pub(super) fn emit_inline_asm_aarch64(
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    asm_warnings: &mut Vec<(
+        super::super::ir::ValueId,
+        crate::c5::diag::Code,
+        alloc::string::String,
+    )>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> Emit {
     // A statement that lowers to nothing needs no staging;
@@ -2343,6 +2353,7 @@ pub(super) fn emit_inline_asm_aarch64(
         text_align,
         asm_text_labels,
         asm_section_text_refs,
+        asm_warnings,
     };
     let syms = AsmSymbols {
         name2entpc,
@@ -2403,7 +2414,12 @@ fn lower_inline_asm(
         outs,
     };
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
-    let text = gas.as_deref().unwrap_or(&text);
+    (out.asm_warnings).extend(
+        gas.warnings
+            .into_iter()
+            .map(|w| (site, crate::c5::diag::Code::ASM_WARNING, w)),
+    );
+    let text = gas.text.as_deref().unwrap_or(&text);
     // The section blocks and the deferred region look a numeric label up by
     // number, so a label defined twice (two chained replacement sequences)
     // is numbered apart by position first.
@@ -2703,6 +2719,7 @@ pub(super) fn encode_a64_asm_section_code(
     a64_for_each_section_item_mut(blocks, &mut |key, site, line, item| {
         crate::c5::asm::encode_code_item(item, line, &mut errors, |text| {
             encode_a64_section_insn(text, key, site, measured.as_ref(), conv, goto_block)
+                .map(Into::into)
         });
     });
     crate::c5::asm::AsmErrors::check(errors)

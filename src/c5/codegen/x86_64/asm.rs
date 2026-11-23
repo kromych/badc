@@ -1175,6 +1175,14 @@ fn sized_nullary(name: &str) -> Option<Mnemonic> {
     Some(Mnemonic::SizedNullary { opcode, opw, stack })
 }
 
+/// The unsuffixed name of the string operation whose byte form is `opcode`.
+pub(super) fn string_op_name(opcode: u8) -> Option<&'static str> {
+    STRING_OPS
+        .iter()
+        .find(|&&(_, op, _)| op == opcode)
+        .map(|&(n, ..)| n)
+}
+
 fn string_op(name: &str) -> Option<Mnemonic> {
     if let Some(&(_, opcode, quad)) = STRING_OPS.iter().find(|(n, ..)| *n == name) {
         return Some(Mnemonic::StringOp {

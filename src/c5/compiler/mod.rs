@@ -3160,24 +3160,37 @@ impl Compiler {
         // No C source and no retry state: the auto-include retry rebuilds
         // from the source string, which would drop the ingested unit.
         let mut this = Self::build("", target, opts);
-        this.ingest_file_scope_asm(&text, false).map_err(|errors| {
-            let diagnostic = |e: crate::c5::asm::AsmError| {
-                let text = crate::c5::asm::source_message(&e.text);
-                let d = match lines.loc(e.line) {
-                    Some(loc) => Diagnostic::new(Code::ASSEMBLER, Level::Error, Some(loc), text),
-                    None => Diagnostic::new(
-                        Code::ASSEMBLER,
-                        Level::Error,
-                        None,
-                        alloc::format!("{label}: {text}"),
-                    ),
-                };
-                e.invoked_at.iter().fold(d, |d, &line| {
-                    d.with_note(lines.loc(line), "macro invoked from here")
-                })
+        // A row at the level its code resolves to; an ignored warning is none.
+        let diagnostic = |sink: &crate::c5::diag::Sink, e: crate::c5::asm::AsmError| {
+            let loc = lines.loc(e.line);
+            let level = match e.is_error() {
+                true => Level::Error,
+                false => sink.level(e.code, loc.as_ref()),
             };
-            C5Error::Compile(errors.0.into_iter().map(diagnostic).collect())
-        })?;
+            let text = crate::c5::asm::source_message(&e.text);
+            let d = match loc {
+                Some(loc) => Diagnostic::new(e.code, level, Some(loc), text),
+                None => Diagnostic::new(e.code, level, None, alloc::format!("{label}: {text}")),
+            };
+            let d = e.invoked_at.iter().fold(d, |d, &line| {
+                d.with_note(lines.loc(line), "macro invoked from here")
+            });
+            (level != Level::Ignore).then_some(d)
+        };
+        match this.ingest_file_scope_asm(&text, false) {
+            Ok(warnings) => {
+                for e in warnings {
+                    if let Some(d) = diagnostic(&this.sink, e) {
+                        this.sink.record(d);
+                    }
+                }
+            }
+            Err(rows) => {
+                let rows = rows.0.into_iter();
+                let rows = rows.filter_map(|e| diagnostic(&this.sink, e));
+                return Err(C5Error::Compile(rows.collect()));
+            }
+        }
         let mut program = this.compile_one_pass()?;
         // The reserved `.data` prefix keeps a c5 global's address away from
         // the null pointer. An assembled unit has no C source and so no c5

@@ -2426,7 +2426,7 @@ impl Compiler {
             // A statement with successors, not an expression: the
             // walker closes the block with `Terminator::AsmGoto`.
             self.flush_pending_stores();
-            let pos = self.ast_src_pos();
+            let pos = self.ast_src_pos_at(at);
             let stmt = self
                 .ast
                 .push_stmt(super::super::ast::Stmt::AsmGoto(idx), pos);
@@ -2437,10 +2437,10 @@ impl Compiler {
             return Ok(());
         }
         self.ty = Ty::Int as i64;
-        let pos = self.ast_src_pos();
+        let pos = self.ast_src_pos_at(at);
         let id = self.ast.push_expr(Expr::InlineAsm(idx), pos);
-        self.ast_acc = Some(id);
-        let _ = self.ast_emit_expr_stmt();
+        self.ast.push_stmt(super::super::ast::Stmt::Expr(id), pos);
+        self.ast_acc = None;
         Ok(())
     }
 

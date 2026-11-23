@@ -72,6 +72,51 @@ fn unsized_mem_size(
         .map(super::super::ir::AsmRegSize::from_width)
 }
 
+/// The warning for an instruction encoded at a default width: it has a
+/// memory operand its operation takes in more than one width, and neither
+/// a suffix nor a register operand (`sized`) picks one.
+fn defaulted_width_warning(
+    insn: &super::asm::AsmInsn,
+    ops: &[super::asm::Concrete],
+    sized: bool,
+    mode: super::table::Mode,
+) -> Option<alloc::string::String> {
+    use super::asm::{Concrete, MemRm, Mnemonic};
+    if !ops.iter().any(|o| MemRm::of(o).is_some()) {
+        return None;
+    }
+    let (name, form) = match insn.mnemonic {
+        Mnemonic::X87 { op, width: None } => (op.name, op.defaulted_form()?),
+        Mnemonic::X87 { .. } => return None,
+        // The accumulator operand sizes a string operation; `(%dx)` does not.
+        Mnemonic::StringOp { opcode, opw: 0, .. } => {
+            if ops
+                .iter()
+                .any(|o| matches!(o, Concrete::Reg { reg: 0, .. }))
+            {
+                return None;
+            }
+            let name = super::asm::string_op_name(opcode)?;
+            (name, alloc::format!("{name}l"))
+        }
+        m => {
+            let name = super::asm::table_name(m)?;
+            if sized || insn.suffix.is_some() || !super::table::memory_width_is_defaulted(name) {
+                return None;
+            }
+            let suffix = match mode.opsize() {
+                2 => 'w',
+                8 => 'q',
+                _ => 'l',
+            };
+            (name, alloc::format!("{name}{suffix}"))
+        }
+    };
+    Some(alloc::format!(
+        "no suffix or register operand sizes the memory operand of `{name}`; encoded as `{form}`"
+    ))
+}
+
 /// RIP-relative target of an inline-asm `%a` address operand: an
 /// `i`-class operand naming a link-time data address (`&global`,
 /// optionally offset by a constant).
@@ -178,7 +223,7 @@ fn encode_x86_asm_section_code(
     goto_block: &dyn Fn(u8) -> Option<u32>,
     op_reg: &[Option<u8>],
     operands: &[super::super::ir::AsmOperand],
-) -> Result<(), crate::c5::asm::AsmErrors> {
+) -> Result<alloc::vec::Vec<crate::c5::asm::AsmError>, crate::c5::asm::AsmErrors> {
     use super::super::ir::Inst;
     use crate::c5::asm::AsmSectionTarget;
     // A same-TU function operand is an `ImmCode` whose ent_pc reverses to its
@@ -242,7 +287,7 @@ fn encode_x86_asm_section_code(
             fold.note_item(&li.item, &imm_of);
         }
     }
-    crate::c5::asm::AsmErrors::check(errors)
+    crate::c5::asm::AsmErrors::split(errors)
 }
 
 /// Encode a file-scope inline-asm section's instructions with an empty
@@ -253,7 +298,7 @@ fn encode_x86_asm_section_code(
 pub(crate) fn encode_x86_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     class: crate::c5::ElfClass,
-) -> Result<(), crate::c5::asm::AsmErrors> {
+) -> Result<alloc::vec::Vec<crate::c5::asm::AsmError>, crate::c5::asm::AsmErrors> {
     use crate::c5::asm::{AsmError, AsmSectionItem, AsmSectionTarget, encode_code_item};
     let operand_target = |_: u8| -> Option<AsmSectionTarget> { None };
     let goto_block = |_: u8| -> Option<u32> { None };
@@ -330,7 +375,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
             fold.note_item(&li.item, &imm_of);
         }
     }
-    crate::c5::asm::AsmErrors::check(errors)
+    crate::c5::asm::AsmErrors::split(errors)
 }
 
 /// Record on an alignment directive the encoding mode it stands in, which
@@ -496,7 +541,7 @@ fn encode_one_x86_section_insn(
     operand_target: &dyn Fn(u8) -> Option<crate::c5::asm::AsmSectionTarget>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     refs: &SectionOperandRefs<'_>,
-) -> Result<crate::c5::asm::AsmSectionItem, alloc::string::String> {
+) -> Result<crate::c5::asm::Encoded, alloc::string::String> {
     use super::asm::{AsmOpnd, Mnemonic};
     use crate::c5::asm::AsmSectionItem;
     // An encoding-mode directive sets the state the rest of the stream
@@ -512,7 +557,8 @@ fn encode_one_x86_section_insn(
             bytes: alloc::vec::Vec::new(),
             relocs: alloc::vec::Vec::new(),
             short: None,
-        });
+        }
+        .into());
     }
     let mode = *mode;
     let insns = if refs.file_scope {
@@ -568,16 +614,21 @@ fn encode_one_x86_section_insn(
         return Err(si.err("prefix on a branch"));
     }
     if let Some(item) = si.goto_branch(goto_block)? {
-        return Ok(item);
+        return Ok(item.into());
     }
     if let Some(item) = si.short_branch()? {
-        return Ok(item);
+        return Ok(item.into());
     }
     if let Some(item) = si.direct_branch(operand_target)? {
-        return Ok(item);
+        return Ok(item.into());
     }
     let ops = si.resolve_operands()?;
-    si.encode(ops)
+    let sized = asm_mem_size(None, insn, refs.operands, refs.op_reg).is_some();
+    let warning = defaulted_width_warning(insn, &ops.concrete, sized, mode);
+    Ok(crate::c5::asm::Encoded {
+        item: si.encode(ops)?,
+        warning,
+    })
 }
 
 /// One replacement instruction of a section, parsed, with the mode it
@@ -1730,6 +1781,8 @@ struct AsmTemplate {
     code: alloc::string::String,
     blocks: alloc::vec::Vec<crate::c5::asm::AsmSectionBlock>,
     insns: alloc::vec::Vec<super::asm::AsmInsn>,
+    /// The warnings the macro directives and the section blocks raised.
+    warnings: alloc::vec::Vec<(crate::c5::diag::Code, alloc::string::String)>,
 }
 
 /// Expand `%=` once so the code text and any `.pushsection` content share
@@ -1785,7 +1838,10 @@ fn prepare_template(
         Ok(e) => e,
         Err(m) => return fail(m),
     };
-    let text = gas.as_deref().unwrap_or(text);
+    let mut warnings: alloc::vec::Vec<_> = (gas.warnings.into_iter())
+        .map(|w| (crate::c5::diag::Code::ASM_WARNING, w))
+        .collect();
+    let text = gas.text.as_deref().unwrap_or(text);
     let multidef = crate::c5::asm::rewrite_multidef_local_labels(text);
     let text = multidef.as_deref().unwrap_or(text);
     let mut extracted = match crate::c5::asm::extract_asm_sections(text, false) {
@@ -1811,8 +1867,8 @@ fn prepare_template(
         section_goto_ks.borrow_mut().push(k as usize);
         Some(bid)
     };
-    if let Some(ex) = extracted.as_mut()
-        && let Err(m) = encode_x86_asm_section_code(
+    if let Some(ex) = extracted.as_mut() {
+        match encode_x86_asm_section_code(
             &mut ex.blocks,
             stmt.func,
             stmt.args,
@@ -1822,9 +1878,10 @@ fn prepare_template(
             &goto_block,
             &op_reg,
             &asm.operands,
-        )
-    {
-        return fail(alloc::string::String::from(m));
+        ) {
+            Ok(w) => warnings.extend(w.into_iter().map(|e| (e.code, e.text))),
+            Err(m) => return fail(alloc::string::String::from(m)),
+        }
     }
     let (code, blocks) = match extracted {
         Some(ex) => (ex.code, ex.blocks),
@@ -1842,6 +1899,7 @@ fn prepare_template(
         code,
         blocks,
         insns,
+        warnings,
     })
 }
 
@@ -3565,6 +3623,15 @@ impl AsmPass<'_> {
         if let Err(m) = super::asm::encode(&mut body, addr, insn.mnemonic, insn.suffix, concrete) {
             return fail(m);
         }
+        let sized = self.mem_size(None, insn).is_some();
+        if let Some(w) = defaulted_width_warning(insn, concrete, sized, super::table::Mode::Bits64)
+        {
+            (out.cx.asm_warnings).push((
+                self.stmt.site,
+                crate::c5::diag::Code::ASM_OPERAND_SIZE,
+                w,
+            ));
+        }
         let sizes = push_legacy_prefixes(code, &body, insn.seg.or(resolved.operand_seg), &pending);
         code.extend_from_slice(&body[sizes..]);
         if let Some(rex) = insn.rex
@@ -4128,6 +4195,7 @@ fn emit_inline_asm_once(
         &section_goto_ks,
         bound.as_ref().map(|b| b.op_reg.as_slice()),
     )?;
+    (out.cx.asm_warnings).extend(tpl.warnings.iter().map(|(c, w)| (site, *c, w.clone())));
     let label_names = super::asm::scan_label_names(&tpl.code);
     let weak_names = crate::c5::asm::asm_weak_only_names(&tpl.blocks, out.cx.asm_sections);
     let stream_defs: alloc::vec::Vec<(u32, usize)> = tpl

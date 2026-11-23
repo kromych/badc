@@ -58,6 +58,10 @@ pub(crate) struct EmitCtx<'a> {
     /// by `ent_pc`, region by region. What `-Wframe-larger-than=` is
     /// measured against.
     pub(crate) frame_stack: &'a mut alloc::collections::BTreeMap<usize, FrameStack>,
+    /// The warnings an inline-asm statement's assembly raised, by its
+    /// instruction index, for the function being lowered.
+    pub(crate) asm_warnings:
+        &'a mut alloc::vec::Vec<(super::super::ir::ValueId, Code, alloc::string::String)>,
     /// Frame-base-relative offset of each parameter's memory home, by
     /// `ent_pc`; the debug-info emitter places the formal parameters with it.
     pub(crate) param_frame_offsets:
@@ -2373,6 +2377,8 @@ pub(crate) struct LowerState {
     pub(crate) text_data_ranges: alloc::vec::Vec<(usize, usize)>,
     pub(crate) local_shift_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub(crate) frame_stack: alloc::collections::BTreeMap<usize, FrameStack>,
+    pub(crate) asm_warnings:
+        alloc::vec::Vec<(super::super::ir::ValueId, Code, alloc::string::String)>,
     pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     pub(crate) region_frame_offsets:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
@@ -2413,6 +2419,7 @@ impl LowerState {
             text_data_ranges: alloc::vec::Vec::new(),
             local_shift_bytes: alloc::collections::BTreeMap::new(),
             frame_stack: alloc::collections::BTreeMap::new(),
+            asm_warnings: alloc::vec::Vec::new(),
             param_frame_offsets: alloc::collections::BTreeMap::new(),
             region_frame_offsets: alloc::collections::BTreeMap::new(),
             pc_to_native: alloc::vec::Vec::new(),
@@ -2443,6 +2450,7 @@ impl LowerState {
                 text_data_ranges: &mut self.text_data_ranges,
                 local_shift_bytes: &mut self.local_shift_bytes,
                 frame_stack: &mut self.frame_stack,
+                asm_warnings: &mut self.asm_warnings,
                 param_frame_offsets: &mut self.param_frame_offsets,
                 region_frame_offsets: &mut self.region_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
@@ -2646,15 +2654,9 @@ fn report_call_diagnostics(
             true => (Code::ATTRIBUTE_ERROR, "error"),
             false => (Code::ATTRIBUTE_WARNING, "warning"),
         };
-        let call = (func.inst_src.get(at).copied())
-            .filter(|s| s.line > 0)
-            .and_then(|s| {
-                let file = program.source_files.get(s.file as usize)?.clone();
-                Some(crate::c5::diag::Loc::in_unit(file, s.line, s.offset))
-            });
         sink.emit(
             code,
-            call.or_else(|| function_loc(program, func.ent_pc)),
+            inst_loc(program, func, at).or_else(|| function_loc(program, func.ent_pc)),
             alloc::format!(
                 "call to `{}` declared with attribute {kind}: {message} (in `{}`)",
                 sym.name,
@@ -2662,6 +2664,17 @@ fn report_call_diagnostics(
             ),
         );
     }
+}
+
+/// The source position of `func`'s instruction `at`, when it has one.
+fn inst_loc(
+    program: &super::super::program::Program,
+    func: &crate::c5::ir::FunctionSsa,
+    at: usize,
+) -> Option<crate::c5::diag::Loc> {
+    let s = func.inst_src.get(at).copied().filter(|s| s.line > 0)?;
+    let file = program.source_files.get(s.file as usize)?.clone();
+    Some(crate::c5::diag::Loc::in_unit(file, s.line, s.offset))
 }
 
 /// Where the function entered at `ent_pc` is defined, for a report the
@@ -2728,7 +2741,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         &program.file_asm,
         B::FILE_ASM_ALIGN_POW2,
         B::FILE_ASM_COMMENTS,
-        &|blocks| super::super::encode_file_asm_section_code(blocks, target, native.elf_class),
+        &|blocks| {
+            super::super::encode_file_asm_section_code(blocks, target, native.elf_class).map(|_| ())
+        },
         &mut st.asm_sections,
     )
     .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
@@ -3628,6 +3643,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             );
         }
         report_call_diagnostics(&mut sink, program, imports, func_ssa);
+        let mut asm_warnings = core::mem::take(&mut st.asm_warnings);
+        asm_warnings.dedup();
+        for (site, code, text) in asm_warnings {
+            let at = inst_loc(program, func_ssa, site as usize);
+            sink.emit(
+                code,
+                at.or_else(|| function_loc(program, func_ssa.ent_pc)),
+                text,
+            );
+        }
         st.func_ends.push(st.code.len());
     }
     b.after_functions(&mut st, &native);

@@ -5599,18 +5599,19 @@ pub(crate) fn lower_for_with_prebuilt(
 /// Assemble a file-scope inline-asm named section's instructions to bytes for
 /// `target`, replacing each `Code` item with `CodeBytes`. The compile-time
 /// validation and the object emission both run this so an instruction is
-/// diagnosed and encoded the same way.
+/// diagnosed and encoded the same way; the warnings are the validation's to
+/// report.
 pub(crate) fn encode_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     target: Target,
     class: ElfClass,
-) -> Result<(), crate::c5::asm::AsmErrors> {
+) -> Result<Vec<crate::c5::asm::AsmError>, crate::c5::asm::AsmErrors> {
     match target {
         Target::LinuxX64 | Target::WindowsX64 => {
             x86_64::emit::encode_x86_file_asm_section_code(blocks, class)
         }
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            aarch64::emit::encode_a64_file_asm_section_code(blocks)
+            aarch64::emit::encode_a64_file_asm_section_code(blocks).map(|()| Vec::new())
         }
     }
 }

@@ -3779,6 +3779,114 @@ fn every_bad_statement_is_reported_at_its_line() {
     }
 }
 
+/// The warning lines of a unit that assembles, under `flags`.
+fn assembly_warnings(target: &str, name: &str, body: &str, flags: &[&str]) -> Vec<String> {
+    let d = dir(&format!("warnings-{target}-{name}"));
+    write(&d, name, body);
+    let target = format!("--target={target}");
+    let args = [&["-q", "-c", &target, name, "-o", "u.o"][..], flags].concat();
+    let text = run_ok(&d, &args);
+    (text.lines())
+        .filter(|l| l.contains(" warning: "))
+        .map(String::from)
+        .collect()
+}
+
+/// A memory operand that neither a suffix nor a register sizes takes a
+/// default width; where the instruction has more than one, the statement
+/// is reported with the form encoded. A width the mode fixes (the stack
+/// group) or the instruction's only width is no choice.
+#[test]
+fn a_defaulted_memory_operand_width_is_reported_with_the_form_encoded() {
+    let body = "\t.text\n\t.globl f\nf:\n\tinc (%rax)\n\tincq (%rax)\n\tinc %eax\n\
+                \tpush (%rax)\n\tfld (%rax)\n\tfldcw (%rax)\n\tlods (%rsi), %al\n\
+                \tlods (%rsi)\n\tret\n";
+    let warnings = assembly_warnings("linux-x64", "w.s", body, &[]);
+    assert_eq!(
+        error_positions(&warnings),
+        ["w.s:4: warning", "w.s:8: warning", "w.s:11: warning"],
+        "{warnings:#?}"
+    );
+    for (w, form) in warnings.iter().zip(["incl", "flds", "lodsl"]) {
+        assert!(
+            w.ends_with(&format!("encoded as `{form}` [B5003] [-Wasm-operand-size]")),
+            "{w}"
+        );
+    }
+    let quiet = assembly_warnings("linux-x64", "w.s", body, &["-Wno-asm-operand-size"]);
+    assert!(quiet.is_empty(), "{quiet:#?}");
+    let d = dir("operand-size-werror");
+    write(&d, "w.s", body);
+    let (ok, text) = run(
+        &d,
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-Werror=asm-operand-size",
+            "w.s",
+            "-o",
+            "u.o",
+        ],
+    );
+    assert!(!ok && text.contains("w.s:4: error"), "{text}");
+}
+
+/// `.warning` reports its text at its line and assembly goes on; `.error`
+/// reports its text and fails the unit.
+#[test]
+fn warning_and_error_directives_report_their_text() {
+    for target in ["linux-x64", "linux-aarch64"] {
+        let body = "\t.text\n\t.globl f\nf:\n\t.warning \"check the table\"\n\tret\n";
+        let warnings = assembly_warnings(target, "w.s", body, &[]);
+        assert_eq!(error_positions(&warnings), ["w.s:4: warning"], "{target}");
+        assert!(
+            warnings[0].ends_with("`.warning` check the table [B5004] [-Wasm-warning]"),
+            "{target}: {}",
+            warnings[0]
+        );
+        let body = "\t.text\n\t.globl f\nf:\n\t.error \"the table is full\"\n\tret\n";
+        let errors = assembly_errors(target, "e.s", body, &[]);
+        assert_eq!(error_positions(&errors), ["e.s:4: error"], "{target}");
+        assert!(
+            errors[0].contains("`.error` the table is full"),
+            "{target}: {}",
+            errors[0]
+        );
+    }
+}
+
+/// An `asm` statement's assembler warnings are reported at the statement,
+/// in a function body and at file scope.
+#[test]
+fn an_asm_statement_reports_its_assembler_warnings_at_its_line() {
+    let src = "void f(int *p)\n{\n    __asm__(\"inc %0\" : \"+m\"(*p));\n\
+               __asm__(\".warning \\\"in a body\\\"\");\n}\n\
+               __asm__(\".globl g\\ng:\\n\\tinc (%rax)\\n\\tret\\n\");\n";
+    let d = dir("asm-statement-warnings");
+    write(&d, "u.c", src);
+    let text = run_ok(&d, &["-q", "-c", "--target=linux-x64", "u.c", "-o", "u.o"]);
+    let warnings: Vec<&str> = text.lines().filter(|l| l.contains(" warning: ")).collect();
+    let at = |line: &str, tail: &str| {
+        warnings
+            .iter()
+            .any(|w| w.starts_with(&format!("u.c:{line}:")) && w.ends_with(tail))
+    };
+    assert!(
+        at("3", "encoded as `incl` [B5003] [-Wasm-operand-size]"),
+        "{text}"
+    );
+    assert!(
+        at("4", "`.warning` in a body [B5004] [-Wasm-warning]"),
+        "{text}"
+    );
+    assert!(
+        at("6", "encoded as `incl` [B5003] [-Wasm-operand-size]"),
+        "{text}"
+    );
+    assert_eq!(warnings.len(), 3, "{text}");
+}
+
 /// An error follows the preprocessor's line markers back to its line's file.
 #[test]
 fn a_preprocessed_unit_reports_the_line_of_the_original_file() {

@@ -293,9 +293,11 @@ pub(crate) fn assemble_tu(
         }
         src_bytes
     };
-    badc::Compiler::assemble(&text, cfg.target, copts).map_err(|e| {
+    let program = badc::Compiler::assemble(&text, cfg.target, copts).map_err(|e| {
         log.error(cfg.stderr_is_tty, "", &e);
-    })
+    })?;
+    report_unit_diagnostics(log, cfg.stderr_is_tty, &program)?;
+    Ok(program)
 }
 
 /// Produce one translation unit's `Program` and write its dependency rule:

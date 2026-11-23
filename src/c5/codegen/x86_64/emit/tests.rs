@@ -1761,7 +1761,10 @@ mod code_mode_tests {
             &[text],
             false,
             AsmComments::X86,
-            &|blocks| super::encode_x86_file_asm_section_code(blocks, crate::c5::ElfClass::Elf64),
+            &|blocks| {
+                super::encode_x86_file_asm_section_code(blocks, crate::c5::ElfClass::Elf64)
+                    .map(drop)
+            },
             &mut sink,
         )
         .expect("assembles");
@@ -1799,7 +1802,10 @@ mod code_mode_tests {
             &[text],
             false,
             AsmComments::X86,
-            &|blocks| super::encode_x86_file_asm_section_code(blocks, crate::c5::ElfClass::Elf64),
+            &|blocks| {
+                super::encode_x86_file_asm_section_code(blocks, crate::c5::ElfClass::Elf64)
+                    .map(drop)
+            },
             &mut sink,
         )
         .expect_err("rejected")

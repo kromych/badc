@@ -49,12 +49,23 @@ pub(crate) fn expand_asm_gas_macros(
     text: &str,
     inst_width: usize,
     subst: &dyn Fn(&str) -> Option<alloc::string::String>,
-) -> Result<Option<alloc::string::String>, alloc::string::String> {
+) -> Result<GasExpanded, alloc::string::String> {
     let Some(ex) = expand_gas_macros(text, inst_width, subst, false) else {
-        return Ok(None);
+        return Ok(GasExpanded::default());
     };
-    AsmErrors::check(ex.errors.into_iter().map(|(_, e)| e).collect())?;
-    Ok(Some(ex.text))
+    let warnings = AsmErrors::split(ex.errors.into_iter().map(|(_, e)| e).collect())?;
+    Ok(GasExpanded {
+        text: Some(ex.text),
+        warnings: warnings.into_iter().map(|e| e.text).collect(),
+    })
+}
+
+/// A template's expansion, `None` when it needed none, and the warnings its
+/// `.warning` directives raised.
+#[derive(Debug, Default)]
+pub(crate) struct GasExpanded {
+    pub text: Option<alloc::string::String>,
+    pub warnings: alloc::vec::Vec<alloc::string::String>,
 }
 
 /// As [`expand_asm_gas_macros`], over a unit's file-scope text. Every folded
@@ -83,6 +94,8 @@ fn expand_gas_macros(
         || text.contains(".purgem")
         || text.contains(".req")
         || text.contains(".if")
+        || text.contains(".error")
+        || text.contains(".warning")
         || has_gas_assignment(text))
     {
         return None;
@@ -147,10 +160,15 @@ struct GasExpandState {
 
 impl GasExpandState {
     fn error(&mut self, text: alloc::string::String) {
+        self.report(crate::c5::diag::Code::ASSEMBLER, text);
+    }
+
+    fn report(&mut self, code: crate::c5::diag::Code, text: alloc::string::String) {
         let e = AsmError {
             line: self.line,
             invoked_at: self.origin.invoked_at(self.ctx),
             text,
+            code,
         };
         self.errors.push((self.origin.len() as u32, e));
     }
@@ -432,6 +450,13 @@ fn expand_gas_statements(
             ".error" => {
                 let msg = rest.trim().trim_matches('"');
                 st.error(alloc::format!("inline asm: `.error` {msg}"));
+            }
+            ".warning" => {
+                let msg = rest.trim().trim_matches('"');
+                st.report(
+                    crate::c5::diag::Code::ASM_WARNING,
+                    alloc::format!("`.warning` {msg}"),
+                );
             }
             ".macro" => {
                 let header = parse_gas_macro_header(rest);
@@ -763,6 +788,7 @@ fn gas_cond_region_is_diagnostic_only(
         }
         match split_first_token(s).0 {
             ".endif" => return Some(n + 1),
+            // TODO: `.warning`, once the layout reports warnings.
             ".error" | ".else" | ".elseif" => {}
             _ => return None,
         }

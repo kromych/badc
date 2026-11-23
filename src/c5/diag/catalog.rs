@@ -301,6 +301,12 @@ catalog! {
     5002, "assembler", [], Error, Hard,
         [], Live,
         "an instruction or directive the assembler cannot parse or encode for the target";
+    5003, "asm-operand-size", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an x86 instruction whose memory operand neither a suffix nor a register operand sizes, encoded at its default width, which the diagnostic names";
+    5004, "asm-warning", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `.warning` directive the assembler reaches, whose text the diagnostic quotes";
     6001, "orphan-section", [], Warning, Controllable,
         [DEFAULT], Live,
         "an input section no script rule names, placed by the linker's own rule";
@@ -583,4 +589,6 @@ impl Code {
     pub const STACK_PROTECTOR: Code = Code::new(4009);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
+    pub const ASM_OPERAND_SIZE: Code = Code::new(5003);
+    pub const ASM_WARNING: Code = Code::new(5004);
 }

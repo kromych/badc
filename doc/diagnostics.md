@@ -181,6 +181,8 @@ output of `badc --list-diagnostics`.
 | B4009 | `stack-protector` | ignore | controllable | - | under `-fstack-protector*`, a function `-fstack-protector` leaves unprotected because its character arrays are all shorter than `--param ssp-buffer-size=`, or a variable-length array or `alloca` buffer, which lies below the other locals, so the canary catches an overflow of it only past them |
 | B5001 | `asm-syntax` | error | hard | - | an `asm` statement whose operand list, constraints or template does not parse |
 | B5002 | `assembler` | error | hard | - | an instruction or directive the assembler cannot parse or encode for the target |
+| B5003 | `asm-operand-size` | warning | controllable | default | an x86 instruction whose memory operand neither a suffix nor a register operand sizes, encoded at its default width, which the diagnostic names |
+| B5004 | `asm-warning` | warning | controllable | default | a `.warning` directive the assembler reaches, whose text the diagnostic quotes |
 | B6001 | `orphan-section` | warning | controllable | default | an input section no script rule names, placed by the linker's own rule |
 | B6002 | `missing-entry` | warning | controllable | default | no input defines the entry symbol, so the image enters at the first text address |
 | B6003 | `merged-section-access` | warning | controllable | default | a relocation reaches past the end of the merged section it names |

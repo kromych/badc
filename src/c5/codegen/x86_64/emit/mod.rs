@@ -527,6 +527,7 @@ struct OutputMark {
     asm_sections: crate::c5::asm::AsmSectionsSnapshot,
     asm_extern_call_sites: usize,
     asm_sym_fixups: usize,
+    asm_warnings: usize,
     text_align: usize,
     mcount_sites: usize,
     early_returns: usize,
@@ -552,6 +553,7 @@ impl Out<'_, '_> {
             asm_sections: self.cx.asm_sections.snapshot(),
             asm_extern_call_sites: self.cx.asm_extern_call_sites.len(),
             asm_sym_fixups: self.cx.asm_sym_fixups.len(),
+            asm_warnings: self.cx.asm_warnings.len(),
             text_align: *self.cx.text_align,
             mcount_sites: self.cx.mcount_sites.len(),
             early_returns: self.cx.early_returns.len(),
@@ -581,6 +583,7 @@ impl Out<'_, '_> {
             .asm_extern_call_sites
             .truncate(m.asm_extern_call_sites);
         self.cx.asm_sym_fixups.truncate(m.asm_sym_fixups);
+        self.cx.asm_warnings.truncate(m.asm_warnings);
         *self.cx.text_align = m.text_align;
         self.cx.mcount_sites.truncate(m.mcount_sites);
         self.cx.early_returns.truncate(m.early_returns);

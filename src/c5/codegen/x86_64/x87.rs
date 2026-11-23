@@ -192,6 +192,15 @@ pub(crate) fn lookup(name: &str) -> Option<(&'static X87, Option<u8>)> {
     None
 }
 
+impl X87 {
+    /// The form an unsuffixed memory operand takes, the narrowest width,
+    /// when the operation has more than one.
+    pub(crate) fn defaulted_form(&self) -> Option<String> {
+        let &(bytes, ..) = self.mem.first()?;
+        suffix(self.name, u32::from(bytes)).map(|s| alloc::format!("{}{s}", self.name))
+    }
+}
+
 /// The AT&T suffix of the memory width `bytes` on `name`, for a spelling
 /// that states the width apart from the mnemonic (Intel's `ptr` size).
 pub(crate) fn suffix(name: &str, bytes: u32) -> Option<&'static str> {

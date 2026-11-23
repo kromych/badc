@@ -93,14 +93,15 @@ On x86-64 the 32-byte GNU vectors are values in the ymm registers, and a
 function holding one executes `vzeroupper` before each call and return that
 passes no such vector in a register. On System V a named 32-byte vector
 argument or result travels in a ymm register, counted with the xmm argument
-registers, as gcc passes it under AVX; an unnamed one goes in memory.
+registers, as the psABI passes `__m256` under AVX; an unnamed one goes in
+memory.
 
 Feature macros:
 
 - x86-64 predefines the x86-64 base set: `__MMX__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`,
   `__SSE2_MATH__`, and `__FXSR__`. The x86-64-v3 macros (`__AVX2__`, `__FMA__`,
   ...) are predefined only for the extensions `-march=` and `-m<ext>` select,
-  combined as gcc combines them; under AVX `__BIGGEST_ALIGNMENT__`, which a bare
+  each with the extensions it implies; under AVX `__BIGGEST_ALIGNMENT__`, which a bare
   `aligned` attribute takes, is 32. `-m<ext>` takes the extensions whose
   intrinsics the headers carry -- SSE3 to SSE4.2, POPCNT, CRC32, AVX, AVX2,
   FMA, F16C, AES, PCLMUL, SHA, VAES, VPCLMULQDQ, RDRND, RDSEED, BMI, BMI2,
@@ -244,8 +245,8 @@ directory withdraws it. The deployment target is the version
 `-mmacosx-version-min=` (or `-mmacos-version-min=`) gives, else
 `$MACOSX_DEPLOYMENT_TARGET`, else 11.0. The
 `__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__` and
-`__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__` predefines spell it as clang's do
-(`10.15` is `101500`), and a Mach-O image records it in `LC_BUILD_VERSION`, 11.0
+`__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__` predefines spell it in the encoding
+the SDK headers compare against (`10.15` is `101500`), and a Mach-O image records it in `LC_BUILD_VERSION`, 11.0
 at least, the first macOS on arm64, as ld64 records it. That command also
 records the SDK version the sysroot's `SDKSettings.json` names, or 26.0 when no
 sysroot names one. libSystem selects its
@@ -325,8 +326,8 @@ the main executable, which no load command names.
   generator records each prologue and epilogue step as it emits it; an object
   carries the steps to the link in its `.note.badc` section. The `.pdata` and
   `.xdata` of a COFF object from another compiler join the exception
-  directory. An assembly function's `.seh_*` directives give it its record,
-  as GNU as writes one. `__try` / `__except` / `__finally` are in
+  directory. An assembly function's `.seh_*` directives give it its record.
+  `__try` / `__except` / `__finally` are in
   [`std-conformance.md`](std-conformance.md).
 - Mach-O: a `__TEXT,__unwind_info` compact unwind table.
 - ELF: badc's code has no `.eh_frame`. With `-g`, its CFI is in

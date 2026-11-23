@@ -170,7 +170,7 @@ without taking it, so an object in allocated storage becomes valid through
 or by assigning a structure holding one, copies its lock word, which is clear
 unless another thread holds the lock during the copy. No array type and no
 bit-field is `_Atomic`. A member of an atomic structure or union is not
-accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
+accessed atomically (C17 6.5.2.3p5); badc refuses the access.
 
 ### Standard predefined macros
 
@@ -186,9 +186,9 @@ accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
 | `__STDC_NO_ATOMICS__`, `__STDC_NO_VLA__` | not defined; `1` under `--msvc`                                          |
 
 `-ffreestanding` also implies `-fno-builtin`, which keeps library calls such as
-`strlen` calls; their `__builtin_` spellings still fold, as in gcc. Without it a
+`strlen` calls; their `__builtin_` spellings still fold. Without it a
 `memcpy`, `memmove`, or `memset` of a constant size the unit does not define
-expands inline at every optimization level, as gcc and clang expand it.
+expands inline at every optimization level.
 `--freestanding`, the link
 option that leaves out the startup runtime, does not change
 `__STDC_HOSTED__`. `__STDC_NO_ATOMICS__` is undefined: `_Atomic` objects are
@@ -349,11 +349,11 @@ badc accepts these gcc options with a narrower meaning than gcc's:
 | `-gdwarf`, `-gdwarf-<n>`, `-gdwarf32`, `-gdwarf64`, `-gstrict-dwarf`, `-gno-strict-dwarf` | badc writes DWARF version 4 in the 32-bit format. A request for another version from 2 to 5, or for the 64-bit format, is reported as `dwarf-output` (B7011) with what is written instead, and the compile continues. A version outside 2 to 5, a level above 3 or a non-integer version is refused with gcc's message. |
 | `-gsplit-dwarf`, `-gz`, `-gline-tables-only` | Refused. |
 | `-mcpu=<part>[+mod...]`, `-march=<arch>[+mod...]` on AArch64 | Select the extensions whose `__ARM_FEATURE_*` macros are predefined; `-march=` overrides `-mcpu=`'s extensions. They select no scheduling model, and the instructions stay the [baseline](./native-compilation.md#instruction-set-baseline). A modifier enabling an extension whose intrinsics badc lacks is refused. |
-| `-march=<cpu>`, `-m<ext>`, `-mno-<ext>` on x86-64 | Select the extensions whose feature macros (`__AVX2__`, `__AVX512F__`, ...) are predefined, combined as gcc combines them. `-m<ext>` takes the extensions whose intrinsics the headers carry and refuses any other; see [native compilation](./native-compilation.md). |
-| `-fsanitize=<check>[,...]`, `-fno-sanitize=`, `-fsanitize-trap[=...]`, `-fno-sanitize-trap[=...]`, `-fsanitize-undefined-trap-on-error`, `-fsanitize-recover[=...]`, `-fno-sanitize-recover[=...]` | Insert the runtime checks of the UndefinedBehaviorSanitizer that badc implements, which the group `undefined` names: `signed-integer-overflow`, for a signed `+`, `-`, `*`, compound `+=`, `-=` and `*=`, `++`, `--`, unary `-`, and `/`, `%`, `/=` or `%=` of the type's minimum by -1; `shift-exponent` and `shift-base` (the group `shift`), for a shift (`<<`, `>>`, `<<=`, `>>=`) by a negative amount or the width or more, and a signed left shift of a negative value or past the sign bit; `integer-divide-by-zero`, for `/`, `%`, `/=` and `%=`; `bounds` (clang's `array-bounds`), for a subscript of an array of known bound past it, the address one past the last element excepted, but for a trailing member reached through a pointer that gcc's rule under `-fstrict-flex-arrays` lets extend past its bound, which `bounds-strict` checks as well; `bool`, for a `_Bool` loaded whose byte is neither 0 nor 1; `null` and `alignment`, for a load or store through a null address or one not aligned for the accessed type (C17 6.5.3.2p4, 6.3.2.3p7) -- `*`, a subscript of a pointer and a member, reported at the `*`, the subscript's pointer operand or the member name, a member access through the structure's address first, with the alignment the structure's and the member offset's give, as clang reports them; an assignment, a compound assignment, `++` and `--` store, the last two where clang checks nothing, an aggregate copy is checked as a load, which clang does not check, the operand of `&` is not accessed (C17 6.5.3.2p3), and neither a volatile access nor the structure address of a `->` that is a constant (the `&((T *)0)->m` shape) is checked, as clang checks neither; `pointer-overflow`, for pointer arithmetic from or to a null pointer, or whose result wraps around the address space or whose index's scaling to bytes overflows (C17 6.5.6p8) -- `+`, `-`, a subscript, `+=`, `-=`, `++` and `--`, at the operator or the subscript's pointer operand, as clang reports them in C, where an offset that folds to 0 takes no check; `float-cast-overflow`, for a floating value converted to an integer type it lies outside the range of, its fraction discarded (C17 6.3.1.4p1) -- by a cast, reported at its `(`, implicitly, at the value, and by a compound assignment, at its operator, as clang reports them; `vla-bound`, for a variable-length array bound that is not positive (C17 6.7.6.2p5) -- an object's, outermost or inner, and a pointer's to such an array, whose type is evaluated where it is declared; `unreachable`, for a `__builtin_unreachable()` reached, whose handler ends the program whatever the recovery; `builtin`, for `__builtin_clz` or `__builtin_ctz`, or a wider form, of 0, reported at the operand -- an operation's at its operator -- as clang reports it; `nonnull-attribute`, for a null argument of a direct call to a pointer parameter a `nonnull` attribute names -- the function's numbered list, its bare form naming every pointer parameter, a parameter's own, on any declaration of the function -- reported at the argument with the attribute as the note; `returns-nonnull-attribute`, for a null a function declared `returns_nonnull` returns, reported at the `return` with the attribute as the note; `return`, which inserts nothing in C, as gcc's and clang's check it in C++ alone: in C only a use of the value is undefined (C17 6.9.1p12); and `enum`, which inserts nothing in C, as gcc's and clang's do there: a C enumeration holds every value of its compatible integer type (C17 6.7.2.2p4). The group `undefined` leaves out `bounds-strict`, as gcc's does. clang's `unsigned-integer-overflow` reports an unsigned `+`, `-`, `*`, compound `+=`, `-=` and `*=`, `++`, `--` and unary `-` whose value wraps, defined as it is (C17 6.2.5p9); `undefined` leaves it out, as clang's does, and clang's group `integer` names it with `signed-integer-overflow`, `shift`, `integer-divide-by-zero` and the implicit truncations below. clang's `implicit-unsigned-integer-truncation` and `implicit-signed-integer-truncation` (the groups `implicit-integer-truncation`, `implicit-integer-conversion` and `implicit-conversion`, of whose checks badc implements these two; `implicit-integer-arithmetic-value-change` names the signed one) report an implicit conversion of an integer to a narrower type that changes the value -- an initializer, constant or not, an assignment, an argument, a returned value, and the result of a compound assignment or `++` / `--` computed in the promoted type -- at the converted expression or the compound operator, as clang 21 does, through `__ubsan_handle_implicit_conversion`; `undefined` leaves them out, as clang's does, the conversion being defined (C17 6.3.1.3). An explicit cast is not checked. Each applies to operations performed in a type of `int` rank or above, and a compound shift's report names the promoted type it is performed in, as gcc's does where clang names the lvalue's. A failed check calls the clang and gcc handler (`__ubsan_handle_add_overflow`, ...) with their data layout, which a native image links from the bundled runtime and which reports as clang's runtime does, its summary line included, once per site; `-fsanitize-trap` traps instead, and `-fno-sanitize-recover` calls the `_abort` handler, which ends the program after its report. Enabling a check badc does not implement is refused. `all` names every check badc implements, `bounds-strict` included, where checks are turned off, trapped or recovered, as a bare `-fsanitize-trap` or `-fno-sanitize-recover` does; `-fsanitize=all` is refused, as gcc and clang refuse it. |
+| `-march=<cpu>`, `-m<ext>`, `-mno-<ext>` on x86-64 | Select the extensions whose feature macros (`__AVX2__`, `__AVX512F__`, ...) are predefined, each with the extensions it implies. `-m<ext>` takes the extensions whose intrinsics the headers carry and refuses any other; see [native compilation](./native-compilation.md). |
+| `-fsanitize=<check>[,...]`, `-fno-sanitize=`, `-fsanitize-trap[=...]`, `-fno-sanitize-trap[=...]`, `-fsanitize-undefined-trap-on-error`, `-fsanitize-recover[=...]`, `-fno-sanitize-recover[=...]` | Insert the runtime checks of the UndefinedBehaviorSanitizer that badc implements, which the group `undefined` names: `signed-integer-overflow`, for a signed `+`, `-`, `*`, compound `+=`, `-=` and `*=`, `++`, `--`, unary `-`, and `/`, `%`, `/=` or `%=` of the type's minimum by -1; `shift-exponent` and `shift-base` (the group `shift`), for a shift (`<<`, `>>`, `<<=`, `>>=`) by a negative amount or the width or more, and a signed left shift of a negative value or past the sign bit; `integer-divide-by-zero`, for `/`, `%`, `/=` and `%=`; `bounds` (also `array-bounds`), for a subscript of an array of known bound past it, the address one past the last element excepted, but for a trailing member reached through a pointer that `-fstrict-flex-arrays` lets extend past its bound, which `bounds-strict` checks as well; `bool`, for a `_Bool` loaded whose byte is neither 0 nor 1; `null` and `alignment`, for a load or store through a null address or one not aligned for the accessed type (C17 6.5.3.2p4, 6.3.2.3p7) -- `*`, a subscript of a pointer and a member, reported at the `*`, the subscript's pointer operand or the member name, a member access through the structure's address first, with the alignment the structure's and the member offset's give; an assignment, a compound assignment, `++` and `--` store, an aggregate copy is checked as a load, the operand of `&` is not accessed (C17 6.5.3.2p3), and neither a volatile access nor the structure address of a `->` that is a constant (the `&((T *)0)->m` shape, an `offsetof`) is checked; `pointer-overflow`, for pointer arithmetic from or to a null pointer, or whose result wraps around the address space or whose index's scaling to bytes overflows (C17 6.5.6p8) -- `+`, `-`, a subscript, `+=`, `-=`, `++` and `--`, at the operator or the subscript's pointer operand; an offset that folds to 0 takes no check; `float-cast-overflow`, for a floating value converted to an integer type it lies outside the range of, its fraction discarded (C17 6.3.1.4p1) -- by a cast, reported at its `(`, implicitly, at the value, and by a compound assignment, at its operator; `vla-bound`, for a variable-length array bound that is not positive (C17 6.7.6.2p5) -- an object's, outermost or inner, and a pointer's to such an array, whose type is evaluated where it is declared; `unreachable`, for a `__builtin_unreachable()` reached, whose handler ends the program whatever the recovery; `builtin`, for `__builtin_clz` or `__builtin_ctz`, or a wider form, of 0, reported at the operand -- an operation's at its operator; `nonnull-attribute`, for a null argument of a direct call to a pointer parameter a `nonnull` attribute names -- the function's numbered list, its bare form naming every pointer parameter, a parameter's own, on any declaration of the function -- reported at the argument with the attribute as the note; `returns-nonnull-attribute`, for a null a function declared `returns_nonnull` returns, reported at the `return` with the attribute as the note; `return`, which inserts nothing: in C only a use of the value is undefined (C17 6.9.1p12); and `enum`, which inserts nothing: a C enumeration holds every value of its compatible integer type (C17 6.7.2.2p4). The group `undefined` leaves out `bounds-strict`. `unsigned-integer-overflow` reports an unsigned `+`, `-`, `*`, compound `+=`, `-=` and `*=`, `++`, `--` and unary `-` whose value wraps, defined as it is (C17 6.2.5p9); `undefined` leaves it out, and the group `integer` names it with `signed-integer-overflow`, `shift`, `integer-divide-by-zero` and the implicit truncations below. `implicit-unsigned-integer-truncation` and `implicit-signed-integer-truncation` (the groups `implicit-integer-truncation`, `implicit-integer-conversion` and `implicit-conversion`, of whose checks badc implements these two; `implicit-integer-arithmetic-value-change` names the signed one) report an implicit conversion of an integer to a narrower type that changes the value -- an initializer, constant or not, an assignment, an argument, a returned value, and the result of a compound assignment or `++` / `--` computed in the promoted type -- at the converted expression or the compound operator, through `__ubsan_handle_implicit_conversion`; `undefined` leaves them out, the conversion being defined (C17 6.3.1.3). An explicit cast is not checked. Each applies to operations performed in a type of `int` rank or above, and a compound shift's report names the promoted type it is performed in. A failed check calls the UBSan runtime's handler (`__ubsan_handle_add_overflow`, ...) with its data layout; a native image links the bundled runtime, which reports each site once, with a summary line; `-fsanitize-trap` traps instead, and `-fno-sanitize-recover` calls the `_abort` handler, which ends the program after its report. Enabling a name that is neither a check nor a group is an error that lists them. `all` names every check, `bounds-strict` included, where checks are turned off, trapped or recovered, as a bare `-fsanitize-trap` or `-fno-sanitize-recover` does; it enables none, so `-fsanitize=all` is an error that lists the checks and groups. |
 | `-finline-stringops[=fn,...]`, `-fno-inline-stringops[=fn,...]` | gcc's: a call to `memcmp`, `memcpy`, `memmove` or `memset` that the option names (all four when bare) is expanded into a loop whatever its length -- the `__builtin_` form, the library call taken as the builtin, and the fill or copy the loop-idiom pass would make -- for code that cannot call the library, as Linux's vDSO asks of `memset`. `memmove` copies downward where the destination overlaps the source from above; `memcmp` yields the difference of the first pair of bytes, as `unsigned char`, that differ. The `-fno-` form takes the named functions out again. |
 | `-fcrash-report`, `-fno-crash-report` | A hosted executable badc links installs, before `main`, a handler that reports a fatal signal the program takes (`SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE`, `SIGABRT`, `SIGTRAP`) on Linux and macOS, on a stack of its own, or an exception no handler takes on Windows: the signal or exception and the address it names, the registers, and the frames, which the system unwinder steps through by the image's unwind tables (libgcc_s's `_Unwind_Backtrace`, opened at the report as glibc's `backtrace` opens it, on Linux; libunwind on macOS; `RtlVirtualUnwind` on Windows) and the frame records chain where no unwinder steps past the fault, each with its offset in its module and the function holding it, as the dynamic loader, the image's symbol table (Linux), or the PDB of a `-g` build (Windows, through DbgHelp) names it. The program then ends as it would have without the handler. On by default while a `-fsanitize` check is enabled; `-fno-crash-report` turns it off. The driver links the handler with `-u __badc_crash_report`; `-c`, `--freestanding`, `--jit` and `--interp` take none. |
-| `-Wa,<opt>`, `-Xassembler <opt>` | Checked against the built-in assembler. `-L` and `--keep-locals` keep the local labels in the symbol table, as GNU as does. `--fatal-warnings`, `-mrelax-relocations=`, `--noexecstack`, `--no-warn-rwx-segments` and `-march=` are accepted and change nothing, because the assembler already behaves that way; `-march=` does not reject instructions above a lower ceiling. Any other option is refused as `unsupported assembler option`. |
+| `-Wa,<opt>`, `-Xassembler <opt>` | Checked against the built-in assembler. `-L` and `--keep-locals` keep the local labels in the symbol table. `--fatal-warnings`, `-mrelax-relocations=`, `--noexecstack`, `--no-warn-rwx-segments` and `-march=` are accepted and change nothing, because the assembler already behaves that way; `-march=` does not reject instructions above a lower ceiling. Any other option is refused as `unsupported assembler option`. |
 
 **Warnings.** `-w`, `-Werror`, `-Wno-error`, `-Werror=<sel>`,
 `-Wno-error=<sel>`, `-W<sel>`, `-Wno-<sel>`, `-Wall`, `-Wextra`, and
@@ -370,8 +370,8 @@ alike. A pragma that covers a position overrides the command line, and `push`
 and `pop` bound the region it covers. A link diagnostic has no source
 position, so only the command line controls it.
 
-**Dialects.** `-std=` takes the dialect names gcc 16 takes and refuses any
-other. It sets `__STDC_VERSION__` as gcc does:
+**Dialects.** `-std=` takes the dialect names below and refuses any other,
+and sets `__STDC_VERSION__`:
 
 | `-std=`                                                       | `__STDC_VERSION__` |
 |---------------------------------------------------------------|--------------------|
@@ -394,11 +394,11 @@ only under `--gnu` ([GCC](#gcc)): a `gnu*` name leaves it undefined, and a
 `-std=`, `__STRICT_ANSI__` is defined, so a header takes its standard-C path
 for the GNU features badc lacks. The editions before C99 (`c89`, `c90`,
 `gnu89`, `gnu90`, `iso9899:1990`, `iso9899:199409`) select the GNU89 inline
-model, as gcc's do; `-fgnu89-inline` and `-fno-gnu89-inline` override the
+model; `-fgnu89-inline` and `-fno-gnu89-inline` override the
 edition. In them a declaration without a type specifier takes `int` (C90
 6.5.2) and a call to an undeclared function declares it as
 `extern int f();` (C90 6.3.2.2), unless the auto-include retry finds a
-bundled header that declares it; `-Wall` reports both, as in gcc.
+bundled header that declares it; `-Wall` reports both.
 
 ## Extensions implemented
 
@@ -429,7 +429,7 @@ bundled header that declares it; `-Wall` reports both, as in gcc.
   structures, string literals, and address constants, but not a label address.
   - ELF: the objects are in `.tdata` and `.tbss` with `STT_TLS` symbols. An
     object whose image is all zeros goes to `.tbss` even when it has an
-    initializer, as gcc places it. TLS relocations let a badc object link
+    initializer. TLS relocations let a badc object link
     against external TLS through the system linker.
   - PE: the image carries an `IMAGE_TLS_DIRECTORY64`.
   - Mach-O: each variable has a `__DATA,__thread_vars` descriptor whose getter
@@ -568,15 +568,15 @@ stdio, stdlib, string, ctype, wide-character, and math functions, among others.
 The parser binds the call through the symbol table. The call takes the function's
 declaration, a header the unit did not include is included as for the plain
 name, and a macro of the library name in the unit, as fortified string headers
-define, does not capture the builtin spelling. gcc's `__builtin_setjmp` and
+define, does not capture the builtin spelling. `__builtin_setjmp` and
 `__builtin_longjmp`, which take a five-word buffer, are not provided.
 `__builtin_isdigit`, `__builtin_isascii`, and `__builtin_toascii` fold from
-their operand as gcc folds them. `__builtin_strlen`, `strcmp`, `strncmp`,
+their operand. `__builtin_strlen`, `strcmp`, `strncmp`,
 `memcmp`, `abs`, and its wider forms also fold with literal operands.
 `__builtin_expect`, `__builtin_prefetch`, `__builtin_assume_aligned`, and the
-infinity and NaN constants are parsed at the call site with gcc's signatures
+infinity and NaN constants are parsed at the call site with their GNU C signatures
 and operand checks, so they work in preprocessed input too. `__builtin_nan`
-folds a string literal's payload as gcc does and calls `nan` for any other
+folds a string literal's payload and calls `nan` for any other
 operand.
 
 The `__sync_*` and `__atomic_*` families are recognized by prefix and lowered
@@ -609,7 +609,7 @@ handler (`.seh_handler`) is refused. The `.def` / `.scl` / `.type` /
 File-scope `asm(...)` belongs to no function: its text reaches the object as
 written, and the assembler and linker resolve the names in it. Naming a
 `static` definition there does not keep the definition; mark it
-`__attribute__((used))`, as gcc requires at `-O2`. A `static` named in a
+`__attribute__((used))`. A `static` named in a
 template inside a function body is kept.
 
 Where the Intel SDM and GNU as encode an x86 instruction differently, badc
@@ -651,7 +651,7 @@ attributes are parsed. These take effect:
 | `naked` | The function has no prologue or epilogue. |
 | `always_inline`, `noinline`, `gnu_inline` | Inlining control. `always_inline` applies without `-O` too. |
 | `ms_abi`, `sysv_abi` | The x86-64 calling convention of a function or of a function pointer's pointee. Ignored on AArch64. |
-| `cleanup(fn)` | Calls `fn` on every exit from the scope, `goto` and `asm goto` included. A jump into the scope past the declaration is rejected, as clang does; gcc accepts it. |
+| `cleanup(fn)` | Calls `fn` on every exit from the scope, `goto` and `asm goto` included. A jump into the scope past the declaration is rejected. |
 | `constructor`, `destructor` | Runs the function before or after `main`, with an optional priority. |
 | `noreturn` | As `_Noreturn`. |
 | `unused`, `maybe_unused` | Silences the unused-entity warnings. |
@@ -685,9 +685,9 @@ on System V and read back from the vector save area. Windows x64 passes a
 16-byte vector by implicit reference, as its convention states, and macOS
 arm64 puts variadic arguments on the stack, as its variant of AAPCS64 states.
 On System V a named 32-byte vector argument or result takes one ymm register,
-counted with `xmm0`-`xmm7`, as gcc passes it under AVX; an unnamed one goes to
-memory, and so does a 64-byte vector, as gcc passes it without AVX-512, under
-`-mavx512f` too. AAPCS64 passes a vector wider than 16 bytes by reference. A
+counted with `xmm0`-`xmm7`, as the psABI passes `__m256` under AVX, which the
+x86-64-v3 baseline has; an unnamed one goes to memory, and so does a 64-byte
+vector, as the psABI passes `__m512` without AVX-512, under `-mavx512f` too. AAPCS64 passes a vector wider than 16 bytes by reference. A
 floating-point vector of one element also goes to memory on System V
 ([Divergences](#argument-passing-the-abi-documents-leave-open)). A struct of
 two to four vectors of one width, an AAPCS64 homogeneous vector aggregate,
@@ -730,7 +730,8 @@ length, the mask operations, and the `__m512` / `__m512d` arithmetic. Not
 provided: the rest of AVX-512's floating-point and conversion forms, and the
 `_mm_reduce_*_epi8` / `_epi16` sequences. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
 An intrinsic whose last operand its instruction encodes as an `imm8` is a
-macro, as gcc's are without `-O`; a lane move written over the vector
+macro, so the operand reaches the instruction as a constant at every
+optimization level; a lane move written over the vector
 extension takes its selector as an argument. The rest are inlined at every optimization level, except those of several
 statements, which are `static inline` and stay calls without `-O`.
 
@@ -793,11 +794,10 @@ partial, `__ARM_FEATURE_SVE` stays undefined and `-march=` / `-mcpu=` refuse
   `/FAILIFMISMATCH:`, `/merge:`, and `/GUARDSYM:`, which changes nothing in an
   image without Control Flow Guard tables. Elsewhere it warns and is ignored, as in
   clang. `#pragma detect_mismatch("name", "value")` gives the object cl's
-  `/FAILIFMISMATCH:"name=value"`. Macros in the operands expand, as in cl
-  and clang.
+  `/FAILIFMISMATCH:"name=value"`. Macros in the operands expand.
 - `<intrin.h>` on the Windows targets is the compiler's own, like the
   intrinsic headers: MSVC's include directory, a system directory, does not
-  supply it, as clang's copy shadows MSVC's. A project's own `<intrin.h>` in
+  supply it. A project's own `<intrin.h>` in
   a `-I` directory is used. On arm64 `<arm64_neon.h>`, which MSVC's
   `<intrin.h>` includes, is the compiler's `<arm_neon.h>`: the vector types are
   the Arm C Language Extensions' distinct types, and MSVC's `__n64` /
@@ -900,11 +900,11 @@ partial, `__ARM_FEATURE_SVE` stays undefined and `-march=` / `-mcpu=` refuse
 - The `__has_include`, `__has_include_next`, `__has_builtin`, and
   `__has_attribute` operators. `__has_feature` is not implemented.
 - A directive name badc does not implement is an error in a group that is
-  not skipped (`directive`, B1010), as in gcc and clang; `#ident` and `#sccs`
+  not skipped (`directive`, B1010); `#ident` and `#sccs`
   are accepted without effect. A missing `#include` file is an error.
-- C23 6.10.4 `#embed` is accepted in every edition, as gcc and clang accept
-  it: the `limit`, `prefix`, `suffix`, and `if_empty` parameters, gcc's and
-  clang's `offset`, the `__has_embed` operator, and the
+- C23 6.10.4 `#embed` is accepted in every edition: the `limit`, `prefix`,
+  `suffix`, and `if_empty` parameters, the `gnu::offset` / `clang::offset`
+  parameter, the `__has_embed` operator, and the
   `__STDC_EMBED_NOT_FOUND__` / `__STDC_EMBED_FOUND__` / `__STDC_EMBED_EMPTY__`
   values. `#embed "..."` searches the including file's directory and then the
   `--embed-dir` directories; `#embed <...>` searches only the latter. An unknown `#pragma` warns

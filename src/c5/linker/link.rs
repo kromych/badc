@@ -4316,7 +4316,7 @@ impl<'a> Link<'a> {
     ///     TLS array (`r10`/`x16 = tls_array[_tls_index]`), so the
     ///     register already holds the module's block base and the
     ///     immediate is `merged_offset` with no bias (an x86_64 `lea`
-    ///     disp32, an aarch64 `add` imm12).
+    ///     disp32, an aarch64 `add` pair).
     /// `machine` does not separate the Windows and ELF models; the
     /// Windows TEB sequence always records a `_tls_index` fixup, so an
     /// object carrying any such fixup uses the Windows no-bias offset.
@@ -4420,21 +4420,10 @@ impl<'a> Link<'a> {
                             insn = (insn & !(0xFFF << 10)) | ((imm & 0xFFF) << 10);
                             text[at..at + 4].copy_from_slice(&insn.to_le_bytes());
                         };
-                        if win_teb {
-                            // TEB sequence: a single `add rd, x16, #imm12`.
-                            if tpoff >= 4096 {
-                                return Err(internal_err(
-                                    MODULE,
-                                    &format!(
-                                        "link_native_objects: TLS offset 0x{tpoff:x} exceeds the 12-bit \
-                                     `add` immediate",
-                                    ),
-                                ));
-                            }
-                            patch_imm12(&mut self.text, patch, tpoff as u32);
-                        } else {
-                            // Variant-1 local-exec pair: `add #hi12, lsl 12`
-                            // at the fixup, `add #lo12` right after it.
+                        {
+                            // The `add #hi12, lsl 12` at the fixup and the
+                            // `add #lo12` right after it: the variant-1
+                            // local-exec pair, or the TEB sequence's last two.
                             if patch + 8 > self.text.len() {
                                 return Err(internal_err(
                                     MODULE,

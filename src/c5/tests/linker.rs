@@ -1352,7 +1352,7 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
     // (`ldr x16, [x18, #0x58]`, index by `_tls_index`), so the accessor
     // records both a `_tls_index` fixup and an extern TLS-offset fixup
     // (reusing the `elf_tpoff_fixups` channel) keyed by the variable name.
-    // The linker fills the `add x?, x16, #imm12` with the variable's raw
+    // The linker fills the `add` pair off x16 with the variable's raw
     // offset in the merged TLS block -- no thread-pointer bias, unlike the
     // variant-1 ELF path's `+16` -- so the patched immediate equals the
     // merged offset directly.
@@ -1415,19 +1415,20 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
     let merged = link_native_objects(&[acc, def]).expect("link resolves cross-unit Windows TLS");
 
     // Scan the merged `.text` for the TEB sequence and confirm its closing
-    // `add x?, x16, #imm12` was patched to `other`'s merged offset (8): the
-    // definer is the only TLS contributor (base 0) and `counter` precedes
-    // it. The raw offset (not `8 + 16`) proves the Windows bias.
+    // `add x?, x16, #hi12, lsl 12` / `add x?, x?, #lo12` pair was patched to
+    // `other`'s merged offset (8): the definer is the only TLS contributor
+    // (base 0) and `counter` precedes it. The raw offset (not `8 + 16`)
+    // proves the Windows bias.
     const TEB_LOAD: u32 = 0xF940_2E50; // ldr x16, [x18, #0x58]
     let text = &merged.text;
+    let word = |at: usize| u32::from_le_bytes(text[at..at + 4].try_into().unwrap());
     let mut patched = None;
     let mut i = 0;
-    while i + 20 <= text.len() {
-        let w = u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
-        if w == TEB_LOAD {
-            let a = u32::from_le_bytes(text[i + 16..i + 20].try_into().unwrap());
-            if (a & 0xFF80_0000) == 0x9100_0000 && (a >> 5) & 0x1F == 16 {
-                patched = Some((a >> 10) & 0xFFF);
+    while i + 24 <= text.len() {
+        if word(i) == TEB_LOAD {
+            let (hi, lo) = (word(i + 16), word(i + 20));
+            if (hi & 0xFFC0_0000) == 0x9140_0000 && (hi >> 5) & 0x1F == 16 {
+                patched = Some((hi >> 10 & 0xFFF) << 12 | (lo >> 10 & 0xFFF));
                 break;
             }
         }
@@ -1436,7 +1437,7 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
     assert_eq!(
         patched,
         Some(off_other as u32),
-        "the TEB `add x?, x16, #imm12` must hold the raw merged offset {off_other} (no +16 bias)"
+        "the TEB `add` pair must hold the raw merged offset {off_other} (no +16 bias)"
     );
 }
 

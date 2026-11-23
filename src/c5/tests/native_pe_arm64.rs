@@ -185,6 +185,21 @@ fn build_and_run_with_options(
     }
 }
 
+/// The block offset each TEB thread-local access in `text` adds: the
+/// `add x?, x16, #hi12, lsl 12` / `add x?, x?, #lo12` pair ending the
+/// sequence its `ldr x16, [x18, #0x58]` begins.
+fn teb_offsets(text: &[u8]) -> Vec<u32> {
+    const TEB_LOAD: u32 = 0xF940_2E50;
+    let word = |at: usize| u32::from_le_bytes(text[at..at + 4].try_into().unwrap());
+    (0..text.len().saturating_sub(23))
+        .step_by(4)
+        .filter(|&i| word(i) == TEB_LOAD)
+        .map(|i| (word(i + 16), word(i + 20)))
+        .filter(|&(hi, _)| (hi & 0xFFC0_0000) == 0x9140_0000 && ((hi >> 5) & 0x1F) == 16)
+        .map(|(hi, lo)| (((hi >> 10) & 0xFFF) << 12) | ((lo >> 10) & 0xFFF))
+        .collect()
+}
+
 fn assert_exit(src: &str, stem: &str, args: &[&str], expected: i32) {
     match build_and_run(src, stem, args) {
         RunOutcome::Exit(c) => {
@@ -207,7 +222,12 @@ fn return_zero() {
 /// directory's `SizeOfZeroFill`.
 #[test]
 fn zero_filled_thread_local_storage_runs() {
-    assert_exit(super::zero_filled_thread_local_source(), "zero_filled_tls", &[], 0);
+    assert_exit(
+        super::zero_filled_thread_local_source(),
+        "zero_filled_tls",
+        &[],
+        0,
+    );
 }
 
 #[test]
@@ -456,10 +476,10 @@ fn pe_text_section(bytes: &[u8]) -> &[u8] {
 /// an `extern` declaration (the cross-unit access the codegen lowers to
 /// a TEB-indexed sequence with a link-patched offset) and through the
 /// defining unit's accessor (a unit-local access). The linker resolves
-/// the extern access's `add` imm12 against the merged TLS layout. The
+/// the extern access's `add` immediates against the merged TLS layout. The
 /// test asserts the link succeeds, that the emitted access reads the TEB
-/// TLS array at `[x18, #0x58]` and ends in an `add x?, x16, #imm12` whose
-/// immediate the linker filled to a non-zero value, and -- when a PE
+/// TLS array at `[x18, #0x58]` and ends in an `add` pair off x16 whose
+/// offset the linker filled to a non-zero value, and -- when a PE
 /// runner is available -- that the program exits 0 (its exit code is a
 /// failure bitmask over the checks).
 #[test]
@@ -506,40 +526,18 @@ int main(void) {\n\
     )
     .unwrap_or_else(|e| panic!("link cross-unit TLS: {e}"));
 
-    // The TEB-indexed access opens with `ldr x16, [x18, #0x58]` and ends
-    // four words later in `add x?, x16, #imm12`. The extern access leaves
-    // the imm12 at 0 for the linker to patch, so at least one such `add`
-    // must carry a non-zero offset after the link.
+    // The extern access leaves the offset at 0 for the linker to patch, so
+    // at least one TEB-indexed access must carry a non-zero offset after
+    // the link.
     let text = pe_text_section(&bytes);
-    const TEB_LOAD: u32 = 0xF940_2E50; // ldr x16, [x18, #0x58]
-    let mut teb_loads = 0usize;
-    let mut patched_add = false;
-    let mut i = 0;
-    while i + 4 <= text.len() {
-        let w = u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
-        if w == TEB_LOAD {
-            teb_loads += 1;
-            // add x?, x16, #imm12 : opcode 0x91, rn (bits 5..10) == 16.
-            let add_off = i + 16;
-            if add_off + 4 <= text.len() {
-                let a = u32::from_le_bytes(text[add_off..add_off + 4].try_into().unwrap());
-                let is_add_imm = (a & 0xFF80_0000) == 0x9100_0000;
-                let rn = (a >> 5) & 0x1F;
-                let imm12 = (a >> 10) & 0xFFF;
-                if is_add_imm && rn == 16 && imm12 != 0 {
-                    patched_add = true;
-                }
-            }
-        }
-        i += 4;
-    }
+    let offsets = teb_offsets(text);
     assert!(
-        teb_loads >= 1,
+        !offsets.is_empty(),
         "expected at least one TEB TLS-array load `ldr x16, [x18, #0x58]`"
     );
     assert!(
-        patched_add,
-        "expected a TEB-indexed `add x?, x16, #imm12` with a link-patched non-zero offset"
+        offsets.iter().any(|&o| o != 0),
+        "expected a TEB-indexed `add` pair with a link-patched non-zero offset"
     );
 
     let path = super::unique_temp_path("badc-pe-arm64-test", "cross_unit_tls", ".exe");
@@ -623,31 +621,12 @@ int main(void) {\n\
     .unwrap_or_else(|e| panic!("link cross-unit TLS rebased: {e}"));
 
     // The pad pushes the definer's vars to offset >= 16, so at least one
-    // TEB-indexed `add x?, x16, #imm12` must carry imm12 >= 16. The pad's
-    // own accesses sit at offsets 0 and 8, so this is unique to the rebase.
+    // TEB-indexed `add` pair must carry an offset >= 16. The pad's own
+    // accesses sit at offsets 0 and 8, so this is unique to the rebase.
     let text = pe_text_section(&bytes);
-    const TEB_LOAD: u32 = 0xF940_2E50; // ldr x16, [x18, #0x58]
-    let mut rebased_add = false;
-    let mut i = 0;
-    while i + 4 <= text.len() {
-        let w = u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
-        if w == TEB_LOAD {
-            let add_off = i + 16;
-            if add_off + 4 <= text.len() {
-                let a = u32::from_le_bytes(text[add_off..add_off + 4].try_into().unwrap());
-                let is_add_imm = (a & 0xFF80_0000) == 0x9100_0000;
-                let rn = (a >> 5) & 0x1F;
-                let imm12 = (a >> 10) & 0xFFF;
-                if is_add_imm && rn == 16 && imm12 >= 16 {
-                    rebased_add = true;
-                }
-            }
-        }
-        i += 4;
-    }
     assert!(
-        rebased_add,
-        "expected a TEB-indexed `add x?, x16, #imm12` with imm12 >= 16 (definer rebased past the pad)"
+        teb_offsets(text).iter().any(|&o| o >= 16),
+        "expected a TEB-indexed `add` pair with an offset >= 16 (definer rebased past the pad)"
     );
 
     let path = super::unique_temp_path("badc-pe-arm64-test", "cross_unit_tls_rebased", ".exe");

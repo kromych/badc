@@ -366,12 +366,12 @@ pub(super) fn emit_tls_addr(
             // x18 is the TEB pointer; TEB+0x58 holds the per-thread TLS array,
             // indexed by `_tls_index` (loaded into x17) to the module's block base
             // in x16. A unit-local access bakes the variable's offset within its
-            // own block into the final `add`, a cross-unit one a 0 placeholder; the
-            // linker resolves both against the merged layout through the
-            // `elf_tpoff_fixups` entry, telling this module-relative form from the
-            // variant-1 one by the `_tls_index` fixup.
-            if tls_extern_sym.is_none() && offset >= 4096 {
-                return fail("TlsAddr: offset exceeds 12-bit add immediate");
+            // own block into the final `add` pair, a cross-unit one a 0
+            // placeholder; the linker resolves both against the merged layout
+            // through the `elf_tpoff_fixups` entry, telling this module-relative
+            // form from the variant-1 one by the `_tls_index` fixup.
+            if tls_extern_sym.is_none() && offset >= (1 << 24) {
+                return fail("TlsAddr: offset exceeds the hi12/lo12 range");
             }
             emit(code, enc_ldr_imm(Reg(16), Reg(18), 0x58));
             let pair_off = code.len();
@@ -390,7 +390,8 @@ pub(super) fn emit_tls_addr(
             } else {
                 offset as u32
             };
-            emit(code, enc_add_imm(rd, Reg(16), imm));
+            emit(code, enc_add_imm_lsl12(rd, Reg(16), imm >> 12));
+            emit(code, enc_add_imm(rd, rd, imm & 0xFFF));
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset: add_off,
                 target: match tls_extern_sym {

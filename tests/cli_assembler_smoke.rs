@@ -3981,3 +3981,73 @@ fn double_shifts_and_sole_width_memory_assemble() {
         ]
     );
 }
+
+/// `(type, symbol name, addend)` of every entry of a named RELA section.
+fn relocs_by_symbol(bytes: &[u8], want: &str) -> Vec<(u32, String, i64)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let syms = sym_table(bytes);
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let names = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    let sections: Vec<String> = (0..shnum)
+        .map(|i| {
+            let n = names + u32at(shoff + i * shentsize);
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+            String::from_utf8_lossy(&bytes[n..n + end]).into_owned()
+        })
+        .collect();
+    let Some(i) = sections.iter().position(|n| n == want) else {
+        return Vec::new();
+    };
+    let sh = shoff + i * shentsize;
+    let (off, size) = (u64at(sh + 0x18) as usize, u64at(sh + 0x20) as usize);
+    (0..size)
+        .step_by(24)
+        .map(|e| {
+            let info = u64at(off + e + 8);
+            let (name, _, shndx, _, _) = &syms[(info >> 32) as usize];
+            // A section symbol carries no name of its own; it reads as its
+            // section's.
+            let name = match name.is_empty() {
+                true => sections[*shndx as usize].clone(),
+                false => name.clone(),
+            };
+            (
+                (info & 0xffff_ffff) as u32,
+                name,
+                u64at(off + e + 16) as i64,
+            )
+        })
+        .collect()
+}
+
+/// A relocation a gas operator writes (`@GOTPCREL`) against a label
+/// the unit defines names the label, not its section plus its offset, as
+/// GNU as and clang write it: the addend of a GOT relocation applies to the
+/// slot, so the section's slot stepped by the offset would read another
+/// entry. A `.L` temporary so referenced stays in the symbol table. A plain
+/// reference still reduces to the section.
+#[test]
+fn operator_relocations_name_a_local_label() {
+    let d = dir("got-local");
+    write(
+        &d,
+        "g.s",
+        ".text\n.globl f\nf:\n    call g\n    call *g@GOTPCREL(%rip)\n    \
+         movq .Lh@GOTPCREL(%rip), %rax\n    ret\n\
+         .data\npad: .quad 0\ng: .quad 0\n.Lh: .quad 0\n",
+    );
+    run_ok(&d, &["-q", "--target=linux-x64", "-c", "g.s", "-o", "g.o"]);
+    let bytes = std::fs::read(d.join("g.o")).unwrap();
+    let (pc32, gotpcrelx, rex_gotpcrelx) = (2, 41, 42);
+    assert_eq!(
+        relocs_by_symbol(&bytes, ".rela.text"),
+        [
+            (pc32, String::from(".data"), 4),
+            (gotpcrelx, String::from("g"), -4),
+            (rex_gotpcrelx, String::from(".Lh"), -4),
+        ]
+    );
+}

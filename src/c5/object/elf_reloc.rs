@@ -2690,11 +2690,29 @@ impl<'a> RelocWriter<'a> {
     /// local, and assignments no directive bound global or weak.
     fn emit_local_asm_symbols(&mut self) -> Result<(), C5Error> {
         let build = self.build;
+        // The names a GOT access of the C code reaches, and those an asm
+        // relocation written with a gas operator names, which keep their
+        // own symbols.
+        let operator = |kind: &crate::c5::asm::AsmRelocKind| {
+            matches!(kind, crate::c5::asm::AsmRelocKind::Op { .. })
+        };
+        let named = |t: &'a crate::c5::asm::AsmSectionTarget| match t {
+            crate::c5::asm::AsmSectionTarget::Symbol(n) => Some(n.as_str()),
+            _ => None,
+        };
+        let section_ops = (self.asm_sections.iter().flat_map(|s| &s.relocs))
+            .filter(|r| operator(&r.kind))
+            .filter_map(|r| named(&r.target));
+        let operand_ops = (build.asm_sym_fixups.iter())
+            .filter(|r| operator(&r.kind))
+            .filter_map(|r| named(&r.target));
         let got_ref_names: BTreeSet<&'a str> = build
             .user_extern_data_refs
             .iter()
             .map(|r| r.symbol_name.as_str())
             .filter(|n| self.extern_addr_form(n) == ExternAddrForm::Got)
+            .chain(section_ops)
+            .chain(operand_ops)
             .collect();
         self.names.got_ref_names = got_ref_names;
         for j in 0..self.names.asm_labels.len() {
@@ -3690,6 +3708,18 @@ impl<'a> RelocWriter<'a> {
         Ok((sym, base + addend + alias_off))
     }
 
+    /// A name a relocation written with a gas operator (`sym@GOTPCREL`,
+    /// `sym@PLT`, `sym@TLSGD`, ...) references: an asm label's own symbol,
+    /// as GNU as keeps it for the GOT, PLT and TLS relocations, whose addend
+    /// applies to the slot rather than to the symbol, else what
+    /// [`Self::asm_symbol_ref`] resolves.
+    fn asm_operator_ref(&self, what: &str, name: &str, addend: i64) -> Result<(u64, i64), C5Error> {
+        match self.syms.asm_label_symidx.get(name) {
+            Some(&i) => Ok((u64::from(i), addend)),
+            None => self.asm_symbol_ref(what, name, addend),
+        }
+    }
+
     /// Function-body inline-asm symbol-operand sites: one row per record at
     /// the instruction word, typed by the field kind.
     fn emit_asm_operand_relocs(&mut self) -> Result<(), C5Error> {
@@ -3717,6 +3747,11 @@ impl<'a> RelocWriter<'a> {
                         .plan
                         .map_ref(off.wrapping_add_signed(r.addend), *off),
                 ),
+                AsmSectionTarget::Symbol(name)
+                    if matches!(r.kind, crate::c5::asm::AsmRelocKind::Op { .. }) =>
+                {
+                    self.asm_operator_ref("asm operand relocation", name, r.addend)?
+                }
                 AsmSectionTarget::Symbol(name) => {
                     self.asm_symbol_ref("asm operand relocation", name, r.addend)?
                 }
@@ -3892,6 +3927,9 @@ impl<'a> RelocWriter<'a> {
                         return Err(Self::internal(String::from(
                             "elf_reloc: unresolved operand-expression section relocation",
                         )));
+                    }
+                    AsmSectionTarget::Symbol(name) if matches!(r.kind, RK::Op { .. }) => {
+                        self.asm_operator_ref("asm relocation", name, r.addend)?
                     }
                     AsmSectionTarget::Symbol(name) => {
                         self.asm_symbol_ref("asm relocation", name, r.addend)?

@@ -565,6 +565,9 @@ pub(crate) struct Lexer {
     /// Lazily built (file, line) -> byte-span index for diagnostics.
     /// See [`LineIndex`].
     line_index: core::cell::OnceCell<LineIndex>,
+    /// The offset of every newline of `src`, built on the first
+    /// [`Self::position_at`], so a position costs the same on any line.
+    newlines: core::cell::OnceCell<Vec<u32>>,
     pos: usize,
     /// Byte offset in `src` where the current token begins.
     tok_start: usize,
@@ -869,6 +872,7 @@ impl Lexer {
         Self {
             src,
             line_index: core::cell::OnceCell::new(),
+            newlines: core::cell::OnceCell::new(),
             pos: 0,
             tok_start: 0,
             line: 1,
@@ -1580,8 +1584,15 @@ impl Lexer {
     pub fn position_at(&self, at: usize) -> (u32, u32) {
         let at = at.min(self.tok_start).min(self.src.len());
         let end = self.tok_start.min(self.src.len());
-        let below = self.src[at..end].iter().filter(|&&c| c == b'\n').count() as u32;
-        let line_start = (self.src[..at].iter().rposition(|&c| c == b'\n')).map_or(0, |p| p + 1);
+        let newlines = self.newlines.get_or_init(|| {
+            let all = self.src.iter().enumerate().filter(|&(_, &c)| c == b'\n');
+            all.map(|(k, _)| k as u32).collect()
+        });
+        let before = |o: usize| newlines.partition_point(|&n| (n as usize) < o);
+        let below = (before(end) - before(at)) as u32;
+        let line_start = before(at)
+            .checked_sub(1)
+            .map_or(0, |k| newlines[k] as usize + 1);
         let line = (self.line as u32).saturating_sub(below);
         let k = self.column_places.partition_point(|p| p.at as usize <= at);
         match k.checked_sub(1).map(|k| self.column_places[k]) {

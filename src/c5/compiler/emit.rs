@@ -1230,6 +1230,7 @@ impl Compiler {
         self.current_func_attrs = super::DeclAttrs::default();
         self.current_func_conv = crate::c5::codegen::CallConv::Target;
         self.current_func_is_noreturn = false;
+        self.current_func_returns_nonnull = None;
         self.finished_functions.push(finished);
     }
 

@@ -1150,6 +1150,8 @@ impl Compiler {
             | Attr::Visibility
             | Attr::PatchableFunctionEntry
             | Attr::CallDiagnostic
+            | Attr::Nonnull
+            | Attr::ReturnsNonnull
             | Attr::Accepted => {}
         }
     }
@@ -1212,6 +1214,12 @@ impl Compiler {
         let is_alias = named == Some(Attr::Alias);
         let is_visibility = named == Some(Attr::Visibility);
         let is_patchable_entry = named == Some(Attr::PatchableFunctionEntry);
+        // Where `nonnull` / `returns_nonnull` is written, which
+        // a sanitizer report's note names.
+        let nonnull_at = matches!(named, Some(Attr::Nonnull | Attr::ReturnsNonnull)).then(|| {
+            let (line, column) = self.lex.position();
+            (self.intern_source_file() as u32, line, column)
+        });
         let call_diagnostic = (named == Some(Attr::CallDiagnostic))
             .then(|| self.symbols[self.lex.curr_id_idx].name.trim_matches('_') == "error");
         let mut seen = AttrFlags::default();
@@ -1283,6 +1291,40 @@ impl Compiler {
                 );
             }
             self.next()?;
+        } else if let Some(at) = nonnull_at {
+            if named == Some(Attr::ReturnsNonnull) {
+                self.pending.attrs.returns_nonnull.get_or_insert(at);
+            } else if self.lex.tk == '(' {
+                // `nonnull(N, ...)`: the 1-based parameters;
+                // an empty list is the bare form.
+                self.next()?;
+                if self.lex.tk == ')' {
+                    self.pending.attrs.nonnull.push((0, at));
+                }
+                while self.lex.tk != ')' {
+                    let n = self.parse_constant_int()?;
+                    if n < 1 || n > u32::MAX as i64 {
+                        return Err(self.compile_err(
+                            Code::INVALID_DECLARATION,
+                            "`nonnull` operand is not a parameter number",
+                        ));
+                    }
+                    self.pending.attrs.nonnull.push((n as u32, at));
+                    if self.lex.tk != ',' {
+                        break;
+                    }
+                    self.next()?;
+                }
+                if self.lex.tk != ')' {
+                    return Err(
+                        self.compile_err(Code::SYNTAX, "`)` expected after `nonnull` operands")
+                    );
+                }
+                self.next()?;
+            } else {
+                // Bare: every pointer parameter.
+                self.pending.attrs.nonnull.push((0, at));
+            }
         } else if is_patchable_entry && self.lex.tk == '(' {
             // `patchable_function_entry(N[, M])`: this
             // function's NOP area, overriding the option's.

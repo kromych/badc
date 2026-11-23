@@ -3233,6 +3233,7 @@ impl Compiler {
             prototyped: s.prototyped(),
             object_size_params: s.object_size_params,
             builtin_spelling,
+            nonnull: s.nonnull.clone(),
         };
         let mut nargs = 0;
         // The per-argument stores consume the AST vstack slots they push;
@@ -3431,6 +3432,16 @@ impl Compiler {
             .filter(|_| callee.builtin_spelling && nargs == 0)
         {
             self.ast_wrap_builtin_arg(arg);
+        }
+        let number = nargs as u32 + 1;
+        if let Some(arg) = self.ast_acc
+            && super::types::is_pointer_ty(self.ty)
+            && let Some(&(_, attr)) = (callee.nonnull.iter()).find(|n| n.0 == number || n.0 == 0)
+        {
+            let at = arg_at.offset.map_or((arg_at.line as u32, 0), |o| {
+                self.lex.position_at(o as usize)
+            });
+            self.sanitize_nonnull_arg(arg, number, attr, at);
         }
         let arg_ast = self.ast_acc;
         self.ast_assign();
@@ -4759,6 +4770,7 @@ impl Compiler {
             prototyped: f.params.prototyped,
             object_size_params: 0,
             builtin_spelling: false,
+            nonnull: Vec::new(),
         });
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
@@ -7850,6 +7862,8 @@ struct DirectCallee {
     /// A `__builtin_` spelling of a library function `-fno-builtin` keeps a
     /// plain call, whose first argument is marked to fold as the builtin.
     builtin_spelling: bool,
+    /// [`crate::c5::symbol::Symbol::nonnull`].
+    nonnull: Vec<(u32, (u32, u32, u32))>,
 }
 
 impl DirectCallee {

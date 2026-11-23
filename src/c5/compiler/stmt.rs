@@ -3937,6 +3937,15 @@ impl Compiler {
                     // the integer's bit pattern in the FP slot.
                     self.convert_assign_rhs(ret_ty);
                     return_value = self.ast_acc;
+                    if let (Some(attr), Some(value)) =
+                        (self.current_func_returns_nonnull, return_value)
+                        && super::types::is_pointer_ty(ret_ty)
+                    {
+                        let pos = at
+                            .offset
+                            .map_or((at.line as u32, 0), |o| self.lex.position_at(o as usize));
+                        self.sanitize_nonnull_return(value, attr, pos);
+                    }
                 }
             } else if !returns_void {
                 // Bare `return;` in a function returning non-void.

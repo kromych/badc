@@ -1821,6 +1821,10 @@ pub(super) struct DeclAttrs {
     /// `error("message")` (`true`) or `warning("message")`.
     pub call_diagnostic: Option<(bool, alloc::string::String)>,
     pub patchable_entry: Option<(u32, u32)>,
+    /// `nonnull`'s parameters as `(number, (file, line, column))`, 0 for
+    /// every pointer parameter, and `returns_nonnull`'s site.
+    pub nonnull: Vec<(u32, (u32, u32, u32))>,
+    pub returns_nonnull: Option<(u32, u32, u32)>,
     pub no_instrument: bool,
     pub no_stack_protector: bool,
     /// The target `alias("target")` names.
@@ -2447,6 +2451,9 @@ pub struct Compiler {
     switch_cases: Vec<stmt::SwitchLabels>,
     /// The array size expressions of the parameter list being parsed.
     param_sizes: Vec<function::ParamSize>,
+    /// The parameters of the list being parsed that are declared `nonnull`
+    /// themselves, as [`DeclAttrs::nonnull`] holds them.
+    param_nonnull: Vec<(u32, (u32, u32, u32))>,
     /// Per nested `switch` body: `true` once a `default:` label
     /// was seen.
     switch_defaults: Vec<bool>,
@@ -2685,6 +2692,8 @@ pub struct Compiler {
     /// body is being parsed, taken off its symbol at the opening brace.
     /// Propagated onto `FinishedFunction::is_noreturn`.
     current_func_is_noreturn: bool,
+    /// `returns_nonnull` on the function whose body is being parsed.
+    current_func_returns_nonnull: Option<(u32, u32, u32)>,
 
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
@@ -3539,6 +3548,7 @@ impl Compiler {
             local_label_scopes: LocalLabelScopes::default(),
             switch_cases: Vec::new(),
             param_sizes: Vec::new(),
+            param_nonnull: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
             tag_scopes: type_layout::TagScopes::file_scope(),
@@ -3595,6 +3605,7 @@ impl Compiler {
             current_func_attrs: DeclAttrs::default(),
             current_func_ret_fn: None,
             current_func_is_noreturn: false,
+            current_func_returns_nonnull: None,
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),
             warn_dead_store,

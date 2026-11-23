@@ -1778,6 +1778,7 @@ impl Compiler {
         self.current_function_name = self.symbols[id_idx].name.clone();
         self.current_func_conv = self.symbols[id_idx].fn_type.conv;
         self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
+        self.current_func_returns_nonnull = self.symbols[id_idx].returns_nonnull;
         self.current_func_ret_fn = self.symbols[id_idx].fn_type.ret.clone();
 
         // Callers push right to left, so the i'th declared parameter sits at slot
@@ -3641,6 +3642,17 @@ impl Compiler {
         }
         if let Some(area) = self.pending.attrs.patchable_entry.take() {
             self.symbols[id_idx].patchable_function_entry = Some(area);
+        }
+        // Each declaration's adds to the name's, as gcc and clang merge them.
+        let nonnull = core::mem::take(&mut self.pending.attrs.nonnull);
+        let sym = &mut self.symbols[id_idx];
+        for n in nonnull {
+            if !sym.nonnull.iter().any(|m| m.0 == n.0) {
+                sym.nonnull.push(n);
+            }
+        }
+        if let Some(at) = self.pending.attrs.returns_nonnull.take() {
+            sym.returns_nonnull.get_or_insert(at);
         }
         if self.pending.attrs.no_instrument {
             self.symbols[id_idx].no_instrument_function = true;

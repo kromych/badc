@@ -186,6 +186,13 @@ pub(crate) struct Symbol {
     /// of the symbol, in place of `-fpatchable-function-entry=`.
     pub patchable_function_entry: Option<(u32, u32)>,
 
+    /// `nonnull` on any declaration of the function or a parameter:
+    /// `(parameter number, (file, line, column))`, 0 for every pointer
+    /// parameter; the site is the attribute's, as a sanitizer note names it.
+    pub nonnull: Vec<(u32, (u32, u32, u32))>,
+    /// `returns_nonnull` on any declaration, at its site.
+    pub returns_nonnull: Option<(u32, u32, u32)>,
+
     /// `__attribute__((aligned(N)))` on a function's declarations: the
     /// largest `N`, the boundary its first instruction takes; 0 for none.
     pub code_align: u32,
@@ -1007,6 +1014,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             object_size_params: _,
             call_diagnostic: _,
             patchable_function_entry: _,
+            nonnull: _,
+            returns_nonnull: _,
             code_align: _,
             no_instrument_function: _,
             no_stack_protector: _,

@@ -77,6 +77,14 @@ struct __ubsan_invalid_builtin_data {
     struct __ubsan_source_location loc;
     unsigned char kind;
 };
+struct __ubsan_nonnull_arg_data {
+    struct __ubsan_source_location loc;
+    struct __ubsan_source_location attr_loc;
+    int arg_index;
+};
+struct __ubsan_nonnull_return_data {
+    struct __ubsan_source_location attr_loc;
+};
 // Whether the site at `loc` reports now: the first failure claims it.
 static int __ubsan_claim(struct __ubsan_source_location *loc, uint32_t *column) {
     *column = __atomic_exchange_n(&loc->column, 0xffffffffu, __ATOMIC_RELAXED);
@@ -333,6 +341,53 @@ void __ubsan_handle_invalid_builtin(struct __ubsan_invalid_builtin_data *d) {
 
 _Noreturn void __ubsan_handle_invalid_builtin_abort(struct __ubsan_invalid_builtin_data *d) {
     __ubsan_invalid_builtin(d);
+    abort();
+}
+
+// The note naming the attribute a report rests on, as clang's runtime adds it.
+static void __ubsan_attr_note(const struct __ubsan_source_location *at, const char *attr) {
+    fprintf(stderr, "%s:%u:%u: note: %s attribute specified here\n", at->file, at->line,
+            at->column, attr);
+}
+
+static void __ubsan_nonnull_arg(struct __ubsan_nonnull_arg_data *d) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    fprintf(stderr, "%s:%u:%u: runtime error: null pointer passed as argument %d, which is "
+            "declared to never be null\n", d->loc.file, d->loc.line, column, d->arg_index);
+    __ubsan_attr_note(&d->attr_loc, "nonnull");
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_nonnull_arg(struct __ubsan_nonnull_arg_data *d) {
+    __ubsan_nonnull_arg(d);
+}
+
+_Noreturn void __ubsan_handle_nonnull_arg_abort(struct __ubsan_nonnull_arg_data *d) {
+    __ubsan_nonnull_arg(d);
+    abort();
+}
+
+static void __ubsan_nonnull_return(struct __ubsan_nonnull_return_data *d,
+                                   struct __ubsan_source_location *loc) {
+    uint32_t column;
+    if (!__ubsan_claim(loc, &column))
+        return;
+    fprintf(stderr, "%s:%u:%u: runtime error: null pointer returned from function declared to "
+            "never return null\n", loc->file, loc->line, column);
+    __ubsan_attr_note(&d->attr_loc, "returns_nonnull");
+    __ubsan_summary(loc, column);
+}
+
+void __ubsan_handle_nonnull_return_v1(struct __ubsan_nonnull_return_data *d,
+                                      struct __ubsan_source_location *loc) {
+    __ubsan_nonnull_return(d, loc);
+}
+
+_Noreturn void __ubsan_handle_nonnull_return_v1_abort(struct __ubsan_nonnull_return_data *d,
+                                                      struct __ubsan_source_location *loc) {
+    __ubsan_nonnull_return(d, loc);
     abort();
 }
 

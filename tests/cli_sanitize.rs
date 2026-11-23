@@ -68,7 +68,12 @@ fn reports(o: &Output) -> Vec<String> {
         let Some((at, _)) = report.split_once(": runtime error: ") else {
             continue;
         };
-        let summary = lines.get(i + 1).copied().unwrap_or_default();
+        // A note on what the report rests on may come between it and its
+        // summary.
+        let summary = (lines[i + 1..].iter())
+            .find(|l| !l.contains(": note: "))
+            .copied()
+            .unwrap_or_default();
         assert!(
             summary.starts_with("SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior ")
                 && summary.ends_with(&format!("overflow.c:{at} ")),
@@ -388,6 +393,80 @@ fn a_zero_count_operand_is_reported() {
         let out = String::from_utf8_lossy(&o.stdout).replace("\r\n", "\n");
         assert_eq!(out, "90\n", "{opt}");
         assert_eq!(reports(&o), want, "{opt}");
+    }
+}
+
+const NONNULL: &str =
+    "__attribute__((nonnull(2))) int f(int a, int *p, int *q) { return p ? *p : a; }
+__attribute__((nonnull)) int g(int *p, int *q) { return (p != 0) + (q != 0); }
+int h(int *p __attribute__((nonnull))) { return p != 0; }
+__attribute__((returns_nonnull)) int *r(int *p) {
+    return p;
+}
+int k(int *p, int *q);
+__attribute__((nonnull(1))) int k(int *p, int *q);
+int k(int *p, int *q) { return (p != 0) + (q != 0); }
+int main(void) {
+    int x = 1;
+    int s = f(0, (int *)0, (int *)0) + g(&x, (int *)0) + h((int *)0);
+    s += k((int *)0, &x) + (int)sizeof(f(0, (int *)0, 0));
+    return s + (r((int *)0) == 0) + (r(&x) == &x);
+}
+";
+
+/// A null argument to a parameter `nonnull` names -- a function's numbered
+/// list, its bare form naming every pointer parameter, a parameter's own,
+/// and one an earlier declaration states -- and a null a `returns_nonnull`
+/// function returns report under `-fsanitize=nonnull-attribute` and
+/// `returns-nonnull-attribute` at the argument or the `return`, with the
+/// attribute's site as the note, as clang 21 reports them. An argument
+/// `sizeof` does not evaluate is not checked.
+#[test]
+fn a_null_argument_or_return_against_nonnull_is_reported() {
+    let dir = TempDir::new("badc-sanitize-nonnull");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, NONNULL).unwrap();
+    let arg = |at: &str, n: u32| {
+        format!(
+            "{at}: runtime error: null pointer passed as argument {n}, which is declared to never be null"
+        )
+    };
+    let want = [
+        arg("12:18", 2),
+        arg("12:46", 2),
+        arg("12:60", 1),
+        arg("13:12", 1),
+        String::from(
+            "5:5: runtime error: null pointer returned from function declared to never return null",
+        ),
+    ];
+    let notes = ["1:16", "2:16", "3:29", "8:16", "4:16"];
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("nonnull{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-w", opt, "-fsanitize=undefined", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert_eq!(o.status.code(), Some(8), "{opt}: {o:?}");
+        assert_eq!(reports(&o), want, "{opt}");
+        let err = String::from_utf8_lossy(&o.stderr);
+        let got: Vec<&str> = (err.lines())
+            .filter_map(|l| {
+                l.split_once("overflow.c:")?
+                    .1
+                    .split_once(": note: ")
+                    .map(|(at, _)| at)
+            })
+            .collect();
+        assert_eq!(got, notes, "{opt}");
     }
 }
 

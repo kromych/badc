@@ -76,12 +76,16 @@ pub enum Check {
     /// `__builtin_clz` or `__builtin_ctz`, or a wider form, of 0, whose
     /// count gcc and clang leave undefined.
     Builtin,
+    /// A null argument to a parameter `nonnull` names.
+    NonnullAttribute,
+    /// A null returned from a function declared `returns_nonnull`.
+    ReturnsNonnullAttribute,
 }
 
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
     /// clang's checks of defined behavior.
-    pub const ALL: [Check; 19] = [
+    pub const ALL: [Check; 21] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -101,6 +105,8 @@ impl Check {
         Check::ImplicitUnsignedIntegerTruncation,
         Check::ImplicitSignedIntegerTruncation,
         Check::Builtin,
+        Check::NonnullAttribute,
+        Check::ReturnsNonnullAttribute,
     ];
 
     /// The spelling `-fsanitize=` takes.
@@ -125,6 +131,8 @@ impl Check {
             Check::ImplicitUnsignedIntegerTruncation => "implicit-unsigned-integer-truncation",
             Check::ImplicitSignedIntegerTruncation => "implicit-signed-integer-truncation",
             Check::Builtin => "builtin",
+            Check::NonnullAttribute => "nonnull-attribute",
+            Check::ReturnsNonnullAttribute => "returns-nonnull-attribute",
         }
     }
 
@@ -588,6 +596,69 @@ impl Compiler {
         checks.push(ValueCheck { check, test });
     }
 
+    /// Check argument `number` (1-based), node `arg` beginning at `at`, of a
+    /// call to a function whose `nonnull` at `attr` names it, under
+    /// `-fsanitize=nonnull-attribute`: not null.
+    pub(super) fn sanitize_nonnull_arg(
+        &mut self,
+        arg: ExprId,
+        number: u32,
+        attr: (u32, u32, u32),
+        at: (u32, u32),
+    ) {
+        let check = Check::NonnullAttribute;
+        if !self.sanitize.runs(check) || self.unevaluated != 0 {
+            return;
+        }
+        // `NonNullArgData`: the location, the attribute's, the number.
+        let data = self.ubsan_site_at(at, &[]);
+        self.data.resize(self.data.len() + 24, 0);
+        self.ubsan_location(data + 16, attr);
+        let n = data as usize + 32;
+        self.data[n..n + 4].copy_from_slice(&number.to_le_bytes());
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_nonnull_arg", 0);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        let test = ValueTest::NonZero { site: None };
+        let checks = self.ast.value_checks.entry(arg).or_default();
+        checks.push(ValueCheck { check, test });
+    }
+
+    /// Check the value node `value` a `return` at `at` gives a function whose
+    /// `returns_nonnull` is at `attr`, under
+    /// `-fsanitize=returns-nonnull-attribute`: not null.
+    pub(super) fn sanitize_nonnull_return(
+        &mut self,
+        value: ExprId,
+        attr: (u32, u32, u32),
+        at: (u32, u32),
+    ) {
+        let check = Check::ReturnsNonnullAttribute;
+        if !self.sanitize.runs(check) {
+            return;
+        }
+        // `NonNullReturnData` holds the attribute's location; the handler
+        // takes the statement's beside it.
+        self.align_data_to(8);
+        let data = self.data.len() as i64;
+        self.data.resize(self.data.len() + 16, 0);
+        self.data_object_starts.push(data);
+        self.ubsan_location(data, attr);
+        let site = self.ubsan_site_at(at, &[]);
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_nonnull_return_v1", 1);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        let test = ValueTest::NonZero { site: Some(site) };
+        let checks = self.ast.value_checks.entry(value).or_default();
+        checks.push(ValueCheck { check, test });
+    }
+
     /// Report the `__builtin_unreachable()` call at node `id`, which begins
     /// at `at`, where it is reached, under `-fsanitize=unreachable`. Its
     /// handler ends the program, whatever the recovery: it has no form that
@@ -893,9 +964,24 @@ impl Compiler {
         });
     }
 
+    /// Write the `SourceLocation` of `(file, line, column)`, a file of
+    /// `source_files`, into the 16 bytes at `slot`.
+    fn ubsan_location(&mut self, slot: i64, (file, line, column): (u32, u32, u32)) {
+        let name = self.source_files[file as usize].clone();
+        let name = self.ubsan_file_named(name);
+        self.data_pointer(slot, name);
+        let at = slot as usize + 8;
+        self.data[at..at + 4].copy_from_slice(&line.to_le_bytes());
+        self.data[at + 4..at + 8].copy_from_slice(&column.to_le_bytes());
+    }
+
     /// The unit's file name, as a handler prints it, once per name.
     fn ubsan_file(&mut self) -> i64 {
-        let name = self.lex.file.clone();
+        self.ubsan_file_named(self.lex.file.clone())
+    }
+
+    /// The name `name`, as a handler prints it, once per name.
+    fn ubsan_file_named(&mut self, name: String) -> i64 {
         if let Some(&at) = self.ubsan_files.get(&name) {
             return at;
         }

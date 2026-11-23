@@ -79,12 +79,15 @@ pub enum Check {
     NonnullAttribute,
     /// A null returned from a function declared `returns_nonnull`.
     ReturnsNonnullAttribute,
+    /// A dereference of an object's address with fewer bytes left than the
+    /// access reads or writes: `*(T *)&obj` of an `obj` smaller than `T`.
+    ObjectSize,
 }
 
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
     /// clang's checks of defined behavior.
-    pub const ALL: [Check; 21] = [
+    pub const ALL: [Check; 22] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -96,6 +99,7 @@ impl Check {
         Check::Null,
         Check::PointerOverflow,
         Check::Alignment,
+        Check::ObjectSize,
         Check::FloatCastOverflow,
         Check::VlaBound,
         Check::Unreachable,
@@ -132,6 +136,7 @@ impl Check {
             Check::Builtin => "builtin",
             Check::NonnullAttribute => "nonnull-attribute",
             Check::ReturnsNonnullAttribute => "returns-nonnull-attribute",
+            Check::ObjectSize => "object-size",
         }
     }
 
@@ -320,13 +325,15 @@ impl Compiler {
 
     /// Whether the parse tracks the object an expression designates
     /// ([`super::ObjectRef`]): inside a `__builtin_object_size` operand, and
-    /// under a bounds check, which holds a subscript to the array's bound.
+    /// under the checks that read it -- a bounds check, which holds a
+    /// subscript to the array's bound, and `object-size`.
     pub(super) fn tracks_objects(&self) -> bool {
         let tracked = [
             Check::Bounds,
             Check::BoundsStrict,
             Check::Null,
             Check::Alignment,
+            Check::ObjectSize,
         ];
         self.pending.object_size_operands > 0
             || tracked
@@ -336,9 +343,11 @@ impl Compiler {
 
     /// Check the address the dereference or subscript node `id` accesses, a
     /// `ty` object aligned to `align`, under `-fsanitize=null` and
-    /// `alignment`, at `at`, but where the operand `base` designates is a
-    /// named object: its address is neither null nor misaligned. The access
-    /// is a load until [`Self::settle_access_checks`] finds it stored.
+    /// `alignment`, at `at`. Where the operand `base` designates is a named
+    /// object the address is not null, and is aligned unless a cast gave the
+    /// dereference its type. Under `object-size` a dereference of an
+    /// object's address with fewer bytes left than `ty` fails. The access is
+    /// a load until [`Self::settle_access_checks`] finds it stored.
     pub(super) fn sanitize_access(
         &mut self,
         id: ExprId,
@@ -346,11 +355,29 @@ impl Compiler {
         (ty, align): (i64, i64),
         at: (u32, u32),
     ) {
-        let named = base.is_some_and(|r| r.addr && !r.via_pointer);
-        if named || self.unevaluated > 0 {
+        if self.unevaluated > 0 {
             return;
         }
-        if let Some(check) = self.access_check((ty, Some(id)), align, TCK_LOAD, at) {
+        let named = base.is_some_and(|r| r.addr && !r.via_pointer);
+        let (deref, cast) = match self.ast.expr(id) {
+            Expr::Unary {
+                op: crate::c5::ast::UnOp::Deref,
+                child,
+                ..
+            } => (true, matches!(self.ast.expr(*child), Expr::Cast { .. })),
+            _ => (false, false),
+        };
+        let room = base
+            .and_then(|r| r.whole.filter(|_| r.addr))
+            .map(|e| e.remaining());
+        let short = deref
+            && self.sanitize.runs(Check::ObjectSize)
+            && room.is_some_and(|left| left < self.size_of_type(ty) as i64);
+        if named && !cast && !short {
+            return;
+        }
+        let tests = (!named, !named || cast, short);
+        if let Some(check) = self.access_check((ty, Some(id)), align, TCK_LOAD, at, tests) {
             self.ast.access_checks.insert(id, check);
         }
     }
@@ -407,8 +434,13 @@ impl Compiler {
                 _ => self.ast_const_value(obj).is_some(),
             };
             if !constant
-                && let Some(check) =
-                    self.access_check((record, None), record_align, TCK_MEMBER_ACCESS, at)
+                && let Some(check) = self.access_check(
+                    (record, None),
+                    record_align,
+                    TCK_MEMBER_ACCESS,
+                    at,
+                    (true, true, false),
+                )
             {
                 self.ast.value_checks.entry(obj).or_default().push(check);
             }
@@ -438,7 +470,8 @@ impl Compiler {
             _ => base_align.min(1 << off.trailing_zeros()),
         };
         if let Some(member) = member
-            && let Some(check) = self.access_check((ty, Some(member)), align, TCK_LOAD, at)
+            && let Some(check) =
+                self.access_check((ty, Some(member)), align, TCK_LOAD, at, (true, true, false))
         {
             self.ast.access_checks.insert(member, check);
         }
@@ -447,29 +480,39 @@ impl Compiler {
     /// The check of an access of a `ty` object aligned to `align` at `at`,
     /// by the node `node` where it names a pointer to a function: clang's
     /// `TypeMismatchDataV1`, the site, the type, the alignment's log2 and
-    /// the access `kind`. A volatile access is not checked.
+    /// the access `kind`, testing the address for null and alignment where
+    /// asked; `short` fails the access, its object too small. A volatile
+    /// access is not checked.
     fn access_check(
         &mut self,
         (ty, node): (i64, Option<ExprId>),
         align: i64,
         kind: u8,
         at: (u32, u32),
+        (null, aligned, short): (bool, bool, bool),
     ) -> Option<ValueCheck> {
         if super::types::is_volatile_object_ty(ty) {
             return None;
         }
-        let null = self.sanitize.runs(Check::Null);
-        let aligned = self.sanitize.runs(Check::Alignment) && align > 1;
-        let checks = match (null, aligned) {
-            (false, false) => return None,
-            (true, false) => Check::Null.bit(),
-            (false, true) => Check::Alignment.bit(),
-            (true, true) => Check::Null.bit() | Check::Alignment.bit(),
-        };
+        let null = null && self.sanitize.runs(Check::Null);
+        let aligned = aligned && self.sanitize.runs(Check::Alignment) && align > 1;
+        let checks = [
+            (null, Check::Null),
+            (aligned, Check::Alignment),
+            (short, Check::ObjectSize),
+        ]
+        .iter()
+        .filter(|(on, _)| *on)
+        .fold(0, |m, (_, c)| m | c.bit());
+        if checks == 0 {
+            return None;
+        }
         let types = [self.ubsan_object_type(ty, node)];
         let data = self.ubsan_site_at(at, &types);
         self.data.resize(self.data.len() + 8, 0);
-        self.data[data as usize + 24] = align.max(1).trailing_zeros() as u8;
+        // The alignment the handler holds the address to: 1 unchecked.
+        let checked = if aligned { align } else { 1 };
+        self.data[data as usize + 24] = checked.trailing_zeros() as u8;
         self.data[data as usize + 25] = kind;
         let handler = self.ubsan_handler(checks, "__ubsan_handle_type_mismatch_v1", 1);
         let check = SanitizeCheck {
@@ -478,7 +521,11 @@ impl Compiler {
             handler,
         };
         let align_mask = if aligned { align as u64 - 1 } else { 0 };
-        let test = ValueTest::Pointer { null, align_mask };
+        let test = ValueTest::Pointer {
+            null,
+            align_mask,
+            short,
+        };
         Some(ValueCheck { check, test })
     }
 

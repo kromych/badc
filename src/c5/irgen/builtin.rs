@@ -515,7 +515,10 @@ impl<'a> Walker<'a> {
                 let zero = b.imm(0);
                 b.binop(BinOp::Eq, fits, zero)
             }
-            ValueTest::Pointer { null, align_mask } => {
+            ValueTest::Pointer { short: true, .. } => b.imm(1),
+            ValueTest::Pointer {
+                null, align_mask, ..
+            } => {
                 let zero = b.imm(0);
                 let misaligned = if align_mask != 0 {
                     let low = b.binop_imm(BinOp::And, value, align_mask as i64);

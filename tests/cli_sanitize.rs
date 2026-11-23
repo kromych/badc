@@ -440,6 +440,87 @@ fn a_report_past_multibyte_comments_names_its_line_and_column() {
     );
 }
 
+const OBJECT_SIZE: &str = "#include <stdio.h>
+int main(void) {
+    char c[2] = {1, 2};
+    int fits = *(short *)&c[0];
+    long long v = *(long long *)&c[1];
+    int buf[2];
+    *(long long *)&buf[1] = 5;
+    printf(\"%d %lld\\n\", fits, v & 0);
+    return 0;
+}
+";
+
+/// A dereference of an object's address with fewer bytes left than the
+/// access reads or writes is reported under `-fsanitize=object-size`, at its
+/// `*`; an access that fits is not. Under `alignment` the same dereferences,
+/// a cast having given them a wider type than the named object's, are
+/// misaligned.
+#[test]
+fn an_access_past_its_object_or_misaligned_through_a_cast_is_reported() {
+    let dir = TempDir::new("badc-sanitize-object-size");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, OBJECT_SIZE).unwrap();
+    let space = |at: &str, kind: &str, ty: &str| {
+        format!(
+            "{at}: runtime error: {kind} address with insufficient space for an object of type '{ty}'"
+        )
+    };
+    let misaligned = |at: &str, kind: &str, ty: &str| {
+        format!(
+            "{at}: runtime error: {kind} misaligned address for type '{ty}', which requires 8 byte alignment"
+        )
+    };
+    let cases = [
+        (
+            "object-size",
+            [
+                space("5:19", "load of", "long long"),
+                space("7:5", "store to", "long long"),
+            ],
+        ),
+        (
+            "alignment",
+            [
+                misaligned("5:19", "load of", "long long"),
+                misaligned("7:5", "store to", "long long"),
+            ],
+        ),
+    ];
+    for (check, want) in cases {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("object-size-{check}{opt}"));
+            let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+                .args(["-q", "-w", opt, &format!("-fsanitize={check}"), "-o"])
+                .arg(&exe)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert!(
+                built.status.success(),
+                "{}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            let o = run(&exe, &[]);
+            assert!(o.status.success(), "{check} {opt}: {o:?}");
+            let got: Vec<String> = reports(&o).iter().map(|r| without_address(r)).collect();
+            assert_eq!(got, want, "{check} {opt}");
+        }
+    }
+}
+
+/// `r` without the address it names, `0x` and the hexadecimal digits.
+fn without_address(r: &str) -> String {
+    match r.split_once(" 0x") {
+        Some((head, tail)) => {
+            let rest = tail.trim_start_matches(|c: char| c.is_ascii_hexdigit());
+            format!("{head}{rest}")
+        }
+        None => r.to_string(),
+    }
+}
+
 const NONNULL: &str =
     "__attribute__((nonnull(2))) int f(int a, int *p, int *q) { return p ? *p : a; }
 __attribute__((nonnull)) int g(int *p, int *q) { return (p != 0) + (q != 0); }

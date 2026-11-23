@@ -1119,8 +1119,13 @@ pub(crate) enum ValueTest {
         single: bool,
     },
     /// An address accessed: not null where `null`, and with no bit of
-    /// `align_mask` set.
-    Pointer { null: bool, align_mask: u64 },
+    /// `align_mask` set; never where `short`, the object it designates
+    /// having fewer bytes left than the access.
+    Pointer {
+        null: bool,
+        align_mask: u64,
+        short: bool,
+    },
 }
 
 /// A runtime check of the operation at a node (`-fsanitize=`): what it

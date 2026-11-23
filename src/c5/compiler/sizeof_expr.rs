@@ -494,10 +494,12 @@ impl Compiler {
 
     /// The subscript index as a parse-time constant, the lexer left
     /// where it was; `None` when it does not fold. Read only inside a
-    /// `__builtin_object_size` operand, where the offset it moves is
-    /// part of the answer, so no other translation pays for the fold.
+    /// `__builtin_object_size` operand and under `-fsanitize=object-size`,
+    /// where the offset it moves is part of the answer, so no other
+    /// translation pays for the fold.
     pub(super) fn peek_constant_index(&mut self) -> Option<i64> {
-        if self.pending.object_size_operands == 0 {
+        let object_size = self.sanitize.runs(super::sanitize::Check::ObjectSize);
+        if self.pending.object_size_operands == 0 && !object_size {
             return None;
         }
         let snap = self.lex.snapshot();

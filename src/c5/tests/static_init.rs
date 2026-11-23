@@ -446,6 +446,16 @@ const AGGREGATES: &[Case] = &[
     case!("zero", "struct Z { int a; char b[3]; } x = {0};", "0000000000000000"),
     case!("empty_braces", "int x[3] = {};", "000000000000000000000000"),
     case!("aligned_member", "struct Al { char c; _Alignas(16) int i; } x = {1, 2};", "0100000000000000000000000000000002000000000000000000000000000000"),
+    // C99 6.7.8p2 makes an element with no object a constraint violation;
+    // clang warns and drops it (gcc refuses the one after a `char[]`'s
+    // string). A union has one object to initialize (6.7.8p17).
+    case!("excess_elements", "int x[2] = {1, 2, 3};", "0100000002000000"),
+    case!("excess_after_a_string", "char x[] = {\"ab\", \"cd\"};", "616200"),
+    case!("excess_in_a_bounded_literal", "int *x = (int[2]){1, 2, 3};", "0000000000000000", 0 => Data("0100000002000000")),
+    case!("excess_union_members", "union u { int a; int b; }; union u x = {1, 2};", "01000000"),
+    case!("excess_union_member", "union v { int a; }; union v x = {1, 2};", "01000000"),
+    case!("excess_union_after_designator", "union w { int a; int b; }; union w x = {.a = 1, 2};", "01000000"),
+    case!("excess_scalar_braces", "int x = {1, 2};", "01000000"),
 ];
 
 /// Packed layouts and bit-fields.
@@ -526,17 +536,6 @@ const ACCEPTED_ONLY_BY_BADC: &[Case] = &[
 /// Initializers badc rejects where clang accepts them.
 #[rustfmt::skip]
 const REJECTED_ONLY_BY_BADC: &[Reject] = &[
-    // C99 6.7.8p2 makes the excess a constraint violation; gcc and clang
-    // warn and drop it.
-    reject!("excess_elements", "int x[2] = {1, 2, 3};", "too many initializers for array `x` (3 > 2)"),
-    reject!("excess_after_a_string", "char x[] = {\"ab\", \"cd\"};", "excess elements after a string initializer"),
-    reject!("excess_in_a_bounded_literal", "int *p = (int[2]){1, 2, 3};", "too many initializers for array compound literal"),
-    // A union has one object to initialize (6.7.8p17); clang and gcc
-    // keep the first value, badc's fill wrote the excess over it.
-    reject!("excess_union_members", "union u { int a; int b; }; union u x = {1, 2};", "too many initializers for union u"),
-    reject!("excess_union_member", "union v { int a; }; union v x = {1, 2};", "too many initializers for union v"),
-    reject!("excess_union_after_designator", "union w { int a; int b; }; union w x = {.a = 1, 2};", "too many initializers for union w"),
-    reject!("excess_scalar_braces", "int x = {1, 2};", "must hold a single value"),
     // TODO: the constant folder carries floating values as `f64`, so a
     // `long double` element does not fold; gcc and clang fold it.
     reject!("long_double_element_read", "static const long double a[] = {1.5L}; long double x = a[0];", "constant integer expected (got identifier `a`)"),

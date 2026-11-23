@@ -987,10 +987,7 @@ impl Compiler {
         let whole = span.is_some()
             && if braced {
                 if self.accept(',')? && self.lex.tk != '}' {
-                    return Err(self.compile_err(
-                        Code::INVALID_INITIALIZER,
-                        "excess elements after a string initializer",
-                    ));
+                    self.drop_excess_initializers("char array")?;
                 }
                 self.accept('}')?
             } else {
@@ -1033,6 +1030,33 @@ impl Compiler {
             };
             self.warn_at(Code::EXCESS_INITIALIZERS, at, text);
         }
+    }
+
+    /// Report the elements of a braced initializer from the current one to the
+    /// list's `}`, which provide values for no object of the `what` it
+    /// initializes (C17 6.7.9p2), and drop them unevaluated, as gcc and
+    /// clang do; the cursor is left on the `}`.
+    pub(super) fn drop_excess_initializers(&mut self, what: &str) -> Result<(), C5Error> {
+        let text = format!("excess elements in {what} initializer");
+        self.warn_at(Code::EXCESS_INITIALIZERS, self.site(), text);
+        // A string literal's bytes join the data segment as it is lexed.
+        let data = self.data.len();
+        let mut depth = 0usize;
+        loop {
+            let tk = self.lex.tk;
+            if tk == 0 {
+                return Err(self.compile_err(Code::SYNTAX, "`}` expected in initializer"));
+            } else if tk == '}' && depth == 0 {
+                break;
+            } else if tk == '{' || tk == '(' || tk == '[' {
+                depth += 1;
+            } else if tk == '}' || tk == ')' || tk == ']' {
+                depth -= 1;
+            }
+            self.next()?;
+        }
+        self.truncate_data(data);
+        Ok(())
     }
 
     /// The length a string initializer gives an unsized array of `elem_ty`.
@@ -1357,10 +1381,13 @@ impl Compiler {
     /// `inner_dims.len() + 1` subscripts index dimensions, a further
     /// `[` / `.` step belongs to the element and is left unconsumed
     /// with `element_chain` set. The trailing `=` is consumed
-    /// otherwise. `None` when the entry carries no designator.
+    /// otherwise. `None` when the entry carries no designator. Each
+    /// subscript is held to its dimension, the first to `outer` where that
+    /// is known (above 0).
     pub(super) fn take_chained_array_designator(
         &mut self,
         inner_dims: &[i64],
+        outer: i64,
     ) -> Result<Option<ArrayDesignator>, C5Error> {
         if self.lex.tk != Token::Brak {
             return Ok(None);
@@ -1370,6 +1397,13 @@ impl Compiler {
         let mut depth: usize = 0;
         loop {
             let sub = self.take_designator_subscript(DesignatorRule::Ordered)?;
+            let extent = match depth {
+                0 => outer,
+                d => inner_dims[d - 1],
+            };
+            if extent > 0 {
+                self.check_designator_extent(sub.lo, sub.hi, extent)?;
+            }
             let scale: i64 = inner_dims.iter().skip(depth).product::<i64>().max(1);
             self.expect_designator_close()?;
             base += sub.lo * scale;
@@ -1484,7 +1518,13 @@ impl Compiler {
             // A `.field` step names a member the scalar element does not
             // have.
             let mut entry_designated = false;
-            if let Some(d) = self.take_chained_array_designator(&inner_dims)? {
+            let row: i64 = inner_dims.iter().product::<i64>().max(1);
+            let outer = if target_size > 0 {
+                target_size / row
+            } else {
+                0
+            };
+            if let Some(d) = self.take_chained_array_designator(&inner_dims, outer)? {
                 if d.element_chain {
                     return Err(
                         self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator")
@@ -1498,6 +1538,10 @@ impl Compiler {
                     None
                 };
                 desig_depth = d.depth;
+            }
+            if !entry_designated && target_size > 0 && cursor >= target_size as usize {
+                self.drop_excess_initializers("array")?;
+                break;
             }
             // The level the entry that follows belongs to: one deeper per
             // extra chained subscript for a designated entry. C99 6.7.8p17
@@ -3646,9 +3690,10 @@ impl Compiler {
                 continue;
             }
             if cursor >= total {
-                return Err(
-                    self.compile_err(Code::INVALID_INITIALIZER, "too many initializers for array")
-                );
+                if braced {
+                    self.drop_excess_initializers("array")?;
+                }
+                break;
             }
             // The rank a positional entry fills: the outermost level whose
             // row boundary the cursor sits on; mid-row it names a deeper
@@ -4208,13 +4253,10 @@ impl Compiler {
             // so a positional initializer after the list's first item
             // names nothing; a designated one overrides (p19).
             if !designated && items > 0 && self.structs[struct_id].is_union {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    format!(
-                        "too many initializers for union {}",
-                        self.structs[struct_id].name
-                    ),
-                ));
+                if braced {
+                    self.drop_excess_initializers("union")?;
+                }
+                break;
             }
             items += 1;
             let field_idx = if self.lex.tk == Token::Dot {
@@ -4273,13 +4315,10 @@ impl Compiler {
                 } else {
                     "struct"
                 };
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    format!(
-                        "too many initializers for {kind} {}",
-                        self.structs[struct_id].name
-                    ),
-                ));
+                if braced {
+                    self.drop_excess_initializers(kind)?;
+                }
+                break;
             }
             let field = self.structs[struct_id].fields[field_idx].clone();
             let field_base = (var_offset as usize) + field.offset;
@@ -4640,10 +4679,7 @@ impl Compiler {
             if braced_scalar {
                 self.accept(',')?;
                 if self.lex.tk != '}' {
-                    return Err(self.compile_err(
-                        Code::INVALID_INITIALIZER,
-                        "scalar initializer wrapped in `{ ... }` must hold a single value",
-                    ));
+                    self.drop_excess_initializers("scalar")?;
                 }
                 self.next()?; // consume `}`
             }
@@ -4764,10 +4800,7 @@ impl Compiler {
         if braced_scalar {
             self.accept(',')?;
             if self.lex.tk != '}' {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    "scalar initializer wrapped in `{ ... }` must hold a single value",
-                ));
+                self.drop_excess_initializers("scalar")?;
             }
             self.next()?; // consume `}`
         }
@@ -4854,10 +4887,7 @@ impl Compiler {
         if braced_scalar && r.is_ok() {
             self.accept(',')?;
             if self.lex.tk != '}' {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    "scalar initializer wrapped in `{ ... }` must hold a single value",
-                ));
+                self.drop_excess_initializers("scalar")?;
             }
             self.next()?; // consume `}`
         }
@@ -5088,10 +5118,7 @@ impl Compiler {
             // A trailing `,` before `}` is allowed in C99.
             self.accept(',')?;
             if self.lex.tk != '}' {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    "scalar initializer wrapped in `{ ... }` must hold a single value",
-                ));
+                self.drop_excess_initializers("scalar")?;
             }
             self.next()?; // consume `}`
         }

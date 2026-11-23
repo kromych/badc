@@ -4074,19 +4074,16 @@ fn struct_array_compound_literal_counts_elements_not_leaves() {
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 
     // The excess is counted in elements: three brace groups, and six
-    // elided leaves folding into three elements, both over a bound of 2.
-    expect_compile_error(
-        "struct s { int a; int b; };\n\
-         int main(void) { const struct s *p = (const struct s[2]){ {1,2},{3,4},{5,6} };\n\
-             return p[0].a; }",
-        "too many initializers for compound literal (3 > 2)",
-    );
-    expect_compile_error(
-        "struct s { int a; int b; };\n\
-         int main(void) { const struct s *p = (const struct s[2]){ 1,2,3,4,5,6 };\n\
-             return p[0].a; }",
-        "too many initializers for compound literal (3 > 2)",
-    );
+    // elided leaves folding into three elements, both over a bound of 2,
+    // drop the third (C17 6.7.9p2).
+    for groups in ["{1,2},{3,4},{5,6}", "1,2,3,4,5,6"] {
+        let src = format!(
+            "struct s {{ int a; int b; }};\n\
+             int main(void) {{ const struct s *p = (const struct s[2]){{ {groups} }};\n\
+                 return p[1].b; }}"
+        );
+        assert_eq!(run_main(&src), 4, "{src}");
+    }
     // A designator past the bound keeps its own diagnostic, as the named
     // array declaration reports it.
     expect_compile_error(
@@ -4098,17 +4095,17 @@ fn struct_array_compound_literal_counts_elements_not_leaves() {
 }
 
 #[test]
-fn union_initializer_list_rejects_a_second_positional_value() {
+fn union_initializer_list_drops_a_second_positional_value() {
     // C99 6.7.8p17: a union's initializer list initializes its first
-    // named member, so a second positional value has no object (6.7.8p2).
-    // The fill had stored it over the first member's storage.
-    expect_compile_error(
-        "int main(void) { union u { int a; int b; } x = {1, 2}; return x.a; }",
-        "too many initializers for union u",
+    // named member, so a second positional value has no object (6.7.8p2):
+    // it is dropped, not stored over the first member's storage.
+    assert_eq!(
+        run_main("int main(void) { union u { int a; int b; } x = {1, 2}; return x.a; }"),
+        1
     );
-    expect_compile_error(
-        "int main(void) { union u { int a; int b; } x = {.a = 1, 2}; return x.a; }",
-        "too many initializers for union u",
+    assert_eq!(
+        run_main("int main(void) { union u { int a; int b; } x = {.a = 1, 2}; return x.a; }"),
+        1
     );
     // 6.7.8p19: a later designator overrides; brace elision inside a
     // struct still hands the union exactly one value.
@@ -4575,22 +4572,22 @@ fn thread_local_is_in_every_declaration_of_an_object_or_in_none() {
 }
 
 #[test]
-fn static_local_array_initializer_over_bound_rejected() {
+fn static_local_array_surplus_stays_out_of_the_next_object() {
     // C99 6.7.8p2: an initializer may not provide a value for an object
     // outside the entity being initialized. The static-local allocator
-    // reserves storage from the declared bound, so a longer list was written
-    // past it, over whatever the initializer's own parse had staged above the
-    // reservation -- and off the end of `.data` when nothing had been, which
-    // panicked on the write index. The file-scope, automatic and
-    // compound-literal paths already rejected the same shapes.
-    expect_compile_error(
-        "int main(void) { static int a[1] = {1, 2, 3, 4}; return a[0]; }",
-        "too many initializers for array `a` (4 > 1)",
+    // reserves storage from the declared bound; the surplus is dropped, so
+    // nothing is written past it into the object the next declaration
+    // reserves, nor off the end of `.data`.
+    assert_eq!(
+        run_main("int main(void) { static int a[1] = {1, 2, 3, 4}; return a[0]; }"),
+        1
     );
-    expect_compile_error(
-        "int main(void) { static int a[1] = {1, 2}; static int b[2] = {3, 4};\n\
-         return a[0] + b[0]; }",
-        "too many initializers for array `a` (2 > 1)",
+    assert_eq!(
+        run_main(
+            "int main(void) { static int a[1] = {1, 2}; static int b[2] = {3, 4};\n\
+             return a[0] * 10 + b[0]; }"
+        ),
+        13
     );
     // The exactly-filling and short forms stay legal: 6.7.8p14 drops the
     // terminator on an exact fit, 6.7.8p21 zero-fills the tail.
@@ -4680,6 +4677,68 @@ fn a_string_longer_than_its_array_warns_and_is_truncated() {
         let warnings = prog.warnings.iter().map(|w| w.to_string());
         let n = warnings.filter(|w| w.contains("[B3013]")).count();
         assert_eq!(n, warned, "{src}");
+        assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0, "{src}");
+    }
+}
+
+/// C17 6.7.9p2: an initializer element with no object of the entity to
+/// initialize -- past an array's, a row's, a struct's or a scalar's end, a
+/// union's second, an element after a braced string -- is reported once per
+/// list as `-Wexcess-initializers`, at file and block scope, in a compound
+/// literal, and dropped unevaluated, as gcc and clang do (clang alone for a
+/// `char[]` after its string, which gcc refuses).
+#[test]
+fn a_surplus_initializer_element_warns_and_is_dropped() {
+    let types = "struct S { int x, y; }; union U { int i; char c; };\n\
+                 int side; int bump(void) { return ++side; }\n";
+    for (globals, body) in [
+        ("int a[2] = {1, 2, 3};", "return a[1] != 2;"),
+        ("struct S s = {1, 2, 3};", "return s.y != 2;"),
+        ("union U u = {1, 2};", "return u.i != 1;"),
+        (
+            "int m[2][2] = {{1, 2, 3}, {4}};",
+            "return m[0][1] != 2 || m[1][0] != 4;",
+        ),
+        ("int n[2][2] = {1, 2, 3, 4, 5};", "return n[1][1] != 4;"),
+        ("struct S sa[1] = {{1, 2}, {3, 4}};", "return sa[0].y != 2;"),
+        (
+            "char c[] = {\"ab\", \"cd\"};",
+            "return sizeof c != 3 || c[1] != 'b';",
+        ),
+        ("int i = {1, 2};", "return i != 1;"),
+        (
+            "",
+            "int la[2] = {1, 2, bump()}; return la[1] != 2 || side != 0;",
+        ),
+        ("", "static int ls[2] = {1, 2, 3}; return ls[1] != 2;"),
+        (
+            "",
+            "struct S l = {1, 2, bump()}; return l.y != 2 || side != 0;",
+        ),
+        (
+            "",
+            "int *p = (int[2]){1, 2, bump()}; return p[1] != 2 || side != 0;",
+        ),
+        (
+            "",
+            "struct S l[1] = {{1, 2}, {3, bump()}}; return l[0].y != 2 || side != 0;",
+        ),
+        ("", "union U l = {7, bump()}; return l.i != 7 || side != 0;"),
+        (
+            "",
+            "int l[2][2] = {{1, 2, bump()}, {4}}; return l[0][1] != 2 || side != 0;",
+        ),
+        ("", "int j = {5, bump()}; return j != 5 || side != 0;"),
+    ] {
+        let src = format!("{types}{globals}\nint main(void) {{ {body} }}\n");
+        let prog = Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        let warnings = prog.warnings.iter().map(|w| w.to_string());
+        let n = warnings
+            .filter(|w| w.contains("excess elements in") && w.contains("[B3013]"))
+            .count();
+        assert_eq!(n, 1, "{src}");
         assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0, "{src}");
     }
 }
@@ -5014,16 +5073,21 @@ fn a_member_read_through_an_address_is_not_a_constant() {
 #[test]
 fn a_braced_scalar_initializer_holds_one_value() {
     // C99 6.7.8p11: the braces around a scalar initializer hold a single
-    // expression, at file scope, at block scope and in a member.
-    for decl in [
-        "int x = {1, 2};",
-        "void f(void) { static int x = {1, 2}; }",
-        "struct { int a; } x = {{1, 2}};",
+    // expression, at file scope, at block scope and in a member; a further
+    // one is reported and dropped (6.7.8p2), as gcc and clang do.
+    for (decl, value) in [
+        ("int x = {1, 2};", "x"),
+        ("int f(void) { static int x = {1, 2}; return x; }", "f()"),
+        ("struct { int a; } x = {{1, 2}};", "x.a"),
     ] {
-        expect_compile_error(
-            &format!("{decl}\nint main(void) {{ return 0; }}"),
-            "scalar initializer wrapped in `{ ... }` must hold a single value",
-        );
+        let src = format!("{decl}\nint main(void) {{ return {value}; }}");
+        let prog = Compiler::new(src.clone()).compile().expect(&src);
+        let warned = prog.warnings.iter().any(|w| {
+            w.to_string()
+                .contains("excess elements in scalar initializer")
+        });
+        assert!(warned, "{src}");
+        assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 1, "{src}");
     }
 }
 
@@ -5768,16 +5832,19 @@ fn a_rejected_array_designator_reports_one_diagnostic() {
         "int f(int n) { return (int[4]){ [n] = 1 }[0]; }",
         "constant integer expected (got identifier `n`)",
     );
-    // An index past the declared extent of a named array is reported as the
-    // element count the initializer would need; the levels that know the
-    // extent when the subscript is parsed report it as the bound.
+    // An index past the declared extent is reported against its bound, an
+    // inner subscript's against its row's.
     expect_compile_error(
         "int a[4] = { [9] = 1 };",
-        "too many initializers for array `a` (10 > 4)",
+        "array designator index 9 out of bounds [0, 4)",
     );
     expect_compile_error(
         "int f(void) { return (int[4]){ [9] = 1 }[0]; }",
-        "too many initializers for compound literal (10 > 4)",
+        "array designator index 9 out of bounds [0, 4)",
+    );
+    expect_compile_error(
+        "int a[2][2] = { [0][3] = 1 };",
+        "array designator index 3 out of bounds [0, 2)",
     );
     for scope in [
         "struct s { int v[3]; }; struct s x = { DESIG };",

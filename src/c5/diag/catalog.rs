@@ -210,7 +210,7 @@ catalog! {
         "a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both";
     3013, "excess-initializers", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped";
+        "an initializer element with no object to initialize -- past an array's, a row's, a structure's or a braced scalar's end, a union's second, one after a braced string -- or a string literal longer than the array, member or row it initializes, a terminator aside; the surplus is dropped unevaluated";
     3015, "cast-function-type", [], Ignore, Controllable,
         [EXTRA], Live,
         "a cast between pointers to function types whose returns or common leading parameters differ other than as pointers or as integers of one precision";

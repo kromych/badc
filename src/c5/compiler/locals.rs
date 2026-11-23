@@ -1675,16 +1675,15 @@ impl Compiler {
             let mut range_end = i;
             if self.lex.tk == Token::Brak {
                 let sub = self.take_designator_subscript(DesignatorRule::Ordered)?;
+                self.check_designator_extent(sub.lo, sub.hi, count)?;
                 self.expect_designator_close()?;
                 self.expect_designator_assign()?;
                 i = sub.lo;
                 range_end = sub.hi;
             }
             if range_end >= count {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    format!("too many initializers for `{}`", self.symbols[loc_idx].name),
-                ));
+                self.drop_excess_initializers("array")?;
+                break;
             }
             if self.lex.tk == '{' {
                 // TODO: descend into a brace-enclosed element and store it
@@ -2663,17 +2662,8 @@ impl Compiler {
                         "<compound literal>",
                     )?;
                 } else if elem_is_aggregate {
-                    // A designator past the bound is the fill's to report.
-                    let items = self.lex.count_top_level_items_in_array() as i64;
-                    if self.lex.tk == '{' && self.designated_array_count(items, 1, None)? <= items {
-                        let supplied =
-                            self.struct_array_init_rows(elem_ty, inner_dims)? * inner_span;
-                        if supplied > count {
-                            return Err(self.compile_err(Code::INVALID_INITIALIZER, format!(
-                                "too many initializers for compound literal ({supplied} > {count})"
-                            )));
-                        }
-                    }
+                    // The fill holds the entries to the bound, dropping a
+                    // surplus and refusing a designator past it.
                     self.stage_struct_array_literal(slot, elem_ty, rows, inner_dims, full)?;
                 } else {
                     self.pending.init_target_array_size = count;
@@ -3117,7 +3107,11 @@ impl Compiler {
         let mut cursor: i64 = 0;
         let mut reached: i64 = 0;
         while self.lex.tk != '}' {
-            let desig = self.take_chained_array_designator(child)?;
+            let desig = self.take_chained_array_designator(child, dims[0])?;
+            if desig.is_none() && cursor >= total {
+                self.drop_excess_initializers("array")?;
+                break;
+            }
             let mut range_end: i64 = 0;
             // The level the entry fills: the chain's depth for a
             // designated entry; for a positional one the outermost level

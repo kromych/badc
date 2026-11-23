@@ -186,6 +186,10 @@ pub(crate) struct Symbol {
     /// of the symbol, in place of `-fpatchable-function-entry=`.
     pub patchable_function_entry: Option<(u32, u32)>,
 
+    /// The `-fsanitize=function` hash of a defined function's type, which
+    /// its entry carries ([`crate::c5::ir::FunctionSsa::type_hash`]).
+    pub function_type_hash: Option<u32>,
+
     /// `nonnull` on any declaration of the function or a parameter:
     /// `(parameter number, (file, line, column))`, 0 for every pointer
     /// parameter; the site is the attribute's, as a sanitizer note names it.
@@ -1014,6 +1018,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             object_size_params: _,
             call_diagnostic: _,
             patchable_function_entry: _,
+            function_type_hash: _,
             nonnull: _,
             returns_nonnull: _,
             code_align: _,

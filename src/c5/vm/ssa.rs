@@ -1239,6 +1239,19 @@ fn function_at(prog: &Program<'_>, raw: i64) -> Result<usize, C5Error> {
     })
 }
 
+/// The `-fsanitize=function` prefix of the function `raw` designates, as
+/// native code reads it ahead of the entry: the signature and the type hash
+/// the function was compiled with, or 0 for an address that is no function
+/// or one compiled without.
+fn function_prefix(prog: &Program<'_>, raw: i64) -> i64 {
+    let hash = function_at(prog, raw)
+        .ok()
+        .and_then(|i| prog.funcs[i].type_hash);
+    hash.map_or(0, |h| {
+        (u64::from(h) << 32 | u64::from(crate::c5::op::FUNCTION_PREFIX_SIGNATURE)) as i64
+    })
+}
+
 /// Build the callee's flat argument list. A variadic by-value
 /// aggregate (`arg_aggs[i]` set, `i` past the fixed parameters) is
 /// expanded into its eightbytes so the callee's `va_arg`, which
@@ -1816,6 +1829,13 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::TailExt(_) => "TailExt",
+        Inst::Intrinsic { kind, args }
+            if *kind == crate::c5::op::Intrinsic::FunctionPrefix as i64 =>
+        {
+            let raw = args.first().map_or(0, |&a| frame.regs[a as usize]);
+            frame.regs[v as usize] = function_prefix(prog, raw);
+            return Ok(());
+        }
         Inst::Intrinsic { kind, args } => {
             run_intrinsic(mem, frame, v, *kind, args)?;
             return Ok(());
@@ -4405,6 +4425,9 @@ fn run_intrinsic(
         C5Error::Runtime(format!("vm_ssa: unknown Intrinsic discriminant {kind}"))
     })?;
     match intr {
+        Intrinsic::FunctionPrefix => Err(C5Error::Runtime(
+            "vm_ssa: FunctionPrefix is answered where the program is in reach".to_string(),
+        )),
         Intrinsic::Alloca => {
             let n_raw = args
                 .first()

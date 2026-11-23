@@ -2546,8 +2546,9 @@ pub(crate) trait LowerTarget {
     ) {
     }
 
-    /// Bring the code stream to the next function's entry alignment.
-    fn align_entry(&mut self, st: &mut LowerState, fn_align: usize);
+    /// Bring the code stream to where `lead` more bytes reach the next
+    /// function's entry alignment.
+    fn align_entry(&mut self, st: &mut LowerState, fn_align: usize, lead: usize);
 
     /// Emit `n` no-ops ahead of the function symbol.
     fn entry_nops(&mut self, code: &mut alloc::vec::Vec<u8>, n: u32);
@@ -3562,7 +3563,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 .unwrap_or(1),
         );
         st.text_align = st.text_align.max(align);
-        b.align_entry(&mut st, align);
+        // Under `-fsanitize=function` the 8 bytes ahead of the symbol hold
+        // the signature and the type hash, unless no-ops take them.
+        let prefix = func_ssa.type_hash.filter(|_| entry.nops_before == 0);
+        b.align_entry(&mut st, align, if prefix.is_some() { 8 } else { 0 });
+        if let Some(hash) = prefix {
+            st.text_data_ranges.push((st.code.len(), 8));
+            let signature = crate::c5::op::FUNCTION_PREFIX_SIGNATURE;
+            st.code.extend_from_slice(&signature.to_le_bytes());
+            st.code.extend_from_slice(&hash.to_le_bytes());
+        }
         if entry.nops_before + entry.nops_after > 0 {
             st.patchable_entries.push(super::EntryArea {
                 func: st.func_ent_pcs.len(),

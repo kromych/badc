@@ -244,6 +244,7 @@ impl SsaBuilder {
             is_internal: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             const_params: 0,

@@ -2357,8 +2357,13 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
         );
     }
 
-    fn align_entry(&mut self, st: &mut super::ssa::emit_common::LowerState, fn_align: usize) {
-        super::pad_to_alignment(&mut st.code, fn_align, &[0x90]);
+    fn align_entry(
+        &mut self,
+        st: &mut super::ssa::emit_common::LowerState,
+        fn_align: usize,
+        lead: usize,
+    ) {
+        super::pad_to_alignment(&mut st.code, fn_align, lead, &[0x90]);
     }
 
     fn entry_nops(&mut self, code: &mut Vec<u8>, n: u32) {

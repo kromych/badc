@@ -3718,6 +3718,7 @@ fn splice_multi_block(
         is_noinline: original.is_noinline,
         section: original.section,
         patchable_entry: original.patchable_entry,
+        type_hash: original.type_hash,
         no_instrument: original.no_instrument,
         no_stack_protector: original.no_stack_protector,
         is_naked: original.is_naked,

@@ -326,7 +326,17 @@ pub enum Intrinsic {
     SveSt1H = 100,
     SveSt1W = 101,
     SveSt1D = 102,
+    /// The 8 bytes ahead of the function `args[0]` points to, the
+    /// `-fsanitize=function` prefix of a function compiled under the check:
+    /// [`FUNCTION_PREFIX_SIGNATURE`] in the low half, its type hash in the
+    /// high. The interpreter answers for its own functions from their
+    /// recorded hash and with 0 for any other address.
+    FunctionPrefix = 103,
 }
+
+/// The low half of [`Intrinsic::FunctionPrefix`] for a function that
+/// carries a type hash.
+pub(crate) const FUNCTION_PREFIX_SIGNATURE: u32 = 0xc105_cafe;
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
 /// `eightbytes << 29 | elements << 26 | by_ref << 25 | (align == 16) << 24 |
@@ -495,6 +505,7 @@ impl Intrinsic {
             100 => Some(Intrinsic::SveSt1H),
             101 => Some(Intrinsic::SveSt1W),
             102 => Some(Intrinsic::SveSt1D),
+            103 => Some(Intrinsic::FunctionPrefix),
             _ => None,
         }
     }

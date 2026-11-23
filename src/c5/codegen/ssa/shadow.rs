@@ -47,6 +47,15 @@ fn function_patchable_entries(program: &Program) -> alloc::collections::BTreeMap
         .collect()
 }
 
+/// The `-fsanitize=function` type hash per defined function.
+fn function_type_hashes(program: &Program) -> alloc::collections::BTreeMap<&str, u32> {
+    use crate::c5::token::Token;
+    (program.symbols.iter())
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
+        .filter_map(|s| Some((s.def_link_name(), s.function_type_hash?)))
+        .collect()
+}
+
 /// Names of defined functions carrying `no_instrument_function`.
 fn no_instrument_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> {
     defined_function_names(program, |s| s.no_instrument_function)
@@ -134,6 +143,7 @@ pub(crate) fn walk_program(
     let internal_names = internal_function_names(program);
     let sections = function_sections(program);
     let patchable_entries = function_patchable_entries(program);
+    let type_hashes = function_type_hashes(program);
     let no_instrument = no_instrument_function_names(program);
     let no_stack_protector = no_stack_protector_names(program);
     let renamed = renamed_functions(program);
@@ -198,6 +208,7 @@ pub(crate) fn walk_program(
         func.is_internal = internal_names.contains(func.name.as_str());
         func.section = sections.get(func.name.as_str()).map(|s| (*s).clone());
         func.patchable_entry = patchable_entries.get(func.name.as_str()).copied();
+        func.type_hash = type_hashes.get(func.name.as_str()).copied();
         func.no_instrument = no_instrument.contains(func.name.as_str());
         func.no_stack_protector = no_stack_protector.contains(func.name.as_str());
         // Seed declared multi-cell extents alongside the synthetic ones the

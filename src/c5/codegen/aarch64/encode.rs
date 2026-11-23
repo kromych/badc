@@ -2547,7 +2547,12 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         }
     }
 
-    fn align_entry(&mut self, st: &mut super::ssa::emit_common::LowerState, fn_align: usize) {
+    fn align_entry(
+        &mut self,
+        st: &mut super::ssa::emit_common::LowerState,
+        fn_align: usize,
+        lead: usize,
+    ) {
         // A preceding body's inline-asm data may leave the stream off
         // instruction alignment; the function's first byte pays it.
         super::emit::a64_align_asm_stream(
@@ -2555,7 +2560,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             &mut st.text_data_ranges,
             &mut self.text_map_state,
         );
-        super::pad_to_alignment(&mut st.code, fn_align, &NOP.to_le_bytes());
+        super::pad_to_alignment(&mut st.code, fn_align, lead, &NOP.to_le_bytes());
     }
 
     fn entry_nops(&mut self, code: &mut Vec<u8>, n: u32) {

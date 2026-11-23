@@ -2672,6 +2672,9 @@ pub(crate) struct FunctionSsa {
     /// `__attribute__((patchable_function_entry(N, M)))`: the NOP area
     /// this function takes in place of the option's.
     pub patchable_entry: Option<(u32, u32)>,
+    /// The `-fsanitize=function` hash of the function's type, written with
+    /// its signature ahead of the entry ([`crate::c5::op::Intrinsic::FunctionPrefix`]).
+    pub type_hash: Option<u32>,
     /// `__attribute__((no_instrument_function))`: no profiling call.
     pub no_instrument: bool,
     /// `__attribute__((no_stack_protector))`: no canary.
@@ -3255,6 +3258,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_internal: _,
             section: _,
             patchable_entry: _,
+            type_hash: _,
             no_instrument: _,
             no_stack_protector: _,
             const_params: _,

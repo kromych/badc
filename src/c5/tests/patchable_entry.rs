@@ -709,3 +709,58 @@ fn profiling_needs_a_relocatable_x86_64_object() {
     };
     assert!(err.to_string().contains("relocatable"), "{err}");
 }
+
+/// Under `-fsanitize=function` the 8 bytes ahead of a prototyped
+/// definition's symbol are the signature and the hash of its type, the
+/// symbol keeping the function alignment. Compatible types hash alike: a
+/// parameter's own qualifier is no part. A function with no-ops ahead of
+/// its symbol, whose area the alignment applies to, or an old-style
+/// definition, has no prefix.
+#[test]
+fn the_function_check_prefixes_each_prototyped_definition() {
+    use crate::c5::{Sanitize, SanitizerCheck};
+    let src = "int f(int a, const int b) { return a + b; }\n\
+               int g(int a, int b) { return a - b; }\n\
+               long w(long a, long b) { return a; }\n\
+               __attribute__((patchable_function_entry(2,1))) int p(int a, int b) { return a; }\n\
+               int k(a, b) int a, b; { return a; }\n";
+    let sanitize = Sanitize {
+        enabled: SanitizerCheck::Function.bit(),
+        ..Sanitize::default()
+    };
+    let signature = crate::c5::op::FUNCTION_PREFIX_SIGNATURE;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let options = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_sanitize(sanitize);
+        let program = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            min_function_alignment: 16,
+            ..NativeOptions::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let rel = parse_et_rel(&bytes, "unit").expect("parse");
+        let ahead = |name: &str| {
+            let sym = func(&rel, name);
+            // One no-op ahead of `p`: a byte, or an AArch64 word.
+            let nop = if target == Target::LinuxX64 { 1 } else { 4 };
+            let area = if name == "p" { nop } else { 0 };
+            assert_eq!(sym.value % 16, area, "{target:?} `{name}` is aligned");
+            let text = &rel.sections[section_of(sym)].bytes;
+            let at = sym.value as usize;
+            let word = |o: usize| u32::from_le_bytes(text[o..o + 4].try_into().unwrap());
+            (word(at - 8), word(at - 4))
+        };
+        let (f, g, w) = (ahead("f"), ahead("g"), ahead("w"));
+        assert_eq!(f.0, signature, "{target:?}");
+        assert_eq!(f, g, "{target:?}: compatible types hash alike");
+        assert_eq!(w.0, signature, "{target:?}");
+        assert_ne!(w.1, f.1, "{target:?}");
+        for name in ["p", "k"] {
+            assert_ne!(ahead(name).0, signature, "{target:?} `{name}`");
+        }
+    }
+}

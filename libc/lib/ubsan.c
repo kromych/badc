@@ -63,6 +63,10 @@ struct __ubsan_type_mismatch_data {
     unsigned char log_alignment;
     unsigned char type_check_kind;
 };
+struct __ubsan_function_type_mismatch_data {
+    struct __ubsan_source_location loc;
+    const struct __ubsan_type_descriptor *type;
+};
 struct __ubsan_pointer_overflow_data {
     struct __ubsan_source_location loc;
 };
@@ -458,6 +462,29 @@ void __ubsan_handle_type_mismatch_v1(struct __ubsan_type_mismatch_data *d, uintp
 _Noreturn void __ubsan_handle_type_mismatch_v1_abort(struct __ubsan_type_mismatch_data *d,
                                                      uintptr_t pointer) {
     __ubsan_type_mismatch(d, pointer);
+    abort();
+}
+
+static void __ubsan_function_type_mismatch(struct __ubsan_function_type_mismatch_data *d,
+                                           uintptr_t function) {
+    uint32_t column;
+    if (!__ubsan_claim(&d->loc, &column))
+        return;
+    fprintf(stderr,
+            "%s:%u:%u: runtime error: call to function at 0x%012llx through pointer to "
+            "incorrect function type %s\n",
+            d->loc.file, d->loc.line, column, (unsigned long long)function, d->type->name);
+    __ubsan_summary(&d->loc, column);
+}
+
+void __ubsan_handle_function_type_mismatch(struct __ubsan_function_type_mismatch_data *d,
+                                           uintptr_t function) {
+    __ubsan_function_type_mismatch(d, function);
+}
+
+_Noreturn void __ubsan_handle_function_type_mismatch_abort(
+    struct __ubsan_function_type_mismatch_data *d, uintptr_t function) {
+    __ubsan_function_type_mismatch(d, function);
     abort();
 }
 

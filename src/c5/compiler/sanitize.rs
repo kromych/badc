@@ -13,6 +13,7 @@ use super::types::{
 use crate::c5::ast::{Expr, ExprId, SanitizeCheck, ValueCheck, ValueTest};
 use crate::c5::ir::BinOp;
 use crate::c5::program::DataReloc;
+use crate::c5::symbol::FnType;
 use crate::c5::token::Token;
 
 /// A runtime check, as `-fsanitize=` names it.
@@ -82,12 +83,15 @@ pub enum Check {
     /// A dereference of an object's address with fewer bytes left than the
     /// access reads or writes: `*(T *)&obj` of an `obj` smaller than `T`.
     ObjectSize,
+    /// A call through a pointer to a function type not compatible with the
+    /// called function's (C17 6.3.2.3p8), where both carry a prototype.
+    Function,
 }
 
 impl Check {
     /// Every check: those `-fsanitize=undefined` lists, in its order, then
     /// clang's checks of defined behavior.
-    pub const ALL: [Check; 22] = [
+    pub const ALL: [Check; 23] = [
         Check::SignedIntegerOverflow,
         Check::ShiftBase,
         Check::ShiftExponent,
@@ -110,6 +114,7 @@ impl Check {
         Check::Builtin,
         Check::NonnullAttribute,
         Check::ReturnsNonnullAttribute,
+        Check::Function,
     ];
 
     /// The spelling `-fsanitize=` takes.
@@ -137,6 +142,7 @@ impl Check {
             Check::NonnullAttribute => "nonnull-attribute",
             Check::ReturnsNonnullAttribute => "returns-nonnull-attribute",
             Check::ObjectSize => "object-size",
+            Check::Function => "function",
         }
     }
 
@@ -649,6 +655,74 @@ impl Compiler {
         let test = ValueTest::NonZero { site: None };
         let checks = self.ast.value_checks.entry(arg).or_default();
         checks.push(ValueCheck { check, test });
+    }
+
+    /// Check the call through the function pointer node `callee`, beginning
+    /// at `at`, of the type returning `ret` with `f`'s parameters, under
+    /// `-fsanitize=function`: the function called, where it carries a type
+    /// hash, carries this type's. clang's `FunctionTypeMismatchData`: the
+    /// location and the pointer's type.
+    pub(super) fn sanitize_function_call(
+        &mut self,
+        callee: ExprId,
+        (ret, f): (i64, &FnType),
+        at: (u32, u32),
+    ) {
+        let check = Check::Function;
+        if !self.sanitize.runs(check) || self.unevaluated != 0 {
+            return;
+        }
+        let Some(hash) = self.function_type_hash(ret, f) else {
+            return;
+        };
+        let text = self.fn_type_text(super::types::add_ptr_level(ret), f, 1);
+        let name = alloc::format!("'{}'", clang_spelling(&text));
+        let ty = self.type_descriptor((name, TK_UNKNOWN, 0));
+        let data = self.ubsan_site_at(at, &[ty]);
+        let handler = self.ubsan_handler(check.bit(), "__ubsan_handle_function_type_mismatch", 1);
+        let check = SanitizeCheck {
+            checks: check.bit(),
+            data,
+            handler,
+        };
+        let test = ValueTest::FunctionType { hash };
+        let checks = self.ast.value_checks.entry(callee).or_default();
+        checks.push(ValueCheck { check, test });
+    }
+
+    /// The `-fsanitize=function` hash of the type returning `ret` with `f`'s
+    /// parameters, or `None` for a type without a prototype: FNV-1a over its
+    /// spelling less what C17 6.7.6.3p15 and 6.2.7 do not compare, so
+    /// compatible types hash alike -- the return's and each parameter's own
+    /// qualifiers, an enumerated type for its integer type, array bounds,
+    /// and which untagged structure.
+    pub(super) fn function_type_hash(&self, ret: i64, f: &FnType) -> Option<u32> {
+        if !f.params.prototyped {
+            return None;
+        }
+        let plain = |t: i64| super::types::unqualified_version_ty(super::types::without_enum(t));
+        let spell = |t: i64, leads: Option<(&FnType, i64)>| match leads {
+            Some((g, depth)) => self.fn_type_text(plain(t), g, depth),
+            None => super::types::format_type(plain(t), &self.structs),
+        };
+        let mut text = spell(ret, f.ret.as_ref().map(|(g, d)| (&**g, *d)));
+        text.push('(');
+        for (i, &t) in f.params.types.iter().enumerate() {
+            text.push_str(if i == 0 { "" } else { "," });
+            text.push_str(&spell(t, f.params.fn_type(i)));
+        }
+        text.push_str(if f.params.variadic { ",...)" } else { ")" });
+        let mut hash = 0x811c_9dc5u32;
+        let mut digits = false;
+        for &c in text.as_bytes() {
+            // `[4]` and `@12` hash as `[]` and `@`.
+            let skip = c.is_ascii_digit() && digits;
+            digits = matches!(c, b'[' | b'@') || (digits && c.is_ascii_digit());
+            if !skip {
+                hash = (hash ^ u32::from(c)).wrapping_mul(0x0100_0193);
+            }
+        }
+        Some(hash)
     }
 
     /// Check argument `number` (1-based), node `arg` beginning at `at`, of a

@@ -3211,6 +3211,7 @@ impl Compiler {
     }
 
     fn parse_direct_call(&mut self, id_idx: usize, spelled: String) -> Result<(), C5Error> {
+        let callee_at = self.lex.position_at(self.operand_start);
         let builtin_spelling = super::super::preprocessor::builtins::library_alias(&spelled)
             .is_some_and(|f| self.library_name_is_opaque(f));
         let s = &self.symbols[id_idx];
@@ -3340,7 +3341,7 @@ impl Compiler {
             ));
         }
         self.ast_vstack.truncate(saved_ast_vstack_depth);
-        self.emit_direct_call_ast(id_idx, &callee, ast_arg_ids, result_temp_off);
+        self.emit_direct_call_ast(id_idx, &callee, ast_arg_ids, (result_temp_off, callee_at));
         if self.sve_type_of(self.ty).is_some() {
             return Ok(());
         }
@@ -3586,7 +3587,7 @@ impl Compiler {
         id_idx: usize,
         callee: &DirectCallee,
         ast_arg_ids: Vec<Option<super::super::ast::ExprId>>,
-        result_temp_off: i64,
+        (result_temp_off, callee_at): (i64, (u32, u32)),
     ) {
         // The result type of a call through a function-pointer variable is
         // the pointer's type less one level (`int (*)()` is `int`); a
@@ -3607,6 +3608,9 @@ impl Compiler {
         // object and yields its address as the call's value.
         let callee_ty = self.symbols[id_idx].type_;
         let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
+        if is_var_call && let Some(f) = self.ast.callee_types.get(&callee_id).cloned() {
+            self.sanitize_function_call(callee_id, (result_ty, &f), callee_at);
+        }
         self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
         // A struct result is its temp's address (the address-as-value rule).
         if callee.returns_struct {
@@ -4710,6 +4714,7 @@ impl Compiler {
 
     fn parse_indirect_call(&mut self) -> Result<(), C5Error> {
         let callee_ast = self.ast_acc;
+        let callee_at = self.lex.position_at(self.operand_start);
         let callee_text = String::from(self.lex.text_from(self.operand_start));
         let ast_vstack_snapshot = self.ast_vstack.len();
         let mut indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>> =
@@ -4840,7 +4845,7 @@ impl Compiler {
         }
         self.drop_operand_array_decay();
         self.ast_vstack.truncate(ast_vstack_snapshot);
-        self.emit_indirect_call_ast(callee_ast, indirect_arg_ids, callee_fn);
+        self.emit_indirect_call_ast(callee_ast, indirect_arg_ids, callee_fn, callee_at);
         Ok(())
     }
 
@@ -4849,6 +4854,7 @@ impl Compiler {
         callee_ast: Option<super::super::ast::ExprId>,
         indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>>,
         callee_fn: Option<FnType>,
+        callee_at: (u32, u32),
     ) {
         let return_ty = self.ty;
         if let Some(callee_id) = callee_ast {
@@ -4868,6 +4874,7 @@ impl Compiler {
             if all_some {
                 // The walker places the arguments by it after the scope is gone.
                 if let Some(f) = callee_fn {
+                    self.sanitize_function_call(callee_id, (return_ty, &f), callee_at);
                     self.ast.callee_types.insert(callee_id, f);
                 }
                 let id = self.ast.push_expr(

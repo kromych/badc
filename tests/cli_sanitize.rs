@@ -595,6 +595,76 @@ fn a_null_argument_or_return_against_nonnull_is_reported() {
     }
 }
 
+const FUNCTION: &str = "enum color { RED, GREEN };
+typedef int (*binop)(int, int);
+int add(int a, int b) { return a + b; }
+long wide(long a, long b) { return a + b; }
+int paint(enum color c, const int x) { return (int)c + x; }
+int sum(int n, int a[]) { return n ? a[0] : 0; }
+void show(const char *s) { (void)s; }
+binop pick(int k) { return k ? add : 0; }
+int old(a, b) int a, b; { return a - b; }
+int main(void) {
+    binop f = add, bad = (binop)wide;
+    int (*g)(unsigned, int) = (int (*)(unsigned, int))paint;
+    int (*h)(int, int *) = sum, a[1] = {4};
+    int (*o)(int, int) = (int (*)(int, int))old;
+    void (*v)(char *) = (void (*)(char *))show;
+    struct { binop op; } box = { (binop)wide };
+    int s = f(2, 3) + g(1, 2) + h(1, a) + pick(1)(1, 1) + o(5, 1);
+    s += bad(4, 5) + box.op(1, 2);
+    v(\"x\");
+    return s != 30;
+}
+";
+
+/// A call through a pointer to a function type incompatible with the
+/// called function's reports under `-fsanitize=function` at the callee,
+/// naming the pointer's type, whether the pointer is a variable or a
+/// member, natively, under the JIT and in the interpreter. A compatible
+/// call is not reported: an enumerated type for its integer type, a
+/// parameter's own qualifier, an array parameter for its pointer, nor a
+/// call to an old-style definition, which carries no prototype.
+#[test]
+fn a_call_through_an_incompatible_function_type_is_reported() {
+    let dir = TempDir::new("badc-sanitize-function");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, FUNCTION).unwrap();
+    let mismatch = |at: &str, ty: &str| {
+        format!(
+            "{at}: runtime error: call to function at ADDR through pointer to incorrect function type '{ty}'"
+        )
+    };
+    let want = [
+        mismatch("18:10", "int (*)(int, int)"),
+        mismatch("18:22", "int (*)(int, int)"),
+        mismatch("19:5", "void (*)(char *)"),
+    ];
+    let badc = || {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_badc"));
+        c.args(["-q", "-w", "-fsanitize=function"]);
+        c
+    };
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("function{opt}"));
+        let built = badc().arg(opt).arg("-o").arg(&exe).arg(&src).output();
+        let built = built.expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success(), "{opt}: {o:?}");
+        assert_eq!(without_addresses(&o), want, "{opt}");
+    }
+    for mode in ["--jit", "--interp"] {
+        let o = badc().arg(mode).arg(&src).output().expect("run badc");
+        assert!(o.status.success(), "{mode}: {o:?}");
+        assert_eq!(without_addresses(&o), want, "{mode}");
+    }
+}
+
 const PLACED: &str = "#include <stddef.h>
 #include <limits.h>
 #include \"h.h\"

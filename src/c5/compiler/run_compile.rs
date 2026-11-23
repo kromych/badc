@@ -1833,6 +1833,11 @@ impl Compiler {
         let ent_pc = self.next_ent_pc;
         self.symbols[id_idx].val = ent_pc as i64;
         self.symbols[id_idx].defined_here = true;
+        if self.sanitize.runs(super::sanitize::Check::Function) {
+            let s = &self.symbols[id_idx];
+            let hash = self.function_type_hash(s.type_, &s.fn_type);
+            self.symbols[id_idx].function_type_hash = hash;
+        }
         self.place_by_segment_pragma(id_idx, crate::c5::segment_pragma::SegKind::Code);
         if !self.current_func_attrs.saw_inline_specifier {
             self.symbols[id_idx].saw_noninline_def = true;

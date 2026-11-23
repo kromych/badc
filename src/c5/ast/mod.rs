@@ -1126,6 +1126,10 @@ pub(crate) enum ValueTest {
         align_mask: u64,
         short: bool,
     },
+    /// A function pointer called: where not null and the function it
+    /// points to carries a `-fsanitize=function` prefix, the prefix's
+    /// hash equal to `hash`, the called type's.
+    FunctionType { hash: u32 },
 }
 
 /// A runtime check of the operation at a node (`-fsanitize=`): what it

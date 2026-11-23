@@ -545,6 +545,24 @@ impl<'a> Walker<'a> {
                 self.report_failed_check(b, check.check, flag, &at);
                 return;
             }
+            ValueTest::FunctionType { hash } => {
+                use crate::c5::op::{FUNCTION_PREFIX_SIGNATURE, Intrinsic};
+                let (read, join) = (b.new_block(), b.new_block());
+                b.branch_zero(value, join, read);
+                b.switch_to(read);
+                let prefix = b.intrinsic(Intrinsic::FunctionPrefix as i64, alloc::vec![value]);
+                let signature = b.binop_imm(BinOp::And, prefix, i64::from(u32::MAX));
+                let signature_imm = b.imm(i64::from(FUNCTION_PREFIX_SIGNATURE));
+                let prefixed = b.binop(BinOp::Eq, signature, signature_imm);
+                let wanted = u64::from(hash) << 32 | u64::from(FUNCTION_PREFIX_SIGNATURE);
+                let wanted = b.imm(wanted as i64);
+                let differs = b.binop(BinOp::Ne, prefix, wanted);
+                let flag = b.binop(BinOp::And, prefixed, differs);
+                self.report_failed_check(b, check.check, flag, &[value]);
+                b.jmp(join);
+                b.switch_to(join);
+                return;
+            }
             // The value as its own type reads it against the value the
             // narrower type keeps; the handler takes both.
             ValueTest::Truncation { from, to } => {

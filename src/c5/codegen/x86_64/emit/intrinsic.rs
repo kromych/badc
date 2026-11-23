@@ -835,6 +835,7 @@ pub(super) fn emit_intrinsic(
             Ok(())
         }
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame),
+        I::FunctionPrefix => emit_function_prefix(code, args, dst, alloc, frame),
         I::Clz
         | I::Ctz
         | I::Popcount
@@ -894,7 +895,8 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::SveSt1B
         | I::SveSt1H
         | I::SveSt1W
-        | I::SveSt1D => false,
+        | I::SveSt1D
+        | I::FunctionPrefix => false,
         I::VaStart
         | I::FrameAddress
         | I::ReturnAddress
@@ -1411,6 +1413,26 @@ fn emit_return_address(
         _ => return fail("ReturnAddress: expected at most 1 arg"),
     };
     emit_mov_r_mem(code, rd, fp, 8);
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
+/// The 8 bytes ahead of the function `args[0]` points to
+/// ([`crate::c5::op::Intrinsic::FunctionPrefix`]).
+fn emit_function_prefix(
+    code: &mut CodeBuf,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let (Some(rd), [target]) = (int_or_spill_dst(dst), args) else {
+        return fail("FunctionPrefix: expected an int destination and 1 arg");
+    };
+    let Some(r) = int_operand_into_rd(code, place_of(alloc, *target), rd, frame) else {
+        return fail("FunctionPrefix: target not int reg / spill");
+    };
+    emit_mov_r_mem(code, rd, r, -8);
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
 }

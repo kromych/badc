@@ -171,6 +171,21 @@ pub(super) fn emit_intrinsic(
         // x18, so it holds the value the OS put there.
         I::PlatformRegister => emit_frame_register(code, dst, frame, Reg(18), "PlatformRegister"),
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame, scratch),
+        I::FunctionPrefix => {
+            let (rd, [target]) = (int_or_spill_scratch(dst, scratch), args) else {
+                return fail("FunctionPrefix: expected 1 arg");
+            };
+            let Some(rd) = rd else {
+                return fail("FunctionPrefix: dst not int reg / spill");
+            };
+            let Some(r) = materialize_int(code, place_of(alloc, *target), scratch.primary, frame)
+            else {
+                return fail("FunctionPrefix: target not int reg / spill");
+            };
+            emit(code, super::encode::enc_ldur(rd, r, -8));
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
         // The walker lowers the bit-count and byte-swap builtins to
         // `Inst::BitCount` / `Inst::Bswap`; they never reach codegen as an
         // `Inst::Intrinsic`.
@@ -223,7 +238,8 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::SveSt1B
         | I::SveSt1H
         | I::SveSt1W
-        | I::SveSt1D => false,
+        | I::SveSt1D
+        | I::FunctionPrefix => false,
         // The AAPCS64 `va_list` forms borrow a register around a push / pop;
         // the cursor forms are loads and stores.
         I::VaArg | I::VaCopy => abi.aarch64_host_variadic(),

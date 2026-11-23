@@ -4982,14 +4982,15 @@ impl FunctionEntry {
     }
 }
 
-/// Fill `code` with `nop` up to a multiple of `align`, for the gap ahead
-/// of a function entry under [`NativeOptions::min_function_alignment`].
-/// `align` is a power of two and `nop.len()` divides it, so the fill is
-/// whole instructions: the gap is unreachable (the preceding function
-/// returns) but decodes, which unwind-metadata generators reading `.text`
-/// as an instruction stream require.
-pub(crate) fn pad_to_alignment(code: &mut Vec<u8>, align: usize, nop: &[u8]) {
-    while !code.len().is_multiple_of(align) {
+/// Fill `code` with `nop` until `lead` more bytes end at a multiple of
+/// `align`, for the gap ahead of a function entry under
+/// [`NativeOptions::min_function_alignment`], `lead` the bytes the entry
+/// is preceded by. `align` is a power of two and `nop.len()` divides it and
+/// `lead`, so the fill is whole instructions: the gap is unreachable (the
+/// preceding function returns) but decodes, which unwind-metadata
+/// generators reading `.text` as an instruction stream require.
+pub(crate) fn pad_to_alignment(code: &mut Vec<u8>, align: usize, lead: usize, nop: &[u8]) {
+    while !(code.len() + lead).is_multiple_of(align) {
         code.extend_from_slice(nop);
     }
 }

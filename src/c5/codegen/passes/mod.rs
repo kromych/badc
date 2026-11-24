@@ -4,6 +4,7 @@
 
 pub(crate) mod agg_parts;
 pub(crate) mod bit_field;
+pub(crate) mod bswap;
 pub(crate) mod byteload;
 pub(crate) mod const_global_fold;
 pub(crate) mod constfold;

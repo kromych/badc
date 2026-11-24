@@ -3185,6 +3185,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::rotate::run", &mut ssa_funcs, |funcs| {
             super::super::passes::rotate::run(funcs);
         });
+        // A byte reversal spelled with shifts and masks, the rotates it
+        // holds already folded.
+        pipeline.run("passes::bswap::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::bswap::run(funcs);
+        });
         // Fused multiply-add contraction (C99 6.5p8). Runs after the
         // inliner: an inlined body keeps the products its expressions
         // contract, and under `-ffp-contract=fast` a product reaching an

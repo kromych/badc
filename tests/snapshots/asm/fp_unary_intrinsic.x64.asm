@@ -52,9 +52,7 @@ Disassembly of section .text:
                	retq
                	movss	<rip>, %xmm0
                	movss	<rip>, %xmm1
-               	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm1
+               	vandpd	<rip>, %xmm1, %xmm1
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
@@ -62,9 +60,7 @@ Disassembly of section .text:
                	retq
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm1
+               	vandpd	<rip>, %xmm1, %xmm1
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
@@ -122,9 +118,7 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	retq
                	movss	<rip>, %xmm0
-               	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	vsqrtss	%xmm0, %xmm0, %xmm1
                	movss	<rip>, %xmm0
                	ucomiss	%xmm0, %xmm1

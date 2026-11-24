@@ -119,17 +119,13 @@ Disassembly of section .text:
                	addq	$0x88, %rsp
                	retq
                	movsd	0x60(%rsp), %xmm0
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	0x68(%rsp), %xmm0
-               	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
@@ -137,9 +133,7 @@ Disassembly of section .text:
                	fldt	(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>

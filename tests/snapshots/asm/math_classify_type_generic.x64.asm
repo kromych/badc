@@ -253,9 +253,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movss	0x50(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x48(%rsp)
                	movl	0x48(%rsp), %eax
                	shrq	$0x1f, %rax

@@ -605,10 +605,8 @@ impl FnEmit<'_, '_> {
         );
         self.patch_branches()?;
         self.materialize_jump_tables(rodata);
-        for (field, bits, single) in core::mem::take(&mut self.out.fp_literals) {
-            rodata
-                .literals
-                .load_disp32(field, bits, if single { 4 } else { 8 });
+        for (field, bits, width) in core::mem::take(&mut self.out.fp_literals) {
+            rodata.literals.load_disp32(field, bits, width);
         }
         uw.end = self.out.cx.code.len() as u32;
         if !uw.leaf {
@@ -1034,7 +1032,9 @@ impl FnEmit<'_, '_> {
                 let single = alloc.is_f32(v);
                 let prefix = if single { 0xF3 } else { 0xF2 };
                 let field = super::encode::emit_sse_mov_rip(code, prefix, false, Reg(d));
-                self.out.fp_literals.push((field, *bits as u64, single));
+                self.out
+                    .fp_literals
+                    .push((field, *bits as u64, if single { 4 } else { 8 }));
             }
             return Ok(());
         }

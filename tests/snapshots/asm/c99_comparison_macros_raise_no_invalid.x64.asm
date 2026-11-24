@@ -164,15 +164,11 @@ Disassembly of section .text:
                	jbe	<addr>
                	movsd	0x20(%rsp), %xmm0
                	movsd	0x20(%rsp), %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	movsd	0x20(%rsp), %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	0x20(%rsp), %xmm1
                	ucomisd	%xmm1, %xmm0
                	jne	<addr>

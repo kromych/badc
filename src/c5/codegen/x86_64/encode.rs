@@ -283,6 +283,17 @@ pub(crate) fn emit_sse_mov_rip(code: &mut Vec<u8>, prefix: u8, store: bool, xmm:
     field
 }
 
+/// `VANDPD` (`0x54`) or `VXORPD` (`0x57`) `dst, src, [rip + disp32]`:
+/// `VEX.128.66.0F op /r`. Returns the displacement's offset.
+pub(crate) fn emit_vex_pd_logic_rip(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) -> usize {
+    emit_vex_0f(code, dst, src, Reg(0), 0b01, false);
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b00, dst.lo(), 0b101));
+    let field = code.len();
+    emit_i32(code, 0);
+    field
+}
+
 fn emit_byte(code: &mut Vec<u8>, b: u8) {
     code.push(b);
 }

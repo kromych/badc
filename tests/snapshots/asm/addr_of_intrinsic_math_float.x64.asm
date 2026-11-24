@@ -109,9 +109,7 @@ Disassembly of section .text:
                	retq
                	movss	<rip>, %xmm0
                	movss	<rip>, %xmm1
-               	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm1
+               	vandpd	<rip>, %xmm1, %xmm1
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>

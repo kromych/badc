@@ -502,6 +502,17 @@ pub(super) fn emit_inst(
             width,
             order,
         } => emit_atomic_store(code, *addr, *value, *width, *order, alloc, frame),
+        Inst::Intrinsic { kind, args }
+            if args.len() == 1
+                && matches!(
+                    crate::c5::op::Intrinsic::from_i64(*kind),
+                    Some(crate::c5::op::Intrinsic::Fabs | crate::c5::op::Intrinsic::Fabsf)
+                ) =>
+        {
+            let literal = super::arith::emit_fp_sign(code, dst, v, args[0], true, alloc, frame)?;
+            out.fp_literals.push(literal);
+            Ok(())
+        }
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
@@ -551,7 +562,11 @@ pub(super) fn emit_inst(
         Inst::Select { cond, a, b, kind } => {
             super::arith::emit_select(code, dst, (v, *cond, *a, *b, *kind), func, alloc, frame)
         }
-        Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
+        Inst::Fneg(value) => {
+            let literal = super::arith::emit_fp_sign(code, dst, v, *value, false, alloc, frame)?;
+            out.fp_literals.push(literal);
+            Ok(())
+        }
         Inst::Fma {
             a,
             b,
@@ -847,14 +862,14 @@ fn folded_operand(
 /// Records the literal of a folded constant `folded` in the disp32 of its
 /// reader, which ends at `end` with no immediate after it.
 fn note_literal(
-    literals: &mut Vec<(usize, u64, bool)>,
+    literals: &mut Vec<(usize, u64, u8)>,
     end: usize,
     func: &FunctionSsa,
     folded: super::super::ir::ValueId,
     single: bool,
 ) {
     if let Inst::Imm(bits) = func.insts[folded as usize] {
-        literals.push((end - 4, bits as u64, single));
+        literals.push((end - 4, bits as u64, if single { 4 } else { 8 }));
     }
 }
 

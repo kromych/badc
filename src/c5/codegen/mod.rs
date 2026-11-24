@@ -3569,16 +3569,23 @@ pub(crate) struct RodataBuild {
 #[derive(Debug, Default)]
 pub(crate) struct LiteralPool {
     slots: alloc::collections::BTreeMap<(u64, u8), u64>,
-    runs: [Vec<u8>; 2],
+    runs: [Vec<u8>; 3],
     /// `(code_offset, width, offset in run, part)` per load.
     loads: Vec<(usize, u8, u64, AddrPart)>,
     /// `(offset, len)` of each run in `RodataBuild::bytes` once placed.
-    pub spans: [(u64, u64); 2],
+    pub spans: [(u64, u64); 3],
 }
 
 impl LiteralPool {
+    /// The widths of the runs, in placement order.
+    pub(crate) const WIDTHS: [u8; 3] = [8, 4, 16];
+
     fn run(width: u8) -> usize {
-        usize::from(width == 4)
+        match width {
+            4 => 1,
+            16 => 2,
+            _ => 0,
+        }
     }
 
     /// The `adrp` + `ldr` pair at `code_offset` loads `width` bytes of `bits`.
@@ -3587,7 +3594,7 @@ impl LiteralPool {
     }
 
     /// The rip-relative operand whose displacement is at `field` reads
-    /// `width` bytes of `bits`.
+    /// `width` bytes of `bits`; a 16-byte literal's upper half is zero.
     pub(crate) fn load_disp32(&mut self, field: usize, bits: u64, width: u8) {
         self.load_part(field, bits, width, AddrPart::Disp32);
     }
@@ -3596,7 +3603,9 @@ impl LiteralPool {
         let run = &mut self.runs[Self::run(width)];
         let at = *self.slots.entry((bits, width)).or_insert_with(|| {
             let at = run.len() as u64;
-            run.extend_from_slice(&bits.to_le_bytes()[..width.into()]);
+            let mut bytes = [0u8; 16];
+            bytes[..8].copy_from_slice(&bits.to_le_bytes());
+            run.extend_from_slice(&bytes[..width.into()]);
             at
         });
         self.loads.push((code_offset, width, at, part));
@@ -3608,7 +3617,8 @@ impl RodataBuild {
     /// once, after the last function.
     pub(crate) fn place_literals(&mut self) {
         let pool = &mut self.literals;
-        for (k, width) in [(0, 8), (1, 4)] {
+        for (k, width) in LiteralPool::WIDTHS.into_iter().enumerate() {
+            let width = usize::from(width);
             if pool.runs[k].is_empty() {
                 continue;
             }

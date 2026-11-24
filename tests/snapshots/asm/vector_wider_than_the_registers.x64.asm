@@ -5729,47 +5729,31 @@ Disassembly of section .text:
                	leaq	0x80(%rdi), %rax
                	leaq	(%rsp), %rcx
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	movss	%xmm1, (%rsp)
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	movss	%xmm1, 0x4(%rsp)
                	vpermilps	$0x2, %xmm0, %xmm1 # xmm1 = xmm0[2,0,0,0]
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	movss	%xmm1, 0x8(%rsp)
                	vpermilps	$0x3, %xmm0, %xmm1 # xmm1 = xmm0[3,0,0,0]
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	movss	%xmm1, 0xc(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm1
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	movss	%xmm1, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm1
                	vpermilps	$0x1, %xmm1, %xmm1 # xmm1 = xmm1[1,0,0,0]
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	movss	%xmm1, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm1
                	vpermilps	$0x2, %xmm1, %xmm1 # xmm1 = xmm1[2,0,0,0]
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	movss	%xmm1, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm0
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x1c(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
@@ -6156,9 +6140,7 @@ Disassembly of section .text:
                	divss	%xmm0, %xmm1
                	leaq	(%rsp), %rcx
                	movss	(%rsp,%rax,4), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	xorl	%esi, %esi
                	leaq	0x40(%rsp), %rcx
                	movss	0x40(%rsp,%rax,4), %xmm5
@@ -6254,84 +6236,52 @@ Disassembly of section .text:
                	leaq	0x100(%rdi), %rax
                	leaq	0x40(%rsp), %rcx
                	movss	(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x40(%rsp)
                	movss	0x4(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x44(%rsp)
                	movss	0x8(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x48(%rsp)
                	movss	0xc(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x4c(%rsp)
                	movss	0x10(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x50(%rsp)
                	movss	0x14(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x54(%rsp)
                	movss	0x18(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x58(%rsp)
                	movss	0x1c(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x5c(%rsp)
                	movss	0x20(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x60(%rsp)
                	movss	0x24(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x64(%rsp)
                	movss	0x28(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x68(%rsp)
                	movss	0x2c(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x6c(%rsp)
                	movss	0x30(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x70(%rsp)
                	movss	0x34(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x74(%rsp)
                	movss	0x38(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x78(%rsp)
                	movss	0x3c(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movss	%xmm0, 0x7c(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
@@ -7072,9 +7022,7 @@ Disassembly of section .text:
                	divss	%xmm0, %xmm1
                	leaq	(%rsp), %rcx
                	movss	(%rsp,%rax,4), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	xorl	%esi, %esi
                	leaq	0x80(%rsp), %rcx
                	movss	0x80(%rsp,%rax,4), %xmm5
@@ -7132,22 +7080,14 @@ Disassembly of section .text:
                	vdivpd	%ymm1, %ymm0, %ymm1
                	vmovups	%ymm1, 0x60(%rdi)
                	vpermilpd	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0]
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	vpermilpd	$0x1, %xmm0, %xmm2 # xmm2 = xmm0[1,0]
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm2
+               	vxorpd	<rip>, %xmm2, %xmm2
                	vextracti128	$0x1, %ymm0, %xmm3
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm3
+               	vxorpd	<rip>, %xmm3, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
                	vpermilpd	$0x1, %xmm0, %xmm0 # xmm0 = xmm0[1,0]
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	%xmm1, 0x80(%rdi)
                	movsd	%xmm2, 0x88(%rdi)
                	movsd	%xmm3, 0x90(%rdi)
@@ -7355,9 +7295,7 @@ Disassembly of section .text:
                	vmulsd	%xmm0, %xmm1, %xmm4
                	divsd	%xmm0, %xmm1
                	vmovq	(%rsp,%rax,8), %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	xorl	%esi, %esi
                	leaq	0x40(%rsp), %rcx
                	vmovq	0x40(%rsp,%rax,8), %xmm5
@@ -7451,37 +7389,21 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0xc0(%rdi)
                	vmovups	%ymm1, 0xe0(%rdi)
                	movsd	(%rsp), %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	0x8(%rsp), %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	movsd	0x10(%rsp), %xmm2
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm2
+               	vxorpd	<rip>, %xmm2, %xmm2
                	movsd	0x18(%rsp), %xmm3
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm3
+               	vxorpd	<rip>, %xmm3, %xmm3
                	movsd	0x20(%rsp), %xmm4
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm4
+               	vxorpd	<rip>, %xmm4, %xmm4
                	movsd	0x28(%rsp), %xmm5
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm5
+               	vxorpd	<rip>, %xmm5, %xmm5
                	movsd	0x30(%rsp), %xmm6
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm6
+               	vxorpd	<rip>, %xmm6, %xmm6
                	movsd	0x38(%rsp), %xmm7
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm7
+               	vxorpd	<rip>, %xmm7, %xmm7
                	movsd	%xmm0, 0x100(%rdi)
                	movsd	%xmm1, 0x108(%rdi)
                	movsd	%xmm2, 0x110(%rdi)
@@ -7870,9 +7792,7 @@ Disassembly of section .text:
                	vmulsd	%xmm0, %xmm1, %xmm4
                	divsd	%xmm0, %xmm1
                	vmovq	(%rsp,%rax,8), %xmm0
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	xorl	%esi, %esi
                	leaq	0x80(%rsp), %rcx
                	vmovq	0x80(%rsp,%rax,8), %xmm5

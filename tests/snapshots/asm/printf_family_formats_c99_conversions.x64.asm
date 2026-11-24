@@ -127,15 +127,11 @@ Disassembly of section .text:
                	movsd	0x38(%rsp), %xmm0
                	movsd	0x38(%rsp), %xmm1
                	divsd	%xmm1, %xmm0
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	movsd	0x38(%rsp), %xmm1
                	movsd	0x38(%rsp), %xmm2
                	divsd	%xmm2, %xmm1
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm1
+               	vandpd	<rip>, %xmm1, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	movq	%rax, %rbx
@@ -158,15 +154,11 @@ Disassembly of section .text:
                	movsd	0x38(%rsp), %xmm0
                	movsd	0x38(%rsp), %xmm1
                	divsd	%xmm1, %xmm0
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	movsd	0x38(%rsp), %xmm1
                	movsd	0x38(%rsp), %xmm2
                	divsd	%xmm2, %xmm1
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm1
+               	vandpd	<rip>, %xmm1, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	cmpl	%ebx, %eax

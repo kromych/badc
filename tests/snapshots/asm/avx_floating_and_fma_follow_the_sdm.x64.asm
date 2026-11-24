@@ -5180,9 +5180,7 @@ Disassembly of section .text:
                	movups	-0x40(%rbp), %xmm14
                	vpermilps	$0x0, %xmm14, %xmm1 # xmm1 = xmm14[0,0,0,0]
                	vpermilps	$0x0, %xmm6, %xmm2 # xmm2 = xmm6[0,0,0,0]
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm2
+               	vxorpd	<rip>, %xmm2, %xmm2 # <addr>
                	vfmadd213ss	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
                	vmovd	%xmm0, %r11d
                	movups	-0x20(%rbp), %xmm0
@@ -5382,9 +5380,7 @@ Disassembly of section .text:
                	movq	%rcx, <rip> # <addr>
                	movups	-0x30(%rbp), %xmm14
                	vpermilpd	$0x0, %xmm14, %xmm0 # xmm0 = xmm14[0,0]
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	movups	-0x50(%rbp), %xmm14
                	vpermilpd	$0x0, %xmm14, %xmm1 # xmm1 = xmm14[0,0]
                	movups	-0x60(%rbp), %xmm14
@@ -5406,16 +5402,12 @@ Disassembly of section .text:
                	movq	%rcx, <rip> # <addr>
                	movups	-0x30(%rbp), %xmm14
                	vpermilpd	$0x0, %xmm14, %xmm0 # xmm0 = xmm14[0,0]
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	movups	-0x50(%rbp), %xmm14
                	vpermilpd	$0x0, %xmm14, %xmm1 # xmm1 = xmm14[0,0]
                	movups	-0x60(%rbp), %xmm14
                	vpermilpd	$0x0, %xmm14, %xmm2 # xmm2 = xmm14[0,0]
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm2
+               	vxorpd	<rip>, %xmm2, %xmm2 # <addr>
                	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
                	vmovq	%xmm0, %r11
                	movups	-0x30(%rbp), %xmm0

@@ -439,18 +439,14 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm1, %xmm0
                	ja	<addr>
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	vaddsd	<rip>, %xmm0, %xmm0
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm1, %xmm0
                	ja	<addr>
@@ -458,9 +454,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	vaddsd	<rip>, %xmm0, %xmm0
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm0
+               	vandpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm1, %xmm0
                	jbe	<addr>

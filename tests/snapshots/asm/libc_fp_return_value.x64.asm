@@ -52,9 +52,7 @@ Disassembly of section .text:
                	cmovpq	%rcx, %rax
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm1
+               	vandpd	<rip>, %xmm1, %xmm1
                	xorl	%ecx, %ecx
                	ucomisd	%xmm0, %xmm1
                	movq	%rax, %rbx
@@ -78,9 +76,7 @@ Disassembly of section .text:
                	cmovpq	%rcx, %rax
                	movss	<rip>, %xmm0
                	movss	<rip>, %xmm1
-               	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
-               	movq	%r10, %xmm15
-               	andpd	%xmm15, %xmm1
+               	vandpd	<rip>, %xmm1, %xmm1
                	xorl	%ecx, %ecx
                	ucomiss	%xmm0, %xmm1
                	cmovneq	%rcx, %rax

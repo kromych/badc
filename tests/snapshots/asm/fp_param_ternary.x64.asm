@@ -29,9 +29,7 @@ Disassembly of section .text:
                	testb	$0x1, %dil
                	je	<addr>
                	retq
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	jmp	<addr>
 
 <grad_dot>:
@@ -41,13 +39,9 @@ Disassembly of section .text:
                	je	<addr>
                	addss	%xmm1, %xmm0
                	retq
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	jmp	<addr>
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	jmp	<addr>
 
 <main>:

@@ -59,7 +59,7 @@ use super::encode::{
     emit_ri, emit_rm, emit_rr, emit_setcc_r8, emit_shift_cl, emit_shift_ri, emit_sse_fp_arith,
     emit_sub_rsp, emit_subsd, emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vex_fma,
     emit_vex_fma_mem, emit_vex_fp_arith, emit_vex_fp_arith_mem, emit_xchg_mem_r, emit_xchg_rr,
-    emit_xorpd, emit_xorps,
+    emit_xorps,
 };
 use super::ssa::code_buf::{CodeBuf, SpillWidth};
 use super::ssa::emit_common::{
@@ -561,9 +561,9 @@ struct Out<'a, 'b> {
     asm_text_abs_refs: &'b mut Vec<super::AsmTextAbsRef>,
     asm_text_labels: &'b mut Vec<super::AsmTextLabel>,
     abs_addr_refs: &'b mut Vec<super::AbsAddrRef>,
-    /// `(displacement offset, bits, single)` per floating constant read
-    /// from a read-only literal.
-    fp_literals: Vec<(usize, u64, bool)>,
+    /// `(displacement offset, bits, width)` per floating constant or mask
+    /// read from a read-only literal.
+    fp_literals: Vec<(usize, u64, u8)>,
 }
 
 /// The length of every output buffer at one point of the emission.

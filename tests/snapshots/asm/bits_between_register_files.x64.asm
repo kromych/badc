@@ -132,9 +132,7 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm0
                	callq	<addr>
                	movsd	0x18(%rsp), %xmm1
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>

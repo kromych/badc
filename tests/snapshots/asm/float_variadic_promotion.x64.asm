@@ -88,9 +88,7 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>
@@ -105,9 +103,7 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>
@@ -123,9 +119,7 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>
@@ -143,9 +137,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	comisd	%xmm0, %xmm15
                	jbe	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>

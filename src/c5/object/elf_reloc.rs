@@ -954,7 +954,7 @@ struct Layout {
     writer_bodies: Vec<(usize, u64, Vec<u8>)>,
     jt_placement: Option<(usize, u64)>,
     /// The entry and base of the 8-byte, then the 4-byte literal run.
-    literal_placements: [Option<(usize, u64)>; 2],
+    literal_placements: [Option<(usize, u64)>; 3],
     /// A default section the unit leaves empty while a named entry claims
     /// its name is dropped, so the name is carried once.
     text_shadowed: bool,
@@ -1725,10 +1725,16 @@ impl<'a> RelocWriter<'a> {
         } else {
             0
         };
-        for (k, (name, width)) in [(".rodata.cst8", 8), (".rodata.cst4", 4)]
+        for (k, width) in crate::c5::codegen::LiteralPool::WIDTHS
             .into_iter()
             .enumerate()
         {
+            let width = u64::from(width);
+            let name = match width {
+                4 => ".rodata.cst4",
+                16 => ".rodata.cst16",
+                _ => ".rodata.cst8",
+            };
             let (_, len) = build.rodata.literals.spans[k];
             if len == 0 {
                 continue;
@@ -3658,7 +3664,7 @@ impl<'a> RelocWriter<'a> {
     fn rodata_ref(&self, rodata_offset: u64) -> Result<(u64, i64), C5Error> {
         let spans = self.build.rodata.literals.spans;
         let within = |k: usize| (spans[k].0..spans[k].0 + spans[k].1).contains(&rodata_offset);
-        let (placed, from) = match (0..2).find(|&k| within(k)) {
+        let (placed, from) = match (0..spans.len()).find(|&k| within(k)) {
             Some(k) => (self.layout.literal_placements[k], spans[k].0),
             None => (self.layout.jt_placement, 0),
         };

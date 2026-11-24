@@ -171,9 +171,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movsd	-0x38(%rbp), %xmm0
@@ -181,9 +179,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movsd	-0x28(%rbp), %xmm0
@@ -191,9 +187,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movsd	-0x18(%rbp), %xmm0
@@ -201,9 +195,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movsd	-0x8(%rbp), %xmm0
@@ -211,9 +203,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1
                	jb	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	comisd	%xmm0, %xmm1
                	jae	<addr>
                	movl	$0x4, %eax

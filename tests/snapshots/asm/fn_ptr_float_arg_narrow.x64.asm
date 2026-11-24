@@ -30,9 +30,7 @@ Disassembly of section .text:
                	retq
 
 <negf>:
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	retq
 
 <addf>:

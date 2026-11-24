@@ -93,9 +93,7 @@ Disassembly of section .text:
                	divsd	%xmm1, %xmm0
                	testb	$0x1, %al
                	je	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	retq
 
 <fvalue>:

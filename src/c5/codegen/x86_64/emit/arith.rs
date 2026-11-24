@@ -686,44 +686,39 @@ pub(super) fn emit_mul_add(
     Ok(())
 }
 
-/// `Inst::Fneg`: flip the IEEE 754 sign bit, `1 << 63` for a double and
-/// `1 << 31` for a single held in the low dword (C99 6.3.1.8), through a
-/// mask built in the second FP scratch.
-pub(super) fn emit_fneg(
+/// `Inst::Fneg` (`clear` false) flips the IEEE 754 sign bit, `fabs` (C99
+/// 7.12.7.2, `clear` true) clears it, of a double or of a single in the low
+/// dword, by one `vxorpd` / `vandpd` with a 16-byte read-only mask. Returns
+/// the mask's `(displacement offset, bits, width)` for the literal pool.
+pub(super) fn emit_fp_sign(
     code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
+    clear: bool,
     alloc: &Allocation,
     frame: Frame,
-) -> Emit {
+) -> Emit<(usize, u64, u8)> {
     let src_place = place_of(alloc, value);
     let Some(dd) = fp_or_spill_dst(dst, frame) else {
-        return fail("Fneg: dst not fp reg / spill");
+        return fail("fp sign: dst not fp reg / spill");
     };
     let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
-        return fail("Fneg: value not fp reg / spill / int reg");
+        return fail("fp sign: value not fp reg / spill / int reg");
     };
-    if dn.0 != dd.0 {
-        emit_movapd_xmm_xmm(code, dd, dn);
-    }
-    // r10 holds nothing live here.
-    let scratch_int = SCRATCH_R10;
-    let mask: i64 = if alloc.is_f32(v) {
-        0x8000_0000
+    let sign: u64 = if alloc.is_f32(v) { 1 << 31 } else { 1 << 63 };
+    let (opcode, mask) = if clear {
+        (0x54, (sign << 1).wrapping_sub(1) & !sign)
     } else {
-        i64::MIN
+        (0x57, sign)
     };
-    emit_mov_r_imm64(code, scratch_int, mask);
-    emit_movq_xmm_r(code, Reg(frame.fp_scratch[1]), scratch_int);
-    emit_xorpd(code, dd, Reg(frame.fp_scratch[1]));
+    let field = super::encode::emit_vex_pd_logic_rip(code, opcode, dd, dn);
     fp_spill_dst_to_slot(code, dst, dd, frame);
-    Ok(())
+    Ok((field, mask, 16))
 }
 
-/// A unary FP intrinsic that is one instruction: `sqrtsd` / `sqrtss`, or
-/// `fabs` as an AND with the inverted sign mask (C99 7.12.7) built as in
-/// `emit_fneg`.
+/// A unary FP intrinsic that is one instruction: `sqrtsd` / `sqrtss`, or a
+/// rounding.
 pub(super) fn emit_fp_unary(
     code: &mut CodeBuf,
     dst: Place,
@@ -734,7 +729,7 @@ pub(super) fn emit_fp_unary(
     frame: Frame,
 ) -> Emit {
     use super::super::op::Intrinsic as I;
-    use super::encode::{emit_andpd, emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
+    use super::encode::{emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
     let src_place = place_of(alloc, value);
     let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("fp_unary: dst not fp reg / spill");
@@ -754,15 +749,6 @@ pub(super) fn emit_fp_unary(
             } else {
                 emit_sqrtsd(code, dd, dn);
             }
-        }
-        I::Fabs | I::Fabsf => {
-            if dn.0 != dd.0 {
-                emit_movapd_xmm_xmm(code, dd, dn);
-            }
-            let mask: i64 = if is_f32 { 0x7fff_ffff } else { i64::MAX };
-            emit_mov_r_imm64(code, SCRATCH_R10, mask);
-            emit_movq_xmm_r(code, Reg(frame.fp_scratch[1]), SCRATCH_R10);
-            emit_andpd(code, dd, Reg(frame.fp_scratch[1]));
         }
         I::Floor | I::Floorf | I::Ceil | I::Ceilf | I::Trunc | I::Truncf => {
             // ROUNDSD/ROUNDSS rounding-mode immediate, with bit 3 set to

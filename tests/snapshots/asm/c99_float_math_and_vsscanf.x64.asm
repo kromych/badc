@@ -158,9 +158,7 @@ Disassembly of section .text:
                	cmpq	$0x3, %rax
                	jne	<addr>
                	movss	0x38(%rsp), %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	callq	<addr>
                	cmpq	$-0x3, %rax
                	je	<addr>

@@ -99,9 +99,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm4 # <addr>
                	divsd	%xmm4, %xmm3
                	movsd	<rip>, %xmm4 # <addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm4
+               	vxorpd	<rip>, %xmm4, %xmm4 # <addr>
                	movsd	<rip>, %xmm5 # <addr>
                	divsd	%xmm5, %xmm4
                	movsd	<rip>, %xmm5 # <addr>
@@ -172,9 +170,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	divsd	%xmm1, %xmm0
                	movq	%xmm0, %rdx
@@ -277,9 +273,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1 # <addr>
                	addsd	%xmm1, %xmm0
                	movq	%xmm0, %rdx
                	leaq	<rip>, %rdi # <addr>
@@ -346,9 +340,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	vmulsd	<rip>, %xmm0, %xmm0 # <addr>
                	movq	%xmm0, %rdx
                	leaq	<rip>, %rdi # <addr>
@@ -450,9 +442,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	vmulsd	<rip>, %xmm0, %xmm0 # <addr>
                	movq	%xmm0, %rdx
                	leaq	<rip>, %rdi # <addr>
@@ -624,9 +614,7 @@ Disassembly of section .text:
                	vdivsd	<rip>, %xmm0, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	movsd	<rip>, %xmm2 # <addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm2
+               	vxorpd	<rip>, %xmm2, %xmm2 # <addr>
                	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
                	movq	%xmm0, %rdx
                	leaq	<rip>, %rdi # <addr>
@@ -718,9 +706,7 @@ Disassembly of section .text:
                	divss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
                	movss	<rip>, %xmm2 # <addr>
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm2
+               	vxorpd	<rip>, %xmm2, %xmm2 # <addr>
                	vfmadd213ss	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
@@ -2225,9 +2211,7 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0 # <addr>
                	sqrtsd	%xmm0, %xmm0
                	movsd	%xmm0, 0x98(%rsp)
                	movsd	0x98(%rsp), %xmm0

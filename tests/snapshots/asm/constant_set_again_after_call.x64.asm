@@ -118,7 +118,6 @@ Disassembly of section .text:
                	retq
 
 <address_constant>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	callq	<addr>
                	movq	%rax, %rbx
@@ -138,7 +137,6 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	addq	%rcx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <function_address>:
@@ -155,7 +153,6 @@ Disassembly of section .text:
 <in_loop>:
                	testq	%rdi, %rdi
                	jle	<addr>
-               	subq	$0x10, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -174,7 +171,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq
                	xorl	%eax, %eax
                	retq

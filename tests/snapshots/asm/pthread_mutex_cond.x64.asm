@@ -49,7 +49,6 @@ Disassembly of section .text:
                	retq
 
 <consume>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	leaq	<rip>, %rdi # <addr>
@@ -75,11 +74,9 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <wait_go>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rbx # <addr>
                	movq	%rbx, %rdi
@@ -98,7 +95,6 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <main>:

@@ -31,7 +31,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0x5, %edi
                	callq	<addr>
@@ -47,7 +46,6 @@ Disassembly of section .text:
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

@@ -73,7 +73,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0x0, <rip> # <addr>
                	movl	$0x1, %edi
@@ -115,5 +114,4 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

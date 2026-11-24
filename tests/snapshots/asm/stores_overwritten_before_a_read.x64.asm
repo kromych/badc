@@ -37,7 +37,6 @@ Disassembly of section .text:
                	retq
 
 <through_call>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movl	$0x3, (%rbx)
@@ -45,7 +44,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x4, (%rbx)
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <via_volatile>:

@@ -414,7 +414,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0xa5a5a5a5, %edi       # imm = 0xA5A5A5A5
                	leaq	<rip>, %rsi # <addr>
@@ -491,5 +490,4 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	andq	$0xff, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

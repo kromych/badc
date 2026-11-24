@@ -140,7 +140,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0xa, %edi
                	movl	$0x14, %esi
@@ -159,5 +158,4 @@ Disassembly of section .text:
                	cmovpq	%rax, %r10
                	cmoveq	%r10, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

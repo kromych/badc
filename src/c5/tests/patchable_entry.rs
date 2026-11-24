@@ -593,9 +593,13 @@ fn an_early_return_follows_the_patch_site() {
     plt32_call_at(&rel, f, f.value + 6, "__fentry__");
     let insns = super::perf_codegen::x64_insns(&bytes[11..]);
     let test = insns.iter().position(|i| i.is_jcc()).expect("the test");
-    // `sub rsp, imm8`, the frame with no pointer the `-O` default builds.
+    // The prologue of the frame with no pointer the `-O` default builds:
+    // `sub rsp, imm8`, or a push where the pushes alone keep rsp aligned.
+    let opens = |i: &super::perf_codegen::X64Insn| {
+        (i.op == 0x83 && i.modrm == Some(0xEC)) || (0x50..=0x57).contains(&i.op)
+    };
     assert!(
-        insns[test + 1].op == 0x83 && insns[test + 1].modrm == Some(0xEC),
+        opens(&insns[test + 1]),
         "the frame past the test: {insns:x?}"
     );
     let exit = insns.iter().position(|i| i.at == insns[test].target());

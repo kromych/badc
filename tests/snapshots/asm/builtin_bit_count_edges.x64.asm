@@ -633,7 +633,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -745,7 +744,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq
                	xorl	%esi, %esi
                	movl	$0x1, %eax
@@ -826,35 +824,29 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq
                	movl	$0x1c, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq
                	movl	$0x1b, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq
                	movl	$0x1a, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq
                	movl	$0x19, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq

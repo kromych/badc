@@ -26,7 +26,6 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
                                                 # <addr>
@@ -90,5 +89,4 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

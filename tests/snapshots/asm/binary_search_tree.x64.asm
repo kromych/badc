@@ -160,7 +160,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	xorl	%edi, %edi
                	movl	$0x32, %esi
@@ -185,7 +184,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	$0x28, %esi
                	movq	%rbx, %rdi
@@ -194,7 +192,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	$0x63, %esi
                	movq	%rbx, %rdi
@@ -203,9 +200,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

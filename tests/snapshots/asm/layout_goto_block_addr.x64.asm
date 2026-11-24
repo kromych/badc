@@ -51,7 +51,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	xorl	%edi, %edi
                	callq	<addr>
@@ -69,5 +68,4 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	%rbx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

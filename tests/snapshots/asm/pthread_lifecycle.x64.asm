@@ -26,14 +26,12 @@ Disassembly of section .text:
                	int3
 
 <returns>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	callq	<addr>
                	movq	%rax, <rip> # <addr>
                	leaq	0x1(%rbx), %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <exits>:
@@ -45,7 +43,6 @@ Disassembly of section .text:
                	retq
 
 <detached>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	leaq	<rip>, %rdi # <addr>
@@ -59,7 +56,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <deep>:

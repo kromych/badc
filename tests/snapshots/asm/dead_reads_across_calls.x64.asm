@@ -31,14 +31,12 @@ Disassembly of section .text:
                	retq
 
 <unread_after_call>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rsi, %rbx
                	imulq	%rdx, %rdi
                	callq	<addr>
                	addq	%rbx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <unread_in_loop>:

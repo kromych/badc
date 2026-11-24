@@ -408,7 +408,10 @@ pub(crate) fn compute_frame_with_tail_calls(
         frame.out = windows.max().unwrap_or(0);
         frame.frame_bytes += frame.out;
         frame.parts.outgoing += frame.out;
-        frame.pushes_alone = !frame.keeps_record && frame.parts.total() == frame.parts.saved_regs;
+        // The pushes alone keep rsp 16-byte aligned at a call when they
+        // take an odd number of eightbytes past the return address.
+        frame.pushes_alone = frame.parts.total() == frame.parts.saved_regs
+            && (!frame.keeps_record || frame.pushed % 16 == 8);
     }
     frame
 }

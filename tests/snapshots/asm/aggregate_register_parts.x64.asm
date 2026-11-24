@@ -243,14 +243,12 @@ Disassembly of section .text:
                	retq
 
 <live>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	leaq	(%rdx,%rdx,2), %rbx
                	callq	<addr>
                	addq	%rbx, %rax
                	addq	%rdx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <ret_global>:

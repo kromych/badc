@@ -91,7 +91,6 @@ Disassembly of section .text:
                	retq
 
 <as_index>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rsi, %rdi
@@ -99,7 +98,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movq	(%rbx,%rax,8), %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <as_short>:

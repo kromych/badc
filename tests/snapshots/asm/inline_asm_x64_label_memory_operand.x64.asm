@@ -98,7 +98,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	callq	<addr>
                	cmpl	$0x2a, %eax
@@ -154,7 +153,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	cmoveq	%rcx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	addb	%bh, 0x2(%rax)
                	jmp	<addr>

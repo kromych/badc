@@ -39426,7 +39426,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	callq	<addr>
@@ -39435,5 +39434,4 @@ Disassembly of section .text:
                	jl	<addr>
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

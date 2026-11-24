@@ -534,7 +534,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <regs_through_pointer>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movl	$0x3, %edi
@@ -549,7 +548,6 @@ Disassembly of section .text:
                	cmoveq	%rdx, %rcx
                	movq	%rcx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <regs_fresh>:

@@ -34,7 +34,6 @@ Disassembly of section .text:
                	retq
 
 <narrow_compare_in_arm>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movl	$0x7, %edi
@@ -54,7 +53,6 @@ Disassembly of section .text:
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <late_operands>:

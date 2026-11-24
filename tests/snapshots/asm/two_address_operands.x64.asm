@@ -37,7 +37,6 @@ Disassembly of section .text:
                	retq
 
 <rsub_call>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rbx, %rdi
@@ -45,7 +44,6 @@ Disassembly of section .text:
                	negq	%rax
                	addq	%rbx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
 
 <fdiv_rev>:

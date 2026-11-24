@@ -989,7 +989,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx # <addr>
@@ -1015,9 +1014,7 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	incq	%rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

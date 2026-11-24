@@ -100,7 +100,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0x14, %edi
                	callq	<addr>
@@ -119,37 +118,31 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	0x4(%rbx), %eax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	0x8(%rbx), %eax
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	0xc(%rbx), %eax
                	cmpl	$0xc, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	0x10(%rbx), %eax
                	cmpl	$0xf, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

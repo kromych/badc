@@ -266,7 +266,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	xorl	%edi, %edi
                	callq	<addr>
@@ -942,5 +941,4 @@ Disassembly of section .text:
                	movb	$0x0, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

@@ -261,7 +261,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	callq	<addr>
                	callq	<addr>
@@ -331,5 +330,4 @@ Disassembly of section .text:
                	cmpl	$0x64, %eax
                	cmovgq	%rcx, %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

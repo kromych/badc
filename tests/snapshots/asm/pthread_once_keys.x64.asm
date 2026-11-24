@@ -53,7 +53,6 @@ Disassembly of section .text:
                	retq
 
 <destroy>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	leaq	<rip>, %rdi # <addr>
@@ -67,7 +66,6 @@ Disassembly of section .text:
                	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
                	popq	%rbx
-               	addq	$0x10, %rsp
                	jmp	<addr>
 
 <destroy_again>:

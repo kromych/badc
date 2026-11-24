@@ -56,7 +56,6 @@ Disassembly of section .text:
                	retq
 
 <keep_gpr>:
-               	subq	$0x10, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -81,7 +80,6 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x10, %rsp
                	retq
 
 <sv8>:
@@ -127,7 +125,6 @@ Disassembly of section .text:
                	retq
 
 <keep_pointer>:
-               	subq	$0x10, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -151,7 +148,6 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x10, %rsp
                	retq
 
 <sv6>:

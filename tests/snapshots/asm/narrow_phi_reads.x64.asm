@@ -44,7 +44,6 @@ Disassembly of section .text:
 <loop_masked>:
                	testl	%edi, %edi
                	jle	<addr>
-               	subq	$0x10, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -63,7 +62,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	addq	$0x10, %rsp
                	retq
                	movl	$0x2a, %eax
                	retq

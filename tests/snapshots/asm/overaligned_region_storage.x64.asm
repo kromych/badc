@@ -302,7 +302,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	<rip>, %ebx # <addr>
                	movq	%rbx, %rdi
@@ -311,7 +310,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	testl	%eax, %eax
@@ -331,7 +329,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	testl	%eax, %eax
@@ -351,7 +348,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x7, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -359,7 +355,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -367,7 +362,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -375,7 +369,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
@@ -386,9 +379,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

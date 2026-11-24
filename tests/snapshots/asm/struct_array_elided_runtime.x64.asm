@@ -30,7 +30,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x10, %rsp
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	movq	%rbx, %rdi
@@ -42,9 +41,7 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq
                	leaq	0x1(%rbx), %rax
                	popq	%rbx
-               	addq	$0x10, %rsp
                	retq

@@ -34,8 +34,6 @@ Disassembly of section .text:
 <em_div_ex>:
                	divb	%cl
                	retq
-               	nop
-               	nopw	%cs:(%rax,%rax)
 
 <div_cx>:
                	divw	%cx

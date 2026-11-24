@@ -66,7 +66,6 @@ Disassembly of section .text:
 <asm_store_magic>:
                	movl	$0x1234, (%rdi)         # imm = 0x1234
                	retq
-               	nop
 
 <asm_magic_word>:
                	js	<addr>

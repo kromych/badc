@@ -40,48 +40,14 @@ Disassembly of section .text:
 <first>:
                	mov	x0, #0x2                // =2
                	ret
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <f64>:
                	mov	x0, #0x1                // =1
                	ret
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <s128>:
                	add	x0, x0, #0x1
                	ret
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <h>:
                	mov	x0, #0x3                // =3

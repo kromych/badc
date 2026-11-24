@@ -326,7 +326,7 @@ fn dominates(a: BlockId, b: BlockId, idom: &[BlockId]) -> bool {
 /// A retreating edge (target at or before the source in RPO) whose
 /// target does not dominate its source enters a loop past its
 /// header; such a multiple-entry loop has no rotation-safe header.
-fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
+pub(crate) fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
     let dom = DomOrder::build(idom);
     for (b, block) in func.blocks.iter().enumerate() {
         if rpo[b] == usize::MAX {
@@ -616,15 +616,15 @@ pub(crate) fn cold_blocks(func: &FunctionSsa) -> Vec<bool> {
 /// loops of a reducible CFG are disjoint or strictly nested (loops
 /// sharing a header were merged), so the smallest containing body is
 /// unique.
-struct LoopForest {
+pub(crate) struct LoopForest {
     /// Innermost loop containing each block, if any.
-    innermost: Vec<Option<usize>>,
+    pub(crate) innermost: Vec<Option<usize>>,
     /// Innermost loop strictly containing each loop, if any.
-    parent: Vec<Option<usize>>,
+    pub(crate) parent: Vec<Option<usize>>,
 }
 
 impl LoopForest {
-    fn build(n_blocks: usize, loops: &[NaturalLoop]) -> LoopForest {
+    pub(crate) fn build(n_blocks: usize, loops: &[NaturalLoop]) -> LoopForest {
         // Stamp bodies from the outermost in; the last (smallest) loop
         // to touch a block is its innermost, and a loop's parent is
         // whatever contained its header before its own stamp. Size

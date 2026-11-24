@@ -23,10 +23,10 @@
 //!    a fresh spill slot -- or, for a value surviving calls whose
 //!    loop-weighted saves cost less than its spill, a caller-saved
 //!    register each of those calls stores and reloads around itself
-//!    ([`Allocation::call_saves`]), or, for a value lying in a loop, a
-//!    register only values living through the loop hold, saved around it
-//!    ([`super::loop_saves`]). Pre-coloring of call arguments into the
-//!    host argument registers is left to the per-arch emit pass.
+//!    ([`Allocation::call_saves`]), or, for a value lying in a loop or a
+//!    branch arm, a register only values living through it hold, saved
+//!    around it ([`super::loop_saves`]). Pre-coloring of call arguments
+//!    into the host argument registers is left to the per-arch emit pass.
 //!
 //! The output is intentionally minimal: each `Place` is either
 //! one of the host's GPRs / FP regs or a stack slot's byte offset
@@ -237,19 +237,21 @@ pub(crate) struct Allocation {
     /// live across it, each stored to its slot ahead of the call and
     /// loaded back after it.
     pub call_saves: Vec<(ValueId, Vec<CallSave>)>,
-    /// The registers saved around loops.
+    /// The registers saved around loops and branch arms.
     pub loop_saves: LoopSaveCode,
     /// The SVE predicates' places and the VL-scaled slots.
     pub sve: super::sve_alloc::SveAlloc,
 }
 
-/// The code the saves around loops add at block boundaries
+/// The code the saves around loops and branch arms add at block boundaries
 /// ([`super::loop_saves`]), with the stores of the values saved around
 /// calls that store once where they are defined ([`save_store_blocks`]).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LoopSaveCode {
     /// Per block: saves stored at its end, ahead of its phi moves.
     pub stores: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+    /// Per block: saves stored at its start, past its loads there.
+    pub stores_at_start: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
     /// Per block: saves loaded at its start.
     pub loads_at_start: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
     /// Per block: saves loaded at its end, past its phi moves.
@@ -270,6 +272,10 @@ impl LoopSaveCode {
         Self::of(&self.stores, b)
     }
 
+    pub(crate) fn stores_at_start_of(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
+        Self::of(&self.stores_at_start, b)
+    }
+
     pub(crate) fn loads_at_start_of(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
         Self::of(&self.loads_at_start, b)
     }
@@ -281,12 +287,14 @@ impl LoopSaveCode {
     /// Whether block `b` holds any of this code.
     pub(crate) fn touches(&self, b: crate::c5::ir::BlockId) -> bool {
         !(self.stores_at(b).is_empty()
+            && self.stores_at_start_of(b).is_empty()
             && self.loads_at_start_of(b).is_empty()
             && self.loads_at_end_of(b).is_empty())
     }
 
     fn all(&self) -> impl Iterator<Item = &CallSave> {
         (self.stores.iter())
+            .chain(&self.stores_at_start)
             .chain(&self.loads_at_start)
             .chain(&self.loads_at_end)
             .flat_map(|(_, s)| s)
@@ -1190,6 +1198,10 @@ pub(crate) struct RegBanks {
     /// prologue's save and the epilogue's restore, once per call of the
     /// function. AArch64 saves the registers in pairs, so each costs half.
     pub open_cost: u64,
+    /// The coloring is repeated with each callee-saved register whose
+    /// holders' spills cost less than its opening withheld (x86-64), so a
+    /// node may open one at no cost of its own.
+    pub withholds: bool,
 }
 
 impl RegBanks {
@@ -1267,6 +1279,7 @@ impl RegBanks {
             fp_scratch,
             callee_fpr_low64_only: !target.is_x86_64(),
             open_cost: if target.is_aarch64() { 1 } else { 2 } * (FREQ_ONE + STATIC_COST),
+            withholds: target.is_x86_64(),
         }
     }
 }
@@ -1882,6 +1895,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             call_forbid: 0,
             save_cost: 0,
             spill_cost: 0,
+            level_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -1913,11 +1927,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let freqs = cost_weights(func);
     let save_costs = call_save_costs(func, &crossings, &node_of, &freqs);
     let spill_weights = use_weights(func, &node_of, &liveness, &freqs);
+    let level_weights = level_use_weights(func, &node_of, &liveness, &freqs);
     let defs = def_weights(func, &node_of, &use_counts, &freqs);
     for (root, c) in node_cons.iter_mut().enumerate() {
         if let Some(c) = c {
             c.save_cost = save_costs[root];
             c.spill_cost = spill_weights[root].saturating_add(defs[root]);
+            c.level_cost = level_weights[root].saturating_add(defs[root]);
         }
     }
     // A two-address result and an operand dying at it follow each other;
@@ -1944,8 +1960,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     }
     let (max_gpr, max_fpr) = pool_size_limits();
     let loops = (!func.has_returns_twice_call)
-        .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &freqs))
-        .flatten();
+        .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &freqs));
     let color = |node_cons: &[Option<NodeConstraints>]| {
         color_graph(
             &value_interference,
@@ -1967,7 +1982,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // at each definition, a load at each use, by loop weight -- is
     // withheld and the graph colored again. x86-64 only: AArch64 saves
     // registers in pairs folded into the frame's own setup and teardown.
-    if target.is_x86_64() {
+    if banks.withholds {
         let exits = (func.blocks.iter())
             .filter(|b| matches!(b.terminator, Terminator::Return(_) | Terminator::TailExt(_)))
             .count() as u64;
@@ -2685,7 +2700,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 };
                 let (na, nb) = (node_of[a as usize], node_of[b as usize]);
                 let lies = |x: ValueId, saved: ValueId| {
-                    info.inside[x as usize].is_some_and(|inner| {
+                    info.inside(x).is_some_and(|inner| {
                         (coloring.loop_saved.iter())
                             .any(|&(l, n)| n == saved && info.encloses(l, inner))
                     })
@@ -2938,10 +2953,10 @@ fn call_save_lists(
     (out, stores)
 }
 
-/// The stores and loads of the saves around loops the coloring chose, with a
+/// The stores and loads of the saves around regions the coloring chose, with a
 /// slot per node, which the reservation grows by.
 fn loop_save_code(
-    loops: Option<&super::loop_saves::LoopSaves>,
+    loops: Option<&super::loop_saves::LoopSaves<'_>>,
     saved: &[(u32, ValueId)],
     (node_cons, places): (&[Option<NodeConstraints>], &[Place]),
     spill_count: &mut u32,
@@ -2966,7 +2981,7 @@ fn loop_save_code(
             Place::FpReg(r) => (r, true),
             _ => continue,
         };
-        let Some(t) = info.through(l, node) else {
+        let (Some(t), Some(store)) = (info.through(l, node), info.store(l)) else {
             continue;
         };
         let wide = node_cons[node as usize].map_or(VecWidth::Scalar, |c| c.wide);
@@ -2982,7 +2997,10 @@ fn loop_save_code(
             slot,
             stored: false,
         };
-        at(&mut code.stores, info.loops[l as usize].preheader, save);
+        match store {
+            super::loop_saves::Store::End(b) => at(&mut code.stores, b, save),
+            super::loop_saves::Store::Start(b) => at(&mut code.stores_at_start, b, save),
+        }
         for &r in &t.reloads {
             match r {
                 super::loop_saves::Reload::Start(b) => at(&mut code.loads_at_start, b, save),
@@ -3658,6 +3676,9 @@ pub(crate) struct NodeConstraints {
     /// What spilling costs: a load at each use and a store at each
     /// definition, by block frequency and size ([`cost_weights`]).
     pub spill_cost: u64,
+    /// The part of `spill_cost` at the definitions and at the uses no loop
+    /// holds that does not hold the definition ([`level_use_weights`]).
+    pub level_cost: u64,
     /// Preferred register, honored when free and bank-legal.
     pub hint: Option<u8>,
     /// Physical registers (in this node's bank) the colorer must not
@@ -3826,7 +3847,7 @@ pub(crate) fn color_graph(
     no_slot_share: bool,
     weights: &[u64],
     apart: &[Vec<ValueId>],
-    loops: Option<&super::loop_saves::LoopSaves>,
+    loops: Option<&super::loop_saves::LoopSaves<'_>>,
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
@@ -4028,21 +4049,15 @@ pub(crate) fn color_graph(
             saved[node] = true;
             Some(r)
         });
-        // Left to spill, a node lying in a loop takes a register only values
-        // living through the loop hold, saved around it, when the saves
-        // cost less than its spill.
+        // Left to spill, a node lying in a loop or a branch arm takes a
+        // register only values living through the region hold, saved around
+        // it or a region around it, when the saves cost less than its spill.
         let pick = pick.or_else(|| {
             let info = loops?;
-            let l = (*info.inside.get(node)?)?;
-            let spill_cost = c.spill_cost;
-            let around = |saves: &[(u32, ValueId)], root: ValueId| {
+            let inner = info.inside(node as ValueId)?;
+            let around = |saves: &[(u32, ValueId)], root: ValueId, l: u32| {
                 saves.iter().any(|&(o, n)| n == root && info.encloses(o, l))
             };
-            let mut cost = [0u64; 64];
-            let mut blocked = [false; 64];
-            for (r, b) in blocked.iter_mut().enumerate() {
-                *b = ((c.forbid | c.call_forbid) >> r) & 1 != 0;
-            }
             let mut holders: Vec<(u8, ValueId)> = Vec::new();
             for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
                 for &nb in interference.neighbors(m) {
@@ -4052,17 +4067,40 @@ pub(crate) fn color_graph(
                         Place::FpReg(r) if c.is_fp => r,
                         _ => continue,
                     };
-                    if root as usize == node || holders.contains(&(r, root)) {
-                        continue;
+                    if root as usize != node && !holders.contains(&(r, root)) {
+                        holders.push((r, root));
                     }
-                    holders.push((r, root));
+                }
+            }
+            // A callee-saved register no value holds yet costs its opening,
+            // unless the coloring is repeated without it when its holders
+            // cost less.
+            let mut base = [0u64; 64];
+            for &r in callee.iter().filter(|_| !banks.withholds) {
+                if (opened[usize::from(c.is_fp)] >> r) & 1 == 0 {
+                    base[r as usize] = banks.open_cost;
+                }
+            }
+            let mut best: Option<(u64, u32, u8)> = None;
+            for l in info.chain(inner) {
+                let limit = if info.is_loop(l) {
+                    c.spill_cost
+                } else {
+                    c.level_cost
+                };
+                let mut cost = base;
+                let mut blocked = [false; 64];
+                for (r, b) in blocked.iter_mut().enumerate() {
+                    *b = ((c.forbid | c.call_forbid) >> r) & 1 != 0;
+                }
+                for &(r, root) in &holders {
                     // A value saved around calls stores and reloads its
-                    // register at each, also inside the loop.
+                    // register at each, also inside the region.
                     if saved[root as usize] {
                         blocked[r as usize] = true;
                         continue;
                     }
-                    if around(&loop_saved, root) {
+                    if around(&loop_saved, root, l) {
                         continue;
                     }
                     match info.through(l, root) {
@@ -4070,15 +4108,21 @@ pub(crate) fn color_graph(
                         None => blocked[r as usize] = true,
                     }
                 }
+                let found = (caller.iter().filter(|_| !c.must_callee))
+                    .chain(callee)
+                    .copied()
+                    .filter(|&r| !blocked[r as usize])
+                    .min_by_key(|&r| cost[r as usize])
+                    .filter(|&r| cost[r as usize] < limit);
+                if let Some(r) = found
+                    && best.is_none_or(|(b, _, _)| cost[r as usize] < b)
+                {
+                    best = Some((cost[r as usize], l, r));
+                }
             }
-            let r = (caller.iter().filter(|_| !c.must_callee))
-                .chain(callee)
-                .copied()
-                .filter(|&r| !blocked[r as usize])
-                .min_by_key(|&r| cost[r as usize])
-                .filter(|&r| cost[r as usize] < spill_cost)?;
+            let (_, l, r) = best?;
             for &(_, root) in holders.iter().filter(|&&(hr, _)| hr == r) {
-                if !around(&loop_saved, root) {
+                if !around(&loop_saved, root, l) {
                     loop_saved.retain(|&(o, n)| !(n == root && info.encloses(l, o)));
                     loop_saved.push((l, root));
                 }
@@ -4284,6 +4328,50 @@ fn use_weights(
             Terminator::Return(v) => bump_term(v),
             Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
                 bump_term(target)
+            }
+            _ => {}
+        }
+    }
+    w
+}
+
+/// [`use_weights`] over the uses in no loop the used value's definition
+/// lies outside of. A save around a branch arm runs once per entry of the
+/// arm, and a loop inside the arm runs per entry a number of times the
+/// static estimate does not know, so the arm weighs its own uses alone.
+fn level_use_weights(
+    func: &FunctionSsa,
+    node_of: &[ValueId],
+    liveness: &super::liveness::Liveness,
+    block_weight: &[u64],
+) -> Vec<u64> {
+    let n = func.insts.len();
+    let depths = crate::c5::codegen::passes::layout::loop_depths(func);
+    let mut depth_of = vec![u32::MAX; n];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            depth_of[v as usize] = depths[b];
+        }
+    }
+    let mut w: Vec<u64> = vec![0u64; n];
+    for (b, block) in func.blocks.iter().enumerate() {
+        let (wb, db) = (block_weight[b], depths[b]);
+        let mut bump = |v: ValueId| {
+            if v != NO_VALUE && (v as usize) < n && db <= depth_of[v as usize] {
+                let root = node_of[v as usize] as usize;
+                w[root] = w[root].saturating_add(wb);
+            }
+        };
+        for i in block.inst_range.clone() {
+            if liveness.reads(i) {
+                for_each_operand(&func.insts[i as usize], &mut bump);
+            }
+        }
+        match block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond),
+            Terminator::Return(v) => bump(v),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                bump(target)
             }
             _ => {}
         }
@@ -6096,6 +6184,7 @@ mod tests {
             fp_scratch: [NO_FP_SCRATCH; FP_SCRATCH_COUNT],
             callee_fpr_low64_only: true,
             open_cost: 2 * FREQ_ONE,
+            withholds: false,
         }
     }
 
@@ -6110,6 +6199,7 @@ mod tests {
             call_forbid: 0,
             save_cost: 0,
             spill_cost: 0,
+            level_cost: 0,
             hint,
             forbid: 0,
             avoid: 0,
@@ -6131,6 +6221,7 @@ mod tests {
             call_forbid: 0,
             save_cost: 0,
             spill_cost: 0,
+            level_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -8966,6 +9057,7 @@ int main(void) { return 0; }
                 call_forbid: 0,
                 save_cost: 0,
                 spill_cost: 0,
+                level_cost: 0,
                 hint: None,
                 forbid: 0,
                 avoid: 0,

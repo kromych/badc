@@ -3846,6 +3846,75 @@ fn a_loop_takes_the_registers_of_values_living_through_it() {
     m.finish();
 }
 
+/// A dispatch loop holds eleven values its cases update, and one case reads
+/// none of them and computes with temporaries of its own. The values give
+/// their registers up for that case, stored at its entry and loaded at its
+/// exit, so its products touch no frame slot. AArch64 runs over a pool of
+/// eight registers a bank, which the loop's values fill as they fill
+/// x86-64's.
+#[test]
+fn a_switch_case_takes_the_registers_of_values_living_through_it() {
+    const SRC: &str = "typedef unsigned long u;\n\
+u f(const unsigned char *ops, long n, const u *o, u *t) {\n\
+    u a0 = o[0], a1 = o[1], a2 = o[2], a3 = o[3], a4 = o[4], a5 = o[5];\n\
+    u a6 = o[6], a7 = o[7], a8 = o[8], a9 = o[9], a10 = o[10];\n\
+    u acc = 0;\n\
+    for (long pc = 0; pc < n; pc++) {\n\
+        switch (ops[pc] & 3) {\n\
+        case 0: a0 += a1 ^ pc; a2 ^= a0; a3 += a2 >> 1; a4 ^= a3; a5 += a4; break;\n\
+        case 1: {\n\
+            u t0 = t[0], t1 = t[1], t2 = t[2], t3 = t[3];\n\
+            u p0 = t0 * t1, p1 = t2 * t3, p2 = t0 * t3;\n\
+            u s = p0 + p1 + p2;\n\
+            u d = (p0 ^ t3) + (p1 ^ t0) + (p2 ^ t1);\n\
+            t[pc & 3] = s ^ d;\n\
+            acc += s - d + p0;\n\
+            break;\n\
+        }\n\
+        case 2: a6 += a7 ^ pc; a8 ^= a6; a9 += a8 >> 2; a10 ^= a9; break;\n\
+        default: a1 += a3 ^ a6; a7 -= a10; acc += a0 ^ a8; break;\n\
+        }\n\
+    }\n\
+    return acc ^ a0 ^ a1 ^ a2 ^ a3 ^ a4 ^ a5 ^ a6 ^ a7 ^ a8 ^ a9 ^ a10;\n\
+}\n";
+    let mut m = Misses::default();
+    // x86-64: from the case's first `imul` to its last.
+    let insns = x64(SRC, "f");
+    let frame = |i: &X64Insn| {
+        let Some(modrm) = i.modrm.filter(|m| m >> 6 != 3) else {
+            return false;
+        };
+        match modrm & 7 {
+            4 => i.sib.is_some_and(|s| s & 7 == 4) && i.rex & 1 == 0,
+            5 => modrm >> 6 != 0 && i.rex & 1 == 0,
+            _ => false,
+        }
+    };
+    let muls: Vec<usize> = (0..insns.len())
+        .filter(|&k| insns[k].op == 0x0FAF)
+        .collect();
+    let span = muls.first().zip(muls.last()).map(|(&a, &b)| &insns[a..=b]);
+    m.expect(
+        muls.len() == 3 && span.is_some_and(|s| !s.iter().any(frame)),
+        || format!("x86-64: {insns:x?}"),
+    );
+    // AArch64: from the case's first `mul` / `madd` to its last.
+    let words = function_words(&object_with_pool(SRC, Target::LinuxAarch64, (8, 8)), "f");
+    let madd = |w: u32| w & 0xFFE0_8000 == 0x9B00_0000;
+    let off_frame = |w: u32| {
+        let base = (w >> 5) & 31;
+        let access = a64_mem_imm(w).is_some() || w & 0x3A00_0000 == 0x2800_0000;
+        access && (base == 31 || base == 29)
+    };
+    let muls: Vec<usize> = (0..words.len()).filter(|&k| madd(words[k])).collect();
+    let span = muls.first().zip(muls.last()).map(|(&a, &b)| &words[a..=b]);
+    m.expect(
+        muls.len() == 3 && span.is_some_and(|s| !s.iter().any(|&w| off_frame(w))),
+        || format!("aarch64: {words:08x?}"),
+    );
+    m.finish();
+}
+
 /// A member of an element before the pointer is reached through the
 /// access's own displacement, composed with the member's offset where the
 /// element's address feeds several members: no `lea` on x86-64, an

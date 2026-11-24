@@ -973,6 +973,9 @@ impl FnEmit<'_, '_> {
         for s in saves.loads_at_start_of(b) {
             call_save(self.out.cx.code, frame, s, false);
         }
+        for s in saves.stores_at_start_of(b) {
+            call_save(self.out.cx.code, frame, s, true);
+        }
         for v in block.inst_range.clone() {
             if self.plan.lowers(block_idx, v) {
                 self.emit_block_inst(block, v, tail_call)?;

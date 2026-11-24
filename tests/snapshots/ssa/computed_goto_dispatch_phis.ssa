@@ -776,7 +776,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=pressure
 fn ent_pc=2 n_params=2 variadic=false locals=4
-  spill_count=6 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
+  spill_count=10 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> [spill 1]
@@ -883,21 +883,21 @@ fn ent_pc=2 n_params=2 variadic=false locals=4
     v98  Imm(0)                                           -> [spill 0]
     v99  Binop { op=add, lhs=v70, rhs=v95 }               -> x12
     v100 Imm(0)                                           -> [spill 0]
-    v101 LocalAddr(-4)                                    -> [spill 4]
-    v102 Imm(0)                                           -> [spill 0]
-    v103 Extend { value=v63, kind=I32 }                   -> [spill 0]
+    v101 LocalAddr(-4)                                    -> [spill 0]
+    v102 Imm(0)                                           -> [spill 3]
+    v103 Extend { value=v63, kind=I32 }                   -> x6
     v104 BinopI { op=add, lhs=v103, rhs_imm=1 }           -> x1
     v105 Extend { value=v104, kind=I32, nsw }             -> [spill 3]
     v106 Imm(0)                                           -> [spill 3]
-    v107 BinopI { op=mul, lhs=v103, rhs_imm=780903145 }   -> [spill 3]
-    v108 BinopI { op=shr, lhs=v107, rhs_imm=33 }          -> [spill 3]
-    v109 BinopI { op=shru, lhs=v108, rhs_imm=63 }         -> [spill 5]
-    v110 Binop { op=add, lhs=v108, rhs=v109 }             -> [spill 3]
-    v111 Binop { op=mul, lhs=v110, rhs=v3 }               -> [spill 3]
-    v112 Binop { op=sub, lhs=v103, rhs=v111 }             -> [spill 0]
+    v107 BinopI { op=mul, lhs=v103, rhs_imm=780903145 }   -> x7
+    v108 BinopI { op=shr, lhs=v107, rhs_imm=33 }          -> x7
+    v109 BinopI { op=shru, lhs=v108, rhs_imm=63 }         -> [spill 3]
+    v110 Binop { op=add, lhs=v108, rhs=v109 }             -> x7
+    v111 Binop { op=mul, lhs=v110, rhs=v3 }               -> x7
+    v112 Binop { op=sub, lhs=v103, rhs=v111 }             -> x6
     v113 Extend { value=v112, kind=I32, nsw }             -> [spill 3]
     v114 Binop { op=add, lhs=v1, rhs=v112 }               -> [spill 3]
-    v115 LoadIndexed { base=v1, index=v112, scale=1, kind=U8 } -> [spill 0]
+    v115 LoadIndexed { base=v1, index=v112, scale=1, kind=U8 } -> x6
     v116 BinopI { op=shl, lhs=v115, rhs_imm=3 }           -> [spill 3]
     v117 Binop { op=add, lhs=v101, rhs=v116 }             -> [spill 3]
     v118 LoadIndexed { base=v101, index=v115, scale=8, kind=I64 } -> [spill 0]
@@ -927,21 +927,21 @@ fn ent_pc=2 n_params=2 variadic=false locals=4
     v140 Imm(0)                                           -> [spill 0]
     v141 Binop { op=add, lhs=v64, rhs=v137 }              -> x2
     v142 Imm(0)                                           -> [spill 0]
-    v143 LocalAddr(-4)                                    -> [spill 4]
-    v144 Imm(0)                                           -> [spill 0]
-    v145 Extend { value=v63, kind=I32 }                   -> [spill 0]
+    v143 LocalAddr(-4)                                    -> [spill 0]
+    v144 Imm(0)                                           -> [spill 3]
+    v145 Extend { value=v63, kind=I32 }                   -> x0
     v146 BinopI { op=add, lhs=v145, rhs_imm=1 }           -> x1
     v147 Extend { value=v146, kind=I32, nsw }             -> [spill 3]
     v148 Imm(0)                                           -> [spill 3]
-    v149 BinopI { op=mul, lhs=v145, rhs_imm=780903145 }   -> [spill 3]
-    v150 BinopI { op=shr, lhs=v149, rhs_imm=33 }          -> [spill 3]
-    v151 BinopI { op=shru, lhs=v150, rhs_imm=63 }         -> [spill 5]
-    v152 Binop { op=add, lhs=v150, rhs=v151 }             -> [spill 3]
-    v153 Binop { op=mul, lhs=v152, rhs=v3 }               -> [spill 3]
-    v154 Binop { op=sub, lhs=v145, rhs=v153 }             -> [spill 0]
+    v149 BinopI { op=mul, lhs=v145, rhs_imm=780903145 }   -> x13
+    v150 BinopI { op=shr, lhs=v149, rhs_imm=33 }          -> x13
+    v151 BinopI { op=shru, lhs=v150, rhs_imm=63 }         -> [spill 3]
+    v152 Binop { op=add, lhs=v150, rhs=v151 }             -> x13
+    v153 Binop { op=mul, lhs=v152, rhs=v3 }               -> x13
+    v154 Binop { op=sub, lhs=v145, rhs=v153 }             -> x0
     v155 Extend { value=v154, kind=I32, nsw }             -> [spill 3]
     v156 Binop { op=add, lhs=v1, rhs=v154 }               -> [spill 3]
-    v157 LoadIndexed { base=v1, index=v154, scale=1, kind=U8 } -> [spill 0]
+    v157 LoadIndexed { base=v1, index=v154, scale=1, kind=U8 } -> x0
     v158 BinopI { op=shl, lhs=v157, rhs_imm=3 }           -> [spill 3]
     v159 Binop { op=add, lhs=v143, rhs=v158 }             -> [spill 3]
     v160 LoadIndexed { base=v143, index=v157, scale=8, kind=I64 } -> [spill 0]

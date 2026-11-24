@@ -1398,7 +1398,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v1099 Extend { value=v1098, kind=I32, nsw }            -> x9
     v1100 Extend { value=v1098, kind=I8 }                  -> x8
     v1101 Binop { op=sub, lhs=v1085, rhs=v1090 }           -> x9
-    v1102 Extend { value=v1101, kind=I32, nsw }            -> x12
+    v1102 Extend { value=v1101, kind=I32, nsw }            -> [spill 0]
     v1103 Extend { value=v1101, kind=I8 }                  -> x9
     v1104 Binop { op=xor, lhs=v1100, rhs=v1103 }           -> x8
     v1105 Binop { op=and, lhs=v1085, rhs=v1090 }           -> x1

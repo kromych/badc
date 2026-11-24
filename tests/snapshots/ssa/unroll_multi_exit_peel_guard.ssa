@@ -850,9 +850,9 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v586 BinopI { op=shl, lhs=v568, rhs_imm=3 }           -> x12
     v587 Binop { op=add, lhs=v81, rhs=v586 }              -> x12
     v588 LoadIndexed { base=v81, index=v568, scale=8, kind=I64 } -> x12
-    v589 ImmData(64)                                      -> x14
-    v590 Binop { op=add, lhs=v82, rhs=v586 }              -> x14
-    v591 LoadIndexed { base=v82, index=v568, scale=8, kind=I64 } -> x14
+    v589 ImmData(64)                                      -> [spill 0]
+    v590 Binop { op=add, lhs=v82, rhs=v586 }              -> [spill 0]
+    v591 LoadIndexed { base=v82, index=v568, scale=8, kind=I64 } -> [spill 0]
     v592 Binop { op=mul, lhs=v588, rhs=v581 }             -> x6
     v593 Binop { op=add, lhs=v569, rhs=v592 }             -> x2
     v594 ImmData(96)                                      -> x6
@@ -915,9 +915,9 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v619 BinopI { op=shl, lhs=v601, rhs_imm=3 }           -> x12
     v620 Binop { op=add, lhs=v96, rhs=v619 }              -> x12
     v621 LoadIndexed { base=v96, index=v601, scale=8, kind=I64 } -> x12
-    v622 ImmData(64)                                      -> x14
-    v623 Binop { op=add, lhs=v97, rhs=v619 }              -> x14
-    v624 LoadIndexed { base=v97, index=v601, scale=8, kind=I64 } -> x14
+    v622 ImmData(64)                                      -> [spill 0]
+    v623 Binop { op=add, lhs=v97, rhs=v619 }              -> [spill 0]
+    v624 LoadIndexed { base=v97, index=v601, scale=8, kind=I64 } -> [spill 0]
     v625 Binop { op=mul, lhs=v621, rhs=v614 }             -> x6
     v626 Binop { op=add, lhs=v602, rhs=v625 }             -> x2
     v627 ImmData(96)                                      -> x6
@@ -1390,9 +1390,9 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v865 BinopI { op=shl, lhs=v847, rhs_imm=3 }           -> x12
     v866 Binop { op=add, lhs=v227, rhs=v865 }             -> x12
     v867 LoadIndexed { base=v227, index=v847, scale=8, kind=I64 } -> x12
-    v868 ImmData(64)                                      -> x14
-    v869 Binop { op=add, lhs=v228, rhs=v865 }             -> x14
-    v870 LoadIndexed { base=v228, index=v847, scale=8, kind=I64 } -> x14
+    v868 ImmData(64)                                      -> [spill 0]
+    v869 Binop { op=add, lhs=v228, rhs=v865 }             -> [spill 0]
+    v870 LoadIndexed { base=v228, index=v847, scale=8, kind=I64 } -> [spill 0]
     v871 Binop { op=mul, lhs=v867, rhs=v860 }             -> x6
     v872 Binop { op=add, lhs=v848, rhs=v871 }             -> x2
     v873 ImmData(96)                                      -> x6
@@ -1455,9 +1455,9 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v898 BinopI { op=shl, lhs=v880, rhs_imm=3 }           -> x12
     v899 Binop { op=add, lhs=v242, rhs=v898 }             -> x12
     v900 LoadIndexed { base=v242, index=v880, scale=8, kind=I64 } -> x12
-    v901 ImmData(64)                                      -> x14
-    v902 Binop { op=add, lhs=v243, rhs=v898 }             -> x14
-    v903 LoadIndexed { base=v243, index=v880, scale=8, kind=I64 } -> x14
+    v901 ImmData(64)                                      -> [spill 0]
+    v902 Binop { op=add, lhs=v243, rhs=v898 }             -> [spill 0]
+    v903 LoadIndexed { base=v243, index=v880, scale=8, kind=I64 } -> [spill 0]
     v904 Binop { op=mul, lhs=v900, rhs=v893 }             -> x6
     v905 Binop { op=add, lhs=v881, rhs=v904 }             -> x2
     v906 ImmData(96)                                      -> x6

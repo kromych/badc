@@ -687,8 +687,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v661 Binop { op=shl, lhs=v522, rhs=v653 }             -> [spill 4]
     v662 Binop { op=or, lhs=v661, rhs=v660 }              -> [spill 3]
     v663 Binop { op=and, lhs=v658, rhs=v657 }             -> [spill 4]
-    v664 Imm(0)                                           -> x3
-    v665 Binop { op=or, lhs=v663, rhs=v664 }              -> x3
+    v664 Imm(0)                                           -> [spill 5]
+    v665 Binop { op=or, lhs=v663, rhs=v664 }              -> [spill 5]
     v666 Binop { op=and, lhs=v662, rhs=v657 }             -> [spill 3]
     v667 Binop { op=and, lhs=v658, rhs=v656 }             -> [spill 2]
     v668 Binop { op=or, lhs=v666, rhs=v667 }              -> [spill 3]

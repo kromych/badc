@@ -37,9 +37,9 @@ Disassembly of section .text:
                	mov	x1, x0
                	cbz	x1, <addr>
                	mov	x0, #0x0                // =0
-               	str	x1, [sp, #0x18]
+               	str	x1, [sp, #0x20]
                	bl	<addr>
-               	ldr	x1, [sp, #0x18]
+               	ldr	x1, [sp, #0x20]
                	cmp	x0, x21
                	b.ne	<addr>
                	mov	x0, x1
@@ -369,38 +369,40 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	b	<addr>
+               	str	x21, [sp, #0x18]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, x20
+               	bl	<addr>
+               	mov	x21, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, x20
                	bl	<addr>
                	str	x0, [sp, #0x28]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, x20
-               	bl	<addr>
-               	str	x0, [sp, #0x20]
-               	ldr	x16, [sp, #0x28]
-               	cbz	x16, <addr>
+               	cbz	x21, <addr>
                	mov	x0, #0x61               // =97
+               	mov	x1, x21
                	mov	x2, x20
-               	ldr	x1, [sp, #0x28]
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x37               // =55
+               	mov	x1, x21
                	mov	x2, x20
-               	ldr	x1, [sp, #0x28]
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x61               // =97
                	mov	x2, x20
-               	ldr	x1, [sp, #0x20]
+               	ldr	x1, [sp, #0x28]
                	bl	<addr>
                	mov	w0, w0
                	cmp	x0, #0x41
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
+               	ldr	x21, [sp, #0x18]
                	b	<addr>
                	mov	x0, #0x0                // =0
+               	ldr	x21, [sp, #0x18]
                	b	<addr>

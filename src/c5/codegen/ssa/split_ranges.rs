@@ -449,10 +449,11 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
                 total = total.saturating_add(wb);
             }
         });
-        // The stores and loads of the registers saved around loops.
+        // The stores and loads of the registers saved around regions.
         let saves = &alloc.loop_saves;
         let b = b as BlockId;
         let moved = saves.stores_at(b).len()
+            + saves.stores_at_start_of(b).len()
             + saves.loads_at_start_of(b).len()
             + saves.loads_at_end_of(b).len();
         total = total.saturating_add(wb.saturating_mul(moved as u64));

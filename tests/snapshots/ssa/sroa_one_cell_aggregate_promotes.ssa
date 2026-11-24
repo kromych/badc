@@ -100,19 +100,19 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v168 Imm(0)                                           -> x9
     v169 BinopI { op=sub, lhs=v2, rhs_imm=3 }             -> x9
     v170 Extend { value=v169, kind=I16 }                  -> x9
-    v171 Imm(0)                                           -> x3
-    v172 Imm(0)                                           -> x3
-    v173 Extend { value=v155, kind=I16 }                  -> x3
-    v174 Imm(0)                                           -> x3
-    v175 Extend { value=v160, kind=I16 }                  -> x3
+    v171 Imm(0)                                           -> [spill 0]
+    v172 Imm(0)                                           -> [spill 0]
+    v173 Extend { value=v155, kind=I16 }                  -> [spill 0]
+    v174 Imm(0)                                           -> [spill 0]
+    v175 Extend { value=v160, kind=I16 }                  -> [spill 0]
     v176 BinopI { op=shl, lhs=v160, rhs_imm=1 }           -> x1
-    v177 Extend { value=v176, kind=I32, nsw }             -> x3
+    v177 Extend { value=v176, kind=I32, nsw }             -> [spill 0]
     v178 Binop { op=add, lhs=v155, rhs=v176 }             -> x1
-    v179 Extend { value=v178, kind=I32, nsw }             -> x3
-    v180 Imm(0)                                           -> x3
-    v181 Extend { value=v165, kind=I16 }                  -> x3
+    v179 Extend { value=v178, kind=I32, nsw }             -> [spill 0]
+    v180 Imm(0)                                           -> [spill 0]
+    v181 Extend { value=v165, kind=I16 }                  -> [spill 0]
     v182 BinopI { op=mul, lhs=v165, rhs_imm=3 }           -> x2
-    v183 Extend { value=v182, kind=I32, nsw }             -> x3
+    v183 Extend { value=v182, kind=I32, nsw }             -> [spill 0]
     v184 Binop { op=add, lhs=v178, rhs=v182 }             -> x1
     v185 Extend { value=v184, kind=I32, nsw }             -> x2
     v186 Imm(0)                                           -> x2

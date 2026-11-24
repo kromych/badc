@@ -8253,6 +8253,31 @@ fn a64_a_compare_with_a_small_negative_is_cmn() {
     );
 }
 
+/// A group opened at a loop step whose jump does not follow it -- the step
+/// sets flags another block's branch reads -- pads nothing: only an open
+/// the first pass closed pads, so the loop's padding stays what the branch
+/// relaxation counted and its backward rel8 jump stays in range under the
+/// `-O` default's loop padding.
+#[test]
+fn x64_a_left_branch_group_pads_nothing() {
+    let src = "int a, c;\n\
+               int **b;\n\
+               static unsigned short add16(unsigned short x, unsigned short y) { return x + y; }\n\
+               void d(void) {\n\
+                   int e;\n\
+                   a = 0;\n\
+                   for (; a < 3; ++a) {\n\
+                       int f[4][4] = {5};\n\
+                       for (e = 1; e < 9; e = add16(e, 8))\n\
+                           ;\n\
+                       *b = &f[3][1];\n\
+                       if (c)\n\
+                           continue;\n\
+                   }\n\
+               }\n";
+    object_at(src, Target::LinuxX64, true);
+}
+
 /// Under `-mbranches-within-32B-boundaries` no local jump, nor a flag-setting
 /// instruction with the conditional jump it fuses with, crosses or ends on a
 /// 32-byte boundary, and the function starts on one; the same source has such

@@ -435,8 +435,18 @@ struct BranchWindows {
     /// Each group's start and the padding it can take ahead of it, in this
     /// pass's layout.
     starts: Vec<(usize, usize)>,
-    /// Where the open group starts.
+    /// Where the open group starts, and its index among this pass's opens.
     open: Option<usize>,
+    open_index: usize,
+    /// This pass's opens so far.
+    opens: usize,
+    /// Per open, in the order the pass opens them, whether a branch closed
+    /// it: a group opened at a flag-setting instruction is left when its
+    /// block ends without the jump. Only an open the previous pass closed
+    /// pads, so every padding is one `relax_branches` counted, where it
+    /// counted it.
+    closed_prev: Vec<bool>,
+    closed_now: Vec<bool>,
     /// Per block, whether its groups are padded; empty pads every block.
     pad: Vec<bool>,
     /// Whether the block being emitted pads.
@@ -866,6 +876,8 @@ impl FnEmit<'_, '_> {
             self.branch_fixups.clear();
             let w = &mut self.windows;
             w.prev = core::mem::take(&mut w.now);
+            w.closed_prev = core::mem::take(&mut w.closed_now);
+            w.opens = 0;
             w.starts.clear();
             w.open = None;
         }
@@ -1342,10 +1354,14 @@ impl FnEmit<'_, '_> {
         let code = &mut *self.out.cx.code;
         let len = usize::from(w.prev.get(first).copied().unwrap_or(0));
         let at = code.len() % 32;
-        if w.here && len > 0 && len < 32 && at + len >= 32 {
+        let closes = w.closed_prev.get(w.opens).copied().unwrap_or(false);
+        if w.here && closes && len > 0 && len < 32 && at + len >= 32 {
             code.pad(|code| push_x86_nops(code, 32 - at));
         }
         w.open = Some(code.len());
+        w.open_index = w.opens;
+        w.opens += 1;
+        w.closed_now.push(false);
         first
     }
 
@@ -1356,6 +1372,7 @@ impl FnEmit<'_, '_> {
             return;
         };
         let len = self.out.cx.code.len() - start;
+        w.closed_now[w.open_index] = true;
         if w.now.len() <= first {
             w.now.resize(first + 1, 0);
         }

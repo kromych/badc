@@ -33,6 +33,7 @@ Disassembly of section .text:
                	leaq	(%rdi,%rax), %rdx
                	movb	%dl, (%rcx)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x100, %eax            # imm = 0x100
                	jl	<addr>
                	testl	%edi, %edi

@@ -145,18 +145,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopl	(%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -180,18 +183,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopw	(%rax,%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -216,18 +222,21 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -259,6 +268,7 @@ Disassembly of section .text:
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -282,18 +292,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopw	(%rax,%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -318,18 +331,21 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -384,18 +400,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopw	(%rax,%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -420,18 +439,21 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -486,18 +508,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopl	(%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -529,12 +554,14 @@ Disassembly of section .text:
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -553,18 +580,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nop
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -589,18 +619,21 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -623,18 +656,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopl	(%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -728,18 +764,21 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nop
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -774,18 +813,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopl	(%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -821,18 +863,21 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -864,6 +909,7 @@ Disassembly of section .text:
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -959,9 +1005,48 @@ Disassembly of section .text:
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9 # <addr>
+               	nop
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	callq	<addr>
+               	leaq	<rip>, %r12 # <addr>
+               	movsd	<rip>, %xmm0 # <addr>
+               	callq	<addr>
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movq	%r12, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	nop
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx # <addr>
+               	nop
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -987,52 +1072,21 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rax, (%rsp)
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0x3d, %edi
-               	callq	<addr>
-               	leaq	<rip>, %r12 # <addr>
-               	movsd	<rip>, %xmm0 # <addr>
-               	callq	<addr>
-               	movq	%xmm0, %rdx
-               	leaq	<rip>, %rdi # <addr>
-               	movq	%r12, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0x3d, %edi
-               	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
-               	testb	$0x1, %al
-               	je	<addr>
-               	leaq	<rip>, %rsi # <addr>
-               	testb	$0x4, %al
-               	je	<addr>
-               	leaq	<rip>, %rdx # <addr>
-               	testb	$0x8, %al
-               	je	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	testb	$0x10, %al
-               	je	<addr>
-               	leaq	<rip>, %r8 # <addr>
-               	testb	$0x20, %al
-               	je	<addr>
-               	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -1057,18 +1111,21 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopl	(%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nop
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
@@ -1094,18 +1151,21 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax,%rax)
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nop
                	testb	$0x10, %al
                	je	<addr>
                	leaq	<rip>, %r8 # <addr>
                	testb	$0x20, %al
                	je	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nop
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -1125,12 +1185,14 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopl	(%rax)
                	testb	$0x1, %al
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
                	testb	$0x4, %al
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	testb	$0x8, %al
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
@@ -1153,6 +1215,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nop
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
@@ -1163,6 +1226,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
@@ -1173,6 +1237,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
@@ -1183,6 +1248,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
@@ -1193,6 +1259,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
@@ -1203,6 +1270,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
@@ -1213,6 +1281,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
@@ -1223,6 +1292,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
@@ -1233,6 +1303,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
@@ -1243,6 +1314,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
@@ -1253,6 +1325,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
@@ -1263,6 +1336,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
@@ -1273,6 +1347,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
@@ -1283,6 +1358,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
@@ -1293,6 +1369,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
@@ -1303,6 +1380,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
@@ -1313,6 +1391,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
@@ -1323,6 +1402,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
@@ -1333,6 +1413,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
@@ -1343,6 +1424,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
@@ -1353,6 +1435,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
@@ -1363,6 +1446,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
@@ -1373,6 +1457,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
@@ -1383,6 +1468,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
@@ -1393,6 +1479,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
@@ -1403,6 +1490,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
@@ -1413,6 +1501,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
@@ -1423,6 +1512,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
@@ -1433,6 +1523,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
@@ -1443,6 +1534,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
@@ -1453,6 +1545,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
@@ -1463,6 +1556,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
                	jmp	<addr>
@@ -1473,6 +1567,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r9 # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r8 # <addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	<rip>, %rcx # <addr>
                	jmp	<addr>

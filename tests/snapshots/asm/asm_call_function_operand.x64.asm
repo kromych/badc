@@ -7,6 +7,29 @@ Disassembly of section .text:
                	endbr64
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
 
 <run_external>:
                	endbr64
@@ -30,6 +53,8 @@ Disassembly of section .text:
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	nop
+               	nop
 
 <run_local>:
                	endbr64
@@ -52,6 +77,8 @@ Disassembly of section .text:
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	nop
+               	nop
 
 <jump_external>:
                	endbr64

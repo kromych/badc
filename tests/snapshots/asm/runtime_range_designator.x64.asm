@@ -106,6 +106,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movl	0x8(%rsp,%rax,4), %edx
+               	nopl	(%rax)
                	cmpl	$0x13, %edx
                	jne	<addr>
                	incq	%rax
@@ -132,6 +133,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	movl	0x8(%rsp,%rax,4), %edx
+               	nopl	(%rax,%rax)
                	cmpl	$0xb, %edx
                	jne	<addr>
                	incq	%rax

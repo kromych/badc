@@ -67,6 +67,7 @@ Disassembly of section .text:
                	divq	%r9
                	addq	%rax, %rsi
                	incq	%rcx
+               	nopl	(%rax,%rax)
                	cmpl	$0x40, %ecx
                	jl	<addr>
                	movq	%rsi, %rax
@@ -91,6 +92,7 @@ Disassembly of section .text:
                	addq	$0x5, %rsi
                	movq	%rsi, 0x110(%rsp,%rax,8)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x40, %eax
                	jl	<addr>
                	xorl	%ecx, %ecx
@@ -130,6 +132,7 @@ Disassembly of section .text:
                	divq	%rsi
                	leaq	(%r9,%rax), %r12
                	incq	%rcx
+               	nopw	(%rax,%rax)
                	cmpl	$0x40, %ecx
                	jl	<addr>
                	leaq	0x10(%rsp), %rdi

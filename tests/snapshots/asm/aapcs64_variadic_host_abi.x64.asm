@@ -73,6 +73,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	incq	%rax
                	movl	-0xd0(%rbp), %edx
+               	nopl	(%rax,%rax)
                	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -127,6 +128,7 @@ Disassembly of section .text:
                	vaddsd	(%rcx), %xmm0, %xmm0
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
+               	nopl	(%rax)
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -166,6 +168,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
+               	nop
                	cmpl	%ecx, %eax
                	jge	<addr>
                	testb	$0x1, %al
@@ -261,6 +264,7 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	incq	%rcx
                	movl	-0xe0(%rbp), %edx
+               	nopl	(%rax,%rax)
                	cmpl	%edx, %ecx
                	jl	<addr>
                	xorl	%ecx, %ecx

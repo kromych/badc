@@ -20,6 +20,13 @@ Disassembly of section .text:
                	movq	$-0xe, %rax
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
 
 <put_user_pair>:
                	endbr64

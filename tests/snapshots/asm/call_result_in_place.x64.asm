@@ -386,6 +386,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%r13)
                	movups	0x10(%rax), %xmm14
                	movups	%xmm14, 0x10(%r13)
+               	nopl	(%rax)
                	testl	%ebx, %ebx
                	jne	<addr>
                	movq	0x20(%rsp), %rax
@@ -393,6 +394,7 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
+               	nopl	(%rax,%rax)
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	0x28(%rsp), %rcx
@@ -435,6 +437,7 @@ Disassembly of section .text:
                	cmpq	$0x2, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
+               	nopl	(%rax)
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	0x38(%rsp), %rax
@@ -451,6 +454,7 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
+               	nopl	(%rax)
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	0x28(%rsp), %rcx

@@ -44,6 +44,7 @@ Disassembly of section .text:
                	subq	%rdi, %rsi
                	testl	%esi, %esi
                	je	<addr>
+               	nopw	(%rax,%rax)
                	cmpl	$0x4, %ecx
                	je	<addr>
                	addq	%rcx, %rax

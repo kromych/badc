@@ -71,6 +71,7 @@ Disassembly of section .text:
                	movzbq	0x20(%rsp,%rax), %rcx
                	movb	%cl, (%rbx,%rax)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x40, %eax
                	jb	<addr>
                	xorl	%eax, %eax
@@ -92,6 +93,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movb	%al, 0x10(%rsp,%rax)
                	incq	%rax
+               	nop
                	cmpl	$0x20, %eax
                	jl	<addr>
                	leaq	0x30(%rsp), %rdi

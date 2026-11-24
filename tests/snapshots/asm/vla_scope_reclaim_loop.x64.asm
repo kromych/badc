@@ -49,6 +49,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	%eax, (%rcx,%rax,4)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x40, %eax
                	jl	<addr>
                	movq	%rsi, %rax
@@ -57,6 +58,7 @@ Disassembly of section .text:
                	addq	%rax, %rdi
                	movq	%r8, %rsp
                	incq	%rsi
+               	nopl	(%rax)
                	cmpl	$0x186a0, %esi          # imm = 0x186A0
                	jl	<addr>
                	xorl	%eax, %eax
@@ -65,6 +67,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rdx
                	addq	%rdx, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jl	<addr>
                	xorl	%eax, %eax

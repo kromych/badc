@@ -196,6 +196,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	incq	%rbx
+               	nopw	(%rax,%rax)
                	cmpl	$0x8, %ebx
                	jl	<addr>
                	xorl	%ebx, %ebx
@@ -339,6 +340,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
+               	nopw	%cs:(%rax,%rax)
                	cmpq	$0x0, 0x18(%rsp)
                	jne	<addr>
                	incq	%rbx

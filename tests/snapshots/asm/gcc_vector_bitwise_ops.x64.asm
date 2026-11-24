@@ -268,6 +268,7 @@ Disassembly of section .text:
                	movzbq	0x30(%rsp,%rax), %r8
                	movzbq	0x10(%rsp,%rax), %r9
                	xorq	%r9, %r8
+               	nop
                	cmpl	%r8d, %edi
                	jne	<addr>
                	incq	%rax

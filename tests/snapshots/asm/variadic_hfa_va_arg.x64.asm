@@ -509,6 +509,7 @@ Disassembly of section .text:
                	vaddsd	0x8(%rcx), %xmm2, %xmm1
                	incq	%rax
                	movl	-0x110(%rbp), %ecx
+               	nopl	(%rax,%rax)
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x38(%rbp), %rax

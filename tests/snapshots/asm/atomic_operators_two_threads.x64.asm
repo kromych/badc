@@ -112,6 +112,7 @@ Disassembly of section .text:
                	movq	-0x50(%rsp), %rax
                	movq	-0x48(%rsp), %rbx
                	movq	%r10, %rsi
+               	nopl	(%rax)
                	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi # <addr>
@@ -156,6 +157,7 @@ Disassembly of section .text:
                	movq	-0x50(%rsp), %rax
                	movq	-0x48(%rsp), %rbx
                	movq	%r10, %rdx
+               	nopl	(%rax,%rax)
                	testq	%rdx, %rdx
                	je	<addr>
                	leaq	<rip>, %rdx # <addr>
@@ -184,6 +186,7 @@ Disassembly of section .text:
                	movzbq	0x68(%rsp), %rcx
                	movzbq	0x69(%rsp), %rax
                	movzbq	0x6a(%rsp), %rdx
+               	nopl	(%rax)
                	cmpl	%eax, %ecx
                	jne	<addr>
                	cmpl	%edx, %eax
@@ -287,6 +290,7 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	leaq	(%rcx,%rcx,2), %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x9c40, %eax           # imm = 0x9C40
                	jl	<addr>
                	leaq	<rip>, %rax # <addr>

@@ -196,6 +196,7 @@ Disassembly of section .text:
                	xorq	%r8, %rdi
                	imulq	%rcx, %rdi
                	incq	%rax
+               	nop
                	cmpl	%edx, %eax
                	jl	<addr>
                	movq	%rdi, %rax
@@ -232,6 +233,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -337,6 +339,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -355,6 +358,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -415,6 +419,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -708,6 +713,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -747,6 +753,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -848,6 +855,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -926,6 +934,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -1074,6 +1083,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -1314,6 +1324,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -1554,6 +1565,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -1794,6 +1806,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5097,6 +5110,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5110,6 +5124,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5260,6 +5275,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5282,6 +5298,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5295,6 +5312,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5308,6 +5326,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5321,6 +5340,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5334,6 +5354,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5347,6 +5368,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5498,6 +5520,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -5530,6 +5553,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
@@ -6082,6 +6106,7 @@ Disassembly of section .text:
                	vmovups	(%r10), %ymm5
                	callq	<addr>
                	incq	%rbx
+               	nopl	(%rax,%rax)
                	cmpl	$0x96, %ebx
                	jl	<addr>
                	incq	%r15

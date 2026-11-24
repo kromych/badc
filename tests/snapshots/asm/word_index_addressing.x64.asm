@@ -127,6 +127,7 @@ Disassembly of section .text:
                	movswq	(%rdi,%rcx,2), %rdx
                	addq	%rdx, %rax
                	decq	%rcx
+               	nopl	(%rax,%rax)
                	testl	%ecx, %ecx
                	jge	<addr>
                	retq
@@ -140,6 +141,7 @@ Disassembly of section .text:
                	movzbq	(%rdi,%r8), %r8
                	addq	%r8, %rax
                	incq	%rdx
+               	nopl	(%rax,%rax)
                	cmpl	%ecx, %edx
                	jb	<addr>
                	retq

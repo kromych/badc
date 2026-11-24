@@ -211,6 +211,7 @@ Disassembly of section .text:
                	cmpq	%rax, %rdx
                	jne	<addr>
                	incq	%rcx
+               	nopl	(%rax,%rax)
                	cmpl	$0x8, %ecx
                	jb	<addr>
                	xorl	%eax, %eax

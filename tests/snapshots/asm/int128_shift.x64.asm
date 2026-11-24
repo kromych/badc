@@ -99,6 +99,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax,%rcx,8), %r14
                	leaq	0x1e(%rcx), %rax
+               	nop
                	cmpq	%rbx, %r9
                	jne	<addr>
                	cmpq	%r14, %r12
@@ -143,6 +144,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	jmp	<addr>
                	xorl	%eax, %eax
+               	nopl	(%rax)
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>

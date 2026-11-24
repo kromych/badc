@@ -157,6 +157,7 @@ Disassembly of section .text:
                	movss	(%rax), %xmm0
                	vzeroupper
                	callq	<addr>
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x7fc00001, %eax       # imm = 0x7FC00001
                	jne	<addr>
                	leaq	(%rsp), %rax
@@ -164,6 +165,7 @@ Disassembly of section .text:
                	movss	0x4(%rax), %xmm0
                	vzeroupper
                	callq	<addr>
+               	nop
                	cmpl	$0xffc00002, %eax       # imm = 0xFFC00002
                	jne	<addr>
                	leaq	(%rsp), %rax
@@ -258,6 +260,7 @@ Disassembly of section .text:
                	movss	0x18(%rax), %xmm0
                	vzeroupper
                	callq	<addr>
+               	nopl	(%rax)
                	cmpl	$0x7fc00003, %eax       # imm = 0x7FC00003
                	jne	<addr>
                	leaq	(%rsp), %rax
@@ -265,6 +268,7 @@ Disassembly of section .text:
                	movss	0x1c(%rax), %xmm0
                	vzeroupper
                	callq	<addr>
+               	nop
                	cmpl	$0x7fc00001, %eax       # imm = 0x7FC00001
                	jne	<addr>
                	incq	%rbx
@@ -335,6 +339,7 @@ Disassembly of section .text:
                	leaq	(%r8,%rdx), %rsi
                	movsd	(%rsi), %xmm0
                	movq	%xmm0, %r9
+               	nop
                	cmpq	%rdi, %r9
                	jne	<addr>
                	movsd	0x8(%rsi), %xmm0
@@ -356,6 +361,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rdx
                	jne	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	vmovdqa	%xmm1, %xmm0

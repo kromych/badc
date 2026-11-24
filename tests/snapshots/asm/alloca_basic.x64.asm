@@ -86,6 +86,7 @@ Disassembly of section .text:
                	subq	$0x3, %rcx
                	movl	%ecx, (%rsi,%rax,4)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0xa, %eax
                	jl	<addr>
                	xorl	%ecx, %ecx
@@ -178,6 +179,7 @@ Disassembly of section .text:
                	movq	%rax, (%rdx)
                	addq	%rax, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	%edi, %eax
                	jl	<addr>
                	movq	%rcx, %rax

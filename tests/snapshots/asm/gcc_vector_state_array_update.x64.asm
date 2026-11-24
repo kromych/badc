@@ -1503,6 +1503,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	incq	%r8
@@ -1530,6 +1531,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movzbq	0x208(%rsp,%rax), %rcx
                	movzbq	0x1b8(%rsp,%rax), %rdx
+               	nop
                	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax

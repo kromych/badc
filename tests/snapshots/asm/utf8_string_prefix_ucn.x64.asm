@@ -57,6 +57,7 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	movsbq	(%rdx,%rax), %rdi
                	andq	$0xff, %rdi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -69,6 +70,7 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	movsbq	(%rdx,%rax), %rdi
                	andq	$0xff, %rdi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -81,6 +83,7 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	movsbq	(%rdx,%rax), %rdi
                	andq	$0xff, %rdi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -93,6 +96,7 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	movsbq	(%rdx,%rax), %rdi
                	andq	$0xff, %rdi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -105,6 +109,7 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	movsbq	(%rdx,%rax), %rdi
                	andq	$0xff, %rdi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -117,6 +122,7 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	movsbq	(%rdx,%rax), %rdi
                	andq	$0xff, %rdi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -132,6 +138,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jb	<addr>
                	xorl	%eax, %eax

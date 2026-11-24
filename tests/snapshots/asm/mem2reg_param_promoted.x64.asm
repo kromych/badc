@@ -37,6 +37,7 @@ Disassembly of section .text:
                	xorl	%r14d, %r14d
                	leaq	-0x1(%r13), %rbx
                	xorl	%r12d, %r12d
+               	nop
                	cmpl	$0x2, %ebx
                	jl	<addr>
                	leaq	-0x1(%rbx), %rdi

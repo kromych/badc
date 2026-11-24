@@ -85,6 +85,7 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	callq	<addr>
                	leaq	0x40(%rbx), %rax
+               	nopw	(%rax,%rax)
                	testb	$0x3f, %al
                	movl	$0x1, %eax
                	jne	<addr>
@@ -187,6 +188,7 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	movl	$0x1, %ecx
+               	nop
                	testq	%rax, %rax
                	jne	<addr>
                	movq	%r15, %rax

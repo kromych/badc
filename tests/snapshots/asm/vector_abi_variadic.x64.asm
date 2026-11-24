@@ -79,6 +79,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	incq	%rax
                	movl	-0xd0(%rbp), %edx
+               	nopl	(%rax)
                	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -299,6 +300,7 @@ Disassembly of section .text:
                	addsd	%xmm1, %xmm0
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
+               	nopl	(%rax,%rax)
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax

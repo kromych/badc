@@ -86,6 +86,7 @@ Disassembly of section .text:
                	imulq	$0x30, %rbx, %rax
                	addq	%rax, %rdx
                	movl	0x1c(%rdx), %esi
+               	nopw	(%rax,%rax)
                	cmpl	%esi, %ecx
                	jne	<addr>
                	testl	%ecx, %ecx

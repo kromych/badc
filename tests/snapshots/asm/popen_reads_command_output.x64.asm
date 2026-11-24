@@ -61,6 +61,7 @@ Disassembly of section .text:
                	je	<addr>
                	cmpl	$0xd, %ecx
                	je	<addr>
+               	nopw	(%rax,%rax)
                	cmpl	$0x20, %ecx
                	je	<addr>
                	leaq	0x10(%rsp), %rdi

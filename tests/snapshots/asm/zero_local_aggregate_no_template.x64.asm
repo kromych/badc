@@ -62,6 +62,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x1e0(%rcx)
                	movups	%xmm14, 0x1f0(%rcx)
                	xorl	%eax, %eax
+               	nopl	(%rax,%rax)
                	cmpb	$0x0, (%rsp,%rax)
                	jne	<addr>
                	incq	%rax

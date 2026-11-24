@@ -61,6 +61,7 @@ Disassembly of section .text:
                	testl	%edx, %edx
                	cmovneq	%r8, %rax
                	incq	%rcx
+               	nop
                	cmpq	%rsi, %rcx
                	jb	<addr>
                	retq
@@ -236,6 +237,7 @@ Disassembly of section .text:
                	jae	<addr>
                	movq	$0x0, (%rax)
                	addq	$0x8, %rax
+               	nop
                	cmpq	%rcx, %rax
                	jb	<addr>
                	callq	<addr>

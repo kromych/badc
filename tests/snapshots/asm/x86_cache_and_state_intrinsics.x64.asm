@@ -49,6 +49,7 @@ Disassembly of section .text:
                	movzbq	(%rdx,%rax), %rsi
                	orq	%rsi, %rcx
                	decq	%rax
+               	nopl	(%rax)
                	testl	%eax, %eax
                	jge	<addr>
                	cmpl	$0x37f, %ecx            # imm = 0x37F

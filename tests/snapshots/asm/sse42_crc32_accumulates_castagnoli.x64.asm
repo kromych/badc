@@ -240,6 +240,7 @@ Disassembly of section .text:
                	movq	%rbx, %r12
                	shrq	$0x20, %r12
                	incq	%r13
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0xc8, %r13d
                	jl	<addr>
                	xorl	%eax, %eax

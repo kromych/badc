@@ -44,6 +44,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	(%rdi,%rax,8), %rcx
                	orq	$0x1, %rcx
+               	nop
                	jmp	<addr>
                	movq	(%rdi,%rax,8), %rcx
                	jmp	<addr>

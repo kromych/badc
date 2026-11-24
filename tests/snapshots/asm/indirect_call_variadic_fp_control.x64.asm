@@ -58,6 +58,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
+               	nop
                	cmpl	%ecx, %eax
                	jge	<addr>
                	testb	$0x1, %al

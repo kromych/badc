@@ -54,6 +54,7 @@ Disassembly of section .text:
                	movsbq	(%rdi,%rax), %rdx
                	addq	%rdx, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%rcx, %rax
@@ -136,6 +137,7 @@ Disassembly of section .text:
                	movl	$0x28, %edx
                	subq	%rax, %rdx
                	movb	%dl, 0x78(%rsp,%rax)
+               	nop
                	jmp	<addr>
                	leaq	0x30(%rsp), %r9
                	movq	%r9, %r10

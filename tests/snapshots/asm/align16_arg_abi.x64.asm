@@ -240,6 +240,7 @@ Disassembly of section .text:
                	imulq	%rax, %rdx
                	addq	%rdx, %rcx
                	movl	-0xd0(%rbp), %edx
+               	nopl	(%rax)
                	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax

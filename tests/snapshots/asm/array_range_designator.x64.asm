@@ -55,12 +55,14 @@ Disassembly of section .text:
                	addq	%r12, %rax
                	movq	(%rax), %rax
                	callq	*%rax
+               	nopl	(%rax)
                	cmpl	$0xb, %eax
                	jne	<addr>
                	leaq	<rip>, %rax # <addr>
                	addq	%r12, %rax
                	movq	0x8(%rax), %rax
                	callq	*%rax
+               	nopl	(%rax)
                	cmpl	$0x16, %eax
                	jne	<addr>
                	leaq	<rip>, %rax # <addr>

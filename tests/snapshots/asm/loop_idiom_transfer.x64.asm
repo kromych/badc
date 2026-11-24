@@ -40,6 +40,7 @@ Disassembly of section .text:
                	cmpl	$0x2, %edx
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movsbq	0x20(%rsp), %rax
@@ -176,6 +177,7 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%eax, %eax
                	movsbq	0x10(%rsp,%rax), %rdx
+               	nop
                	cmpl	$0x1, %edx
                	jne	<addr>
                	incq	%rax

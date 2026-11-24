@@ -120,6 +120,7 @@ Disassembly of section .text:
                	incq	%rcx
                	incq	%rsi
                	movq	%rdx, %rdi
+               	nop
                	testq	%rdi, %rdi
                	jne	<addr>
                	imulq	$0x64, %r8, %rax

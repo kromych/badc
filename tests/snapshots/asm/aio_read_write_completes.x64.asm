@@ -100,6 +100,7 @@ Disassembly of section .text:
                	je	<addr>
                	callq	<addr>
                	movl	(%rax), %eax
+               	nopw	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jne	<addr>
                	movq	%rbx, %rdi
@@ -174,6 +175,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
+               	nopl	(%rax)
                	cmpq	$0x73, %rax
                	je	<addr>
                	testl	%eax, %eax

@@ -39,6 +39,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x30(%rax)
                	xorl	%edx, %edx
                	movl	(%rsp,%rdx,4), %eax
+               	nopw	(%rax,%rax)
                	testl	%eax, %eax
                	jle	<addr>
                	leaq	0x1(%rdx), %rax
@@ -49,6 +50,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	je	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	incq	%rdx

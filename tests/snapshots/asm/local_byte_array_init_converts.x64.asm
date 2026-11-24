@@ -42,6 +42,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x5, %eax
                	jl	<addr>
                	xorl	%eax, %eax

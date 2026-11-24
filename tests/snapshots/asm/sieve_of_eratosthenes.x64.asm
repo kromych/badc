@@ -32,6 +32,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movq	%rcx, %rax
                	imulq	%rcx, %rax
+               	nopl	(%rax,%rax)
                	cmpq	$0x186a0, %rax          # imm = 0x186A0
                	jge	<addr>
                	cmpb	$0x0, (%rdx,%rcx)
@@ -40,6 +41,7 @@ Disassembly of section .text:
                	jge	<addr>
                	movb	$0x1, (%rdx,%rax)
                	addq	%rcx, %rax
+               	nopl	(%rax)
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jl	<addr>
                	jmp	<addr>

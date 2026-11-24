@@ -107,6 +107,7 @@ Disassembly of section .text:
                	addq	%rax, %rsi
                	movswq	0xa(%rsi), %rsi
                	addq	$0x5, %rdx
+               	nop
                	cmpl	%edx, %esi
                	jne	<addr>
                	movl	$0x6, %ebx
@@ -121,6 +122,7 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	movswq	0xe(%rdx), %rdx
                	addq	$0x7, %rsi
+               	nopw	(%rax,%rax)
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rcx

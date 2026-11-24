@@ -34,6 +34,7 @@ Disassembly of section .text:
                	movzbq	-0x1(%rdi), %rcx
                	addq	%rcx, %rax
                	subq	$0x1, %rsi
+               	nopl	(%rax,%rax)
                	jae	<addr>
                	retq
 
@@ -48,6 +49,7 @@ Disassembly of section .text:
                	movzbq	-0x1(%rdi), %rcx
                	addq	%rcx, %rax
                	movl	%esi, %ecx
+               	nop
                	movq	%rcx, %rsi
                	subq	$0x1, %rsi
                	jae	<addr>

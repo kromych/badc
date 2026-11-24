@@ -268,6 +268,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%r12, %r9
                	andq	%rsi, %r9
+               	nop
                	testq	%r9, %r9
                	je	<addr>
                	movq	%rcx, %r9
@@ -294,6 +295,7 @@ Disassembly of section .text:
                	shlq	%rsi
                	leaq	-0x1(%rcx), %r9
                	andq	%r9, %rcx
+               	nopl	(%rax)
                	testq	%rcx, %rcx
                	jne	<addr>
                	cmpq	$0xe, %rdx

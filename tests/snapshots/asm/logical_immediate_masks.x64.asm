@@ -183,6 +183,7 @@ Disassembly of section .text:
                	andq	$0x1234, %rax           # imm = 0x1234
                	xorq	%r8, %rax
                	incq	%rcx
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %ecx
                	jl	<addr>
                	retq
@@ -270,6 +271,7 @@ Disassembly of section .text:
                	movabsq	$-0x8000000000000000, %rsi # imm = 0x8000000000000000
                	movq	%rbx, %rdi
                	callq	<addr>
+               	nopl	(%rax,%rax)
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
@@ -310,6 +312,7 @@ Disassembly of section .text:
                	movabsq	$0xff00ff00ff00ff, %rsi # imm = 0xFF00FF00FF00FF
                	movq	%rbx, %rdi
                	callq	<addr>
+               	nopl	(%rax,%rax)
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi

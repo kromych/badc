@@ -32,6 +32,7 @@ Disassembly of section .text:
                	cmpq	$0x0, (%rcx,%rax,8)
                	je	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpq	$0x0, (%rcx,%rax,8)
                	jne	<addr>
                	testl	%eax, %eax

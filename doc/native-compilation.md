@@ -637,7 +637,7 @@ implement is refused, so a configure-time probe gets a true answer.
 | `-mharden-sls=none\|return\|indirect-jmp\|all` | straight-line-speculation barriers (x86-64) |
 | `-fcf-protection=none\|branch` | `endbr64` landing pads (x86-64); `return` and `full` are refused |
 | `-mbranch-protection=none\|bti\|pac-ret[+leaf]\|standard` | AArch64 only; see [below](#aarch64-branch-protection) |
-| `-mbranches-within-32B-boundaries` | x86-64: every function starts at a multiple of 32 bytes, and NOPs keep a jump or fused compare-and-jump from crossing or ending on a 32-byte boundary |
+| `-m[no-]branches-within-32B-boundaries` | x86-64: every function starts at a multiple of 32 bytes, and NOPs keep a jump or fused compare-and-jump from crossing or ending on a 32-byte boundary; or neither. Under `-O`, unless given, functions start on 32 bytes and only the jumps of blocks inside a loop are kept off the boundaries |
 | `-fno-zero-initialized-in-bss` | an object initialized to zero stays in `.data`; only one with no initializer goes to `.bss` |
 | `-fconserve-stack` | the inliner keeps the caller's frame within 100 bytes or 400% growth over its own, in place of 256 bytes and 1000% |
 

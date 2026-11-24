@@ -208,6 +208,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x8(%rsp), %r8
+               	nopl	(%rax,%rax)
                	testq	%rax, %rax
                	jne	<addr>
                	incq	%r8

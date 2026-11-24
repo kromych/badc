@@ -58,6 +58,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	vfmadd213sd	0x68(%rsp,%rax,8), %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) + mem
                	decq	%rax
+               	nopl	(%rax,%rax)
                	testl	%eax, %eax
                	jge	<addr>
                	movsd	<rip>, %xmm0
@@ -79,6 +80,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movsd	%xmm0, (%rdi,%rax,8)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x3, %eax
                	jge	<addr>
                	leaq	(%rsp), %rdi
@@ -94,6 +96,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
                	movq	%r11, %xmm0
+               	nopl	(%rax,%rax)
                	jmp	<addr>
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
@@ -138,10 +141,12 @@ Disassembly of section .text:
                	addq	%rcx, %rsi
                	vsubsd	0x8(%rsi), %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
+               	nopl	(%rax)
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm11
+               	nopw	(%rax,%rax)
                	comisd	%xmm0, %xmm11
                	jbe	<addr>
                	imulq	$0x18, %rax, %rsi
@@ -154,10 +159,12 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	vsubsd	0x10(%rcx), %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
+               	nopw	(%rax,%rax)
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
+               	nopw	%cs:(%rax,%rax)
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	incq	%rax

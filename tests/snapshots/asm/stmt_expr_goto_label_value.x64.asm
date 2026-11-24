@@ -41,12 +41,15 @@ Disassembly of section .text:
                	incq	%rdi
                	cmpl	$0x64, %edx
                	jae	<addr>
+               	nopw	%cs:(%rax,%rax)
+               	nop
                	cmpl	$0xc8, %edi
                	jae	<addr>
                	incq	%r8
                	addq	%rdx, %r9
                	leaq	0x1(%rdx), %rcx
                	movl	$0x64, %edx
+               	nopl	(%rax,%rax)
                	cmpl	$0x64, %ecx
                	jae	<addr>
                	movq	%rcx, %rax

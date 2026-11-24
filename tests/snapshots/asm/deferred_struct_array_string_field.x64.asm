@@ -57,6 +57,7 @@ Disassembly of section .text:
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	movq	0x10(%rdi), %rcx
+               	nop
                	cmpb	$0x0, (%rcx,%rax)
                	je	<addr>
                	movq	0x10(%rdi), %rcx
@@ -65,6 +66,7 @@ Disassembly of section .text:
                	cmpl	%esi, %ecx
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax,%rax)
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq

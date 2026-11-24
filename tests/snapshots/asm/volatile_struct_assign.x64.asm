@@ -122,6 +122,7 @@ Disassembly of section .text:
                	leaq	(%rdx,%rax), %r8
                	movq	%rdi, (%r8)
                	addq	$0x8, %rax
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x800, %eax            # imm = 0x800
                	jb	<addr>
                	xorl	%eax, %eax
@@ -129,6 +130,7 @@ Disassembly of section .text:
                	imulq	$0x7, %rax, %rdi
                	incq	%rdi
                	andq	$0xff, %rdi
+               	nop
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -138,6 +140,7 @@ Disassembly of section .text:
                	movq	(%rdx,%rax,8), %rcx
                	imulq	$0xf4243, %rax, %rsi    # imm = 0xF4243
                	subq	$0x5, %rsi
+               	nop
                	cmpq	%rsi, %rcx
                	jne	<addr>
                	incq	%rax

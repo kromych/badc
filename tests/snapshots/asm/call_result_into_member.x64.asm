@@ -1220,6 +1220,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp,%rbx,8), %rax
                	movl	$0x27, %edi
                	callq	*%rax
+               	nopl	(%rax,%rax)
                	testl	%eax, %eax
                	je	<addr>
                	incq	%rbx

@@ -76,6 +76,7 @@ Disassembly of section .text:
                	movsbq	-0x1(%rsi), %rcx
                	movb	%cl, -0x1(%rdi)
                	decq	%rax
+               	nopl	(%rax)
                	testl	%eax, %eax
                	jg	<addr>
                	xorl	%eax, %eax
@@ -99,6 +100,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movsbq	0x38(%rsp,%rax), %rcx
                	movsbq	0x10(%rsp,%rax), %rdx
+               	nop
                	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax

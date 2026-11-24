@@ -155,6 +155,7 @@ Disassembly of section .text:
                	andq	$0xff, %rdi
                	movb	%dil, (%rcx,%rax)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x30, %eax
                	jl	<addr>
                	incq	%r8
@@ -239,6 +240,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	movzbq	(%rdx,%rcx), %rdi
                	movzbq	0x40(%rsp,%rcx), %r8
+               	nopl	(%rax)
                	cmpl	%r8d, %edi
                	jne	<addr>
                	movzbq	(%rsi,%rcx), %rdi
@@ -246,6 +248,7 @@ Disassembly of section .text:
                	cmpl	%r8d, %edi
                	jne	<addr>
                	incq	%rcx
+               	nopl	(%rax,%rax)
                	cmpl	$0x30, %ecx
                	jl	<addr>
                	cmpl	%ebx, %eax

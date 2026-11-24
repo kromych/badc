@@ -42,6 +42,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	addl	$0x1, (%rcx)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x3, %eax
                	jge	<addr>
                	movl	0x8(%rsp), %esi

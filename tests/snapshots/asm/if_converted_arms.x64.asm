@@ -113,6 +113,7 @@ Disassembly of section .text:
                	cmpl	%edx, %r9d
                	cmovlq	%r8, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%rcx, %rax
@@ -471,6 +472,7 @@ Disassembly of section .text:
                	movl	$0x7, %esi
                	testq	%rcx, %rcx
                	cmoveq	%rsi, %rdx
+               	nopw	(%rax,%rax)
                	cmpq	%rdx, %rax
                	jne	<addr>
                	leaq	0x48(%rsp), %rax
@@ -513,6 +515,7 @@ Disassembly of section .text:
                	movl	$0x5, %esi
                	testq	%rcx, %rcx
                	cmoveq	%rsi, %rdx
+               	nopl	(%rax)
                	cmpq	%rdx, %rax
                	jne	<addr>
                	incq	%rcx

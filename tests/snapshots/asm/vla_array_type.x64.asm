@@ -51,6 +51,7 @@ Disassembly of section .text:
                	imulq	$0xa, %rax, %rdx
                	movl	%edx, (%rcx,%rax,4)
                	incq	%rax
+               	nop
                	cmpl	%edi, %eax
                	jl	<addr>
                	movq	%rdi, %rax
@@ -276,6 +277,7 @@ Disassembly of section .text:
                	addq	%rdx, %r8
                	movq	%r8, (%rcx,%rax,8)
                	incq	%rax
+               	nop
                	cmpl	%edi, %eax
                	jl	<addr>
                	movq	%rdi, %rax

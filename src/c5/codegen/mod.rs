@@ -1344,6 +1344,16 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
     ReturnExt::None
 }
 
+/// Which x86-64 branch groups keep off 32-byte boundaries, which a core with
+/// the update for Intel erratum SKX102 otherwise decodes on every pass
+/// through: none, those of blocks inside a loop, or all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BranchPadding {
+    Off,
+    Loops,
+    All,
+}
+
 /// True when `return_type_tag` is an integer type narrower than the return
 /// register at `target`, so the result occupies the low word and bits 32..63
 /// carry none of it (SysV AMD64 3.2.3, AAPCS64 6.9, Win64: a sub-register
@@ -4906,10 +4916,11 @@ pub struct NativeOptions {
     /// A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
-    /// x86-64 `-mbranches-within-32B-boundaries`: function entries on 32
-    /// bytes, and no local jump or fused compare-and-jump crossing or ending
-    /// on a 32-byte boundary.
-    pub branches_within_32b: bool,
+    /// x86-64 `-m[no-]branches-within-32B-boundaries`: function entries on
+    /// 32 bytes, and no local jump or fused compare-and-jump crossing or
+    /// ending on a 32-byte boundary, everywhere or nowhere; unset, the groups
+    /// inside loops under `-O` ([`Self::branch_padding`]).
+    pub branches_within_32b: Option<bool>,
     /// Leave the program, the lowering and dead bodies unfreed to the process exit.
     pub freed_by_exit: bool,
     /// `-fpatchable-function-entry=N,M`: the NOP area at every function
@@ -5356,7 +5367,7 @@ impl NativeOptions {
             stack_protect: StackProtect::OFF,
             fixed_regs: FixedRegs::NONE,
             min_function_alignment: 1,
-            branches_within_32b: false,
+            branches_within_32b: None,
             freed_by_exit: false,
             patchable_function_entry: PatchableEntry::NONE,
             profiling: Profiling::OFF,
@@ -5404,6 +5415,15 @@ impl NativeOptions {
     /// Whether a function may keep no frame pointer: as
     /// [`Self::omit_frame_pointer`] says, else under `-O`. Such a frame keeps
     /// the registers a lowering borrows in the red zone.
+    pub(crate) const fn branch_padding(&self) -> BranchPadding {
+        match self.branches_within_32b {
+            Some(true) => BranchPadding::All,
+            Some(false) => BranchPadding::Off,
+            None if self.optimizes() => BranchPadding::Loops,
+            None => BranchPadding::Off,
+        }
+    }
+
     pub(crate) const fn omits_frame_pointer(&self) -> bool {
         let asked = match self.omit_frame_pointer {
             Some(on) => on,

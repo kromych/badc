@@ -42,6 +42,7 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
+               	nop
                	cmpl	%esi, %eax
                	jne	<addr>
                	movq	%rcx, %rax

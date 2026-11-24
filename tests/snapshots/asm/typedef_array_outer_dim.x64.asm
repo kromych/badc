@@ -144,6 +144,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x78(%r8)
                	addq	%rdi, %rdx
                	incq	%rax
+               	nop
                	cmpl	$0x4, %eax
                	jl	<addr>
                	cmpq	%rsi, %rdx

@@ -224,6 +224,7 @@ Disassembly of section .text:
                	orq	%rsi, %rcx
                	movsbq	0xf0(%rsp,%rax), %rdx
                	movsbq	%cl, %rcx
+               	nopl	(%rax)
                	cmpl	%ecx, %edx
                	jne	<addr>
                	incq	%rax

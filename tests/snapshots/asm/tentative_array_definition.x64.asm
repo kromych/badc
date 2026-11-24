@@ -51,6 +51,7 @@ Disassembly of section .text:
                	cmovneq	%rdi, %rsi
                	incq	%rax
                	leaq	<rip>, %rdx # <addr>
+               	nopl	(%rax,%rax)
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	testq	%rsi, %rsi

@@ -145,6 +145,7 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	callq	<addr>
                	movq	0x18(%rsp), %rcx
+               	nopl	(%rax)
                	testq	%rax, %rax
                	je	<addr>
                	movl	0x8(%rax), %edx
@@ -154,6 +155,7 @@ Disassembly of section .text:
                	cmpl	$0x32, %edx
                	jne	<addr>
                	movq	(%rax), %rcx
+               	nopl	(%rax)
                	cmpq	$0x24, %rcx
                	jne	<addr>
                	leaq	0x50(%rsp), %rcx
@@ -170,12 +172,14 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
+               	nopl	(%rax)
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	0x58(%rsp), %ecx
                	testl	%ecx, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
+               	nopw	(%rax,%rax)
                	testq	%rcx, %rcx
                	je	<addr>
                	movzbq	0x5c(%rsp), %rcx
@@ -183,12 +187,14 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	xorl	%ecx, %ecx
+               	nopw	(%rax,%rax)
                	testq	%rdx, %rdx
                	je	<addr>
                	movzbq	0x5d(%rsp), %rdx
                	testl	%edx, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
+               	nopl	(%rax)
                	testq	%rdx, %rdx
                	je	<addr>
                	movzbq	0x5e(%rsp), %rdx
@@ -215,6 +221,7 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	jmp	<addr>
                	movq	%rdx, %rcx
+               	nopl	(%rax)
                	jmp	<addr>
                	movq	%rdx, %rcx
                	jmp	<addr>
@@ -610,6 +617,7 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	jne	<addr>
                	movq	(%rcx), %rax
+               	nopw	(%rax,%rax)
                	cmpq	$0x1c, %rax
                	jne	<addr>
                	leaq	0x68(%rsp), %rax

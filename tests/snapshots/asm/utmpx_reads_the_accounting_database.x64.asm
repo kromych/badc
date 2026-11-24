@@ -34,6 +34,7 @@ Disassembly of section .text:
                	cmpl	$0x186a0, %ebx          # imm = 0x186A0
                	jge	<addr>
                	movswq	(%rax), %rax
+               	nopl	(%rax)
                	testl	%eax, %eax
                	jl	<addr>
                	cmpl	$0x9, %eax

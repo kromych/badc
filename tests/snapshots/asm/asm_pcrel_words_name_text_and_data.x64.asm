@@ -118,14 +118,16 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <text_tbl>:
-               	enter	$-0x2, $-0x1
-               	jo	<addr>
+               	testb	$-0x2, %al
+               	<unknown>
+               	lock
+               	subl	%eax, (%rax)
+               	addb	%dl, (%rax)
                	addb	%al, (%rax)
-               	adcb	%al, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)
-               	addb	%al, (%rax)
-               	subb	%fs:(%rax), %al
+               	addb	%ah, %ah
+               	subl	%eax, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)

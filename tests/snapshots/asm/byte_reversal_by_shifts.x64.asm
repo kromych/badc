@@ -106,6 +106,7 @@ Disassembly of section .text:
                	movzbq	0x20(%rsp,%rcx), %rsi
                	orq	%rsi, %rdx
                	incq	%rcx
+               	nop
                	cmpl	$0x8, %ecx
                	jl	<addr>
                	cmpq	%rdx, %rax
@@ -150,6 +151,7 @@ Disassembly of section .text:
                	movzbq	0x30(%rsp,%rax), %rdx
                	orq	%rdx, %rcx
                	incq	%rax
+               	nop
                	cmpl	$0x4, %eax
                	jl	<addr>
                	cmpq	%rcx, %r8
@@ -166,6 +168,7 @@ Disassembly of section .text:
                	andq	$0xff, %rdi
                	movb	%dil, 0x38(%rsp,%rax)
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	xorl	%eax, %eax
@@ -173,6 +176,7 @@ Disassembly of section .text:
                	movzbq	0x38(%rsp,%rax), %rdx
                	orq	%rdx, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	cmpq	%rcx, %r8
@@ -189,6 +193,7 @@ Disassembly of section .text:
                	andq	$0xff, %rdi
                	movb	%dil, 0x40(%rsp,%rax)
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	xorl	%eax, %eax
@@ -196,6 +201,7 @@ Disassembly of section .text:
                	movzbq	0x40(%rsp,%rax), %rdx
                	orq	%rdx, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	cmpq	%rcx, %r8
@@ -219,6 +225,7 @@ Disassembly of section .text:
                	movzbq	0x48(%rsp,%rax), %rdx
                	orq	%rdx, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x2, %eax
                	jl	<addr>
                	cmpq	%rcx, %rdi
@@ -242,6 +249,7 @@ Disassembly of section .text:
                	movzbq	0x50(%rsp,%rax), %rdx
                	orq	%rdx, %rcx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x2, %eax
                	jl	<addr>
                	cmpq	%rcx, %rdi
@@ -259,6 +267,7 @@ Disassembly of section .text:
                	shrq	$0x18, %rcx
                	shlq	$0x10, %rcx
                	orq	%rdx, %rcx
+               	nop
                	cmpl	%ecx, %eax
                	jne	<addr>
                	movq	%rbx, %rdi
@@ -297,6 +306,7 @@ Disassembly of section .text:
                	shrq	$0x1d, %rax
                	xorq	%rax, %rbx
                	incq	%r13
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x1000, %r13d          # imm = 0x1000
                	jl	<addr>
                	xorl	%eax, %eax

@@ -90,6 +90,7 @@ Disassembly of section .text:
                	cmpl	$0x80000000, %ecx       # imm = 0x80000000
                	sete	%cl
                	movzbq	%cl, %rcx
+               	nop
                	cmpl	%ecx, %eax
                	jne	<addr>
                	incq	%rbx

@@ -495,6 +495,7 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	movq	0x8(%rax), %rdx
                	leaq	(%rsp), %rsi
+               	nopl	(%rax)
                	cmpq	%rsi, %rdx
                	jne	<addr>
                	movq	0x8(%rdx), %rdx

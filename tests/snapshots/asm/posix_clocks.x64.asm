@@ -46,11 +46,13 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movq	0x20(%rsp), %rax
+               	nopl	(%rax,%rax)
                	testq	%rax, %rax
                	jl	<addr>
                	movq	0x28(%rsp), %rax
                	testq	%rax, %rax
                	jl	<addr>
+               	nopw	(%rax,%rax)
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jge	<addr>
                	leaq	<rip>, %rax # <addr>
@@ -64,12 +66,14 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jl	<addr>
                	movq	0x48(%rsp), %rax
+               	nopw	(%rax,%rax)
                	testq	%rax, %rax
                	jl	<addr>
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jge	<addr>
                	cmpq	$0x0, 0x40(%rsp)
                	jne	<addr>
+               	nopl	(%rax)
                	cmpq	$0x0, 0x48(%rsp)
                	jne	<addr>
                	leaq	0x1e(%rbx), %rax
@@ -271,6 +275,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	0x38(%rsp), %rax
                	movq	0x28(%rsp), %rcx
+               	nopl	(%rax,%rax)
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movl	$0x1, %edi

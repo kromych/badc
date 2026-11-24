@@ -265,7 +265,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::FixedRegs::NONE,
                     false,
                     (true, true),
-                    false,
+                    super::super::BranchPadding::Off,
                 )
             };
             if ok.is_err() {

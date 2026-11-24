@@ -7936,9 +7936,10 @@ void g(double v) { coef[1] = v; }\n";
         .iter()
         .filter(|b| (b.is_jmp() || b.is_jcc()) && b.target() <= b.at)
         .map(|b| {
+            // A multi-byte NOP (`0F 1F /0`) names an address it does not access.
             (insns.iter())
                 .filter(|i| i.at >= b.target() && i.at <= b.at)
-                .filter(|i| i.modrm.is_some() && !i.reg_form())
+                .filter(|i| i.modrm.is_some() && !i.reg_form() && i.op != 0x0F1F)
                 .count()
         })
         .collect::<Vec<_>>();
@@ -8255,7 +8256,8 @@ fn a64_a_compare_with_a_small_negative_is_cmn() {
 /// Under `-mbranches-within-32B-boundaries` no local jump, nor a flag-setting
 /// instruction with the conditional jump it fuses with, crosses or ends on a
 /// 32-byte boundary, and the function starts on one; the same source has such
-/// groups without the option.
+/// groups under `-mno-`, and under `-O` with neither the loops' groups alone
+/// keep off the boundaries.
 #[test]
 fn x64_branch_groups_stay_within_32_byte_windows() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
@@ -8279,7 +8281,9 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
     )
     .compile()
     .expect("compile");
-    let groups = |on: bool| {
+    // Per option: the function's start, and the crossing groups and those of
+    // them that close a loop (a backward jump).
+    let groups = |on: Option<bool>| {
         // The frame form is fixed: the premise is a layout with a crossing.
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
@@ -8304,7 +8308,7 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
                 || (matches!(i.op, 0xF6 | 0xF7) && r == 0)
                 || (matches!(i.op, 0xFE | 0xFF) && r <= 1)
         };
-        let crossing = (insns.iter().enumerate())
+        let crossing: Vec<bool> = (insns.iter().enumerate())
             .filter(|(_, i)| i.is_jcc() || i.is_jmp())
             .filter(|&(k, i)| {
                 let from = match k.checked_sub(1).map(|p| &insns[p]) {
@@ -8314,17 +8318,26 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
                 let (lo, end) = (start + from, start + i.at + i.len);
                 lo / 32 != (end - 1) / 32 || end % 32 == 0
             })
-            .count();
-        (start, crossing)
+            .map(|(_, i)| i.target() <= i.at)
+            .collect();
+        (
+            start,
+            crossing.len(),
+            crossing.iter().filter(|&&b| b).count(),
+        )
     };
-    let (_, without) = groups(false);
+    let (_, without, _) = groups(Some(false));
     assert!(
         without > 0,
         "no group crosses a boundary without the option"
     );
-    let (start, with) = groups(true);
+    let (start, with, _) = groups(Some(true));
     assert_eq!(start % 32, 0);
     assert_eq!(with, 0);
+    // Unset under `-O`: the groups inside loops, the back edges among them.
+    let (start, _, back) = groups(None);
+    assert_eq!(start % 32, 0);
+    assert_eq!(back, 0);
 }
 
 /// A load, an addition, subtraction or bitwise operation on it and the store

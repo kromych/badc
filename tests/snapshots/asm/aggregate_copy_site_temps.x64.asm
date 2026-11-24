@@ -52,6 +52,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movzbq	0x38(%rsp,%rax), %rsi
                	movzbq	0x78(%rsp,%rax), %rdi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -66,6 +67,7 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	movb	%sil, 0x30(%rsp,%rax)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0xc, %eax
                	jb	<addr>
                	leaq	0x70(%rsp), %rcx
@@ -104,6 +106,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movzbq	0x30(%rsp,%rax), %rsi
                	movzbq	0x70(%rsp,%rax), %rdi
+               	nopl	(%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -118,6 +121,7 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	movb	%sil, 0x28(%rsp,%rax)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x18, %eax
                	jb	<addr>
                	leaq	0x68(%rsp), %rcx
@@ -170,6 +174,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x28, %eax
                	jb	<addr>
                	movl	$0x6, %ecx
@@ -223,6 +228,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
+               	nop
                	cmpl	$0x10, %eax
                	jb	<addr>
                	movl	$0x8, %ecx
@@ -327,6 +333,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movzbq	(%rdx,%rax), %rsi
                	movzbq	(%rcx,%rax), %rdi
+               	nopl	(%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -400,6 +407,7 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x1008, %eax           # imm = 0x1008
                	jb	<addr>
                	xorl	%eax, %eax

@@ -132,6 +132,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	(%rcx,%rax,4), %edi
                	leaq	0xbb8(%rax), %r8
+               	nop
                	cmpl	%r8d, %edi
                	jne	<addr>
                	incq	%rax

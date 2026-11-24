@@ -47,6 +47,7 @@ Disassembly of section .text:
                	cmpl	$0x3, %ecx
                	jb	<addr>
                	movq	<rip>, %rcx # <addr>
+               	nopw	(%rax,%rax)
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movq	%rdx, %rcx

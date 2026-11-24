@@ -44,6 +44,7 @@ Disassembly of section .text:
                	addq	%rdi, %rdx
                	addq	%rdx, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x3, %eax
                	jb	<addr>
                	cmpq	$0x45, %rcx
@@ -80,6 +81,7 @@ Disassembly of section .text:
                	addq	%rdi, %rsi
                	addq	%rsi, %rdx
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x3, %eax
                	jb	<addr>
                	cmpq	$0x2e, %rdx

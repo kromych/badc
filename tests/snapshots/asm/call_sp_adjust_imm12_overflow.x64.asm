@@ -2638,6 +2638,7 @@ Disassembly of section .text:
                	shlq	%rsi
                	movq	%rsi, 0x8(%rcx)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x105, %eax            # imm = 0x105
                	jl	<addr>
                	leaq	<rip>, %rax # <addr>

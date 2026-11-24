@@ -41,6 +41,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rbx
                	xorl	%r12d, %r12d
+               	nopw	(%rax,%rax)
                	movq	%rbx, %r13
                	addq	$0x9, %r13
                	jne	<addr>

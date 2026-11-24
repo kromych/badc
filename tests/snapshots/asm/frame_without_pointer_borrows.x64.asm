@@ -226,6 +226,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	%rax, %r12
                	incq	%rbx
+               	nopl	(%rax,%rax)
                	cmpl	$0x4, %ebx
                	jl	<addr>
                	movq	%r12, %rax

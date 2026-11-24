@@ -42,6 +42,7 @@ Disassembly of section .text:
                	movq	(%r11,%rax,8), %r10
                	jmpq	*%r10
                	movl	$0x1, %eax
+               	nop
                	cmpl	%edx, %eax
                	je	<addr>
                	jmp	<addr>
@@ -50,6 +51,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	jmp	<addr>
                	movl	$0x4, %eax
+               	nopl	(%rax)
                	jmp	<addr>
                	movl	$0x5, %eax
                	jmp	<addr>
@@ -58,6 +60,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	jmp	<addr>
                	movl	$0x8, %eax
+               	nopl	(%rax)
                	jmp	<addr>
                	movl	$0x9, %eax
                	jmp	<addr>

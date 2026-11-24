@@ -61,6 +61,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movq	%rdx, %rcx
                	xchgl	%ecx, (%rax)
+               	nopl	(%rax)
                	testl	%ecx, %ecx
                	jne	<addr>
                	movq	<rip>, %rax # <addr>

@@ -198,6 +198,7 @@ Disassembly of section .text:
                	xorq	%r9, %rax
                	movl	%eax, (%r12,%rdx,4)
                	incq	%rdx
+               	nopw	(%rax,%rax)
                	cmpl	$0x100, %edx            # imm = 0x100
                	jb	<addr>
                	xorl	%eax, %eax
@@ -271,6 +272,7 @@ Disassembly of section .text:
                	cmpl	%eax, %r12d
                	jne	<addr>
                	incq	%rbx
+               	nopl	(%rax,%rax)
                	cmpl	$0x3, %ebx
                	jl	<addr>
                	xorl	%eax, %eax

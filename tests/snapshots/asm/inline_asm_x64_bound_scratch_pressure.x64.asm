@@ -350,6 +350,7 @@ Disassembly of section .text:
                	incq	%rdx
                	movq	%rdx, (%rsp,%rax,8)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x12, %eax
                	jl	<addr>
                	movq	<rip>, %rdi # <addr>

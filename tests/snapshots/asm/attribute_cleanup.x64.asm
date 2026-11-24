@@ -87,6 +87,7 @@ Disassembly of section .text:
                	leaq	0x1(%rdx), %rsi
                	movl	%esi, <rip> # <addr>
                	movl	%eax, (%rcx,%rdx,4)
+               	nop
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
                	movslq	<rip>, %rcx # <addr>

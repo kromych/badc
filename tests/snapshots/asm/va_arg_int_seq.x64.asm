@@ -81,6 +81,7 @@ Disassembly of section .text:
                	callq	<addr>
                	incq	%rbx
                	movl	-0xc8(%rbp), %eax
+               	nop
                	cmpl	%eax, %ebx
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax

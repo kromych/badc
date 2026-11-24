@@ -45,6 +45,7 @@ Disassembly of section .text:
                	addq	$0x7, %rsi
                	addq	%rsi, %rdx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x32, %eax
                	jl	<addr>
                	cmpq	%rdx, %rcx

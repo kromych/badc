@@ -158,6 +158,7 @@ Disassembly of section .text:
                	je	<addr>
                	cmpl	$0x3, %ebx
                	je	<addr>
+               	nopl	(%rax)
                	cmpl	$0x6, %ebx
                	jne	<addr>
                	callq	<addr>
@@ -178,6 +179,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpl	$0x3, %ebx
                	jl	<addr>
+               	nopw	(%rax,%rax)
                	cmpl	$0x5, %ebx
                	jl	<addr>
                	cmpl	$0x6, %ebx
@@ -216,6 +218,7 @@ Disassembly of section .text:
                	orq	%r10, %rax
                	movslq	%r13d, %rsi
                	movzbq	0x50(%rsp,%rsi), %rcx
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0xaa, %ecx
                	movl	$0x1, %ecx
                	je	<addr>
@@ -242,6 +245,7 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	movl	0x10(%r14), %edx
+               	nopw	(%rax,%rax)
                	cmpl	%edx, %r12d
                	jne	<addr>
                	testl	%eax, %eax
@@ -249,6 +253,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jne	<addr>
                	jmp	<addr>
+               	nop
                	cmpl	$-0x8, %eax
                	jne	<addr>
                	movsd	0x48(%rsp), %xmm0
@@ -314,6 +319,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movq	%rax, %r12
+               	nop
                	jmp	<addr>
                	testq	%r13, %r13
                	je	<addr>

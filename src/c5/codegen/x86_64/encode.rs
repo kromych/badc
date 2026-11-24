@@ -2461,7 +2461,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             native.fixed_regs,
             native.optimizes(),
             (native.sibling_calls, native.red_zone),
-            native.branches_within_32b,
+            native.branch_padding(),
         )
     }
 

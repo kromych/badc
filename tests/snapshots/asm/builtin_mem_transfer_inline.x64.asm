@@ -193,6 +193,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	movb	%al, (%rcx,%rax)
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x18, %eax
                	jl	<addr>
                	leaq	<rip>, %rdi # <addr>
@@ -278,6 +279,7 @@ Disassembly of section .text:
                	cmpb	$0x0, 0x220(%rsp,%rax)
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x18, %eax
                	jb	<addr>
                	movzbq	0x238(%rsp), %rax

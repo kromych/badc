@@ -45,6 +45,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	addq	%rax, %rsi
                	movss	0x4(%rsi), %xmm1
+               	nopw	%cs:(%rax,%rax)
+               	nopl	(%rax)
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -63,6 +65,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	addq	%rsi, %rax
                	movss	0xc(%rax), %xmm1
+               	nopl	(%rax,%rax)
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>

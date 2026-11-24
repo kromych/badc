@@ -196,7 +196,7 @@ pub(crate) struct Codegen {
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
     pub(crate) align_functions: u32,
-    pub(crate) branches_within_32b: bool,
+    pub(crate) branches_within_32b: Option<bool>,
     pub(crate) patchable_function_entry: badc::PatchableEntry,
     pub(crate) profiling: badc::Profiling,
     pub(crate) fpic: bool,
@@ -244,7 +244,7 @@ impl Default for Codegen {
             keep_local_labels: false,
             min_function_alignment: 1,
             align_functions: 1,
-            branches_within_32b: false,
+            branches_within_32b: None,
             patchable_function_entry: badc::PatchableEntry::NONE,
             profiling: badc::Profiling::OFF,
             fpic: false,
@@ -1887,8 +1887,8 @@ impl Parser {
             "-mno-strict-align" => code.strict_align = false,
             // No jump or fused compare-and-jump crosses or ends on a
             // 32-byte boundary.
-            "-mbranches-within-32B-boundaries" => code.branches_within_32b = true,
-            "-mno-branches-within-32B-boundaries" => code.branches_within_32b = false,
+            "-mbranches-within-32B-boundaries" => code.branches_within_32b = Some(true),
+            "-mno-branches-within-32B-boundaries" => code.branches_within_32b = Some(false),
             // The x86 baseline, which every x86-64 unit already targets.
             "-mmmx" | "-msse" | "-msse2" => self.isa_args.push(arg.to_string()),
             s if s.starts_with("-march=") || s.starts_with("-mtune=") => {

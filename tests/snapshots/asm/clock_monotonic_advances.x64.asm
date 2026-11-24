@@ -67,6 +67,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, 0x28(%rsp)
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0xf4240, %eax          # imm = 0xF4240
                	jl	<addr>
                	movl	$0x1, %edi

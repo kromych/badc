@@ -33,6 +33,7 @@ Disassembly of section .text:
                	shlq	$0x3, %rcx
                	addq	%rdx, %rcx
                	movl	(%rcx), %esi
+               	nopl	(%rax)
                	cmpl	$0x9, %esi
                	jne	<addr>
                	movl	0x4(%rcx), %ecx

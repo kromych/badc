@@ -87,6 +87,7 @@ Disassembly of section .text:
                	andq	%rcx, %rax
                	xorq	%rdi, %rax
                	incq	%rdx
+               	nopw	(%rax,%rax)
                	cmpl	$0x9, %edx
                	jl	<addr>
                	retq
@@ -99,6 +100,7 @@ Disassembly of section .text:
                	andq	$0xff, %rdx
                	movb	%dl, (%rsp,%rax)
                	incq	%rax
+               	nop
                	cmpl	$0x3d, %eax
                	jl	<addr>
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF

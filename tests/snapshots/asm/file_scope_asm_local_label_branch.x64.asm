@@ -58,7 +58,6 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	popq	%r11
                	retq
-               	addb	%al, (%rax)
                	addb	%dl, -0x48(%rdx)
 
 <pv_unlock>:

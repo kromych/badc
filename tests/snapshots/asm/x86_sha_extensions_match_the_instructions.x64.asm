@@ -58,6 +58,7 @@ Disassembly of section .text:
                	xchgq	%rsi, %rdx
                	xchgq	%rcx, %rsi
                	xchgq	%rdi, %rcx
+               	nopl	(%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	vmovd	%edx, %xmm0

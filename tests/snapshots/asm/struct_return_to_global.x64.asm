@@ -37,6 +37,7 @@ Disassembly of section .text:
                	movq	%rdi, (%rcx)
                	movq	$0x1, 0x8(%rcx)
                	incq	%rax
+               	nop
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	<rip>, %rax # <addr>

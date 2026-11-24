@@ -106,6 +106,7 @@ Disassembly of section .text:
                	jne	<addr>
                	incq	%rax
                	movsbq	(%rsi,%rax), %rcx
+               	nopl	(%rax,%rax)
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rbx # <addr>

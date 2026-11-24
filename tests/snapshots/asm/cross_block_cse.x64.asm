@@ -48,6 +48,7 @@ Disassembly of section .text:
                	cmpl	$0xc8, %eax
                	jg	<addr>
                	movq	%rdx, %rcx
+               	nopl	(%rax)
                	testl	%ecx, %ecx
                	jg	<addr>
                	cmpl	$0x23, %eax
@@ -63,6 +64,7 @@ Disassembly of section .text:
                	subq	%rdi, %rcx
                	movl	0x8(%rsp,%rcx,4), %ecx
                	addq	%rcx, %rax
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0xc8, %eax
                	jg	<addr>
                	movq	%rdx, %rcx

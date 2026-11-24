@@ -32,6 +32,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movsbq	(%rcx,%rax), %rsi
                	movsbq	(%rdx,%rax), %rdi
+               	nop
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
@@ -47,6 +48,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movsbq	(%rsp,%rax), %rsi
                	movsbq	(%rdx,%rax), %rdi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax

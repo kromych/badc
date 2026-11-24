@@ -34,6 +34,7 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0x3, %eax
                	jl	<addr>
+               	nopl	(%rax,%rax)
                	cmpl	$0x3, %eax
                	je	<addr>
                	movq	%rdx, %rcx
@@ -44,6 +45,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x63, %ecx
                	jmp	<addr>
+               	nopl	(%rax)
                	cmpl	$0x1, %eax
                	jl	<addr>
                	movl	$0x62, %ecx
@@ -52,6 +54,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %edi
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x5, %eax
                	jl	<addr>
                	xorl	%eax, %eax

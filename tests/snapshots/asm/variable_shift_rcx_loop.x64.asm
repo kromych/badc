@@ -34,6 +34,7 @@ Disassembly of section .text:
                	jge	<addr>
                	leaq	(%rcx,%rax), %rdx
                	addq	%rsi, %rcx
+               	nopl	(%rax)
                	cmpq	%rdi, %rdx
                	jl	<addr>
                	retq

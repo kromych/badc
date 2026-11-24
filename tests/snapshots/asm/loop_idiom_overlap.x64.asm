@@ -123,6 +123,7 @@ Disassembly of section .text:
                	movsbq	(%rcx,%rax), %rdx
                	movb	%dl, (%rsi,%rax)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x9, %eax
                	jl	<addr>
                	jmp	<addr>

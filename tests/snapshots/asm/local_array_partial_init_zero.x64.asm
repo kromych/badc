@@ -77,6 +77,7 @@ Disassembly of section .text:
                	movl	0x38(%rsp,%rax,4), %edi
                	addq	%rdi, %rdx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x19, %eax
                	jl	<addr>
                	testl	%ecx, %ecx

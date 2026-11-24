@@ -88,6 +88,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	0x20(%rcx), %rsi
                	leaq	<rip>, %rdi # <addr>
+               	nopl	(%rax)
                	cmpq	%rdi, %rsi
                	jne	<addr>
                	movl	0x4(%rcx), %ecx
@@ -95,6 +96,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rcx # <addr>
                	addq	%rdx, %rcx
+               	nop
                	cmpq	$0x0, 0x28(%rcx)
                	jne	<addr>
                	incq	%rax
@@ -136,6 +138,7 @@ Disassembly of section .text:
                	movq	0x10(%rdx), %rdx
                	addq	%rdx, %rcx
                	incq	%rax
+               	nop
                	cmpl	$0x3, %eax
                	jl	<addr>
                	cmpq	$0x4200, %rcx           # imm = 0x4200

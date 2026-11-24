@@ -33,6 +33,7 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	sete	%sil
                	movzbq	%sil, %rsi
+               	nopl	(%rax,%rax)
                	testl	%esi, %esi
                	jne	<addr>
                	movq	%rax, %rcx

@@ -127,6 +127,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %esi
                	jne	<addr>
                	incq	%rax
+               	nop
                	cmpl	$0x8, %eax
                	jl	<addr>
                	movsd	0x18(%rsp), %xmm0

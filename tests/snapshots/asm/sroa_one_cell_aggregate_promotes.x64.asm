@@ -40,6 +40,7 @@ Disassembly of section .text:
                	cmovbq	%r8, %rax
                	movq	%rdi, %rcx
                	cmovbq	%r9, %rcx
+               	nopl	(%rax,%rax)
                	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	0x7(%rsi), %rax
@@ -84,6 +85,7 @@ Disassembly of section .text:
                	cmovbq	%rdi, %rax
                	movq	%r9, %rcx
                	cmovbq	%r8, %rcx
+               	nop
                	testl	%ecx, %ecx
                	jne	<addr>
                	cmpq	$0xd, %rdx

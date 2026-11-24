@@ -36,6 +36,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx # <addr>
                	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdx,%rax), %rdi
+               	nop
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax

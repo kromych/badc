@@ -22,6 +22,7 @@ Disassembly of section .text:
                	movl	$0x1a, %r13d
                	movl	$0xa, %ebx
                	jmp	<addr>
+               	nop
                	subq	$0x1, %rbx
                	je	<addr>
                	addl	$0x1, (%rip)            # <addr>
@@ -37,6 +38,8 @@ Disassembly of section .text:
                	movq	%rsp, %rcx
                	callq	<addr>
 		R_X86_64_PLT32	resched_thunk-0x4
+               	nopw	%cs:(%rax,%rax)
+               	nopl	(%rax)
                	movabsq	$-0x7ffffdfd00000000, %r11 # imm = 0x8000020300000000
                	movq	%rax, %rcx
                	cmpq	%r11, %rax
@@ -50,6 +53,32 @@ Disassembly of section .text:
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
+               	nop
 
 <enter_entry>:
                	endbr64

@@ -115,6 +115,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx # <addr>
                	movb	%sil, (%rdx,%rax)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	leaq	<rip>, %rdx # <addr>
@@ -126,6 +127,7 @@ Disassembly of section .text:
                	movabsq	$0x100000001b3, %rax    # imm = 0x100000001B3
                	imulq	%rdi, %rax
                	incq	%rcx
+               	nop
                	cmpl	$0x200, %ecx            # imm = 0x200
                	jl	<addr>
                	xorl	%ecx, %ecx

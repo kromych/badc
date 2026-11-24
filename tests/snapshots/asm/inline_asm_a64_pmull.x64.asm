@@ -35,6 +35,7 @@ Disassembly of section .text:
                	cmovneq	%rsi, %rcx
                	shlq	%rax
                	shrq	%rdx
+               	nopl	(%rax)
                	testq	%rdx, %rdx
                	jne	<addr>
                	andq	$0xffff, %rcx           # imm = 0xFFFF

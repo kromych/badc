@@ -108,6 +108,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx,%rbx,8), %rcx
                	orq	%r12, %rcx
+               	nopw	(%rax,%rax)
                	cmpq	%rcx, %rax
                	jne	<addr>
                	incq	%rbx
@@ -135,6 +136,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	jne	<addr>
                	incq	%rbx
+               	nopl	(%rax)
                	cmpl	$0x8, %ebx
                	jb	<addr>
                	xorl	%eax, %eax
@@ -144,6 +146,7 @@ Disassembly of section .text:
                	mulsd	%xmm1, %xmm0
                	movsd	%xmm0, 0x20(%rsp,%rax,8)
                	incq	%rax
+               	nop
                	cmpl	$0x40, %eax
                	jge	<addr>
                	leaq	0x20(%rsp), %rcx
@@ -151,6 +154,7 @@ Disassembly of section .text:
                	je	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
+               	nopl	(%rax)
                	jmp	<addr>
                	movabsq	$0x3fd0000000000000, %r11 # imm = 0x3FD0000000000000
                	movq	%r11, %xmm0
@@ -167,6 +171,7 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	%rax, %rcx
                	andq	$0x1, %rcx
+               	nopw	(%rax,%rax)
                	testq	%rcx, %rcx
                	je	<addr>
                	xorps	%xmm0, %xmm0

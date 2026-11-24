@@ -115,6 +115,7 @@ Disassembly of section .text:
                	movl	(%rdx,%rax,4), %esi
                	addq	%rsi, %rcx
                	incq	%rax
+               	nop
                	cmpl	$0x3, %eax
                	jl	<addr>
                	incq	%rdi

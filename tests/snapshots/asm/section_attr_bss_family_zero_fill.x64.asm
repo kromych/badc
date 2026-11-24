@@ -48,6 +48,7 @@ Disassembly of section .text:
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	xorl	%eax, %eax
+               	nopw	(%rax,%rax)
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	incq	%rax

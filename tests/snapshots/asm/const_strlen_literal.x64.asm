@@ -104,6 +104,7 @@ Disassembly of section .text:
                	incq	%rax
                	incq	%rcx
                	movsbq	(%rax), %rdx
+               	nopl	(%rax,%rax)
                	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	(%rax), %rax

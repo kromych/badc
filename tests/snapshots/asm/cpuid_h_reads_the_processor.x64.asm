@@ -69,6 +69,7 @@ Disassembly of section .text:
                	cmpl	$0x7e, %edi
                	jg	<addr>
                	incq	%rsi
+               	nopw	(%rax,%rax)
                	cmpl	$0xc, %esi
                	jl	<addr>
                	leaq	-0x20(%rbp), %rdi

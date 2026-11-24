@@ -414,6 +414,7 @@ Disassembly of section .text:
                	xorq	%rsi, %rcx
                	movl	%ecx, (%rdx,%rax,4)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	xorl	%eax, %eax
@@ -468,6 +469,7 @@ Disassembly of section .text:
                	leaq	0x2f0(%rsp), %rdi
                	addq	%rcx, %rdi
                	movl	(%rdi,%rax,4), %edi
+               	nopl	(%rax,%rax)
                	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax

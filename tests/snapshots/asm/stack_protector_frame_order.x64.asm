@@ -33,6 +33,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movb	$0x3, (%rsp,%rax)
                	incq	%rax
+               	nop
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movsbq	(%rsp), %rax

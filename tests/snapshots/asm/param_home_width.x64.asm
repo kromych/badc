@@ -34,6 +34,7 @@ Disassembly of section .text:
                	leaq	(%rcx,%rcx,2), %rcx
                	leaq	0x1(%rcx), %rdi
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%rdi, %rax
@@ -49,6 +50,7 @@ Disassembly of section .text:
                	leaq	(%rcx,%rcx,2), %rcx
                	leaq	0x1(%rcx), %rdi
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%rdi, %rax
@@ -125,6 +127,7 @@ Disassembly of section .text:
                	sete	%dil
                	movzbq	%dil, %rdi
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%rdi, %rax

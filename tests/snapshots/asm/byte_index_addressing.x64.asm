@@ -164,6 +164,7 @@ Disassembly of section .text:
                	cmpb	$0x0, (%rdi,%rax)
                	cmoveq	%rdx, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%rcx, %rax
@@ -526,6 +527,7 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jge	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	nopw	(%rax,%rax)
                	cmpb	$0x0, (%rdi,%rcx)
                	jne	<addr>
                	movl	<rip>, %eax # <addr>

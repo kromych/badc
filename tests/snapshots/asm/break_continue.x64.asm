@@ -36,6 +36,7 @@ Disassembly of section .text:
                	testl	%edx, %edx
                	cmovneq	%rsi, %rcx
                	incq	%rax
+               	nop
                	cmpl	$0xa, %eax
                	jl	<addr>
                	movq	%rcx, %rax

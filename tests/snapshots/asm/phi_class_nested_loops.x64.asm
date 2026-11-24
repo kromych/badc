@@ -36,6 +36,7 @@ Disassembly of section .text:
                	jge	<addr>
                	incq	%rcx
                	incq	%rdx
+               	nopl	(%rax)
                	cmpl	%edi, %edx
                	jl	<addr>
                	addq	%rcx, %rax
@@ -55,6 +56,7 @@ Disassembly of section .text:
                	jl	<addr>
                	addq	%rcx, %rax
                	incq	%rdi
+               	nopl	(%rax,%rax)
                	cmpl	$0x7, %edi
                	jl	<addr>
                	retq

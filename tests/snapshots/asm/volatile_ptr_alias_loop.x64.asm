@@ -34,6 +34,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, 0x8(%rsp)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0xa, %eax
                	jg	<addr>
                	movl	0x8(%rsp), %ecx

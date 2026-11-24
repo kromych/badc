@@ -95,6 +95,7 @@ Disassembly of section .text:
                	movq	%r10, 0x80(%rsp)
                	jmp	<addr>
                	incq	%rbx
+               	nopl	(%rax)
                	cmpl	0x78(%rsp), %ebx
                	jge	<addr>
                	addq	%rbx, %rax
@@ -115,6 +116,7 @@ Disassembly of section .text:
                	movq	0x80(%rsp), %r10
                	xorq	%r12, %r10
                	movq	%r10, 0x80(%rsp)
+               	nopl	(%rax)
                	testb	$0x7, %bl
                	jne	<addr>
                	movq	%rdi, 0x38(%rsp)
@@ -211,6 +213,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp,%r8,8), %rcx
                	addq	%rdi, %rcx
                	jmp	<addr>
+               	nopw	(%rax,%rax)
                	testb	$0x7, %bl
                	jne	<addr>
                	movq	0x10(%rsp), %rdi
@@ -427,6 +430,7 @@ Disassembly of section .text:
                	movups	%xmm0, 0x10(%rsp)
                	vpxor	%xmm0, %xmm1, %xmm1
                	vpaddd	%xmm1, %xmm2, %xmm2
+               	nop
                	testb	$0x1, %bl
                	jne	<addr>
                	movups	%xmm1, 0x20(%rsp)
@@ -604,12 +608,14 @@ Disassembly of section .text:
                	addq	%r12, %r8
                	movapd	%xmm4, %xmm2
                	vpinsrd	$0x3, %r8d, %xmm2, %xmm2
+               	nopl	(%rax)
                	testb	$0x1, %al
                	jne	<addr>
                	vmovd	%edi, %xmm1
                	vpinsrd	$0x1, %esi, %xmm1, %xmm1
                	vpinsrd	$0x2, %edx, %xmm1, %xmm1
                	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
+               	nop
                	jmp	<addr>
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax

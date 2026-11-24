@@ -153,6 +153,7 @@ Disassembly of section .text:
                	imulq	%rax, %rbx
                	addq	%rbx, %rdx
                	movq	(%r8,%rcx,8), %rax
+               	nop
                	testq	%rax, %rax
                	jl	<addr>
                	incq	%rcx
@@ -187,6 +188,7 @@ Disassembly of section .text:
                	shlq	%rbx
                	addq	%rbx, %rdx
                	movq	(%r8,%rcx,8), %rax
+               	nopw	(%rax,%rax)
                	testq	%rax, %rax
                	jl	<addr>
                	incq	%rcx
@@ -219,6 +221,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jl	<addr>
                	incq	%rcx
+               	nop
                	cmpl	%r9d, %ecx
                	jl	<addr>
                	leaq	(%rdx,%rcx), %rax
@@ -277,6 +280,7 @@ Disassembly of section .text:
                	imulq	%r12, %rsi
                	addq	%rsi, %rdx
                	movq	(%r9,%rcx,8), %rsi
+               	nop
                	cmpq	%rbx, %rsi
                	jl	<addr>
                	incq	%rcx
@@ -302,6 +306,7 @@ Disassembly of section .text:
                	imulq	%rbx, %rsi
                	addq	%rsi, %rdx
                	movq	(%r9,%rcx,8), %rsi
+               	nop
                	testq	%rsi, %rsi
                	jl	<addr>
                	incq	%rcx
@@ -389,6 +394,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jl	<addr>
                	incq	%rcx
+               	nopl	(%rax)
                	cmpl	%r9d, %ecx
                	jl	<addr>
                	leaq	(%rdx,%rcx), %rax
@@ -423,6 +429,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jl	<addr>
                	incq	%rcx
+               	nopw	(%rax,%rax)
                	cmpl	%r9d, %ecx
                	jl	<addr>
                	leaq	(%rdx,%rcx), %rax
@@ -504,12 +511,14 @@ Disassembly of section .text:
                	cmpl	%eax, %ecx
                	jge	<addr>
                	movq	(%r8,%rcx,8), %rsi
+               	nopl	(%rax)
                	testq	%rsi, %rsi
                	jl	<addr>
                	movq	(%rdi,%rcx,8), %r12
                	imulq	%r12, %rsi
                	addq	%rsi, %rdx
                	movq	(%r9,%rcx,8), %rsi
+               	nopl	(%rax,%rax)
                	cmpq	%rbx, %rsi
                	jl	<addr>
                	incq	%rcx
@@ -535,6 +544,7 @@ Disassembly of section .text:
                	imulq	%rbx, %rsi
                	addq	%rsi, %rdx
                	movq	(%r9,%rcx,8), %rsi
+               	nop
                	testq	%rsi, %rsi
                	jl	<addr>
                	incq	%rcx
@@ -618,6 +628,7 @@ Disassembly of section .text:
                	imulq	%rbx, %rsi
                	addq	%rsi, %rdx
                	movq	(%r9,%rcx,8), %rsi
+               	nopl	(%rax)
                	testq	%rsi, %rsi
                	jl	<addr>
                	incq	%rcx
@@ -654,6 +665,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jl	<addr>
                	incq	%rcx
+               	nopl	(%rax)
                	cmpl	%r9d, %ecx
                	jl	<addr>
                	leaq	(%rdx,%rcx), %rax
@@ -691,6 +703,7 @@ Disassembly of section .text:
                	imulq	%rbx, %rsi
                	addq	%rsi, %rdx
                	movq	(%r9,%rcx,8), %rsi
+               	nop
                	testq	%rsi, %rsi
                	jl	<addr>
                	incq	%rcx
@@ -726,6 +739,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jl	<addr>
                	incq	%rcx
+               	nopw	(%rax,%rax)
                	cmpl	%r9d, %ecx
                	jl	<addr>
                	leaq	(%rdx,%rcx), %rax

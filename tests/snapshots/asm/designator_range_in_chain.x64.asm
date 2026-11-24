@@ -57,6 +57,7 @@ Disassembly of section .text:
                	cmpl	$0x8, %ecx
                	jne	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x3, %eax
                	jl	<addr>
                	movl	<rip>, %eax # <addr>

@@ -389,6 +389,7 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	addb	%al, (%rax)
+               	addb	%cl, -0x73(%rax)
 
 <ms_ext>:
                	leaq	(%rdx,%rcx,8), %rax

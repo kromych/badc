@@ -52,6 +52,7 @@ Disassembly of section .text:
                	shlq	%rcx
                	movl	%ecx, (%rdx,%rax,4)
                	incq	%rax
+               	nop
                	cmpl	%edi, %eax
                	jl	<addr>
                	xorl	%eax, %eax

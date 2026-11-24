@@ -70,6 +70,7 @@ Disassembly of section .text:
                	andq	$0x1, %rdx
                	addq	%rdx, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%rcx, %rax

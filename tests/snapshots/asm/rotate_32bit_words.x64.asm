@@ -173,6 +173,7 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	jmp	<addr>
                	incq	%rcx
+               	nop
                	cmpl	$0x20, %ecx
                	jge	<addr>
                	shrxq	%rcx, %rbx, %rsi
@@ -200,6 +201,7 @@ Disassembly of section .text:
                	cmpl	$0x20, %ecx
                	jge	<addr>
                	shrxq	%rcx, %rbx, %rsi
+               	nopl	(%rax)
                	testb	$0x1, %sil
                	je	<addr>
                	movl	$0x1, %esi
@@ -208,6 +210,7 @@ Disassembly of section .text:
                	andq	$0x1f, %r8
                	shlxq	%r8, %rsi, %rsi
                	orq	%rsi, %rdx
+               	nopl	(%rax)
                	jmp	<addr>
                	cmpl	%edx, %eax
                	jne	<addr>
@@ -215,6 +218,7 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, 0x30(%rsp)
                	movl	0x30(%rsp), %eax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jb	<addr>
                	movq	%rbx, %rdi
@@ -223,6 +227,7 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	jmp	<addr>
                	incq	%rcx
+               	nopl	(%rax,%rax)
                	cmpl	$0x20, %ecx
                	jge	<addr>
                	shrxq	%rcx, %rbx, %rsi
@@ -257,6 +262,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	jne	<addr>
                	incq	%r12
+               	nopw	(%rax,%rax)
                	cmpl	$0x7, %r12d
                	jb	<addr>
                	leaq	0x20(%rsp), %rax
@@ -271,6 +277,7 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0xbfe1c8ab, %ecx       # imm = 0xBFE1C8AB
                	shrxq	%rax, %rcx, %rcx
+               	nopw	(%rax,%rax)
                	testb	$0x1, %cl
                	je	<addr>
                	movl	$0x1, %ecx
@@ -288,6 +295,7 @@ Disassembly of section .text:
                	movq	%rax, %r12
                	jmp	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x20, %eax
                	jge	<addr>
                	shrxq	%rax, %rcx, %rdx

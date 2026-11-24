@@ -45,7 +45,6 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%bh, 0x2(%rax)
 
 <asm_label_two>:

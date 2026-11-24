@@ -407,6 +407,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movb	%al, -0x18(%rbp,%rax)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x11, %eax
                	jl	<addr>
                	movups	-0x17(%rbp), %xmm0

@@ -225,6 +225,7 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %rdx
                	testq	%rcx, %rcx
                	je	<addr>
+               	nopl	(%rax)
                	cmpl	$0x0, 0x8(%rcx)
                	jne	<addr>
                	movl	0xc(%rcx), %eax
@@ -249,6 +250,7 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	xorl	%edx, %edx
+               	nopl	(%rax)
                	testq	%rax, %rax
                	je	<addr>
                	movl	0x78(%rsp), %eax

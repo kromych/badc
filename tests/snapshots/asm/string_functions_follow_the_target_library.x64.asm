@@ -195,6 +195,7 @@ Disassembly of section .text:
                	leaq	0x78(%rsp), %rdx
                	movq	%rbx, %rsi
                	callq	<addr>
+               	nopl	(%rax)
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	0x88(%rsp), %rdi

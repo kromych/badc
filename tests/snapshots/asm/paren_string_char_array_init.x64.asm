@@ -54,6 +54,7 @@ Disassembly of section .text:
                	cmpl	%r8d, %edi
                	jne	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpb	$0x0, (%rcx,%rax)
                	jne	<addr>
                	movsbq	<rip>, %rax # <addr>

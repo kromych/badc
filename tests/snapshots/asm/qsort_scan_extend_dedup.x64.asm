@@ -55,6 +55,7 @@ Disassembly of section .text:
                	jl	<addr>
                	movslq	%edx, %rdi
                	movl	(%r12,%rdi,4), %r8d
+               	nopl	(%rax)
                	cmpl	%eax, %r8d
                	jle	<addr>
                	decq	%rdx
@@ -74,6 +75,7 @@ Disassembly of section .text:
                	movq	%r12, %rdi
                	callq	<addr>
                	movq	%rbx, %rsi
+               	nopl	(%rax)
                	cmpl	%r13d, %esi
                	jl	<addr>
                	popq	%rbx
@@ -105,6 +107,7 @@ Disassembly of section .text:
                	movl	0x10(%rsp,%rax,4), %ecx
                	leaq	-0x1(%rax), %rsi
                	movl	0x10(%rsp,%rsi,4), %edx
+               	nopl	(%rax,%rax)
                	cmpl	%edx, %ecx
                	jl	<addr>
                	incq	%rax

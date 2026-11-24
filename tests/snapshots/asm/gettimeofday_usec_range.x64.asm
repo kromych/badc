@@ -44,6 +44,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jle	<addr>
                	incq	%rbx
+               	nopw	(%rax,%rax)
                	cmpl	$0x64, %ebx
                	jl	<addr>
                	xorl	%eax, %eax

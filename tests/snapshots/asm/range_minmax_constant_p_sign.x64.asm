@@ -69,6 +69,7 @@ Disassembly of section .text:
                	cmovbq	%rax, %rdx
                	addq	%rdx, %rcx
                	subq	%rdx, %rax
+               	nopw	(%rax,%rax)
                	testl	%eax, %eax
                	jg	<addr>
                	testq	%rcx, %rcx

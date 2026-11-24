@@ -341,6 +341,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movss	-0x28(%rbp,%rax,4), %xmm0
                	movss	-0x10(%rbp), %xmm1
+               	nopw	(%rax,%rax)
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -535,6 +536,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdx
                	andq	$0xff, %rdx
                	movzbq	-0x40(%rbp,%rax), %rsi
+               	nopl	(%rax)
                	cmpl	%edx, %esi
                	jne	<addr>
                	incq	%rax
@@ -606,6 +608,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	vmovq	-0x40(%rbp,%rax,8), %xmm0
                	movsd	-0x8(%rbp), %xmm1
+               	nopw	%cs:(%rax,%rax)
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -995,6 +998,7 @@ Disassembly of section .text:
                	cmpl	$-0x1, %edx
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x4, %eax
                	jb	<addr>
                	vzeroupper
@@ -1002,6 +1006,7 @@ Disassembly of section .text:
                	movsd	%xmm0, -0x28(%rbp)
                	xorl	%eax, %eax
                	movl	-0x28(%rbp,%rax,4), %edx
+               	nopl	(%rax,%rax)
                	cmpl	$0x12345, %edx          # imm = 0x12345
                	jne	<addr>
                	incq	%rax
@@ -1025,6 +1030,7 @@ Disassembly of section .text:
                	cmpl	$-0x1, %edx
                	jne	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x8, %eax
                	jb	<addr>
                	vzeroupper
@@ -1033,6 +1039,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movsbq	-0x28(%rbp,%rax), %rdx
                	leaq	0x1(%rax), %rsi
+               	nop
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax

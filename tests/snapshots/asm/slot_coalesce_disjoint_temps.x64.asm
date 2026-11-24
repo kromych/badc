@@ -44,6 +44,7 @@ Disassembly of section .text:
                	cmoveq	%rcx, %rdx
                	cmpl	$0xa, %edx
                	jle	<addr>
+               	nop
                	cmpl	$0x64, %edx
                	jge	<addr>
                	leaq	-0x1(%rdx), %rcx
@@ -60,6 +61,7 @@ Disassembly of section .text:
                	leaq	0x7(%rax), %rcx
                	testq	%r8, %r8
                	cmoveq	%rcx, %rdx
+               	nopl	(%rax)
                	cmpl	$0xa, %edx
                	jle	<addr>
                	cmpl	$0x64, %edx
@@ -71,6 +73,7 @@ Disassembly of section .text:
                	jle	<addr>
                	movq	%rcx, %r8
                	shlq	%r8
+               	nop
                	jmp	<addr>
                	movq	%rcx, %r8
                	jmp	<addr>
@@ -79,6 +82,7 @@ Disassembly of section .text:
                	movq	%rcx, %r9
                	jmp	<addr>
                	leaq	0x1(%rdx), %rcx
+               	nop
                	jmp	<addr>
                	xorl	%eax, %eax
                	movl	$0x1, %ecx

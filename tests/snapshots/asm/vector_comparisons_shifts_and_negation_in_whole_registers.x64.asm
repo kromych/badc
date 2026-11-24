@@ -75,6 +75,7 @@ Disassembly of section .text:
                	cmpl	%r9d, %ebx
                	movq	%rcx, %r9
                	cmovlq	%rdx, %r9
+               	nopw	(%rax,%rax)
                	cmpl	%r9d, %r8d
                	jne	<addr>
                	movsbq	0x50(%rsp,%rax), %r8
@@ -93,6 +94,7 @@ Disassembly of section .text:
                	movsbq	0x20(%rsp,%rax), %r9
                	cmpl	%ebx, %r9d
                	cmovleq	%r13, %r12
+               	nopl	(%rax,%rax)
                	cmpl	%r12d, %r8d
                	jne	<addr>
                	movsbq	0x70(%rsp,%rax), %r8
@@ -111,6 +113,7 @@ Disassembly of section .text:
                	movsbq	0x20(%rsp,%rax), %r9
                	cmpl	%ebx, %r9d
                	cmovneq	%r13, %r12
+               	nopl	(%rax,%rax)
                	cmpl	%r12d, %r8d
                	jne	<addr>
                	incq	%rax
@@ -178,6 +181,7 @@ Disassembly of section .text:
                	movzbq	0x90(%rsp,%rax), %r9
                	cmpl	%ebx, %r9d
                	cmovgq	%r13, %r12
+               	nop
                	cmpl	%r12d, %r8d
                	jne	<addr>
                	movsbq	0x60(%rsp,%rax), %r8
@@ -205,6 +209,7 @@ Disassembly of section .text:
                	movzbq	0x90(%rsp,%rax), %r9
                	cmpl	%ebx, %r9d
                	cmovneq	%r13, %r12
+               	nopl	(%rax)
                	cmpl	%r12d, %r8d
                	jne	<addr>
                	incq	%rax
@@ -257,6 +262,7 @@ Disassembly of section .text:
                	movswq	0xe8(%rsp,%rax,2), %r8
                	cmpl	%r9d, %r8d
                	cmovleq	%r12, %rbx
+               	nopl	(%rax,%rax)
                	cmpl	%ebx, %edi
                	jne	<addr>
                	movswq	0x120(%rsp,%rax,2), %rdi
@@ -308,6 +314,7 @@ Disassembly of section .text:
                	movzwq	0xf8(%rsp,%rax,2), %rbx
                	cmpl	%edi, %ebx
                	cmovgeq	%r9, %r8
+               	nopl	(%rax)
                	cmpl	%r8d, %esi
                	jne	<addr>
                	movswq	0x110(%rsp,%rax,2), %rsi
@@ -335,6 +342,7 @@ Disassembly of section .text:
                	movzwq	0xf8(%rsp,%rax,2), %rdi
                	cmpl	%r8d, %edi
                	cmovlq	%rbx, %r9
+               	nopl	(%rax)
                	cmpl	%r9d, %esi
                	jne	<addr>
                	movswq	0x128(%rsp,%rax,2), %rsi
@@ -399,6 +407,7 @@ Disassembly of section .text:
                	movl	0xb0(%rsp,%rax,4), %r8d
                	cmpl	%r9d, %r8d
                	cmovleq	%r12, %rbx
+               	nopl	(%rax,%rax)
                	cmpl	%ebx, %edi
                	jne	<addr>
                	movl	0x70(%rsp,%rax,4), %edi
@@ -417,6 +426,7 @@ Disassembly of section .text:
                	movl	0xb0(%rsp,%rax,4), %r8d
                	cmpl	%r9d, %r8d
                	cmovneq	%r12, %rbx
+               	nopl	(%rax)
                	cmpl	%ebx, %edi
                	jne	<addr>
                	incq	%rax
@@ -479,6 +489,7 @@ Disassembly of section .text:
                	movl	0x30(%rsp,%rax,4), %edi
                	cmpl	%r8d, %edi
                	cmovbq	%rbx, %r9
+               	nopl	(%rax)
                	cmpl	%r9d, %esi
                	jne	<addr>
                	movl	0x80(%rsp,%rax,4), %esi
@@ -491,6 +502,7 @@ Disassembly of section .text:
                	cmpl	%r9d, %esi
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	leaq	0xd0(%rsp), %rax
@@ -523,6 +535,7 @@ Disassembly of section .text:
                	movq	0xd0(%rsp,%rax,8), %rbx
                	cmpq	%rdi, %rbx
                	cmovgeq	%r9, %r8
+               	nopl	(%rax,%rax)
                	cmpq	%r8, %rsi
                	jne	<addr>
                	movq	0x50(%rsp,%rax,8), %rsi
@@ -541,6 +554,7 @@ Disassembly of section .text:
                	movq	0xd0(%rsp,%rax,8), %rdi
                	cmpq	%r8, %rdi
                	cmovleq	%rbx, %r9
+               	nopl	(%rax)
                	cmpq	%r9, %rsi
                	jne	<addr>
                	movq	0x70(%rsp,%rax,8), %rsi
@@ -559,6 +573,7 @@ Disassembly of section .text:
                	movq	0xd0(%rsp,%rax,8), %rdi
                	cmpq	%r8, %rdi
                	cmovneq	%rbx, %r9
+               	nop
                	cmpq	%r9, %rsi
                	jne	<addr>
                	incq	%rax
@@ -592,6 +607,7 @@ Disassembly of section .text:
                	movq	0x30(%rsp,%rax,8), %rbx
                	cmpq	%rdi, %rbx
                	cmovaeq	%r9, %r8
+               	nopl	(%rax)
                	cmpq	%r8, %rsi
                	jne	<addr>
                	movq	0x50(%rsp,%rax,8), %rsi
@@ -610,6 +626,7 @@ Disassembly of section .text:
                	movq	0x30(%rsp,%rax,8), %rdi
                	cmpq	%r8, %rdi
                	cmovbeq	%rbx, %r9
+               	nopw	(%rax,%rax)
                	cmpq	%r9, %rsi
                	jne	<addr>
                	movq	0x70(%rsp,%rax,8), %rsi
@@ -628,6 +645,7 @@ Disassembly of section .text:
                	movq	0x30(%rsp,%rax,8), %rdi
                	cmpq	%r8, %rdi
                	cmovneq	%rbx, %r9
+               	nopl	(%rax)
                	cmpq	%r9, %rsi
                	jne	<addr>
                	incq	%rax

@@ -32,6 +32,7 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	movb	$-0x56, (%rcx)
                	incq	%rax
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x800, %eax            # imm = 0x800
                	jb	<addr>
                	addq	$0x808, %rsp            # imm = 0x808
@@ -47,6 +48,7 @@ Disassembly of section .text:
                	movzbq	(%r8), %r8
                	orq	%r8, %rax
                	incq	%rcx
+               	nopl	(%rax,%rax)
                	cmpl	%edx, %ecx
                	jb	<addr>
                	retq

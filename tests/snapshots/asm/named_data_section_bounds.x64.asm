@@ -41,6 +41,7 @@ Disassembly of section .text:
                	addq	$0x10, %rax
                	incq	%rdx
                	leaq	<rip>, %rdi # <addr>
+               	nopw	(%rax,%rax)
                	cmpq	%rdi, %rax
                	jb	<addr>
                	cmpl	$0x3, %edx

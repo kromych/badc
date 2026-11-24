@@ -34,6 +34,7 @@ Disassembly of section .text:
                	shlxq	%rsi, %rdx, %rdx
                	incq	%rax
                	orq	%rdx, %rcx
+               	nopl	(%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, %rax
@@ -47,6 +48,7 @@ Disassembly of section .text:
                	imulq	%rdx, %rsi
                	decq	%rax
                	xorq	%rsi, %rcx
+               	nopl	(%rax)
                	testl	%eax, %eax
                	jne	<addr>
                	movq	%rcx, %rax
@@ -128,6 +130,7 @@ Disassembly of section .text:
                	andq	$0xffff, %rsi           # imm = 0xFFFF
                	andq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x14, %eax
                	jbe	<addr>
                	movl	$0x14, %edi

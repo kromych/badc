@@ -31,6 +31,7 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	movq	%rcx, <rip> # <addr>
                	decq	%rax
+               	nopl	(%rax)
                	testl	%eax, %eax
                	jne	<addr>
                	retq

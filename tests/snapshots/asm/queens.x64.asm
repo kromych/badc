@@ -60,6 +60,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %edx
                	je	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	%r13d, %eax
                	jl	<addr>
                	movl	%ebx, (%r12,%r13,4)

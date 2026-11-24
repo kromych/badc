@@ -50,6 +50,7 @@ Disassembly of section .text:
                	movl	0x20(%rsp,%rax,4), %ecx
                	addq	%rcx, %rbx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x40, %eax
                	jl	<addr>
                	movl	%ebx, (%r14)

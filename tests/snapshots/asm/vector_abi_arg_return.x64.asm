@@ -325,6 +325,7 @@ Disassembly of section .text:
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movl	$0x32, %edi
@@ -363,6 +364,7 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0x20(%rsp)
                	xorl	%eax, %eax
                	movzbq	0x20(%rsp,%rax), %rdx
+               	nopw	(%rax,%rax)
                	cmpl	$0x45, %edx
                	jne	<addr>
                	incq	%rax

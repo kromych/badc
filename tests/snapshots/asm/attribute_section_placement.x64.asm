@@ -38,8 +38,6 @@ Disassembly of section .text:
                	subq	$0x2a, %rax
                	popq	%r11
                	retq
-		...
-               	addb	%bh, 0x7(%rax)
 
 <boot>:
                	movl	$0x7, %eax

@@ -226,7 +226,7 @@ pub(crate) fn emit_function(
     // `-O`: the block plan may repeat a small test in place of a jump to it.
     repeat_tests: bool,
     (sibling_calls, red_zone): (bool, bool),
-    branches_within_32b: bool,
+    padding: super::super::BranchPadding,
 ) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
@@ -389,7 +389,16 @@ pub(crate) fn emit_function(
         branch_fixups: Vec::new(),
         branch_short: Vec::new(),
         windows: BranchWindows {
-            on: branches_within_32b,
+            on: padding != super::super::BranchPadding::Off,
+            pad: match padding {
+                super::super::BranchPadding::Loops => {
+                    crate::c5::codegen::passes::layout::loop_depths(func)
+                        .iter()
+                        .map(|&d| d > 0)
+                        .collect()
+                }
+                _ => Vec::new(),
+            },
             ..BranchWindows::default()
         },
         seh_placed: Vec::new(),
@@ -409,9 +418,10 @@ pub(crate) fn emit_function(
     }
 }
 
-/// `-mbranches-within-32B-boundaries`: a branch group -- a local jump, or
-/// the flag-setting instruction a conditional jump fuses with through the
-/// jump -- padded so that it neither crosses nor ends on a 32-byte boundary.
+/// `-mbranches-within-32B-boundaries`, and under `-O` inside loops: a branch
+/// group -- a local jump, or the flag-setting instruction a conditional jump
+/// fuses with through the jump -- padded so that it neither crosses nor ends
+/// on a 32-byte boundary.
 /// Function entries are 32-byte aligned, so the offset in `code` places the
 /// boundaries.
 #[derive(Default)]
@@ -427,6 +437,10 @@ struct BranchWindows {
     starts: Vec<(usize, usize)>,
     /// Where the open group starts.
     open: Option<usize>,
+    /// Per block, whether its groups are padded; empty pads every block.
+    pad: Vec<bool>,
+    /// Whether the block being emitted pads.
+    here: bool,
 }
 
 /// Per value, whether it is a frame object's address that only indexed
@@ -913,6 +927,7 @@ impl FnEmit<'_, '_> {
         self.block_offsets[block_idx] = self.out.cx.code.len();
         self.out.cx.code.begin_block();
         self.windows.open = None;
+        self.windows.here = self.windows.pad.get(block_idx).copied().unwrap_or(true);
         // A `__try` handler is entered with rsp where the exception left it:
         // the prologue's rsp, realigned as the prologue realigns it.
         if func.is_seh_target(block_idx as super::super::ir::BlockId) {
@@ -1327,7 +1342,7 @@ impl FnEmit<'_, '_> {
         let code = &mut *self.out.cx.code;
         let len = usize::from(w.prev.get(first).copied().unwrap_or(0));
         let at = code.len() % 32;
-        if len > 0 && len < 32 && at + len >= 32 {
+        if w.here && len > 0 && len < 32 && at + len >= 32 {
             code.pad(|code| push_x86_nops(code, 32 - at));
         }
         w.open = Some(code.len());

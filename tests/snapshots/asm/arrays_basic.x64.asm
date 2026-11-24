@@ -37,6 +37,7 @@ Disassembly of section .text:
                	movl	0x8(%rsp,%rax,4), %esi
                	addq	%rsi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x5, %eax
                	jl	<addr>
                	cmpl	$0xf, %ecx

@@ -231,6 +231,7 @@ Disassembly of section .text:
                	movss	%xmm0, (%rcx)
                	movl	%edx, 0x4(%rcx)
                	incq	%rax
+               	nop
                	cmpq	%r12, %rax
                	jl	<addr>
                	movq	%rbx, %rdi

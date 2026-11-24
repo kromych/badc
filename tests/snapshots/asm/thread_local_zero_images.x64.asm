@@ -77,6 +77,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%fs:0x0, %rcx
                	addq	$-0xc0, %rcx
+               	nopw	(%rax,%rax)
                	cmpb	$0x0, (%rcx,%rax)
                	jne	<addr>
                	incq	%rax

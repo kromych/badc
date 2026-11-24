@@ -83,6 +83,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	%rdx
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x5, %eax
                	jl	<addr>
                	movq	%rcx, %rax

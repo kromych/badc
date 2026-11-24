@@ -43,6 +43,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%dl, 0x52(%rcx)
 
 <cs_wrapper>:
                	pushq	%rcx

@@ -189,6 +189,7 @@ Disassembly of section .text:
                	jge	<addr>
                	leaq	(%rbx,%rbx,2), %rcx
                	leaq	0x2(%rcx), %rsi
+               	nopl	(%rax)
                	testl	%r12d, %r12d
                	jl	<addr>
                	cmpl	$0xc, %r12d
@@ -196,6 +197,7 @@ Disassembly of section .text:
                	movl	$0xc8, %ecx
                	subq	%r12, %rcx
                	movq	%r14, %r8
+               	nop
                	testl	%r13d, %r13d
                	jl	<addr>
                	cmpl	$0xc, %r13d
@@ -210,6 +212,7 @@ Disassembly of section .text:
                	imulq	$0xa, %rdi, %rsi
                	addq	%rsi, %rcx
                	addq	%rcx, %rdx
+               	nopw	(%rax,%rax)
                	testl	%r12d, %r12d
                	jl	<addr>
                	cmpl	$0xa, %r12d
@@ -233,6 +236,7 @@ Disassembly of section .text:
                	cmpl	$0xf, %ebx
                	jl	<addr>
                	incq	%r12
+               	nopl	(%rax,%rax)
                	cmpl	$0xf, %r12d
                	jl	<addr>
                	xorl	%eax, %eax

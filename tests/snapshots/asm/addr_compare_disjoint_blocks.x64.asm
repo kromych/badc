@@ -50,6 +50,7 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdx
                	cmoveq	%rdi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	testl	%ecx, %ecx

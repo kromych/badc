@@ -434,6 +434,7 @@ Disassembly of section .text:
                	leaq	0x38(%rsp), %rax
                	imulq	$0x18, %rbx, %rdx
                	addq	%rdx, %rax
+               	nopl	(%rax)
                	cmpl	$0x0, 0x10(%rax)
                	je	<addr>
                	movsd	0x128(%rsp), %xmm14
@@ -572,12 +573,14 @@ Disassembly of section .text:
                	movq	$-0x1, %rcx
                	cmpl	%eax, %r12d
                	cmoveq	%r12, %rcx
+               	nopw	(%rax,%rax)
                	cmpl	%r13d, %ecx
                	jne	<addr>
                	leaq	0x38(%rsp), %rax
                	imulq	$0x18, %rbx, %rcx
                	addq	%rcx, %rax
                	movsd	(%rax), %xmm0
+               	nopl	(%rax)
                	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -669,6 +672,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movsd	(%rax), %xmm14
                	movsd	%xmm14, 0x28(%rsp)
+               	nop
                	jmp	<addr>
                	leaq	0x14(%rbx), %rax
                	popq	%rbx

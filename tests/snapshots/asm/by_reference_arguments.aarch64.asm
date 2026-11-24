@@ -130,10 +130,8 @@ Disassembly of section .text:
                	ldr	x8, [x8, #0x8]
                	mul	x1, x1, x6
                	mul	x7, x7, x5
-               	sxtw	x7, w7
                	add	x1, x1, x7
                	mul	x3, x3, x4
-               	sxtw	x3, w3
                	add	x1, x1, x3
                	sxtw	x2, w2
                	add	x1, x1, x2

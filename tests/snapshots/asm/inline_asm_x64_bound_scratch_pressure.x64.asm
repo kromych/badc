@@ -348,7 +348,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leaq	(%rax,%rax,2), %rdx
                	incq	%rdx
-               	movslq	%edx, %rdx
                	movq	%rdx, (%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x12, %eax

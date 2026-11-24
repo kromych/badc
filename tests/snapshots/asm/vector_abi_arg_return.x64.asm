@@ -326,7 +326,6 @@ Disassembly of section .text:
                	movzbq	0x20(%rsp,%rax), %rdx
                	leaq	0x1(%rax), %rsi
                	leaq	(%rsi,%rsi,8), %rsi
-               	andq	$0xff, %rsi
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax

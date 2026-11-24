@@ -345,25 +345,23 @@ Disassembly of section .text:
                	sub	sp, sp, #0x100
                	str	x20, [sp]
                	mov	x1, #0x0                // =0
-               	mov	x4, #0x7                // =7
+               	mov	x3, #0x7                // =7
+               	mov	x4, #0x3334             // =13108
+               	movk	x4, #0x3333, lsl #16
                	mov	x7, #0x5556             // =21846
                	movk	x7, #0x5555, lsl #16
-               	mov	x5, #0x6667             // =26215
-               	movk	x5, #0x6666, lsl #16
                	mov	x0, x1
                	b	<addr>
-               	strb	w2, [x6, x0]
+               	strb	w2, [x5, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x60
                	b.ge	<addr>
-               	sub	x6, x29, #0x60
-               	mul	x2, x0, x4
-               	sxtw	x2, w2
-               	mul	x3, x2, x5
-               	asr	x3, x3, #33
-               	add	x3, x3, x3, lsr #63
-               	add	x3, x3, x3, lsl #2
-               	sub	x2, x2, x3
+               	sub	x5, x29, #0x60
+               	mul	x2, x0, x3
+               	mul	x6, x2, x4
+               	lsr	x6, x6, #32
+               	add	x6, x6, x6, lsl #2
+               	sub	x2, x2, x6
                	cbnz	w2, <addr>
                	mov	x2, x1
                	b	<addr>

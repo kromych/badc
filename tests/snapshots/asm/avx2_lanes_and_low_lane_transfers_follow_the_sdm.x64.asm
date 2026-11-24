@@ -28,8 +28,7 @@ Disassembly of section .text:
 <check_moves>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	pushq	%r14
+               	subq	$0x48, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -60,36 +59,35 @@ Disassembly of section .text:
                	vmovq	%rax, %xmm0
                	vpbroadcastq	%xmm0, %ymm0
                	vmovups	%ymm0, 0x60(%rsp)
-               	xorl	%r14d, %r14d
+               	xorl	%r13d, %r13d
                	movl	$0x1, %eax
-               	shlxq	%r14, %rax, %rcx
+               	shlxq	%r13, %rax, %rcx
                	leaq	(%rsp), %rax
-               	movq	%r14, %rdx
+               	movq	%r13, %rdx
                	shlq	$0x5, %rdx
                	addq	%rdx, %rax
                	vmovups	(%rax), %ymm0
                	vmovups	%ymm0, -0x20(%rbp)
-               	xorl	%r13d, %r13d
-               	imulq	$0x0, %rcx, %rdi
+               	xorl	%r12d, %r12d
                	movl	$0x20, %eax
                	cltd
                	idivl	%ecx
-               	cmpl	%eax, %r13d
+               	cmpl	%eax, %r12d
                	jge	<addr>
-               	movq	%rcx, %r8
-               	imulq	%r13, %r8
+               	movq	%rcx, %rdi
+               	imulq	%r12, %rdi
                	xorl	%eax, %eax
                	movq	%rax, %rdx
                	cmpl	%ecx, %eax
                	jge	<addr>
-               	leaq	(%r8,%rax), %r9
+               	leaq	(%rdi,%rax), %r8
+               	movslq	%r8d, %r8
+               	movzbq	-0x20(%rbp,%r8), %r8
+               	movq	%rax, %r9
+               	shlq	$0x3, %r9
                	movslq	%r9d, %r9
-               	movzbq	-0x20(%rbp,%r9), %r9
-               	movq	%rax, %r12
-               	shlq	$0x3, %r12
-               	movslq	%r12d, %r12
-               	shlxq	%r12, %r9, %r9
-               	orq	%r9, %rdx
+               	shlxq	%r9, %r8, %r8
+               	orq	%r8, %rdx
                	incq	%rax
                	cmpl	%ecx, %eax
                	jl	<addr>
@@ -97,27 +95,25 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	cmpl	%ecx, %eax
                	jge	<addr>
-               	leaq	(%rdi,%rax), %r8
+               	movzbq	(%rbx,%rax), %rdi
+               	movq	%rax, %r8
+               	shlq	$0x3, %r8
                	movslq	%r8d, %r8
-               	movzbq	(%rbx,%r8), %r8
-               	movq	%rax, %r9
-               	shlq	$0x3, %r9
-               	movslq	%r9d, %r9
-               	shlxq	%r9, %r8, %r8
-               	orq	%r8, %rsi
+               	shlxq	%r8, %rdi, %rdi
+               	orq	%rdi, %rsi
                	incq	%rax
                	cmpl	%ecx, %eax
                	jl	<addr>
                	cmpq	%rsi, %rdx
                	jne	<addr>
-               	incq	%r13
+               	incq	%r12
                	movl	$0x20, %eax
                	cltd
                	idivl	%ecx
-               	cmpl	%eax, %r13d
+               	cmpl	%eax, %r12d
                	jl	<addr>
-               	incq	%r14
-               	cmpl	$0x4, %r14d
+               	incq	%r13
+               	cmpl	$0x4, %r13d
                	jl	<addr>
                	vmovdqa	%xmm1, %xmm0
                	vinserti128	$0x1, %xmm2, %ymm0, %ymm0
@@ -137,7 +133,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	vzeroupper
                	leave
                	retq
@@ -167,7 +162,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	vzeroupper
                	leave
                	retq
@@ -217,7 +211,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	vzeroupper
                	leave
                	retq
@@ -226,7 +219,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	vzeroupper
                	leave
                	retq
@@ -235,7 +227,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	vzeroupper
                	leave
                	retq

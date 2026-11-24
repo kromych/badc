@@ -46,14 +46,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	add	x0, x0, x0, lsl #1
-               	sxth	x0, w0
-               	cmn	w0, #0x7e
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
-               	ret
                	mov	x17, #0x2493            // =9363
                	movk	x17, #0x9249, lsl #16
                	mul	x0, x1, x17

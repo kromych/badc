@@ -20,7 +20,6 @@ Disassembly of section .text:
                	and	x1, x1, #0xff
                	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
-               	sxtw	x1, w1
                	add	x0, x0, x1
                	sxtw	x1, w2
                	add	x0, x0, x1

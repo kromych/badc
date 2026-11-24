@@ -4881,11 +4881,11 @@ fn ent_pc=31 n_params=0 variadic=false locals=3
     v146 Extend { value=v122, kind=I32 }                  -> x0
     v147 Imm(0)                                           -> x1
     v148 Binop { op=div, lhs=v122, rhs=v147 }             -> x0
-    v149 Extend { value=v148, kind=I32, nsw }             -> x2
-    v150 Binop { op=mul, lhs=v148, rhs=v147 }             -> x1
-    v151 Binop { op=sub, lhs=v122, rhs=v150 }             -> x13
-    v152 Extend { value=v151, kind=I32, nsw }             -> x1
-    v153 Binop { op=add, lhs=v148, rhs=v151 }             -> x0
+    v149 Extend { value=v148, kind=I32, nsw }             -> x1
+    v150 Imm(0)                                           -> x1
+    v151 BinopI { op=sub, lhs=v122, rhs_imm=0 }           -> x1
+    v152 Extend { value=v122, kind=I32, nsw }             -> x1
+    v153 Binop { op=add, lhs=v148, rhs=v122 }             -> x0
     v154 Extend { value=v153, kind=I32, nsw }             -> x1
     v155 Extend { value=v153, kind=I32 }                  -> x1
     v156 Extend { value=v153, kind=I32 }                  -> x1

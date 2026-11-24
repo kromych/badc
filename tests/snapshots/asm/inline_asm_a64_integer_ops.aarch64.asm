@@ -96,7 +96,7 @@ Disassembly of section .text:
                	cbz	x4, <addr>
                	umull	x0, w9, w10
                	cbz	x4, <addr>
-               	umulh	x1, x5, x6
+               	umulh	x0, x5, x6
                	cbz	x4, <addr>
                	smulh	x0, x5, x6
                	cbz	x4, <addr>
@@ -402,13 +402,11 @@ Disassembly of section .text:
                	cmp	x0, x1
                	csel	x4, x3, x2, eq
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	umulh	x2, x5, x6
-               	madd	x2, x5, x0, x2
-               	madd	x2, x0, x6, x2
-               	mov	x3, #0x1b               // =27
-               	cmp	x1, x2
-               	csel	x4, x0, x3, eq
+               	umulh	x1, x5, x6
+               	mov	x2, #0x1b               // =27
+               	mov	x3, #0x0                // =0
+               	cmp	x0, x1
+               	csel	x4, x3, x2, eq
                	b	<addr>
                	mov	w1, w9
                	mov	x17, #0x7               // =7

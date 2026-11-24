@@ -631,8 +631,7 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x2a0, %rsp            # imm = 0x2A0
                	retq
-               	imulq	$0x0, %rbx, %rax
-               	movq	%rax, 0x120(%rsp)
+               	movq	$0x0, 0x120(%rsp)
                	movq	%rbx, 0x128(%rsp)
                	movq	%rbx, %rax
                	shlq	%rax

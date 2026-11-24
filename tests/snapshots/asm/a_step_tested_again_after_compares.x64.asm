@@ -89,7 +89,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rsi, (%rdx)
                	leaq	(%rax,%rax,8), %rsi
-               	andq	$0xff, %rsi
                	movb	%sil, 0x9(%rdx)
                	incq	%rax
                	cmpl	$0x4, %eax

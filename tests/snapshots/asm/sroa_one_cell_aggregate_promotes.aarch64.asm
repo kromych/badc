@@ -48,7 +48,6 @@ Disassembly of section .text:
                	add	x3, x3, x3, lsl #1
                	add	x1, x1, x3
                	add	x1, x1, x4
-               	sxtw	x1, w1
                	add	x1, x1, x1, lsl #1
                	add	x8, x0, x1
                	mov	x4, #0x0                // =0

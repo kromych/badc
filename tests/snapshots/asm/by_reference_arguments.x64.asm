@@ -101,11 +101,9 @@ Disassembly of section .text:
                	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
                	movsbq	%sil, %rsi
                	imulq	$0x64, %rsi, %rsi
-               	movslq	%esi, %rsi
                	addq	%rsi, %rcx
                	movsbq	%dl, %rdx
                	imulq	$0xa, %rdx, %rdx
-               	movslq	%edx, %rdx
                	addq	%rdx, %rcx
                	movslq	%edi, %rdx
                	addq	%rdx, %rcx

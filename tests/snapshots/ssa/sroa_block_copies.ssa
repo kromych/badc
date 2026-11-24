@@ -391,8 +391,8 @@ fn ent_pc=13 n_params=2 variadic=false locals=4
     v33  LoadLocal { off=-4, disp=8, kind=I64 }           -> x1
     v34  Binop { op=add, lhs=v30, rhs=v33 }               -> x0
     v35  LocalAddr(-4)                                    -> x1
-    v36  BinopI { op=add, lhs=v24, rhs_imm=16 }           -> x1
-    v37  LoadLocal { off=-4, disp=16, kind=I64 }          -> x1
+    v36  BinopI { op=add, lhs=v35, rhs_imm=16 }           -> x1
+    v37  Load { addr=v36, disp=0, kind=I64 }              -> x1
     v38  Imm(100)                                         -> x1
     v39  BinopI { op=add, lhs=v34, rhs_imm=100 }          -> x0
     v40  LifetimeEnd(-4)                                  -> -
@@ -1953,7 +1953,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=80
     v828 Imm(0)                                           -> x0
     v829 BinopI { op=add, lhs=v826, rhs_imm=0 }           -> x0
     v830 Imm(0)                                           -> x0
-    v831 BinopI { op=mul, lhs=v2, rhs_imm=0 }             -> x0
+    v831 Imm(0)                                           -> x0
     v832 StoreLocal { off=-48, value=v831, kind=I64 }     -> -
     v833 Imm(0)                                           -> x0
     v834 Imm(1)                                           -> x0

@@ -34,7 +34,6 @@ Disassembly of section .text:
                	shlq	$0x4, %rcx
                	addq	%rsi, %rcx
                	imulq	$0xa, %rax, %rdi
-               	movslq	%edi, %rdi
                	movq	%rdi, (%rcx)
                	movq	$0x1, 0x8(%rcx)
                	incq	%rax

@@ -26,7 +26,6 @@ Disassembly of section .text:
                	add	x4, x4, <lo12>
                	add	x1, x4, x0, lsl #4
                	mul	x5, x0, x3
-               	sxtw	x5, w5
                	str	x5, [x1]
                	str	x2, [x1, #0x8]
                	add	x0, x0, #0x1

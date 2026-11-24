@@ -236,10 +236,10 @@ fn ent_pc=6 n_params=3 variadic=false locals=0
     v15  Imm(0)                                           -> x2
     v16  BinopI { op=mul, lhs=v0, rhs_imm=2 }             -> x8
     v17  Binop { op=mulhu, lhs=v0, rhs=v14 }              -> x2
-    v18  BinopI { op=mul, lhs=v0, rhs_imm=0 }             -> x0
+    v18  Imm(0)                                           -> x0
     v19  BinopI { op=mul, lhs=v1, rhs_imm=2 }             -> x9
-    v20  Binop { op=add, lhs=v17, rhs=v18 }               -> x0
-    v21  Binop { op=add, lhs=v20, rhs=v19 }               -> x0
+    v20  BinopI { op=add, lhs=v17, rhs_imm=0 }            -> x0
+    v21  Binop { op=add, lhs=v17, rhs=v19 }               -> x0
     v22  Imm(0)                                           -> x2
     v23  Imm(0)                                           -> x2
     v24  Imm(0)                                           -> x2

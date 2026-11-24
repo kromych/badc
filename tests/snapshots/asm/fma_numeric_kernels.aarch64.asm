@@ -82,7 +82,6 @@ Disassembly of section .text:
                	add	x5, x5, x2
                	add	x6, x4, x0
                	add	x6, x6, #0x1
-               	sxtw	x6, w6
                	scvtf	d1, x6
                	str	d1, [x5, x0, lsl #3]
                	sub	x5, x29, #0x48

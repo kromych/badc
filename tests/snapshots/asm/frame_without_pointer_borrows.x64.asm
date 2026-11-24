@@ -341,10 +341,8 @@ Disassembly of section .text:
 
 <x87>:
                	xorps	%xmm1, %xmm1
-               	imulq	$0x0, %rsi, %rax
-               	addq	%rdx, %rax
                	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rax, %xmm2
+               	cvtsi2sd	%rdx, %xmm2
                	vdivsd	<rip>, %xmm2, %xmm2
                	movsd	%xmm2, -0x8(%rsp)
                	fldl	-0x8(%rsp)

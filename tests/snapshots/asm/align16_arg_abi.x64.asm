@@ -113,10 +113,8 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%rsi, %rax
                	mulq	%r10
-               	imulq	$0x0, %rsi, %rax
                	shlq	%r9
-               	addq	%rdx, %rax
-               	addq	%r9, %rax
+               	leaq	(%rdx,%r9), %rax
                	movq	%rdi, %rsi
                	sarq	$0x3f, %rsi
                	leaq	(%r8,%rdi), %rdx

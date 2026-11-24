@@ -337,7 +337,6 @@ Disassembly of section .text:
                	ldrb	w2, [x1, x0]
                	add	x3, x0, #0x1
                	add	x3, x3, x3, lsl #3
-               	and	x3, x3, #0xff
                	cmp	w2, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1

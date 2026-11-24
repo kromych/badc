@@ -235,7 +235,6 @@ Disassembly of section .text:
                	sub	x3, x29, #0xa0
                	mul	x4, x0, x1
                	add	x4, x4, #0x1
-               	and	x4, x4, #0xff
                	strb	w4, [x3, x0]
                	sub	x3, x29, #0x90
                	mul	x4, x0, x2

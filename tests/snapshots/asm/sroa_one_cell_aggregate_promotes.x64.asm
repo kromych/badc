@@ -67,7 +67,6 @@ Disassembly of section .text:
                	leaq	(%rdx,%rdx,2), %rdx
                	addq	%rdx, %rcx
                	addq	%r9, %rcx
-               	movslq	%ecx, %rcx
                	leaq	(%rcx,%rcx,2), %rcx
                	leaq	(%rax,%rcx), %r10
                	movq	%r10, 0x8(%rsp)

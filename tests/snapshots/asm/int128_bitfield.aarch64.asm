@@ -42,117 +42,6 @@ Disassembly of section .text:
                	mov	x0, #0x10               // =16
                	cbz	x0, <addr>
                	ret
-               	mov	x3, #0xe0000000         // =3758096384
-               	mov	x4, #0x0                // =0
-               	mov	x0, #0xb6db             // =46811
-               	movk	x0, #0xdb6d, lsl #16
-               	mov	x1, #0x14               // =20
-               	movk	x1, #0x6000, lsl #16
-               	lsr	x2, x0, #32
-               	cbnz	x2, <addr>
-               	mul	x2, x0, x4
-               	mov	x5, #0xa0000000         // =2684354560
-               	orr	x5, x5, x1, lsl #32
-               	cmp	x2, x5
-               	b.ls	<addr>
-               	sub	x0, x0, #0x1
-               	add	x1, x1, x3
-               	lsr	x2, x1, #32
-               	cbz	x2, <addr>
-               	mov	x1, #0xa0000000         // =2684354560
-               	movk	x1, #0x14, lsl #32
-               	mov	x17, #-0x2000000000000000 // =-2305843009213693952
-               	mul	x2, x0, x17
-               	sub	x2, x1, x2
-               	lsr	x1, x2, #29
-               	mov	x5, #0x2493             // =9363
-               	movk	x5, #0x9249, lsl #16
-               	movk	x5, #0x4924, lsl #32
-               	movk	x5, #0x2492, lsl #48
-               	umulh	x1, x1, x5
-               	msub	x2, x1, x3, x2
-               	lsr	x5, x1, #32
-               	cbnz	x5, <addr>
-               	mul	x5, x1, x4
-               	lsl	x6, x2, #32
-               	cmp	x5, x6
-               	b.ls	<addr>
-               	sub	x1, x1, #0x1
-               	add	x2, x2, x3
-               	lsr	x5, x2, #32
-               	cbz	x5, <addr>
-               	orr	x4, x1, x0, lsl #32
-               	mov	x17, #0xdb85            // =56197
-               	movk	x17, #0x6db6, lsl #16
-               	movk	x17, #0xb6db, lsl #32
-               	movk	x17, #0xdb6d, lsl #48
-               	cmp	x4, x17
-               	b.eq	<addr>
-               	mov	x0, #0x55               // =85
-               	cbz	x0, <addr>
-               	ret
-               	mov	x3, #0x3000             // =12288
-               	movk	x3, #0xf424, lsl #16
-               	mov	x5, #0x0                // =0
-               	lsr	x0, x4, #1
-               	mov	x1, #0xd00000000000     // =228698418577408
-               	movk	x1, #0xa99, lsl #48
-               	orr	x2, x1, x0, lsr #19
-               	lsl	x0, x4, #44
-               	lsr	x6, x0, #32
-               	mov	w8, w0
-               	mov	x0, #0x59c7             // =22983
-               	movk	x0, #0x49cb, lsl #16
-               	movk	x0, #0xf454, lsl #32
-               	movk	x0, #0x10c6, lsl #48
-               	umulh	x0, x2, x0
-               	lsr	x0, x0, #28
-               	msub	x1, x0, x3, x2
-               	lsr	x7, x0, #32
-               	cbnz	x7, <addr>
-               	mul	x7, x0, x5
-               	orr	x9, x6, x1, lsl #32
-               	cmp	x7, x9
-               	b.ls	<addr>
-               	sub	x0, x0, #0x1
-               	add	x1, x1, x3
-               	lsr	x7, x1, #32
-               	cbz	x7, <addr>
-               	orr	x1, x6, x2, lsl #32
-               	mov	x17, #0x300000000000    // =52776558133248
-               	movk	x17, #0xf424, lsl #48
-               	mul	x2, x0, x17
-               	sub	x2, x1, x2
-               	lsr	x1, x2, #12
-               	mov	x6, #0xe5ad             // =58797
-               	movk	x6, #0x2a24, lsl #16
-               	movk	x6, #0x637a, lsl #32
-               	movk	x6, #0x8, lsl #48
-               	umulh	x1, x1, x6
-               	lsr	x1, x1, #7
-               	msub	x2, x1, x3, x2
-               	lsr	x6, x1, #32
-               	cbnz	x6, <addr>
-               	mul	x6, x1, x5
-               	orr	x7, x8, x2, lsl #32
-               	cmp	x6, x7
-               	b.ls	<addr>
-               	sub	x1, x1, #0x1
-               	add	x2, x2, x3
-               	lsr	x6, x2, #32
-               	cbz	x6, <addr>
-               	orr	x0, x1, x0, lsl #32
-               	mov	x17, #0x4243            // =16963
-               	movk	x17, #0xf, lsl #16
-               	mul	x0, x0, x17
-               	sub	x0, x4, x0
-               	mov	x17, #0x47c3            // =18371
-               	movk	x17, #0x2, lsl #16
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x58               // =88
-               	cbz	x0, <addr>
-               	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldur	w1, [x0, #0x1]
@@ -170,10 +59,6 @@ Disassembly of section .text:
                	cmn	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x7a               // =122
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>

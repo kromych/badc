@@ -633,11 +633,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v607 Binop { op=mul, lhs=v605, rhs=v606 }             -> x2
     v608 Binop { op=and, lhs=v565, rhs=v607 }             -> x2
     v609 BinopI { op=ne, lhs=v608, rhs_imm=0 }            -> [spill 1]
-    v610 BinopI { op=and, lhs=v600, rhs_imm=127 }         -> x8
+    v610 BinopI { op=and, lhs=v600, rhs_imm=127 }         -> x2
     v611 BinopI { op=and, lhs=v600, rhs_imm=63 }          -> x2
     v612 Imm(63)                                          -> x9
     v613 Binop { op=sub, lhs=v612, rhs=v611 }             -> [spill 2]
-    v614 BinopI { op=shru, lhs=v610, rhs_imm=6 }          -> x8
+    v614 BinopI { op=shru, lhs=v600, rhs_imm=6 }          -> x8
     v615 Neg(v614)                                        -> x8
     v616 BinopI { op=xor, lhs=v615, rhs_imm=-1 }          -> [spill 3]
     v617 Binop { op=shru, lhs=v567, rhs=v611 }            -> [spill 4]

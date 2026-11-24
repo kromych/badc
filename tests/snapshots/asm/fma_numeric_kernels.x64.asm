@@ -85,7 +85,6 @@ Disassembly of section .text:
                	addq	%rcx, %rdi
                	leaq	(%rsi,%rax), %r8
                	incq	%r8
-               	movslq	%r8d, %r8
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%r8, %xmm0
                	movsd	%xmm0, (%rdi,%rax,8)

@@ -312,41 +312,39 @@ fn ent_pc=10 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Extend { value=v1, kind=I32 }                    -> x0
-    v5   Imm(0)                                           -> x0
-    v6   BinopI { op=gt, lhs=v1, rhs_imm=2 }              -> x1
-    v7   BinopI { op=mul, lhs=v1, rhs_imm=10 }            -> x1
-    v8   BinopI { op=gt, lhs=v1, rhs_imm=2 }              -> x2
-    v9   Select { cond=v8, a=v7, b=v5, kind=I64 }         -> x0
+    v5   Undef                                            -> x0
+    v6   BinopI { op=gt, lhs=v1, rhs_imm=2 }              -> x0
+    v7   Imm(30)                                          -> x0
+    v8   Imm(30)                                          -> x0
+    v9   Imm(0)                                           -> x0
+    v10  BinopI { op=gt, lhs=v1, rhs_imm=2 }              -> x0
+    v11  Imm(30)                                          -> x0
+    v12  Imm(-1)                                          -> x1
+    v13  BinopI { op=gt, lhs=v1, rhs_imm=2 }              -> x2
+    v14  Select { cond=v13, a=v11, b=v12, kind=I64 }      -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v12  Copy { value=v9, fp=false }                      -> x1
-    v13  BinopI { op=gt, lhs=v1, rhs_imm=2 }              -> x1
-    v14  Imm(-1)                                          -> x1
-    v15  BinopI { op=gt, lhs=v1, rhs_imm=2 }              -> x2
-    v16  Select { cond=v15, a=v9, b=v14, kind=I64 }       -> x0
-    terminator Jmp(b2)
-  block 2  start_pc=0
-    v19  Copy { value=v16, fp=false }                     -> x1
-    v20  Extend { value=v16, kind=I32 }                   -> x1
-    v21  Extend { value=v16, kind=I32 }                   -> x1
-    v22  Imm(0)                                           -> x1
-    v23  BinopI { op=add, lhs=v1, rhs_imm=3 }             -> x1
-    v24  Extend { value=v23, kind=I32, nsw }              -> x2
-    v25  Extend { value=v23, kind=I32 }                   -> x2
-    v26  Undef                                            -> x2
-    v27  Imm(1)                                           -> x2
-    v28  BinopI { op=mul, lhs=v23, rhs_imm=10 }           -> x1
-    v29  Extend { value=v28, kind=I32, nsw }              -> x2
-    v30  Imm(0)                                           -> x2
-    v31  Imm(1)                                           -> x2
-    v32  Extend { value=v28, kind=I32 }                   -> x2
-    v33  Imm(0)                                           -> x2
-    v34  Extend { value=v28, kind=I32 }                   -> x2
-    v35  Extend { value=v28, kind=I32 }                   -> x2
-    v36  Binop { op=add, lhs=v16, rhs=v28 }               -> x0
-    v37  Extend { value=v36, kind=I32, nsw }              -> x1
-    v38  Extend { value=v36, kind=I32 }                   -> x1
-    terminator Return(v36)   (exit_acc=v36)
+    v17  Copy { value=v14, fp=false }                     -> x1
+    v18  Extend { value=v14, kind=I32 }                   -> x1
+    v19  Extend { value=v14, kind=I32 }                   -> x1
+    v20  Imm(0)                                           -> x1
+    v21  BinopI { op=add, lhs=v1, rhs_imm=3 }             -> x1
+    v22  Extend { value=v21, kind=I32, nsw }              -> x2
+    v23  Extend { value=v21, kind=I32 }                   -> x2
+    v24  Undef                                            -> x2
+    v25  Imm(1)                                           -> x2
+    v26  BinopI { op=mul, lhs=v21, rhs_imm=10 }           -> x1
+    v27  Extend { value=v26, kind=I32, nsw }              -> x2
+    v28  Imm(0)                                           -> x2
+    v29  Imm(1)                                           -> x2
+    v30  Extend { value=v26, kind=I32 }                   -> x2
+    v31  Imm(0)                                           -> x2
+    v32  Extend { value=v26, kind=I32 }                   -> x2
+    v33  Extend { value=v26, kind=I32 }                   -> x2
+    v34  Binop { op=add, lhs=v14, rhs=v26 }               -> x0
+    v35  Extend { value=v34, kind=I32, nsw }              -> x1
+    v36  Extend { value=v34, kind=I32 }                   -> x1
+    terminator Return(v34)   (exit_acc=v34)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=stack_arg
 fn ent_pc=11 n_params=10 variadic=false locals=0

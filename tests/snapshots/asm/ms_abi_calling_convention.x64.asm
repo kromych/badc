@@ -261,15 +261,14 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
-               	movq	%rax, %rbx
-               	movq	%rbx, %r12
-               	shlq	%r12
-               	leaq	(%rbx,%rbx,2), %r13
-               	cmpl	$0x2, %ebx
+               	movq	%rax, %rcx
+               	shlq	%rcx
+               	leaq	(%rax,%rax,2), %rdx
+               	cmpl	$0x2, %eax
                	jne	<addr>
-               	cmpl	$0x4, %r12d
+               	cmpl	$0x4, %ecx
                	jne	<addr>
-               	cmpl	$0x6, %r13d
+               	cmpl	$0x6, %edx
                	je	<addr>
                	movl	$0x9, %eax
                	addq	$0x20, %rsp
@@ -281,21 +280,17 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, %edi
                	callq	<addr>
-               	movq	%rax, %r14
+               	movq	%rax, %rbx
                	movl	$0x4, %edi
                	callq	<addr>
-               	movq	%rax, 0x48(%rsp)
+               	movq	%rax, %r12
                	movl	$0x5, %edi
                	callq	<addr>
-               	movq	0x48(%rsp), %rcx
-               	imulq	$0xa, %rcx, %rcx
-               	addq	%r14, %rcx
-               	imulq	$0x64, %rbx, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x3e8, %r12, %rdx      # imm = 0x3E8
-               	addq	%rdx, %rcx
-               	imulq	$0x2710, %r13, %rdx     # imm = 0x2710
-               	addq	%rdx, %rcx
+               	imulq	$0xa, %r12, %rcx
+               	addq	%rbx, %rcx
+               	addq	$0xc8, %rcx
+               	addq	$0xfa0, %rcx            # imm = 0xFA0
+               	addq	$0xea60, %rcx           # imm = 0xEA60
                	movslq	%ecx, %rcx
                	imulq	$0x186a0, %rax, %rax    # imm = 0x186A0
                	addq	%rcx, %rax

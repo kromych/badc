@@ -103,12 +103,7 @@ Disassembly of section .text:
                	ret
 
 <inlined>:
-               	sxtw	x0, w0
-               	mov	x1, #0x0                // =0
-               	mov	x17, #0xa               // =10
-               	mul	x2, x0, x17
-               	cmp	w0, #0x2
-               	csel	x1, x2, x1, gt
+               	mov	x1, #0x1e               // =30
                	mov	x2, #-0x1               // =-1
                	cmp	w0, #0x2
                	csel	x1, x1, x2, gt

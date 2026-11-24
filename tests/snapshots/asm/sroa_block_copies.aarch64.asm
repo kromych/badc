@@ -660,9 +660,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x29, #0x180
-               	mov	x17, #0x0               // =0
-               	mul	x0, x20, x17
-               	str	x0, [sp, #0x120]
+               	str	xzr, [sp, #0x120]
                	str	x20, [sp, #0x128]
                	lsl	x0, x20, #1
                	str	x0, [sp, #0x130]

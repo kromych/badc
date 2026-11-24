@@ -150,7 +150,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	shlq	$0x8, %rcx
                	leaq	(%r9,%rax), %rbx
-               	movslq	%ebx, %rbx
                	movzbq	(%rdi,%rbx), %rbx
                	orq	%rbx, %rcx
                	decq	%rax
@@ -170,7 +169,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	shlq	$0x8, %rcx
                	leaq	(%r9,%rax), %rbx
-               	movslq	%ebx, %rbx
                	movzbq	(%rsi,%rbx), %rbx
                	orq	%rbx, %rcx
                	decq	%rax
@@ -187,7 +185,6 @@ Disassembly of section .text:
                	shlq	$0x3, %r9
                	xorl	%eax, %eax
                	leaq	(%r9,%rax), %rbx
-               	movslq	%ebx, %rbx
                	movq	%rax, %r12
                	shlq	$0x3, %r12
                	shrxq	%r12, %rcx, %r12
@@ -202,7 +199,6 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	shlq	$0x8, %rcx
                	leaq	(%rdx,%rax), %rbx
-               	movslq	%ebx, %rbx
                	movzbq	(%rdi,%rbx), %rbx
                	orq	%rbx, %rcx
                	decq	%rax
@@ -214,7 +210,6 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	shlq	$0x8, %rdx
                	leaq	(%rbx,%rax), %r12
-               	movslq	%r12d, %r12
                	movzbq	(%rsi,%r12), %r12
                	orq	%r12, %rdx
                	decq	%rax
@@ -229,7 +224,6 @@ Disassembly of section .text:
                	shlq	$0x3, %rcx
                	xorl	%eax, %eax
                	leaq	(%rcx,%rax), %rbx
-               	movslq	%ebx, %rbx
                	movq	%rax, %r12
                	shlq	$0x3, %r12
                	shrxq	%r12, %rdx, %r12
@@ -252,7 +246,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	shlq	$0x8, %rcx
                	leaq	(%r8,%rax), %r9
-               	movslq	%r9d, %r9
                	movzbq	(%rdx,%r9), %r9
                	orq	%r9, %rcx
                	decq	%rax
@@ -271,7 +264,6 @@ Disassembly of section .text:
                	shlq	%rdx
                	xorl	%eax, %eax
                	leaq	(%rdx,%rax), %r9
-               	movslq	%r9d, %r9
                	movq	%rax, %rbx
                	shlq	$0x3, %rbx
                	shrxq	%rbx, %rcx, %rbx
@@ -508,7 +500,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlq	$0x8, %rcx
                	leaq	(%rdx,%rax), %rsi
-               	movslq	%esi, %rsi
                	movzbq	(%r9,%rsi), %rsi
                	orq	%rsi, %rcx
                	decq	%rax
@@ -518,7 +509,6 @@ Disassembly of section .text:
                	shlq	%r9
                	xorl	%eax, %eax
                	leaq	(%r9,%rax), %rdx
-               	movslq	%edx, %rdx
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	shrxq	%rsi, %rcx, %rsi
@@ -556,7 +546,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlq	$0x8, %rcx
                	leaq	(%rdx,%rax), %rsi
-               	movslq	%esi, %rsi
                	movzbq	(%r9,%rsi), %rsi
                	orq	%rsi, %rcx
                	decq	%rax
@@ -566,7 +555,6 @@ Disassembly of section .text:
                	shlq	%r9
                	xorl	%eax, %eax
                	leaq	(%r9,%rax), %rdx
-               	movslq	%edx, %rdx
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	shrxq	%rsi, %rcx, %rsi
@@ -602,7 +590,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlq	$0x8, %rcx
                	leaq	(%rdx,%rax), %rsi
-               	movslq	%esi, %rsi
                	movzbq	(%r9,%rsi), %rsi
                	orq	%rsi, %rcx
                	decq	%rax
@@ -612,7 +599,6 @@ Disassembly of section .text:
                	shlq	%r9
                	xorl	%eax, %eax
                	leaq	(%r9,%rax), %rdx
-               	movslq	%edx, %rdx
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	shrxq	%rsi, %rcx, %rsi
@@ -648,7 +634,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlq	$0x8, %rcx
                	leaq	(%rdx,%rax), %rsi
-               	movslq	%esi, %rsi
                	movzbq	(%r9,%rsi), %rsi
                	orq	%rsi, %rcx
                	decq	%rax
@@ -658,7 +643,6 @@ Disassembly of section .text:
                	shlq	%r9
                	xorl	%eax, %eax
                	leaq	(%r9,%rax), %rdx
-               	movslq	%edx, %rdx
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	shrxq	%rsi, %rcx, %rsi
@@ -694,7 +678,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlq	$0x8, %rcx
                	leaq	(%rdx,%rax), %rsi
-               	movslq	%esi, %rsi
                	movzbq	(%r9,%rsi), %rsi
                	orq	%rsi, %rcx
                	decq	%rax
@@ -704,7 +687,6 @@ Disassembly of section .text:
                	shlq	%r9
                	xorl	%eax, %eax
                	leaq	(%r9,%rax), %rdx
-               	movslq	%edx, %rdx
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	shrxq	%rsi, %rcx, %rsi
@@ -1258,7 +1240,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlq	$0x8, %rcx
                	leaq	(%rdx,%rax), %rsi
-               	movslq	%esi, %rsi
                	movzbq	(%rdi,%rsi), %rsi
                	orq	%rsi, %rcx
                	decq	%rax
@@ -1270,7 +1251,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlq	$0x8, %rdx
                	leaq	(%rsi,%rax), %r8
-               	movslq	%r8d, %r8
                	movzbq	(%rdi,%r8), %r8
                	orq	%r8, %rdx
                	decq	%rax
@@ -1287,7 +1267,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlq	$0x8, %rcx
                	leaq	(%rsi,%rax), %r8
-               	movslq	%r8d, %r8
                	movzbq	(%rdi,%r8), %r8
                	orq	%r8, %rcx
                	decq	%rax
@@ -1356,7 +1335,6 @@ Disassembly of section .text:
                	shlq	%rdi
                	xorl	%eax, %eax
                	leaq	(%rdi,%rax), %r8
-               	movslq	%r8d, %r8
                	movq	%rax, %r9
                	shlq	$0x3, %r9
                	shrxq	%r9, %rdx, %r9
@@ -1403,7 +1381,6 @@ Disassembly of section .text:
                	shlq	%rdi
                	xorl	%eax, %eax
                	leaq	(%rdi,%rax), %r8
-               	movslq	%r8d, %r8
                	movq	%rax, %r9
                	shlq	$0x3, %r9
                	shrxq	%r9, %rdx, %r9
@@ -1448,7 +1425,6 @@ Disassembly of section .text:
                	shlq	%rdi
                	xorl	%eax, %eax
                	leaq	(%rdi,%rax), %r8
-               	movslq	%r8d, %r8
                	movq	%rax, %r9
                	shlq	$0x3, %r9
                	shrxq	%r9, %rdx, %r9
@@ -1493,7 +1469,6 @@ Disassembly of section .text:
                	shlq	%rdi
                	xorl	%eax, %eax
                	leaq	(%rdi,%rax), %r8
-               	movslq	%r8d, %r8
                	movq	%rax, %r9
                	shlq	$0x3, %r9
                	shrxq	%r9, %rdx, %r9
@@ -1538,7 +1513,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	xorl	%eax, %eax
                	leaq	(%rsi,%rax), %rdi
-               	movslq	%edi, %rdi
                	movq	%rax, %r8
                	shlq	$0x3, %r8
                	shrxq	%r8, %rdx, %r8
@@ -1584,7 +1558,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	xorl	%eax, %eax
                	leaq	(%rsi,%rax), %rdi
-               	movslq	%edi, %rdi
                	movq	%rax, %r8
                	shlq	$0x3, %r8
                	shrxq	%r8, %rdx, %r8
@@ -1630,7 +1603,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	xorl	%eax, %eax
                	leaq	(%rsi,%rax), %rdi
-               	movslq	%edi, %rdi
                	movq	%rax, %r8
                	shlq	$0x3, %r8
                	shrxq	%r8, %rdx, %r8
@@ -1676,7 +1648,6 @@ Disassembly of section .text:
                	shlq	%rsi
                	xorl	%eax, %eax
                	leaq	(%rsi,%rax), %rdi
-               	movslq	%edi, %rdi
                	movq	%rax, %r8
                	shlq	$0x3, %r8
                	shrxq	%r8, %rdx, %r8

@@ -114,15 +114,15 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v71  Imm(0)                                           -> x0
     v72  Extend { value=v67, kind=I32 }                   -> x0
     v73  Binop { op=mul, lhs=v1, rhs=v67 }                -> x0
-    v74  Extend { value=v73, kind=I32, nsw }              -> x0
-    v75  Intrinsic { kind=Alloca, args=[v74] }            -> x15
+    v74  Extend { value=v73, kind=I32, nsw }              -> x1
+    v75  Intrinsic { kind=Alloca, args=[v73] }            -> x15
     v76  Imm(0)                                           -> x0
     v77  Imm(0)                                           -> x0
     v78  Extend { value=v67, kind=I32 }                   -> x0
     v79  Imm(0)                                           -> x0
-    v80  Binop { op=mul, lhs=v1, rhs=v67 }                -> x0
-    v81  Extend { value=v80, kind=I32, nsw }              -> x2
-    v82  CallExt { binding_idx=25, args=[v75, v67, v81], fp_arg_mask=0x0 } -> x0
+    v80  Binop { op=mul, lhs=v1, rhs=v67 }                -> x2
+    v81  Extend { value=v80, kind=I32, nsw }              -> x0
+    v82  CallExt { binding_idx=25, args=[v75, v67, v80], fp_arg_mask=0x0 } -> x0
     v83  Imm(0)                                           -> x0
     v84  Extend { value=v67, kind=I32 }                   -> x0
     v85  Call { target_pc=0, args=[v75, v67], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -180,9 +180,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v131 Binop { op=mul, lhs=v1, rhs=v67 }                -> x0
     v132 Extend { value=v131, kind=I32, nsw }             -> x2
     v133 BinopI { op=sub, lhs=v131, rhs_imm=1 }           -> x0
-    v134 Extend { value=v133, kind=I32, nsw }             -> x0
-    v135 Binop { op=add, lhs=v75, rhs=v134 }              -> x2
-    v136 LoadIndexed { base=v75, index=v134, scale=1, kind=I8 } -> x0
+    v134 Extend { value=v133, kind=I32, nsw }             -> x2
+    v135 Binop { op=add, lhs=v75, rhs=v133 }              -> x2
+    v136 LoadIndexed { base=v75, index=v133, scale=1, kind=I8 } -> x0
     v137 Binop { op=ne, lhs=v136, rhs=v67 }               -> x13
     v138 BinopI { op=ne, lhs=v137, rhs_imm=0 }            -> x0
     v139 Imm(0)                                           -> x0
@@ -345,15 +345,15 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v122 Extend { value=v115, kind=I32 }                  -> x0
     v123 Binop { op=mul, lhs=v1, rhs=v115 }               -> x0
     v124 Extend { value=v123, kind=I32, nsw }             -> x1
-    v125 BinopI { op=add, lhs=v123, rhs_imm=1 }           -> x0
-    v126 Extend { value=v125, kind=I32, nsw }             -> x2
+    v125 BinopI { op=add, lhs=v123, rhs_imm=1 }           -> x2
+    v126 Extend { value=v125, kind=I32, nsw }             -> x0
     v127 Imm(0)                                           -> x0
-    v128 Intrinsic { kind=Alloca, args=[v126] }           -> x14
+    v128 Intrinsic { kind=Alloca, args=[v125] }           -> x14
     v129 Imm(0)                                           -> x0
     v130 Imm(0)                                           -> x0
     v131 Extend { value=v115, kind=I32 }                  -> x0
     v132 Imm(0)                                           -> x0
-    v133 CallExt { binding_idx=25, args=[v128, v115, v126], fp_arg_mask=0x0 } -> x0
+    v133 CallExt { binding_idx=25, args=[v128, v115, v125], fp_arg_mask=0x0 } -> x0
     v134 Imm(0)                                           -> x0
     v135 Extend { value=v115, kind=I32 }                  -> x0
     v136 Call { target_pc=0, args=[v128, v115], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -388,9 +388,9 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v162 Imm(0)                                           -> x0
     v163 Extend { value=v115, kind=I32 }                  -> x0
     v164 Binop { op=mul, lhs=v1, rhs=v115 }               -> x0
-    v165 Extend { value=v164, kind=I32, nsw }             -> x0
-    v166 Binop { op=add, lhs=v128, rhs=v165 }             -> x1
-    v167 LoadIndexed { base=v128, index=v165, scale=1, kind=I8 } -> x0
+    v165 Extend { value=v164, kind=I32, nsw }             -> x1
+    v166 Binop { op=add, lhs=v128, rhs=v164 }             -> x1
+    v167 LoadIndexed { base=v128, index=v164, scale=1, kind=I8 } -> x0
     v168 Binop { op=ne, lhs=v167, rhs=v115 }              -> x1
     v169 BinopI { op=ne, lhs=v168, rhs_imm=0 }            -> x0
     v170 Imm(0)                                           -> x0

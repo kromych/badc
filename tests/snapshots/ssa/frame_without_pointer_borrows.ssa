@@ -604,10 +604,10 @@ fn ent_pc=8 n_params=3 variadic=false locals=0
     v14  Imm(0)                                           -> x0
     v15  BinopI { op=add, lhs=v1, rhs_imm=0 }             -> x0
     v16  Imm(0)                                           -> x0
-    v17  BinopI { op=mul, lhs=v3, rhs_imm=0 }             -> x0
-    v18  Imm(0)                                           -> x1
-    v19  Binop { op=add, lhs=v17, rhs=v5 }                -> x0
-    v20  FpCast { kind=IntToFp, value=v19 }               -> d2
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=add, lhs=v5, rhs_imm=0 }             -> x0
+    v20  FpCast { kind=IntToFp, value=v5 }                -> d2
     v21  Imm(4)                                           -> x0
     v22  Imm(4616189618054758400)                         -> d0
     v23  Binop { op=fdiv, lhs=v20, rhs=v22 }              -> d2

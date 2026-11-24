@@ -27,7 +27,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	add	x0, x0, x0, lsl #1
                	strb	w0, [x1, #0x24]
-               	sxtb	x0, w0
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20

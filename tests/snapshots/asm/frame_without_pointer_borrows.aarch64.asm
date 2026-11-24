@@ -309,10 +309,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	movi	d1, #0000000000000000
-               	mov	x17, #0x0               // =0
-               	mul	x3, x1, x17
-               	add	x3, x3, x2
-               	scvtf	d2, x3
+               	scvtf	d2, x2
                	fmov	d0, #4.00000000
                	fdiv	d2, d2, d0
                	add	x16, x0, #0x0

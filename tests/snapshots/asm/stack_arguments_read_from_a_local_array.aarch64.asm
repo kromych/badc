@@ -145,7 +145,6 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	add	x3, x1, x1, lsl #1
                	add	x3, x3, #0x1
-               	sxtw	x3, w3
                	madd	x2, x1, x3, x2
                	add	x1, x1, #0x1
                	cmp	w1, #0x14

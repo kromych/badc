@@ -87,7 +87,7 @@ Disassembly of section .text:
                	addq	%rdx, %r9
                	movq	$-0x8000, %rdx          # imm = 0x8000
                	movl	$0x7fff, %ebx           # imm = 0x7FFF
-               	cmpq	%rdx, %r9
+               	cmpl	%edx, %r9d
                	jge	<addr>
                	movzbq	0x30(%rsp,%rcx), %rcx
                	movzbq	0x30(%rsp,%r8), %r8
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	cmpl	%edx, %ecx
                	je	<addr>
                	jmp	<addr>
-               	cmpq	%rbx, %r9
+               	cmpl	%ebx, %r9d
                	movq	%r9, %rdx
                	cmovgq	%rbx, %rdx
                	jmp	<addr>

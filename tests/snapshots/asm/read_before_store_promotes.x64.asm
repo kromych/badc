@@ -121,11 +121,7 @@ Disassembly of section .text:
                	retq
 
 <inlined>:
-               	movslq	%edi, %rdi
-               	xorl	%eax, %eax
-               	imulq	$0xa, %rdi, %rcx
-               	cmpl	$0x2, %edi
-               	cmovgq	%rcx, %rax
+               	movl	$0x1e, %eax
                	movq	$-0x1, %rcx
                	cmpl	$0x2, %edi
                	cmovleq	%rcx, %rax

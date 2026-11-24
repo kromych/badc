@@ -218,7 +218,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rdx
                	movq	$-0x1, %r8
                	shrxq	%rdx, %r8, %rdx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%r8b
                	movzbq	%r8b, %r8
                	imulq	%r8, %rdx
@@ -227,14 +227,13 @@ Disassembly of section .text:
                	setne	%r10b
                	movzbq	%r10b, %r10
                	movq	%r10, 0x20(%rsp)
-               	movq	%rax, %r8
-               	andq	$0x7f, %r8
                	movq	%rax, %rdx
                	andq	$0x3f, %rdx
                	movl	$0x3f, %r9d
                	movq	%r9, %r10
                	subq	%rdx, %r10
                	movq	%r10, 0x18(%rsp)
+               	movq	%rax, %r8
                	shrq	$0x6, %r8
                	negq	%r8
                	movq	%r8, %r10

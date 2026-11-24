@@ -39,8 +39,7 @@ Disassembly of section .text:
                	b.gt	<addr>
                	mov	x27, sp
                	add	x0, x20, x20, lsl #1
-               	add	x0, x0, #0x1
-               	sxtw	x21, w0
+               	add	x21, x0, #0x1
                	add	x17, x21, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x22, sp
@@ -163,8 +162,7 @@ Disassembly of section .text:
                	b.gt	<addr>
                	mov	x26, sp
                	add	x0, x20, x20, lsl #2
-               	add	x0, x0, #0x1
-               	sxtw	x21, w0
+               	add	x21, x0, #0x1
                	add	x17, x21, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x22, sp

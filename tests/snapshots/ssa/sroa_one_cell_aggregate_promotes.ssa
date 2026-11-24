@@ -118,9 +118,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v186 Imm(0)                                           -> x2
     v187 Extend { value=v170, kind=I16 }                  -> x2
     v188 Binop { op=add, lhs=v184, rhs=v170 }             -> x1
-    v189 Extend { value=v188, kind=I32, nsw }             -> x1
+    v189 Extend { value=v188, kind=I32, nsw }             -> x2
     v190 LifetimeEnd(0)                                   -> -
-    v191 BinopI { op=mul, lhs=v189, rhs_imm=3 }           -> x1
+    v191 BinopI { op=mul, lhs=v188, rhs_imm=3 }           -> x1
     v192 Binop { op=add, lhs=v152, rhs=v191 }             -> [spill 2]
     v193 Imm(0)                                           -> x0
     v194 Imm(0)                                           -> x0

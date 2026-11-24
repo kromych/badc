@@ -74,26 +74,18 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	movl	$0x5, %edi
                	callq	<addr>
-               	movq	%rax, %rsi
+               	movq	%rax, %rcx
                	movl	%ebx, %eax
                	cltd
-               	idivl	%esi
-               	movq	%rax, %rcx
-               	imulq	%rcx, %rsi
-               	subq	%rsi, %rbx
-               	cmpl	$-0x3, %ecx
+               	idivl	%ecx
+               	movq	%rax, %rsi
+               	imulq	%rsi, %rcx
+               	subq	%rcx, %rbx
+               	cmpl	$-0x3, %esi
                	jne	<addr>
                	cmpl	$-0x2, %ebx
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
-               	addq	$0x10, %rsp
-               	retq
-               	leaq	(%rcx,%rcx,4), %rax
-               	addq	%rbx, %rax
-               	cmpl	$-0x11, %eax
-               	je	<addr>
-               	movl	$0x3, %eax
                	popq	%rbx
                	addq	$0x10, %rsp
                	retq

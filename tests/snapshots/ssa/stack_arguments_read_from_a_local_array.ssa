@@ -188,8 +188,8 @@ fn ent_pc=1 n_params=2 variadic=false locals=20
     v138 BinopI { op=mul, lhs=v131, rhs_imm=3 }           -> x6
     v139 Extend { value=v138, kind=I32, nsw }             -> x7
     v140 BinopI { op=add, lhs=v138, rhs_imm=1 }           -> x6
-    v141 Extend { value=v140, kind=I32, nsw }             -> x6
-    v142 Binop { op=mul, lhs=v131, rhs=v141 }             -> x6
+    v141 Extend { value=v140, kind=I32, nsw }             -> x7
+    v142 Binop { op=mul, lhs=v131, rhs=v140 }             -> x6
     v143 Binop { op=add, lhs=v132, rhs=v142 }             -> x2
     v144 Imm(0)                                           -> x6
     v145 Extend { value=v131, kind=I32 }                  -> x6

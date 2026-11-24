@@ -39,7 +39,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v34  BinopI { op=shl, lhs=v29, rhs_imm=4 }            -> x1
     v35  Binop { op=add, lhs=v27, rhs=v34 }               -> x1
     v36  BinopI { op=mul, lhs=v29, rhs_imm=10 }           -> x7
-    v37  Extend { value=v36, kind=I32, nsw }              -> x7
+    v37  Extend { value=v36, kind=I32, nsw }              -> x8
     v38  Imm(0)                                           -> x8
     v39  Imm(0)                                           -> x8
     v40  Imm(0)                                           -> x8
@@ -49,7 +49,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v44  Imm(0)                                           -> x8
     v45  Imm(0)                                           -> x8
     v46  Imm(0)                                           -> x8
-    v47  Store { addr=v35, disp=0, value=v37, kind=I64 }  -> -
+    v47  Store { addr=v35, disp=0, value=v36, kind=I64 }  -> -
     v48  Imm(0)                                           -> x7
     v49  Store { addr=v35, disp=8, value=v9, kind=I64 }   -> -
     v50  LifetimeEnd(0)                                   -> -

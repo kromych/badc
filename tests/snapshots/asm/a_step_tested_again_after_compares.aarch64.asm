@@ -70,7 +70,6 @@ Disassembly of section .text:
                	b	<addr>
                	str	x3, [x2]
                	add	x3, x0, x0, lsl #3
-               	and	x3, x3, #0xff
                	strb	w3, [x2, #0x9]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4

@@ -52,13 +52,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x18, %rsp
                	retq
-               	leaq	(%rax,%rax,2), %rax
-               	movswq	%ax, %rax
-               	cmpl	$-0x7e, %eax
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x18, %rsp
-               	retq
                	movl	$0x92492493, %eax       # imm = 0x92492493
                	imulq	%rcx, %rax
                	sarq	$0x22, %rax

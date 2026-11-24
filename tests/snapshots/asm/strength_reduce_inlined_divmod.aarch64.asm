@@ -2556,9 +2556,8 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x18]
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
-               	sdiv	x1, x23, x0
-               	msub	x0, x1, x0, x23
-               	add	x0, x1, x0
+               	sdiv	x0, x23, x0
+               	add	x0, x0, x23
                	add	x21, x21, x0
                	b	<addr>
                	adrp	x0, <page>

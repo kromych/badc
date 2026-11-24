@@ -144,15 +144,15 @@ Disassembly of section .text:
                	setg	%cl
                	movzbq	%cl, %rcx
                	addq	%rdx, %rcx
-               	cmpq	%r8, %rdi
+               	cmpl	%r8d, %edi
                	setne	%dl
                	movzbq	%dl, %rdx
                	addq	%rdx, %rcx
-               	cmpq	%r9, %r8
+               	cmpl	%r9d, %r8d
                	setne	%dl
                	movzbq	%dl, %rdx
                	addq	%rdx, %rcx
-               	cmpq	%rdi, %r9
+               	cmpl	%edi, %r9d
                	setne	%dl
                	movzbq	%dl, %rdx
                	addq	%rdx, %rcx
@@ -166,7 +166,7 @@ Disassembly of section .text:
                	movzbq	0x2(%rax), %rdx
                	movzbq	0x3(%rax), %rax
                	addq	%rax, %rdx
-               	cmpq	$0xe0, %rcx
+               	cmpl	$0xe0, %ecx
                	jne	<addr>
                	cmpl	$0x8, %esi
                	jne	<addr>

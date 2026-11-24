@@ -144,7 +144,6 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	leaq	(%rcx,%rcx,2), %rsi
                	incq	%rsi
-               	movslq	%esi, %rsi
                	imulq	%rcx, %rsi
                	addq	%rsi, %rdx
                	incq	%rcx

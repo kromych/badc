@@ -247,14 +247,13 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	bl	<addr>
-               	mov	x20, x0
-               	lsl	x21, x20, #1
-               	add	x22, x20, x20, lsl #1
-               	cmp	w20, #0x2
+               	lsl	x1, x0, #1
+               	add	x2, x0, x0, lsl #1
+               	cmp	w0, #0x2
                	b.ne	<addr>
-               	cmp	w21, #0x4
+               	cmp	w1, #0x4
                	b.ne	<addr>
-               	cmp	w22, #0x6
+               	cmp	w2, #0x6
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x40]
@@ -264,24 +263,19 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	mov	x23, x0
+               	mov	x20, x0
                	mov	x0, #0x4                // =4
                	bl	<addr>
-               	mov	x24, x0
+               	mov	x21, x0
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	mov	x17, #0xa               // =10
-               	mul	x1, x24, x17
-               	add	x1, x23, x1
-               	mov	x17, #0x64              // =100
-               	mul	x2, x20, x17
-               	add	x1, x1, x2
-               	mov	x17, #0x3e8             // =1000
-               	mul	x2, x21, x17
-               	add	x1, x1, x2
-               	mov	x17, #0x2710            // =10000
-               	mul	x2, x22, x17
-               	add	x1, x1, x2
+               	mul	x1, x21, x17
+               	add	x1, x20, x1
+               	add	x1, x1, #0xc8
+               	add	x1, x1, #0xfa0
+               	mov	x17, #0xea60            // =60000
+               	add	x1, x1, x17
                	sxtw	x1, w1
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16

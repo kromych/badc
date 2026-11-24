@@ -95,9 +95,6 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	lsl	x5, x2, #1
                	umulh	x1, x2, x1
-               	mov	x17, #0x0               // =0
-               	mul	x2, x2, x17
-               	add	x1, x1, x2
                	add	x2, x1, x3, lsl #1
                	add	x1, x5, x0
                	cmp	x1, x5

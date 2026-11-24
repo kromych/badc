@@ -92,7 +92,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rdx
                	movq	$-0x1, %rdi
                	shrxq	%rdx, %rdi, %rdx
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	setne	%dil
                	movzbq	%dil, %rdi
                	imulq	%rdi, %rdx
@@ -100,12 +100,12 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	setne	%r8b
                	movzbq	%r8b, %r8
-               	movq	%rsi, %rdx
-               	andq	$0x7f, %rdx
                	movq	%rsi, %rdi
                	andq	$0x3f, %rdi
-               	movl	$0x3f, %r9d
+               	movl	$0x3f, %edx
+               	movq	%rdx, %r9
                	subq	%rdi, %r9
+               	movq	%rsi, %rdx
                	shrq	$0x6, %rdx
                	negq	%rdx
                	movq	%rdx, %r12
@@ -200,7 +200,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rcx
                	movq	$-0x1, %rsi
                	shrxq	%rcx, %rsi, %rcx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	setne	%sil
                	movzbq	%sil, %rsi
                	imulq	%rsi, %rcx
@@ -208,12 +208,12 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	setne	%r8b
                	movzbq	%r8b, %r8
-               	movq	%rdx, %rcx
-               	andq	$0x7f, %rcx
                	movq	%rdx, %rsi
                	andq	$0x3f, %rsi
-               	movl	$0x3f, %r9d
+               	movl	$0x3f, %ecx
+               	movq	%rcx, %r9
                	subq	%rsi, %r9
+               	movq	%rdx, %rcx
                	shrq	$0x6, %rcx
                	negq	%rcx
                	movq	%rcx, %rbx
@@ -325,7 +325,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rdx
                	movq	$-0x1, %rdi
                	shrxq	%rdx, %rdi, %rdx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%dil
                	movzbq	%dil, %rdi
                	imulq	%rdi, %rdx
@@ -333,12 +333,12 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	setne	%r9b
                	movzbq	%r9b, %r9
-               	movq	%rax, %rdi
-               	andq	$0x7f, %rdi
                	movq	%rax, %rdx
                	andq	$0x3f, %rdx
-               	movl	$0x3f, %ebx
+               	movl	$0x3f, %edi
+               	movq	%rdi, %rbx
                	subq	%rdx, %rbx
+               	movq	%rax, %rdi
                	shrq	$0x6, %rdi
                	negq	%rdi
                	movq	%rdi, %r12
@@ -448,7 +448,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rdx
                	movq	$-0x1, %rdi
                	shrxq	%rdx, %rdi, %rdx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%dil
                	movzbq	%dil, %rdi
                	imulq	%rdi, %rdx
@@ -456,12 +456,12 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	setne	%r9b
                	movzbq	%r9b, %r9
-               	movq	%rax, %rdi
-               	andq	$0x7f, %rdi
                	movq	%rax, %rdx
                	andq	$0x3f, %rdx
-               	movl	$0x3f, %ebx
+               	movl	$0x3f, %edi
+               	movq	%rdi, %rbx
                	subq	%rdx, %rbx
+               	movq	%rax, %rdi
                	shrq	$0x6, %rdi
                	negq	%rdi
                	movq	%rdi, %r12
@@ -1541,7 +1541,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rsi
                	movq	$-0x1, %r8
                	shrxq	%rsi, %r8, %rsi
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	setne	%r9b
                	movzbq	%r9b, %r9
                	imulq	%r9, %rsi
@@ -1550,16 +1550,13 @@ Disassembly of section .text:
                	setne	%r10b
                	movzbq	%r10b, %r10
                	movq	%r10, 0x30(%rsp)
-               	movq	%rcx, %r10
-               	andq	$0x7f, %r10
-               	movq	%r10, 0x38(%rsp)
                	movq	%rcx, %rsi
                	andq	$0x3f, %rsi
                	movl	$0x3f, %r9d
                	movq	%r9, %r10
                	subq	%rsi, %r10
                	movq	%r10, 0x28(%rsp)
-               	movq	0x38(%rsp), %r10
+               	movq	%rcx, %r10
                	shrq	$0x6, %r10
                	movq	%r10, 0x38(%rsp)
                	negq	%r10
@@ -1729,7 +1726,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rsi
                	movq	$-0x1, %r8
                	shrxq	%rsi, %r8, %rsi
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	setne	%r9b
                	movzbq	%r9b, %r9
                	imulq	%r9, %rsi
@@ -1738,16 +1735,13 @@ Disassembly of section .text:
                	setne	%r10b
                	movzbq	%r10b, %r10
                	movq	%r10, 0x30(%rsp)
-               	movq	%rcx, %r10
-               	andq	$0x7f, %r10
-               	movq	%r10, 0x38(%rsp)
                	movq	%rcx, %rsi
                	andq	$0x3f, %rsi
                	movl	$0x3f, %r9d
                	movq	%r9, %r10
                	subq	%rsi, %r10
                	movq	%r10, 0x28(%rsp)
-               	movq	0x38(%rsp), %r10
+               	movq	%rcx, %r10
                	shrq	$0x6, %r10
                	movq	%r10, 0x38(%rsp)
                	negq	%r10
@@ -1916,7 +1910,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rdx
                	movq	$-0x1, %rdi
                	shrxq	%rdx, %rdi, %rdx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	setne	%dil
                	movzbq	%dil, %rdi
                	imulq	%rdi, %rdx
@@ -1924,12 +1918,12 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	setne	%r8b
                	movzbq	%r8b, %r8
-               	movq	%rcx, %rdi
-               	andq	$0x7f, %rdi
                	movq	%rcx, %rdx
                	andq	$0x3f, %rdx
-               	movl	$0x3f, %r9d
+               	movl	$0x3f, %edi
+               	movq	%rdi, %r9
                	subq	%rdx, %r9
+               	movq	%rcx, %rdi
                	shrq	$0x6, %rdi
                	negq	%rdi
                	movq	%rdi, %r10
@@ -2042,7 +2036,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rdx
                	movq	$-0x1, %rdi
                	shrxq	%rdx, %rdi, %rdx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%dil
                	movzbq	%dil, %rdi
                	imulq	%rdi, %rdx
@@ -2050,14 +2044,13 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	setne	%r9b
                	movzbq	%r9b, %r9
-               	movq	%rax, %rdi
-               	andq	$0x7f, %rdi
                	movq	%rax, %rdx
                	andq	$0x3f, %rdx
-               	movl	$0x3f, %r10d
-               	movq	%r10, 0x38(%rsp)
+               	movl	$0x3f, %edi
+               	movq	%rdi, %r10
                	subq	%rdx, %r10
                	movq	%r10, 0x38(%rsp)
+               	movq	%rax, %rdi
                	shrq	$0x6, %rdi
                	negq	%rdi
                	movq	%rdi, %r10

@@ -71,17 +71,16 @@ Disassembly of section .text:
                	and	x9, x9, #0x3f
                	mov	x13, #-0x1              // =-1
                	lsr	x9, x13, x9
-               	cmp	x6, #0x0
+               	cmp	w6, #0x0
                	cset	x11, ne
                	mul	x9, x9, x11
                	and	x9, x10, x9
                	cmp	x9, #0x0
                	cset	x15, ne
-               	and	x11, x6, #0x7f
                	and	x9, x6, #0x3f
                	mov	x14, #0x3f              // =63
                	sub	x3, x14, x9
-               	lsr	x11, x11, #6
+               	lsr	x11, x6, #6
                	neg	x11, x11
                	mvn	x4, x11
                	lsr	x5, x1, x9
@@ -146,16 +145,15 @@ Disassembly of section .text:
                	sub	x3, x12, x2
                	and	x3, x3, #0x3f
                	lsr	x3, x13, x3
-               	cmp	x2, #0x0
+               	cmp	w2, #0x0
                	cset	x6, ne
                	mul	x3, x3, x6
                	and	x3, x9, x3
                	cmp	x3, #0x0
                	cset	x3, ne
-               	and	x10, x2, #0x7f
                	and	x6, x2, #0x3f
                	sub	x11, x14, x6
-               	lsr	x10, x10, #6
+               	lsr	x10, x2, #6
                	neg	x10, x10
                	mvn	x12, x10
                	lsr	x13, x1, x6
@@ -235,17 +233,16 @@ Disassembly of section .text:
                	and	x3, x3, #0x3f
                	mov	x9, #-0x1               // =-1
                	lsr	x3, x9, x3
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	cset	x7, ne
                	mul	x3, x3, x7
                	and	x3, x6, x3
                	cmp	x3, #0x0
                	cset	x11, ne
-               	and	x7, x1, #0x7f
                	and	x3, x1, #0x3f
                	mov	x10, #0x3f              // =63
                	sub	x12, x10, x3
-               	lsr	x7, x7, #6
+               	lsr	x7, x1, #6
                	neg	x7, x7
                	mvn	x13, x7
                	lsr	x14, x2, x3
@@ -322,16 +319,15 @@ Disassembly of section .text:
                	sub	x3, x8, x1
                	and	x3, x3, #0x3f
                	lsr	x3, x9, x3
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	cset	x6, ne
                	mul	x3, x3, x6
                	and	x3, x4, x3
                	cmp	x3, #0x0
                	cset	x7, ne
-               	and	x6, x1, #0x7f
                	and	x3, x1, #0x3f
                	sub	x8, x10, x3
-               	lsr	x6, x6, #6
+               	lsr	x6, x1, #6
                	neg	x6, x6
                	mvn	x9, x6
                	lsr	x10, x2, x3
@@ -1128,17 +1124,16 @@ Disassembly of section .text:
                	and	x6, x5, #0x3f
                	mov	x5, #-0x1               // =-1
                	lsr	x6, x5, x6
-               	cmp	x3, #0x0
+               	cmp	w3, #0x0
                	cset	x7, ne
                	mul	x6, x6, x7
                	and	x6, x8, x6
                	cmp	x6, #0x0
                	cset	x11, ne
-               	and	x10, x3, #0x7f
                	and	x7, x3, #0x3f
                	mov	x6, #0x3f               // =63
                	sub	x12, x6, x7
-               	lsr	x10, x10, #6
+               	lsr	x10, x3, #6
                	neg	x10, x10
                	mvn	x13, x10
                	lsr	x14, x2, x7
@@ -1247,16 +1242,15 @@ Disassembly of section .text:
                	sub	x4, x9, x3
                	and	x4, x4, #0x3f
                	lsr	x4, x5, x4
-               	cmp	x3, #0x0
+               	cmp	w3, #0x0
                	cset	x8, ne
                	mul	x4, x4, x8
                	and	x4, x7, x4
                	cmp	x4, #0x0
                	cset	x9, ne
-               	and	x8, x3, #0x7f
                	and	x4, x3, #0x3f
                	sub	x10, x6, x4
-               	lsr	x8, x8, #6
+               	lsr	x8, x3, #6
                	neg	x8, x8
                	mvn	x11, x8
                	lsr	x12, x2, x4
@@ -1370,17 +1364,16 @@ Disassembly of section .text:
                	and	x4, x4, #0x3f
                	mov	x7, #-0x1               // =-1
                	lsr	x4, x7, x4
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	cset	x8, ne
                	mul	x4, x4, x8
                	and	x4, x5, x4
                	cmp	x4, #0x0
                	cset	x10, ne
-               	and	x9, x1, #0x7f
                	and	x4, x1, #0x3f
                	mov	x8, #0x3f               // =63
                	sub	x11, x8, x4
-               	lsr	x9, x9, #6
+               	lsr	x9, x1, #6
                	neg	x9, x9
                	mvn	x12, x9
                	lsr	x13, x0, x4
@@ -1457,16 +1450,15 @@ Disassembly of section .text:
                	sub	x2, x6, x0
                	and	x2, x2, #0x3f
                	lsr	x2, x7, x2
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x5, ne
                	mul	x2, x2, x5
                	and	x2, x4, x2
                	cmp	x2, #0x0
                	cset	x6, ne
-               	and	x5, x0, #0x7f
                	and	x2, x0, #0x3f
                	sub	x7, x8, x2
-               	lsr	x5, x5, #6
+               	lsr	x5, x0, #6
                	neg	x5, x5
                	mvn	x8, x5
                	lsr	x10, x1, x2

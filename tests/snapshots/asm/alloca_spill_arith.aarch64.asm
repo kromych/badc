@@ -99,13 +99,13 @@ Disassembly of section .text:
                	cmp	w2, w3
                	cset	x2, gt
                	add	x1, x1, x2
-               	cmp	x4, x5
+               	cmp	w4, w5
                	cset	x2, ne
                	add	x1, x1, x2
-               	cmp	x5, x6
+               	cmp	w5, w6
                	cset	x2, ne
                	add	x1, x1, x2
-               	cmp	x6, x4
+               	cmp	w6, w4
                	cset	x2, ne
                	add	x1, x1, x2
                	add	x1, x14, x1
@@ -115,7 +115,7 @@ Disassembly of section .text:
                	ldrb	w2, [x0, #0x2]
                	ldrb	w0, [x0, #0x3]
                	add	x2, x2, x0
-               	cmp	x1, #0xe0
+               	cmp	w1, #0xe0
                	b.ne	<addr>
                	cmp	w3, #0x8
                	b.ne	<addr>

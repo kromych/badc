@@ -34,7 +34,6 @@ Disassembly of section .text:
                	imulq	$0x3e8, %rdi, %rax      # imm = 0x3E8
                	movsbq	0x8(%rsp), %rcx
                	imulq	$0x64, %rcx, %rcx
-               	movslq	%ecx, %rcx
                	addq	%rcx, %rax
                	movslq	0x9(%rsp), %rcx
                	addq	%rcx, %rax

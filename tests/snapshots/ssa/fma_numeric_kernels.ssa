@@ -172,8 +172,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     v101 Binop { op=add, lhs=v76, rhs=v89 }               -> x8
     v102 Extend { value=v101, kind=I32, nsw }             -> x9
     v103 BinopI { op=add, lhs=v101, rhs_imm=1 }           -> x8
-    v104 Extend { value=v103, kind=I32, nsw }             -> x8
-    v105 FpCast { kind=IntToFp, value=v104 }              -> d0
+    v104 Extend { value=v103, kind=I32, nsw }             -> x9
+    v105 FpCast { kind=IntToFp, value=v103 }              -> d0
     v106 StoreIndexed { base=v95, index=v89, scale=8, value=v105, kind=F64 } -> -
     v107 LocalAddr(-9)                                    -> x7
     v108 Extend { value=v68, kind=I32 }                   -> x8

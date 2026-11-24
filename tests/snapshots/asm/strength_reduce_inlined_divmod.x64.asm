@@ -2589,8 +2589,6 @@ Disassembly of section .text:
                	movq	%r13, %rax
                	cqto
                	idivq	%rcx
-               	imulq	%rax, %rcx
-               	subq	%rcx, %r13
                	addq	%r13, %rax
                	addq	%rax, %rbx
                	jmp	<addr>

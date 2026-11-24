@@ -392,16 +392,11 @@ Disassembly of section .text:
                	addq	$0x38, %rsp
                	retq
                	xorl	%eax, %eax
-               	leaq	<rip>, %rsi # <addr>
-               	imulq	$0x25, %rax, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rdx
-               	shrq	$0x3a, %rdx
-               	addq	%rdx, %rcx
-               	andq	$0x3f, %rcx
-               	subq	%rdx, %rcx
-               	subq	$0x14, %rcx
-               	movl	%ecx, (%rsi,%rax,4)
+               	leaq	<rip>, %rcx # <addr>
+               	imulq	$0x25, %rax, %rdx
+               	andq	$0x3f, %rdx
+               	subq	$0x14, %rdx
+               	movl	%edx, (%rcx,%rax,4)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>

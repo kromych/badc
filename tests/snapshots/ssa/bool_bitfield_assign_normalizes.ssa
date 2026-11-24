@@ -658,7 +658,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v616 Imm(0)                                           -> x0
     v617 LocalAddr(-2)                                    -> x0
     v618 BinopI { op=add, lhs=v585, rhs_imm=8 }           -> x0
-    v619 Imm(0)                                           -> x0
+    v619 LoadLocal { off=-2, disp=8, kind=U8 }            -> x0
     v620 Imm(0)                                           -> x0
     v621 Imm(0)                                           -> x0
     v622 Imm(0)                                           -> x0

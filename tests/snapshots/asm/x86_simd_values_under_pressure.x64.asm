@@ -294,11 +294,9 @@ Disassembly of section .text:
                	movl	%edx, 0x368(%rsp)
                	movl	%esi, 0x36c(%rsp)
                	movl	0x370(%rsp), %edx
-               	movl	%eax, %eax
                	imulq	%rdx, %rax
                	movl	%eax, 0x370(%rsp)
                	movl	0x374(%rsp), %eax
-               	movl	%ecx, %ecx
                	imulq	%rcx, %rax
                	movl	%eax, 0x374(%rsp)
                	movl	0x378(%rsp), %eax
@@ -357,14 +355,8 @@ Disassembly of section .text:
                	movl	%ecx, 0x3b4(%rsp)
                	movl	%edx, 0x3b8(%rsp)
                	movl	%esi, 0x3bc(%rsp)
-               	movl	0x3c0(%rsp), %edx
-               	movl	%eax, %eax
-               	addq	%rdx, %rax
-               	movl	%eax, 0x3c0(%rsp)
-               	movl	0x3c4(%rsp), %eax
-               	movl	%ecx, %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, 0x3c4(%rsp)
+               	addl	%eax, 0x3c0(%rsp)
+               	addl	%ecx, 0x3c4(%rsp)
                	movl	0x3c8(%rsp), %eax
                	movl	0x3b8(%rsp), %ecx
                	addq	%rcx, %rax

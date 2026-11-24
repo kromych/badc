@@ -57,7 +57,6 @@ Disassembly of section .text:
                	movzbq	0x20(%rsp,%rax), %r8
                	xorq	%r8, %rdx
                	movb	%dl, 0x40(%rsp,%rax)
-               	andq	$0xff, %rdx
                	movzbq	0x10(%rsp,%rax), %rsi
                	movzbq	0x20(%rsp,%rax), %r8
                	xorq	%r8, %rsi

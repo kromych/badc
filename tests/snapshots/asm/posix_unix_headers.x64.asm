@@ -36,15 +36,7 @@ Disassembly of section .text:
                	movzbq	(%rsp), %rax
                	orq	$0x8, %rax
                	movb	%al, (%rsp)
-               	movzbq	0x5(%rsp), %rcx
-               	orq	$0x1, %rcx
-               	movb	%cl, 0x5(%rsp)
-               	andq	$0xff, %rcx
-               	testb	$0x1, %cl
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x88, %rsp
-               	retq
+               	orb	$0x1, 0x5(%rsp)
                	testb	$0x10, %al
                	je	<addr>
                	movl	$0x3, %eax

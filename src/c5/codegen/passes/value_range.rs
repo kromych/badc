@@ -1033,7 +1033,7 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
         // A width-limited read cannot produce a value outside the width
         // it extends from, nor can a narrow atomic load or the prior
         // contents a compare-exchange zero-extends.
-        Inst::Load { kind, .. } | Inst::LoadLocal { disp: 0, kind, .. } => {
+        Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } | Inst::LoadIndexed { kind, .. } => {
             extend_range(*kind).unwrap_or(UNIVERSE)
         }
         // So is an SVE reduction into a narrow lane.
@@ -2183,6 +2183,58 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A narrow read is bounded by its width wherever it reads: a frame
+    /// object's field past the slot's base, and an indexed element.
+    #[test]
+    fn a_narrow_read_is_bounded_at_any_displacement() {
+        use crate::c5::ir::{Block, IndexExt};
+        let insts = vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64,
+            },
+            Inst::LoadLocal {
+                off: -2,
+                disp: 12,
+                kind: LoadKind::U32,
+                volatile: false,
+            },
+            Inst::LoadIndexed {
+                base: 0,
+                index: 0,
+                index_ext: IndexExt::None,
+                scale: 2,
+                kind: LoadKind::I16,
+                abs_base: false,
+            },
+        ];
+        let f = FunctionSsa {
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 3],
+            f32_values: vec![false; 3],
+            insts,
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            ..FunctionSsa::default()
+        };
+        let r = def_ranges(&f, &[]);
+        assert!(
+            r[1] == Range {
+                lo: 0,
+                hi: 0xffff_ffff
+            }
+        );
+        assert!(
+            r[2] == Range {
+                lo: -0x8000,
+                hi: 0x7fff
+            }
+        );
+    }
 
     /// A product's bounds are its corners' extremes, whatever the signs,
     /// and unbounded where a corner leaves 64 bits.

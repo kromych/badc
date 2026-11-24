@@ -65,7 +65,6 @@ Disassembly of section .text:
                	strb	w1, [x0, #0xd]
                	strb	w1, [x0, #0xe]
                	strb	w1, [x0, #0xf]
-               	and	x1, x1, #0xff
                	cmp	w1, #0x5a
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

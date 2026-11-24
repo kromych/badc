@@ -44,27 +44,11 @@ Disassembly of section .text:
                	movb	%al, (%rsp)
                	orq	$0x80, %rax
                	movb	%al, (%rsp)
-               	movzbq	0x1(%rsp), %rcx
-               	orq	$0x1, %rcx
-               	movb	%cl, 0x1(%rsp)
-               	movzbq	0xc(%rsp), %rdx
-               	orq	$0x10, %rdx
-               	movb	%dl, 0xc(%rsp)
+               	orb	$0x1, 0x1(%rsp)
+               	orb	$0x10, 0xc(%rsp)
                	testb	$0x1, %al
                	jne	<addr>
                	movl	$0x2, %eax
-               	addq	$0x88, %rsp
-               	retq
-               	andq	$0xff, %rcx
-               	testb	$0x1, %cl
-               	jne	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x88, %rsp
-               	retq
-               	andq	$0xff, %rdx
-               	testb	$0x10, %dl
-               	jne	<addr>
-               	movl	$0x5, %eax
                	addq	$0x88, %rsp
                	retq
                	movzbq	(%rsp), %rax
@@ -73,8 +57,8 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	addq	$0x88, %rsp
                	retq
-               	movzbq	0x6(%rsp), %rsi
-               	testb	$0x4, %sil
+               	movzbq	0x6(%rsp), %rcx
+               	testb	$0x4, %cl
                	je	<addr>
                	movl	$0x7, %eax
                	addq	$0x88, %rsp
@@ -84,11 +68,13 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	addq	$0x88, %rsp
                	retq
+               	movzbq	0x1(%rsp), %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0xc, %eax
                	addq	$0x88, %rsp
                	retq
+               	movzbq	0xc(%rsp), %rdx
                	cmpl	$0x10, %edx
                	je	<addr>
                	movl	$0xd, %eax
@@ -106,7 +92,6 @@ Disassembly of section .text:
                	movl	$0x16, %eax
                	addq	$0x88, %rsp
                	retq
-               	movzbq	0x1(%rsp), %rcx
                	testb	$0x1, %cl
                	jne	<addr>
                	movl	$0x17, %eax

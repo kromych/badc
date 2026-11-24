@@ -598,6 +598,60 @@ fn the_variable_shifts_are_rows_the_interpreter_runs() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// Each extension's header, under the name gcc and clang give it, compiles
+/// behind `<immintrin.h>` as those compilers require and on its own, and
+/// gives the extension's intrinsics.
+#[test]
+fn each_extension_header_gives_its_intrinsics() {
+    for name in [
+        "avxintrin.h",
+        "avx2intrin.h",
+        "fmaintrin.h",
+        "f16cintrin.h",
+        "shaintrin.h",
+        "vaesintrin.h",
+        "vpclmulqdqintrin.h",
+        "rdseedintrin.h",
+        "bmiintrin.h",
+        "bmi2intrin.h",
+        "lzcntintrin.h",
+        "adxintrin.h",
+        "xsaveintrin.h",
+        "clflushoptintrin.h",
+        "clwbintrin.h",
+        "prfchwintrin.h",
+        "avx512fintrin.h",
+        "avx512bwintrin.h",
+        "avx512dqintrin.h",
+        "avx512vlintrin.h",
+        "avx512cdintrin.h",
+        "avx512vnniintrin.h",
+        "avx512vlbwintrin.h",
+        "avx512vldqintrin.h",
+        "x86gprintrin.h",
+        "ia32intrin.h",
+    ] {
+        for umbrella in ["#include <immintrin.h>\n", ""] {
+            let src =
+                alloc::format!("{umbrella}#include <{name}>\nint main(void) {{ return 0; }}\n");
+            super::compile_str_bare_for(&src, crate::Target::LinuxX64);
+        }
+    }
+    let src = "#include <immintrin.h>\n\
+        #include <lzcntintrin.h>\n\
+        #include <bmiintrin.h>\n\
+        #include <bmi2intrin.h>\n\
+        int main(void) {\n\
+            if (_mm_popcnt_u32(0xf0f0u) != 8) return 1;\n\
+            if (_lzcnt_u32(1) != 31) return 2;\n\
+            if (_blsr_u32(6) != 4) return 3;\n\
+            if (_pdep_u32(5, 0xf0) != 0x50) return 4;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// The blends by the sign of each mask lane are rows the interpreter
 /// runs: a lane of the second operand where the mask lane's top bit is
 /// set, at every lane width and at 16 and 32 bytes, and the AVX blend by

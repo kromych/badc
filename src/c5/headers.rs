@@ -130,6 +130,38 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
     ),
 ];
 
+/// Extension headers the references ship only for inclusion behind
+/// `<immintrin.h>` (an `#error` alone, the table's `f`); badc's include
+/// `<x86intrin.h>`, so each also compiles alone.
+#[cfg(test)]
+const UMBRELLA_ONLY: &[&str] = &[
+    "avxintrin.h",
+    "avx2intrin.h",
+    "fmaintrin.h",
+    "f16cintrin.h",
+    "shaintrin.h",
+    "vaesintrin.h",
+    "vpclmulqdqintrin.h",
+    "rdseedintrin.h",
+    "bmiintrin.h",
+    "bmi2intrin.h",
+    "lzcntintrin.h",
+    "adxintrin.h",
+    "xsaveintrin.h",
+    "clflushoptintrin.h",
+    "clwbintrin.h",
+    "prfchwintrin.h",
+    "avx512fintrin.h",
+    "avx512bwintrin.h",
+    "avx512dqintrin.h",
+    "avx512vlintrin.h",
+    "avx512cdintrin.h",
+    "avx512vnniintrin.h",
+    "avx512vlbwintrin.h",
+    "avx512vldqintrin.h",
+    "ia32intrin.h",
+];
+
 /// The intrinsic wrappers, built on badc's own builtins and inline-asm
 /// encoders. Another compiler's copy is written against that compiler's
 /// builtins and can never compile here, so where a search directory
@@ -153,6 +185,32 @@ pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "smmintrin.h",
     "nmmintrin.h",
     "wmmintrin.h",
+    "avxintrin.h",
+    "avx2intrin.h",
+    "fmaintrin.h",
+    "f16cintrin.h",
+    "shaintrin.h",
+    "vaesintrin.h",
+    "vpclmulqdqintrin.h",
+    "rdseedintrin.h",
+    "bmiintrin.h",
+    "bmi2intrin.h",
+    "lzcntintrin.h",
+    "adxintrin.h",
+    "xsaveintrin.h",
+    "clflushoptintrin.h",
+    "clwbintrin.h",
+    "prfchwintrin.h",
+    "avx512fintrin.h",
+    "avx512bwintrin.h",
+    "avx512dqintrin.h",
+    "avx512vlintrin.h",
+    "avx512cdintrin.h",
+    "avx512vnniintrin.h",
+    "avx512vlbwintrin.h",
+    "avx512vldqintrin.h",
+    "x86gprintrin.h",
+    "ia32intrin.h",
 ];
 
 /// The rest of the headers that live in the compiler's own include
@@ -256,6 +314,32 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("smmintrin.h", X86_64, compiler),
     header!("nmmintrin.h", X86_64, compiler),
     header!("wmmintrin.h", X86_64, compiler),
+    header!("avxintrin.h", X86_64, compiler),
+    header!("avx2intrin.h", X86_64, compiler),
+    header!("fmaintrin.h", X86_64, compiler),
+    header!("f16cintrin.h", X86_64, compiler),
+    header!("shaintrin.h", X86_64, compiler),
+    header!("vaesintrin.h", X86_64, compiler),
+    header!("vpclmulqdqintrin.h", X86_64, compiler),
+    header!("rdseedintrin.h", X86_64, compiler),
+    header!("bmiintrin.h", X86_64, compiler),
+    header!("bmi2intrin.h", X86_64, compiler),
+    header!("lzcntintrin.h", X86_64, compiler),
+    header!("adxintrin.h", X86_64, compiler),
+    header!("xsaveintrin.h", X86_64, compiler),
+    header!("clflushoptintrin.h", X86_64, compiler),
+    header!("clwbintrin.h", X86_64, compiler),
+    header!("prfchwintrin.h", X86_64, compiler),
+    header!("avx512fintrin.h", X86_64, compiler),
+    header!("avx512bwintrin.h", X86_64, compiler),
+    header!("avx512dqintrin.h", X86_64, compiler),
+    header!("avx512vlintrin.h", X86_64, compiler),
+    header!("avx512cdintrin.h", X86_64, compiler),
+    header!("avx512vnniintrin.h", X86_64, compiler),
+    header!("avx512vlbwintrin.h", X86_64, compiler),
+    header!("avx512vldqintrin.h", X86_64, compiler),
+    header!("x86gprintrin.h", X86_64, compiler),
+    header!("ia32intrin.h", X86_64, compiler),
     header!(
         "mm_malloc.h",
         MACOS.or(TargetSet::of(Target::LinuxX64)).or(WINDOWS),
@@ -947,7 +1031,12 @@ mod tests {
                 continue;
             };
             let beyond = (BEYOND_REFERENCE.iter().filter(|e| e.0 == name))
-                .fold(TargetSet(0), |set, e| set.or(e.1));
+                .fold(TargetSet(0), |set, e| set.or(e.1))
+                .or(if UMBRELLA_ONLY.contains(&name) {
+                    X86_64
+                } else {
+                    TargetSet(0)
+                });
             if beyond.0 & measured.0 != 0 {
                 failures.push(alloc::format!(
                     "{name}: a reason recorded where the reference ships it"

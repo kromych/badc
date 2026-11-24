@@ -3374,6 +3374,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 super::super::passes::store_forward::drop_overwritten_stores(f);
             }
         });
+        // Again once the forwarding has made one value of a word the source
+        // reread for each shift.
+        pipeline.run("passes::rotate::run forwarded", &mut ssa_funcs, |funcs| {
+            super::super::passes::rotate::run(funcs);
+            super::super::passes::bswap::run(funcs);
+        });
         // The stores the forwarding left to slots nothing reads go; the
         // slots lose their frame location.
         pipeline.run("passes::dead_slot_stores::run", &mut ssa_funcs, |funcs| {

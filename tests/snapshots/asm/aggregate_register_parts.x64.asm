@@ -36,10 +36,7 @@ Disassembly of section .text:
                	retq
 
 <swapq>:
-               	movq	%rdi, %rax
-               	shrq	$0x20, %rax
-               	shlq	$0x20, %rdi
-               	orq	%rdi, %rax
+               	rorxq	$0x20, %rdi, %rax
                	retq
 
 <tail>:
@@ -161,12 +158,9 @@ Disassembly of section .text:
                	retq
 
 <nested>:
-               	movq	%rdi, %rax
-               	shrq	$0x20, %rax
-               	movslq	%edi, %rcx
-               	leaq	(%rsi,%rcx), %rdx
-               	shlq	$0x20, %rdi
-               	orq	%rdi, %rax
+               	movslq	%edi, %rax
+               	leaq	(%rsi,%rax), %rdx
+               	rorxq	$0x20, %rdi, %rax
                	retq
 
 <pp>:

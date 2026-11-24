@@ -155,7 +155,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=8 }             -> x0
     v6   Extend { value=v5, kind=I32 }                    -> x0
     v7   BinopI { op=shru, lhs=v3, rhs_imm=8 }            -> x0
-    v8   Binop { op=add, lhs=v5, rhs=v7 }                 -> x0
+    v8   Bswap { value=v1, width=2 }                      -> x0
     v9   Extend { value=v8, kind=I32, nsw }               -> x0
     v10  Bswap { value=v1, width=2 }                      -> x0
     terminator Return(v10)   (exit_acc=v10)

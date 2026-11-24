@@ -21,8 +21,7 @@ Disassembly of section .text:
                	ret
 
 <swapq>:
-               	lsr	x1, x0, #32
-               	orr	x0, x1, x0, lsl #32
+               	ror	x0, x0, #0x20
                	ret
 
 <tail>:
@@ -132,10 +131,9 @@ Disassembly of section .text:
                	ret
 
 <nested>:
-               	lsr	x2, x0, #32
-               	sxtw	x3, w0
-               	add	x1, x1, x3
-               	orr	x0, x2, x0, lsl #32
+               	sxtw	x2, w0
+               	add	x1, x1, x2
+               	ror	x0, x0, #0x20
                	ret
 
 <pp>:

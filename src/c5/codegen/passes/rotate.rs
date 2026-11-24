@@ -1,6 +1,7 @@
 //! Recognize `(x >> c) | (x << (W - c))` shapes and fold them to a
 //! single `Ror`. Runs after `inline` so post-inline rotates
-//! exposed by parameter substitution become recognizable. The 64-bit
+//! exposed by parameter substitution become recognizable, and again after
+//! store forwarding, which makes one value of a word read twice. The 64-bit
 //! form rotates the full register; the 32-bit one, over a zero-extended
 //! word, is `Ror32` ([`match_rotate32`]).
 //!
@@ -234,10 +235,15 @@ fn shift32(func: &FunctionSsa, v: ValueId, want: BinOp) -> Option<(ValueId, Shif
 }
 
 /// The 32-bit rotate the OR at `or_idx` computes: `(x >> c) | (x << (32 -
-/// c))` over a zero-extended `x`, the left shift's bits above 31 unread
-/// or cut, which `Ror32` computes from `x`'s low word. Returns that word
+/// c))`, the right shift over a zero-extended `x` (or one `high_clear` says
+/// is) and the left over `x` or that extension, its bits above 31 unread or
+/// cut, which `Ror32` computes from `x`'s low word. Returns that word
 /// and the right shift's count, by which the rotate turns.
-fn match_rotate32(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateBy)> {
+fn match_rotate32(
+    func: &FunctionSsa,
+    or_idx: usize,
+    high_clear: &core::cell::OnceCell<Vec<bool>>,
+) -> Option<(ValueId, RotateBy)> {
     let Inst::Binop {
         op: BinOp::Or,
         lhs,
@@ -249,7 +255,8 @@ fn match_rotate32(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateB
     let try_one = |a: ValueId, b: ValueId| -> Option<(ValueId, RotateBy)> {
         let (xa, right) = shift32(func, a, BinOp::Shru)?;
         let (xb, left) = shift32(func, b, BinOp::Shl)?;
-        // The right shift brings zeros down only from a zero-extended word.
+        // The right shift brings zeros down only from a word whose high
+        // half is clear: zero-extended, or so by range.
         let x = match func.insts.get(xa as usize)? {
             Inst::BinopI {
                 op: BinOp::And,
@@ -259,7 +266,17 @@ fn match_rotate32(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateB
             | Inst::Extend {
                 kind: LoadKind::U32,
                 ..
-            } if xa == xb => low_word(func, xa),
+            } if xa == xb || low_word(func, xa) == xb => low_word(func, xa),
+            _ if xa == xb
+                && high_clear
+                    .get_or_init(|| {
+                        crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func)
+                    })
+                    .get(xa as usize)
+                    == Some(&true) =>
+            {
+                xa
+            }
             _ => return None,
         };
         let value = |c: &ShiftAmount| match *c {
@@ -320,10 +337,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let n = func.insts.len();
         let mut rewrites: Vec<(usize, ValueId, RotateBy, BinOp)> = Vec::new();
+        let high_clear = core::cell::OnceCell::new();
         for idx in 0..n {
             if let Some((x, by)) = match_rotate(func, idx) {
                 rewrites.push((idx, x, by, BinOp::Ror));
-            } else if let Some((x, by)) = match_rotate32(func, idx) {
+            } else if let Some((x, by)) = match_rotate32(func, idx, &high_clear) {
                 rewrites.push((idx, x, by, BinOp::Ror32));
             }
         }

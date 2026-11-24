@@ -4010,6 +4010,10 @@ f:
     movzx eax, byte ptr [rsi]
     movsx rax, word ptr [rsi]
     movsxd rax, dword ptr [rsi]
+    movzx edi, ah
+    movsx eax, bh
+    mov ch, dl
+    add dh, 3
     cqo
     imul rax, qword ptr [rbx], 8
     shl dword ptr [rax], cl
@@ -4063,6 +4067,10 @@ f:
     movzbl (%rsi), %eax
     movswq (%rsi), %rax
     movslq (%rsi), %rax
+    movzbl %ah, %edi
+    movsbl %bh, %eax
+    movb %dl, %ch
+    addb $3, %dh
     cqto
     imulq $8, (%rbx), %rax
     shll %cl, (%rax)

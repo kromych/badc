@@ -304,6 +304,9 @@ fn suffix(bytes: u32) -> Option<char> {
 /// The width of a general-purpose register named `r`.
 fn gpr_width(r: &str) -> Option<u32> {
     use crate::c5::ir::AsmRegSize::*;
+    if super::asm::high_byte_reg_by_name(r).is_some() {
+        return Some(1);
+    }
     match super::asm::reg_by_name(r)? {
         (n, size) if n < 16 => Some(match size {
             Byte => 1,
@@ -315,14 +318,18 @@ fn gpr_width(r: &str) -> Option<u32> {
     }
 }
 
-/// Whether `name` names a register, `rip` included.
+/// Whether `name` names a register, `rip` and the high-byte registers
+/// included.
 fn register(name: &str) -> Option<String> {
     let lower = name.trim_start_matches('%').to_ascii_lowercase();
     let mask = lower
         .strip_prefix('k')
         .is_some_and(|d| matches!(d, "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7"));
     let st = lower.replace(' ', "");
-    (lower == "rip" || mask || super::asm::reg_by_name(&lower).is_some())
+    let known = |r: &str| {
+        super::asm::reg_by_name(r).is_some() || super::asm::high_byte_reg_by_name(r).is_some()
+    };
+    (lower == "rip" || mask || known(&lower))
         .then_some(lower)
         .or_else(|| super::asm::reg_by_name(&st).map(|_| st))
 }

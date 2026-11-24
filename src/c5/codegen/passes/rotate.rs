@@ -235,9 +235,9 @@ fn shift32(func: &FunctionSsa, v: ValueId, want: BinOp) -> Option<(ValueId, Shif
 }
 
 /// The 32-bit rotate the OR at `or_idx` computes: `(x >> c) | (x << (32 -
-/// c))`, the right shift over a zero-extended `x` (or one `high_clear` says
-/// is) and the left over `x` or that extension, its bits above 31 unread or
-/// cut, which `Ror32` computes from `x`'s low word. Returns that word
+/// c))`, the right shift over a zero-extended `x` (or one its range says
+/// is) and the left over `x` or an extension of it, its bits above 31
+/// unread or cut, which `Ror32` computes from `x`'s low word. Returns that word
 /// and the right shift's count, by which the rotate turns.
 fn match_rotate32(
     func: &FunctionSsa,
@@ -266,11 +266,14 @@ fn match_rotate32(
             | Inst::Extend {
                 kind: LoadKind::U32,
                 ..
-            } if xa == xb || low_word(func, xa) == xb => low_word(func, xa),
+            } if xa == xb || low_word(func, xa) == low_word(func, xb) => low_word(func, xa),
             _ if xa == xb
                 && high_clear
                     .get_or_init(|| {
-                        crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func)
+                        super::value_range::def_ranges(func, &[])
+                            .into_iter()
+                            .map(|r| r.high_word_clear())
+                            .collect()
                     })
                     .get(xa as usize)
                     == Some(&true) =>

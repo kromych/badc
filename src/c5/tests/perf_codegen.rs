@@ -446,11 +446,22 @@ fn a_contraction_leaves_no_multiply_under_fenv_access() {
     let insns = x64(SRC, "fused");
     // `mulsd` / `vmulsd`, and a VEX `vfmadd`/`vfmsub` (0F38 map, 0x98-0xBF).
     assert!(!insns.iter().any(|i| i.op == 0x0F59), "{insns:x?}");
-    assert!(insns.iter().any(|i| i.vex && (0x3898..=0x38BF).contains(&i.op)), "{insns:x?}");
+    assert!(
+        insns
+            .iter()
+            .any(|i| i.vex && (0x3898..=0x38BF).contains(&i.op)),
+        "{insns:x?}"
+    );
     let ws = a64(SRC, "fused");
     // FMUL and FMADD, double precision.
-    assert!(!ws.iter().any(|&w| w & 0xFFE0_FC00 == 0x1E60_0800), "{ws:08x?}");
-    assert!(ws.iter().any(|&w| w & 0xFFE0_8000 == 0x1F40_0000), "{ws:08x?}");
+    assert!(
+        !ws.iter().any(|&w| w & 0xFFE0_FC00 == 0x1E60_0800),
+        "{ws:08x?}"
+    );
+    assert!(
+        ws.iter().any(|&w| w & 0xFFE0_8000 == 0x1F40_0000),
+        "{ws:08x?}"
+    );
 }
 
 /// Floating arithmetic of a loop's invariants and the conversion of an

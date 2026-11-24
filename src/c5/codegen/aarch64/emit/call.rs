@@ -1658,9 +1658,13 @@ fn expand_parts(
     }
     let mut out = plan.clone();
     out.placements.clear();
+    // The positions move, and a stack argument's width with its own.
+    out.stack_widths = crate::c5::ir::ArgWidths::default();
     let (mut values, mut aggs) = (Vec::new(), Vec::new());
     for (i, (&v, &placement)) in args.iter().zip(&plan.placements).enumerate() {
         let Some(parts) = parts_of(v) else {
+            out.stack_widths
+                .set(values.len(), plan.stack_widths.bytes(i));
             values.push(v);
             aggs.push(arg_aggs.get(i).copied().flatten());
             out.placements.push(placement);

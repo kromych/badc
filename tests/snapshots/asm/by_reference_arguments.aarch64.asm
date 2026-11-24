@@ -210,15 +210,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x78
-               	mov	x1, #0x1                // =1
-               	stur	x1, [x29, #-0x78]
-               	mov	x2, #0x2                // =2
-               	stur	x2, [x29, #-0x70]
-               	mov	x3, #0x3                // =3
-               	stur	x3, [x29, #-0x68]
-               	stur	x1, [x29, #-0x60]
-               	stur	x2, [x29, #-0x58]
-               	stur	x3, [x29, #-0x50]
+               	mov	x1, #0x2                // =2
+               	stur	x1, [x29, #-0x70]
+               	mov	x2, #0x3                // =3
+               	stur	x2, [x29, #-0x68]
+               	stur	x1, [x29, #-0x58]
+               	stur	x2, [x29, #-0x50]
                	mov	x1, #-0x1               // =-1
                	stur	x1, [x29, #-0x60]
                	stur	x1, [x29, #-0x78]
@@ -230,8 +227,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x60
                	blr	x1
                	sub	x0, x29, #0x48
-               	mov	x1, #0x1                // =1
-               	stur	x1, [x29, #-0x48]
                	mov	x1, #0x2                // =2
                	stur	x1, [x29, #-0x40]
                	mov	x1, #0x3                // =3

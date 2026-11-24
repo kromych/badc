@@ -34,8 +34,6 @@ Disassembly of section .text:
                	xorl	%ebx, %ebx
                	movl	%ebx, 0x28(%rsp)
                	movq	%rbx, 0xa0(%rsp)
-               	movq	%rbx, 0xa8(%rsp)
-               	movq	%rbx, 0xb0(%rsp)
                	movq	%rbx, 0xb8(%rsp)
                	movq	%rbx, 0xc0(%rsp)
                	movq	%rbx, 0xc8(%rsp)

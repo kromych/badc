@@ -1612,43 +1612,43 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v1481 LocalAddr(-131)                                  -> x0
     v1482 Imm(0)                                           -> x0
     v1483 Imm(0)                                           -> x0
-    v1484 Imm(81985529216486895)                           -> x1
-    v1485 StoreLocal { off=-131, value=v1484, kind=I64 }   -> -
+    v1484 Imm(0)                                           -> x0
+    v1485 Imm(0)                                           -> x0
     v1486 Imm(0)                                           -> x0
-    v1487 Imm(-81985529216486896)                          -> x2
-    v1488 StoreLocal { off=-131, disp=8, value=v1487, kind=I64 } -> -
+    v1487 Imm(0)                                           -> x0
+    v1488 Imm(0)                                           -> x0
     v1489 Imm(0)                                           -> x0
     v1490 Imm(0)                                           -> x0
     v1491 Imm(0)                                           -> x0
-    v1492 Imm(0)                                           -> x0
+    v1492 Imm(390282985199)                                -> x0
     v1493 Imm(0)                                           -> x0
-    v1494 Imm(390282985199)                                -> x0
-    v1495 Imm(0)                                           -> x6
-    v1496 StoreLocal { off=-131, disp=16, value=v1494, kind=I64 } -> -
+    v1494 Imm(0)                                           -> x0
+    v1495 LocalAddr(-131)                                  -> x0
+    v1496 Imm(0)                                           -> x0
     v1497 LocalAddr(-131)                                  -> x0
     v1498 Imm(0)                                           -> x0
-    v1499 LocalAddr(-131)                                  -> x0
+    v1499 Imm(0)                                           -> x0
     v1500 Imm(0)                                           -> x0
     v1501 Imm(0)                                           -> x0
     v1502 Imm(0)                                           -> x0
     v1503 Imm(0)                                           -> x0
-    v1504 Imm(0)                                           -> x0
-    v1505 Imm(0)                                           -> x0
-    v1506 StoreLocal { off=-131, value=v1505, kind=I64 }   -> -
-    v1507 BinopI { op=add, lhs=v1481, rhs_imm=8 }          -> x6
-    v1508 StoreLocal { off=-131, disp=8, value=v1505, kind=I64 } -> -
-    v1509 BinopI { op=add, lhs=v1481, rhs_imm=16 }         -> x6
-    v1510 StoreLocal { off=-131, disp=16, value=v1505, kind=I64 } -> -
-    v1511 LocalAddr(-131)                                  -> x6
-    v1512 Imm(0)                                           -> x6
-    v1513 LocalAddr(-131)                                  -> x6
-    v1514 Imm(0)                                           -> x6
-    v1515 Imm(0)                                           -> x6
-    v1516 Imm(0)                                           -> x6
-    v1517 Imm(0)                                           -> x6
-    v1518 StoreLocal { off=-131, value=v1484, kind=I64 }   -> -
-    v1519 BinopI { op=add, lhs=v1513, rhs_imm=8 }          -> x1
-    v1520 StoreLocal { off=-131, disp=8, value=v1487, kind=I64 } -> -
+    v1504 Imm(0)                                           -> x1
+    v1505 BinopI { op=add, lhs=v1481, rhs_imm=8 }          -> x1
+    v1506 Imm(0)                                           -> x1
+    v1507 BinopI { op=add, lhs=v1481, rhs_imm=16 }         -> x1
+    v1508 StoreLocal { off=-131, disp=16, value=v1503, kind=I64 } -> -
+    v1509 LocalAddr(-131)                                  -> x1
+    v1510 Imm(0)                                           -> x1
+    v1511 LocalAddr(-131)                                  -> x1
+    v1512 Imm(0)                                           -> x1
+    v1513 Imm(0)                                           -> x1
+    v1514 Imm(0)                                           -> x1
+    v1515 Imm(0)                                           -> x1
+    v1516 Imm(81985529216486895)                           -> x1
+    v1517 StoreLocal { off=-131, value=v1516, kind=I64 }   -> -
+    v1518 BinopI { op=add, lhs=v1511, rhs_imm=8 }          -> x1
+    v1519 Imm(-81985529216486896)                          -> x1
+    v1520 StoreLocal { off=-131, disp=8, value=v1519, kind=I64 } -> -
     v1521 LocalAddr(-131)                                  -> x1
     v1522 Imm(0)                                           -> x1
     v1523 Imm(0)                                           -> x1
@@ -1657,7 +1657,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v1526 LifetimeEnd(0)                                   -> -
     v1527 LifetimeEnd(-131)                                -> -
     v1528 LifetimeEnd(0)                                   -> -
-    terminator Return(v1505)   (exit_acc=v1505)
+    terminator Return(v1503)   (exit_acc=v1503)
   block 81  start_pc=0
     v1469 Imm(8)                                           -> x0
     v1470 LifetimeEnd(-64)                                 -> -

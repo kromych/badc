@@ -60,7 +60,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x10]
-               	sturh	w1, [x29, #-0x8]
                	lsr	x0, x1, #16
                	sturh	w0, [x29, #-0x6]
                	ldurb	w0, [x29, #-0x10]

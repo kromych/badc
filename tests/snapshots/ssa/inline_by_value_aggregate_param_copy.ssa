@@ -8,7 +8,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v2   Mzero { dst=v1, size=2, align=8 }                -> -
     v3   LocalAddr(-1)                                    -> x1
     v4   Imm(17)                                          -> x1
-    v5   StoreLocal { off=-1, value=v4, kind=I8 }         -> -
+    v5   Imm(0)                                           -> x1
     v6   LocalAddr(-1)                                    -> x1
     v7   LocalAddr(-1)                                    -> x1
     v8   Imm(3)                                           -> x1
@@ -112,7 +112,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
   block 7  start_pc=0
     v101 LocalAddr(-1)                                    -> x0
     v102 Imm(3)                                           -> x0
-    v103 StoreLocal { off=-1, value=v102, kind=I8 }       -> -
+    v103 Imm(0)                                           -> x0
     v104 LocalAddr(-1)                                    -> x0
     v105 LocalAddr(-1)                                    -> x0
     v106 LocalAddr(-1)                                    -> x0

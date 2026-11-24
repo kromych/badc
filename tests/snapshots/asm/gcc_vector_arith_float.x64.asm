@@ -467,7 +467,6 @@ Disassembly of section .text:
                	jl	<addr>
                	vdivpd	%xmm4, %xmm0, %xmm1
                	movups	%xmm1, 0x40(%rsp)
-               	movups	%xmm0, (%rsp)
                	vdivpd	%xmm4, %xmm0, %xmm1
                	movups	%xmm1, (%rsp)
                	xorl	%eax, %eax

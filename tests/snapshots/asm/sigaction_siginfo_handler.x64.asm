@@ -47,7 +47,6 @@ Disassembly of section .text:
 <check>:
                	subq	$0x138, %rsp            # imm = 0x138
                	leaq	(%rsp), %rcx
-               	movq	$0x0, (%rsp)
                	movq	$0x0, 0x8(%rsp)
                	movq	$0x0, 0x10(%rsp)
                	movq	$0x0, 0x18(%rsp)

@@ -3371,7 +3371,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::store_forward::run", &mut ssa_funcs, |funcs| {
             super::super::passes::store_forward::run(funcs);
             for f in funcs.iter_mut() {
-                super::super::passes::store_forward::drop_overwritten_stores(f);
+                super::super::passes::store_forward::drop_overwritten_stores(f, false);
             }
         });
         // Again once the forwarding has made one value of a word the source
@@ -3401,6 +3401,18 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 native.strict_align,
             );
         });
+        // A frame slot's store a later one overwrites goes once the merges
+        // have formed the wide stores, so a narrow write over part of one
+        // does not split it.
+        pipeline.run(
+            "passes::store_forward::drop_overwritten_stores slots",
+            &mut ssa_funcs,
+            |funcs| {
+                for f in funcs.iter_mut() {
+                    super::super::passes::store_forward::drop_overwritten_stores(f, true);
+                }
+            },
+        );
         // The merges above can leave an operation reading one value twice,
         // or a constant, and a branch it decides.
         pipeline.run(

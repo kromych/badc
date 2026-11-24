@@ -196,10 +196,6 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	stur	x2, [x29, #-0x38]
                	stur	x2, [x29, #-0x30]
-               	stur	x2, [x29, #-0x28]
-               	stur	x2, [x29, #-0x20]
-               	stur	x2, [x29, #-0x18]
-               	stur	x2, [x29, #-0x10]
                	stur	x2, [x29, #-0x8]
                	stur	x3, [x29, #-0x28]
                	stur	x0, [x29, #-0x20]

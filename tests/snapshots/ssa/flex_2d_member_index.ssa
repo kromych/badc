@@ -592,7 +592,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v587 Imm(4)                                           -> x1
     v588 BinopI { op=add, lhs=v581, rhs_imm=4 }           -> x1
     v589 Imm(119)                                         -> x1
-    v590 StoreLocal { off=-4, disp=8, value=v589, kind=I8 } -> -
+    v590 Imm(0)                                           -> x1
     v591 Imm(1)                                           -> x1
     v592 Imm(0)                                           -> x1
     v593 Imm(0)                                           -> x1
@@ -762,35 +762,35 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v757 Imm(20)                                          -> x1
     v758 BinopI { op=add, lhs=v713, rhs_imm=20 }          -> x1
     v759 Imm(0)                                           -> x1
-    v760 Imm(0)                                           -> x2
-    v761 Imm(10)                                          -> x6
-    v762 Imm(11)                                          -> x6
-    v763 Imm(11)                                          -> x6
-    v764 Imm(11)                                          -> x6
-    v765 Imm(28)                                          -> x6
-    v766 Imm(2)                                           -> x6
-    v767 Imm(14)                                          -> x6
-    v768 Imm(1)                                           -> x6
-    v769 LocalAddr(-4)                                    -> x6
-    v770 Imm(11)                                          -> x6
-    v771 Imm(22)                                          -> x6
-    v772 BinopI { op=add, lhs=v769, rhs_imm=22 }          -> x6
-    v773 Imm(0)                                           -> x6
+    v760 Imm(0)                                           -> x1
+    v761 Imm(10)                                          -> x2
+    v762 Imm(11)                                          -> x2
+    v763 Imm(11)                                          -> x2
+    v764 Imm(11)                                          -> x2
+    v765 Imm(28)                                          -> x2
+    v766 Imm(2)                                           -> x2
+    v767 Imm(14)                                          -> x2
+    v768 Imm(1)                                           -> x2
+    v769 LocalAddr(-4)                                    -> x2
+    v770 Imm(11)                                          -> x2
+    v771 Imm(22)                                          -> x2
+    v772 BinopI { op=add, lhs=v769, rhs_imm=22 }          -> x2
+    v773 Imm(0)                                           -> x2
     v774 StoreLocal { off=-4, disp=20, value=v760, kind=I32 } -> -
-    v775 Imm(11)                                          -> x2
-    v776 Imm(12)                                          -> x2
-    v777 Imm(12)                                          -> x2
-    v778 Imm(12)                                          -> x2
-    v779 Imm(28)                                          -> x2
-    v780 Imm(2)                                           -> x2
-    v781 Imm(14)                                          -> x2
-    v782 Imm(1)                                           -> x2
-    v783 LocalAddr(-4)                                    -> x2
-    v784 Imm(12)                                          -> x2
-    v785 Imm(24)                                          -> x2
-    v786 BinopI { op=add, lhs=v769, rhs_imm=24 }          -> x2
-    v787 Imm(0)                                           -> x2
-    v788 StoreLocal { off=-4, disp=24, value=v759, kind=I16 } -> -
+    v775 Imm(11)                                          -> x1
+    v776 Imm(12)                                          -> x1
+    v777 Imm(12)                                          -> x1
+    v778 Imm(12)                                          -> x1
+    v779 Imm(28)                                          -> x1
+    v780 Imm(2)                                           -> x1
+    v781 Imm(14)                                          -> x1
+    v782 Imm(1)                                           -> x1
+    v783 LocalAddr(-4)                                    -> x1
+    v784 Imm(12)                                          -> x1
+    v785 Imm(24)                                          -> x1
+    v786 BinopI { op=add, lhs=v769, rhs_imm=24 }          -> x1
+    v787 Imm(0)                                           -> x1
+    v788 Imm(0)                                           -> x1
     v789 Imm(12)                                          -> x1
     v790 Imm(13)                                          -> x1
     v791 Imm(13)                                          -> x1

@@ -95,7 +95,6 @@ Disassembly of section .text:
 <main>:
                	subq	$0x28, %rsp
                	xorl	%edi, %edi
-               	movq	%rdi, 0x18(%rsp)
                	leaq	0x18(%rsp), %rdx
                	movq	$0xf, 0x18(%rsp)
                	movq	%rdi, 0x18(%rsp)

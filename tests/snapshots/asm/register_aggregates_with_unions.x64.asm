@@ -70,7 +70,6 @@ Disassembly of section .text:
 <bump>:
                	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
-               	movw	%si, 0x8(%rsp)
                	movq	%rsi, %rax
                	shrq	$0x10, %rax
                	movw	%ax, 0xa(%rsp)

@@ -1187,15 +1187,15 @@ fn writes_memory(inst: &Inst) -> bool {
 
 /// Drop each store or zero fill a later one in its block overwrites, with
 /// no access between that may read the bytes: nothing reads what it
-/// writes. Two writes through one base ([`base_disp`]) compare by their
-/// byte ranges. A load through that base keeps the stores whose bytes it
-/// reads; any other read of memory -- a load through another base or of a
-/// slot, a call, an asm statement, a copy, a volatile or atomic access --
-/// keeps every earlier store, and a store between, which only writes,
-/// keeps none. A store whose value something reads through its id stays.
+/// writes. Two writes through one base ([`base_disp`]), or with `slots`
+/// to one frame slot, compare by their byte ranges. A load through that base or of that
+/// slot keeps the stores whose bytes it reads; any other read of memory --
+/// a load through another base or of another slot, a call, an asm
+/// statement, a copy, a volatile or atomic access -- keeps every earlier
+/// store, and a store between, which only writes, keeps none. A store whose value something reads through its id stays.
 /// A function with a `__try` region, whose handlers may read memory a
 /// fault between the stores leaves, keeps its stores.
-pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
+pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa, slots: bool) {
     if func.has_seh() {
         return;
     }
@@ -1214,12 +1214,22 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                 | Inst::SegLoad { .. }
         )
     };
+    // A location: a pointer base, or a frame slot by its offset.
+    #[derive(Clone, Copy, PartialEq)]
+    enum At {
+        Base(ValueId),
+        Slot(i64),
+    }
+    let through = |addr: ValueId, disp: i32| {
+        let (base, at) = base_disp(func, addr, disp);
+        (At::Base(base), at)
+    };
     let mut dead = Vec::new();
     for block in &func.blocks {
-        // The byte ranges the block's later stores write, by base.
-        let mut written: Vec<(ValueId, i64, i64)> = Vec::new();
+        // The byte ranges the block's later stores write, by location.
+        let mut written: Vec<(At, i64, i64)> = Vec::new();
         for i in block.inst_range.clone().rev() {
-            let (addr, disp, w, used) = match func.insts[i as usize] {
+            let store = match func.insts[i as usize] {
                 Inst::Store {
                     addr,
                     disp,
@@ -1227,17 +1237,26 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                     volatile: false,
                     pc_rel: false,
                     ..
-                } => (
-                    addr,
-                    disp,
+                } => Some((
+                    through(addr, disp),
                     i64::from(store_width(kind)),
                     uses[i as usize] > 0,
-                ),
-                Inst::Mzero { dst, size, .. } => (dst, 0, size, false),
-                _ => (NO_VALUE, 0, 0, false),
+                )),
+                Inst::StoreLocal {
+                    off,
+                    disp,
+                    kind,
+                    volatile: false,
+                    ..
+                } if slots => Some((
+                    (At::Slot(off), i64::from(disp)),
+                    i64::from(store_width(kind)),
+                    uses[i as usize] > 0,
+                )),
+                Inst::Mzero { dst, size, .. } => Some((through(dst, 0), size, false)),
+                _ => None,
             };
-            if addr != NO_VALUE {
-                let (base, at) = base_disp(func, addr, disp);
+            if let Some(((base, at), w, used)) = store {
                 if written
                     .iter()
                     .any(|&(b, a, aw)| b == base && a <= at && at + w <= a + aw)
@@ -1250,13 +1269,7 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                 }
                 continue;
             }
-            match func.insts[i as usize] {
-                Inst::Store {
-                    volatile: false, ..
-                }
-                | Inst::StoreLocal {
-                    volatile: false, ..
-                } => {}
+            let read = match func.insts[i as usize] {
                 Inst::Load {
                     addr,
                     disp,
@@ -1264,11 +1277,27 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                     volatile: false,
                     pc_rel: false,
                     ..
-                } if uses[i as usize] > 0 => {
-                    let (base, at) = base_disp(func, addr, disp);
-                    let w = i64::from(load_width(kind));
-                    written.retain(|&(b, a, aw)| b == base && !(a < at + w && at < a + aw));
+                } if uses[i as usize] > 0 => Some((through(addr, disp), kind)),
+                Inst::LoadLocal {
+                    off,
+                    disp,
+                    kind,
+                    volatile: false,
+                } if uses[i as usize] > 0 => Some(((At::Slot(off), i64::from(disp)), kind)),
+                _ => None,
+            };
+            if let Some(((base, at), kind)) = read {
+                let w = i64::from(load_width(kind));
+                written.retain(|&(b, a, aw)| b == base && !(a < at + w && at < a + aw));
+                continue;
+            }
+            match func.insts[i as usize] {
+                Inst::Store {
+                    volatile: false, ..
                 }
+                | Inst::StoreLocal {
+                    volatile: false, ..
+                } => {}
                 // A plain load nothing reads is not emitted.
                 ref inst
                     if !writes_memory(inst)
@@ -2074,7 +2103,7 @@ mod tests {
             insts.extend(between);
             insts.push(store(at, 3, last));
             let mut f = fresh(insts, Terminator::Return(ret), NO_VALUE);
-            super::drop_overwritten_stores(&mut f);
+            super::drop_overwritten_stores(&mut f, false);
             matches!(f.insts[4], Inst::Store { .. })
         };
         assert!(!survives(None, 0, StoreKind::I64, NO_VALUE));
@@ -2132,7 +2161,7 @@ mod tests {
             let mut insts = params();
             insts.extend([first, last]);
             let mut f = fresh(insts, Terminator::Return(NO_VALUE), NO_VALUE);
-            super::drop_overwritten_stores(&mut f);
+            super::drop_overwritten_stores(&mut f, false);
             matches!(f.insts[2], Inst::Imm(0))
         };
         assert!(first_goes(zero(8), store(StoreKind::I64)));

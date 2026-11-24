@@ -1724,7 +1724,6 @@ Disassembly of section .text:
                	xorq	%rdx, %r8
                	jmp	<addr>
                	xorl	%eax, %eax
-               	movl	$0x0, 0x438(%rsp)
                	movl	%r8d, %ecx
                	movq	$0x0, 0x440(%rsp)
                	movq	$0x0, 0x448(%rsp)

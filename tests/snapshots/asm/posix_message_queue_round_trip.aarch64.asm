@@ -21,8 +21,6 @@ Disassembly of section .text:
                	mov	x20, #0x0               // =0
                	stur	w20, [x29, #-0xf8]
                	stur	x20, [x29, #-0x80]
-               	stur	x20, [x29, #-0x78]
-               	stur	x20, [x29, #-0x70]
                	stur	x20, [x29, #-0x68]
                	stur	x20, [x29, #-0x60]
                	stur	x20, [x29, #-0x58]

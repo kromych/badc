@@ -29,7 +29,6 @@ Disassembly of section .text:
                	subq	$0x18, %rsp
                	leaq	0x8(%rsp), %rax
                	movw	$0x0, (%rax)
-               	movb	$0x11, 0x8(%rsp)
                	movb	$-0x74, 0x8(%rsp)
                	movb	$0x7, 0x8(%rsp)
                	movq	%rax, <rip> # <addr>
@@ -47,7 +46,6 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	movb	$0x8, 0x8(%rsp)
-               	movb	$0x3, 0x8(%rsp)
                	movb	$0x37, 0x8(%rsp)
                	movb	$0x4d, <rip> # <addr>
                	xorl	%eax, %eax

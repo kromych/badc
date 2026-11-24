@@ -503,7 +503,6 @@ Disassembly of section .text:
                	sub	x1, x29, #0x60
                	stur	q1, [x29, #-0x60]
                	sub	x2, x29, #0x40
-               	stur	q0, [x29, #-0x40]
                	fdiv	v1.2d, v0.2d, v3.2d
                	stur	q1, [x29, #-0x40]
                	mov	x0, #0x0                // =0

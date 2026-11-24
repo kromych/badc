@@ -286,18 +286,12 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	addq	$0x428, %rsp            # imm = 0x428
                	retq
+               	xorl	%eax, %eax
+               	movq	%rax, 0x18(%rsp)
                	movabsq	$0x123456789abcdef, %rcx # imm = 0x123456789ABCDEF
                	movq	%rcx, 0x8(%rsp)
-               	movabsq	$-0x123456789abcdf0, %rdx # imm = 0xFEDCBA9876543210
-               	movq	%rdx, 0x10(%rsp)
-               	movabsq	$0x5adeadbeef, %rax     # imm = 0x5ADEADBEEF
-               	movq	%rax, 0x18(%rsp)
-               	xorl	%eax, %eax
-               	movq	%rax, 0x8(%rsp)
-               	movq	%rax, 0x10(%rsp)
-               	movq	%rax, 0x18(%rsp)
-               	movq	%rcx, 0x8(%rsp)
-               	movq	%rdx, 0x10(%rsp)
+               	movabsq	$-0x123456789abcdf0, %rcx # imm = 0xFEDCBA9876543210
+               	movq	%rcx, 0x10(%rsp)
                	addq	$0x428, %rsp            # imm = 0x428
                	retq
                	movl	$0x8, %eax

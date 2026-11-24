@@ -432,7 +432,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	sub	x3, x29, #0x10
                	stur	x1, [x29, #-0x10]
-               	stur	x3, [x29, #-0x8]
                	stur	x1, [x29, #-0x28]
                	str	x2, [x3]
                	add	x2, x2, #0x8

@@ -115,10 +115,6 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movq	%rdx, 0x88(%rsp)
                	movq	%rdx, 0x90(%rsp)
-               	movq	%rdx, 0x98(%rsp)
-               	movq	%rdx, 0xa0(%rsp)
-               	movq	%rdx, 0xa8(%rsp)
-               	movq	%rdx, 0xb0(%rsp)
                	movq	%rdx, 0xb8(%rsp)
                	leaq	0x40(%rsp), %rcx
                	movq	%rcx, 0x98(%rsp)
@@ -329,8 +325,6 @@ Disassembly of section .text:
                	movq	$0x0, 0xa0(%rsp)
                	movq	$0x0, 0xa8(%rsp)
                	movq	$0x0, 0xb0(%rsp)
-               	movq	$0x0, 0xb8(%rsp)
-               	movq	$0x0, 0xc0(%rsp)
                	movq	$0x0, 0xc8(%rsp)
                	movq	%rsi, 0xb8(%rsp)
                	movq	$0x30, 0xc0(%rsp)
@@ -384,10 +378,6 @@ Disassembly of section .text:
                	movq	$0x1, 0x90(%rsp)
                	movq	$0x0, 0x98(%rsp)
                	movq	$0x0, 0xa0(%rsp)
-               	movq	$0x0, 0xa8(%rsp)
-               	movq	$0x0, 0xb0(%rsp)
-               	movq	$0x0, 0xb8(%rsp)
-               	movq	$0x0, 0xc0(%rsp)
                	movq	$0x0, 0xc8(%rsp)
                	leaq	0xd0(%rsp), %rcx
                	movq	$0x0, 0xd0(%rsp)
@@ -519,9 +509,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rax, 0x88(%rsp)
                	movq	$0x5, 0x90(%rsp)
-               	movq	$0x0, 0x98(%rsp)
-               	movq	$0x0, 0xa8(%rsp)
-               	movq	$0x0, 0xb0(%rsp)
                	movq	$0x0, 0xb8(%rsp)
                	movq	$0x0, 0xc0(%rsp)
                	movq	$0x0, 0xc8(%rsp)
@@ -545,11 +532,6 @@ Disassembly of section .text:
                	leaq	0x38(%rsp), %rax
                	movq	%rax, 0x88(%rsp)
                	movq	$0x8, 0x90(%rsp)
-               	movq	$0x0, 0x98(%rsp)
-               	movq	$0x0, 0xa8(%rsp)
-               	movq	$0x0, 0xb0(%rsp)
-               	movq	$0x0, 0xb8(%rsp)
-               	movq	$0x0, 0xc0(%rsp)
                	movq	$0x0, 0xc8(%rsp)
                	leaq	0x58(%rsp), %rax
                	movq	$0x0, 0x58(%rsp)

@@ -84,8 +84,6 @@ Disassembly of section .text:
                	movl	$0x0, 0x8(%rsp)
                	movl	$0x1, 0x8(%rsp)
                	movl	$0x1, 0x8(%rsp)
-               	movl	$0x2, 0x8(%rsp)
-               	movl	$0x3, 0x8(%rsp)
                	movl	$0x4, 0x8(%rsp)
                	movq	%rcx, %rdi
                	callq	<addr>

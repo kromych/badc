@@ -197,10 +197,6 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movq	%rdx, 0x88(%rsp)
                	movq	%rdx, 0x90(%rsp)
-               	movq	%rdx, 0x98(%rsp)
-               	movq	%rdx, 0xa0(%rsp)
-               	movq	%rdx, 0xa8(%rsp)
-               	movq	%rdx, 0xb0(%rsp)
                	movq	%rdx, 0xb8(%rsp)
                	leaq	0x68(%rsp), %rcx
                	movq	%rcx, 0x98(%rsp)

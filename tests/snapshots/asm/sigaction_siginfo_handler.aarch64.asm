@@ -41,7 +41,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x130
                	sub	x1, x29, #0x130
-               	str	xzr, [sp]
                	str	xzr, [sp, #0x8]
                	str	xzr, [sp, #0x10]
                	str	xzr, [sp, #0x18]

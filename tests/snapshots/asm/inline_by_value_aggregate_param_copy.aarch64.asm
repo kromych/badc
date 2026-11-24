@@ -19,8 +19,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	x0, x29, #0x8
                	strh	wzr, [x0]
-               	mov	x1, #0x11               // =17
-               	sturb	w1, [x29, #-0x8]
                	mov	x1, #0x8c               // =140
                	sturb	w1, [x29, #-0x8]
                	mov	x1, #0x7                // =7
@@ -44,8 +42,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x8                // =8
-               	sturb	w0, [x29, #-0x8]
-               	mov	x0, #0x3                // =3
                	sturb	w0, [x29, #-0x8]
                	mov	x0, #0x37               // =55
                	sturb	w0, [x29, #-0x8]

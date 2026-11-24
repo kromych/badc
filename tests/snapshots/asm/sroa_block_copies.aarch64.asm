@@ -186,8 +186,6 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x18]
                	mov	x2, #0x1                // =1
                	stur	x2, [x29, #-0x10]
-               	mov	x2, #0x2                // =2
-               	stur	x2, [x29, #-0x8]
                	add	x0, x0, #0x2
                	stur	x0, [x29, #-0x8]
                	mov	x16, x1

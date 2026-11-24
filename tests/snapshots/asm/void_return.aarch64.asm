@@ -83,10 +83,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
                	stur	w0, [x29, #-0x8]
-               	mov	x0, #0x2                // =2
-               	stur	w0, [x29, #-0x8]
-               	mov	x0, #0x3                // =3
-               	stur	w0, [x29, #-0x8]
                	mov	x0, #0x4                // =4
                	stur	w0, [x29, #-0x8]
                	mov	x0, x1

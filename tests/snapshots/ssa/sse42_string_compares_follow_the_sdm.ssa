@@ -3933,9 +3933,9 @@ fn ent_pc=493 n_params=6 variadic=false locals=128
     v308 Imm(0)                                           -> x1
     v309 Imm(0)                                           -> x1
     v310 Imm(0)                                           -> x1
-    v311 Imm(0)                                           -> x2
-    v312 Imm(0)                                           -> x2
-    v313 StoreLocal { off=-5, value=v310, kind=I32 }      -> -
+    v311 Imm(0)                                           -> x1
+    v312 Imm(0)                                           -> x1
+    v313 Imm(0)                                           -> x1
     v314 BinopI { op=add, lhs=v306, rhs_imm=4 }           -> x1
     v315 BinopI { op=and, lhs=v299, rhs_imm=4294967295 }  -> x1
     v316 BinopI { op=add, lhs=v306, rhs_imm=8 }           -> x2

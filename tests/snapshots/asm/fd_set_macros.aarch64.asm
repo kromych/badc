@@ -33,7 +33,6 @@ Disassembly of section .text:
                	sub	x2, x29, #0x80
                	ldurb	w0, [x29, #-0x80]
                	orr	x0, x0, #0x1
-               	sturb	w0, [x29, #-0x80]
                	orr	x0, x0, #0x80
                	sturb	w0, [x29, #-0x80]
                	ldurb	w1, [x29, #-0x7f]

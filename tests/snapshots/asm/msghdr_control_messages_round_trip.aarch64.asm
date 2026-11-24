@@ -112,10 +112,6 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	stur	x2, [x29, #-0x78]
                	stur	x2, [x29, #-0x70]
-               	stur	x2, [x29, #-0x68]
-               	stur	x2, [x29, #-0x60]
-               	stur	x2, [x29, #-0x58]
-               	stur	x2, [x29, #-0x50]
                	stur	x2, [x29, #-0x48]
                	stur	x3, [x29, #-0x68]
                	stur	x0, [x29, #-0x60]
@@ -316,8 +312,6 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0x70]
                	stur	xzr, [x29, #-0x68]
                	stur	xzr, [x29, #-0x60]
-               	stur	xzr, [x29, #-0x58]
-               	stur	xzr, [x29, #-0x50]
                	stur	xzr, [x29, #-0x48]
                	stur	x1, [x29, #-0x58]
                	mov	x2, #0x30               // =48
@@ -377,10 +371,6 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	stur	x2, [x29, #-0x78]
                	stur	x2, [x29, #-0x70]
-               	stur	x2, [x29, #-0x68]
-               	stur	x2, [x29, #-0x60]
-               	stur	x2, [x29, #-0x58]
-               	stur	x2, [x29, #-0x50]
                	stur	x2, [x29, #-0x48]
                	sub	x0, x29, #0x40
                	stur	x2, [x29, #-0x40]
@@ -517,10 +507,7 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	stur	x1, [x29, #-0x80]
                	sub	x1, x29, #0x78
-               	stur	x2, [x29, #-0x78]
                	mov	x3, #0x10               // =16
-               	stur	x2, [x29, #-0x68]
-               	stur	x2, [x29, #-0x60]
                	stur	x2, [x29, #-0x58]
                	stur	x2, [x29, #-0x50]
                	stur	x2, [x29, #-0x48]
@@ -547,12 +534,7 @@ Disassembly of section .text:
                	mov	x1, #0x8                // =8
                	stur	x1, [x29, #-0x80]
                	sub	x1, x29, #0x78
-               	stur	x2, [x29, #-0x78]
                	mov	x3, #0x10               // =16
-               	stur	x2, [x29, #-0x68]
-               	stur	x2, [x29, #-0x60]
-               	stur	x2, [x29, #-0x58]
-               	stur	x2, [x29, #-0x50]
                	stur	x2, [x29, #-0x48]
                	sub	x4, x29, #0xb8
                	stur	xzr, [x29, #-0xb8]

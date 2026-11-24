@@ -157,7 +157,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=2
     v1   ParamPart(0, part=1, kind=I64)                   -> x6
     v2   LocalAddr(-2)                                    -> x0
     v3   StoreLocal { off=-2, value=v0, kind=I64 }        -> -
-    v4   StoreLocal { off=-2, disp=8, value=v1, kind=I16 } -> -
+    v4   Imm(0)                                           -> x0
     v5   BinopI { op=shru, lhs=v1, rhs_imm=16 }           -> x0
     v6   StoreLocal { off=-2, disp=10, value=v5, kind=I16 } -> -
     v7   AllocaInit(0)                                    -> -

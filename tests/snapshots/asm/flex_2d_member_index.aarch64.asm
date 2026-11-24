@@ -67,8 +67,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x77               // =119
-               	sturb	w0, [x29, #-0x18]
                	stur	wzr, [x29, #-0x20]
                	stur	wzr, [x29, #-0x1c]
                	stur	wzr, [x29, #-0x18]
@@ -76,7 +74,6 @@ Disassembly of section .text:
                	stur	wzr, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	stur	wzr, [x29, #-0xc]
-               	sturh	w0, [x29, #-0x8]
                	mov	x2, #0x4d               // =77
                	stur	w2, [x29, #-0x8]
                	add	x2, x1, #0x2

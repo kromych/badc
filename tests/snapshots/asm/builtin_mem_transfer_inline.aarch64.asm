@@ -289,26 +289,18 @@ Disassembly of section .text:
                	add	sp, sp, #0x420
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x0                // =0
+               	str	x0, [sp, #0x18]
                	mov	x1, #0xcdef             // =52719
                	movk	x1, #0x89ab, lsl #16
                	movk	x1, #0x4567, lsl #32
                	movk	x1, #0x123, lsl #48
                	str	x1, [sp, #0x8]
-               	mov	x2, #0x3210             // =12816
-               	movk	x2, #0x7654, lsl #16
-               	movk	x2, #0xba98, lsl #32
-               	movk	x2, #0xfedc, lsl #48
-               	str	x2, [sp, #0x10]
-               	mov	x0, #0xbeef             // =48879
-               	movk	x0, #0xdead, lsl #16
-               	movk	x0, #0x5a, lsl #32
-               	str	x0, [sp, #0x18]
-               	mov	x0, #0x0                // =0
-               	str	x0, [sp, #0x8]
-               	str	x0, [sp, #0x10]
-               	str	x0, [sp, #0x18]
-               	str	x1, [sp, #0x8]
-               	str	x2, [sp, #0x10]
+               	mov	x1, #0x3210             // =12816
+               	movk	x1, #0x7654, lsl #16
+               	movk	x1, #0xba98, lsl #32
+               	movk	x1, #0xfedc, lsl #48
+               	str	x1, [sp, #0x10]
                	add	sp, sp, #0x420
                	ldp	x29, x30, [sp], #0x10
                	ret

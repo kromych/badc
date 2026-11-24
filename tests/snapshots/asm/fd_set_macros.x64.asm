@@ -41,7 +41,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movzbq	(%rsp), %rax
                	orq	$0x1, %rax
-               	movb	%al, (%rsp)
                	orq	$0x80, %rax
                	movb	%al, (%rsp)
                	orb	$0x1, 0x1(%rsp)

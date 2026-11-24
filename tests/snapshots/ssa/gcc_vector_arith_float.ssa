@@ -1785,7 +1785,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v1942 Imm(0)                                           -> x0
     v1943 LocalAddr(-320)                                  -> x2
     v1944 Imm(0)                                           -> x0
-    v1945 StoreLocal { off=-320, value=v9, kind=V128 }     -> -
+    v1945 Imm(0)                                           -> x0
     v1946 LocalAddr(-320)                                  -> x0
     v1947 LocalAddr(-320)                                  -> x0
     v1948 Imm(0)                                           -> x0

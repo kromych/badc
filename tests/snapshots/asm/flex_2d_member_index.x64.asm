@@ -61,14 +61,12 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	addq	$0x28, %rsp
                	retq
-               	movb	$0x77, 0x8(%rsp)
                	movl	$0x0, (%rsp)
                	movl	$0x0, 0x4(%rsp)
                	movl	$0x0, 0x8(%rsp)
                	movl	$0x0, 0xc(%rsp)
                	movl	$0x0, 0x10(%rsp)
                	movl	$0x0, 0x14(%rsp)
-               	movw	$0x0, 0x18(%rsp)
                	movl	$0x4d, 0x18(%rsp)
                	leaq	0x2(%rax), %rcx
                	addq	$0x18, %rax

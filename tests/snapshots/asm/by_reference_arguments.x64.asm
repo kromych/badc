@@ -184,10 +184,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	addq	$0x88, %rsp
                	retq
-               	movq	$0x1, 0x78(%rsp)
                	movq	$0x2, 0x80(%rsp)
                	movq	$0x3, 0x88(%rsp)
-               	movq	$0x1, 0x90(%rsp)
                	movq	$0x2, 0x98(%rsp)
                	movq	$0x3, 0xa0(%rsp)
                	movq	$-0x1, 0x90(%rsp)
@@ -198,7 +196,6 @@ Disassembly of section .text:
                	leaq	0x90(%rsp), %rdi
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	movq	$0x1, 0x90(%rsp)
                	movq	$0x2, 0x98(%rsp)
                	movq	$0x3, 0xa0(%rsp)
                	movq	$-0x1, 0x90(%rsp)

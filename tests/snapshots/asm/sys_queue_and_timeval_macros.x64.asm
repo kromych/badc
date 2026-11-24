@@ -444,7 +444,6 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	leaq	0x20(%rsp), %rdx
                	movq	%rcx, 0x20(%rsp)
-               	movq	%rdx, 0x28(%rsp)
                	movq	%rcx, 0x8(%rsp)
                	movq	%rax, (%rdx)
                	leaq	(%rsp), %rax

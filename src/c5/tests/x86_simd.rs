@@ -598,6 +598,34 @@ fn the_variable_shifts_are_rows_the_interpreter_runs() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// On an x86-64 host whose processor has the AVX-512 subsets, VAES and
+/// VPCLMULQDQ the AVX-512 programs use, `src` also runs natively through the
+/// JIT, at -O0 and -O, each in a child process, to `want`, the status the
+/// interpreter gives; elsewhere the interpreter's run stands alone.
+fn natively_on_avx512(src: &str, want: i32) {
+    #[cfg(all(
+        target_arch = "x86_64",
+        any(target_os = "linux", target_os = "windows")
+    ))]
+    {
+        let host = std::arch::is_x86_feature_detected!("avx512f")
+            && std::arch::is_x86_feature_detected!("avx512bw")
+            && std::arch::is_x86_feature_detected!("avx512dq")
+            && std::arch::is_x86_feature_detected!("avx512vl")
+            && std::arch::is_x86_feature_detected!("avx512cd")
+            && std::arch::is_x86_feature_detected!("avx512vnni")
+            && std::arch::is_x86_feature_detected!("vaes")
+            && std::arch::is_x86_feature_detected!("vpclmulqdq");
+        if host {
+            for optimize in [false, true] {
+                let code = super::jit::jit_exit_bare_in_child(src, optimize);
+                assert_eq!(code, want, "native, optimize={optimize}");
+            }
+        }
+    }
+    let _ = (src, want);
+}
+
 /// Each extension's header, under the name gcc and clang give it, compiles
 /// behind `<immintrin.h>` as those compilers require and on its own, and
 /// gives the extension's intrinsics.
@@ -685,6 +713,7 @@ fn the_wide_aes_rounds_and_the_vl_ternary_logic_run() {
         }\n";
     let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    natively_on_avx512(src, 0);
 }
 
 /// The blends by the sign of each mask lane are rows the interpreter
@@ -2451,6 +2480,7 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
+    natively_on_avx512(SRC, 0);
     #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
@@ -2531,6 +2561,7 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
+    natively_on_avx512(SRC, 0);
     #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
@@ -2707,6 +2738,7 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
+    natively_on_avx512(SRC, 0);
     #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
@@ -2786,6 +2818,7 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
+    natively_on_avx512(SRC, 0);
     #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);

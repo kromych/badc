@@ -219,13 +219,25 @@ fn in_own_process(src: &str) -> bool {
 const CHILD_SRC: &str = "BADC_JIT_CHILD_SRC";
 const CHILD_ARGS: &str = "BADC_JIT_CHILD_ARGS";
 const CHILD_OPTIMIZE: &str = "BADC_JIT_CHILD_OPTIMIZE";
+const CHILD_BARE: &str = "BADC_JIT_CHILD_BARE";
 const CHILD_RAN: &str = "jit child ran";
 
 /// The exit status of `src` run by the JIT in a child test process.
 fn jit_exit_in_child(src: &str, args: &[&str], optimize: bool) -> i32 {
+    child_exit(src, args, optimize, false)
+}
+
+/// The exit status of `src`, compiled without the test prelude, run by the
+/// JIT in a child test process, so a fault ends the child and not the run.
+#[cfg(target_arch = "x86_64")]
+pub(super) fn jit_exit_bare_in_child(src: &str, optimize: bool) -> i32 {
+    child_exit(src, &[], optimize, true)
+}
+
+fn child_exit(src: &str, args: &[&str], optimize: bool, bare: bool) -> i32 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    (src, optimize).hash(&mut h);
+    (src, optimize, bare).hash(&mut h);
     let dir = std::env::temp_dir().join(format!(
         "badc-jit-child-{}-{:x}",
         std::process::id(),
@@ -241,6 +253,9 @@ fn jit_exit_in_child(src: &str, args: &[&str], optimize: bool) -> i32 {
         .env(CHILD_ARGS, args.join("\u{1f}"));
     if optimize {
         cmd.env(CHILD_OPTIMIZE, "1");
+    }
+    if bare {
+        cmd.env(CHILD_BARE, "1");
     }
     let out = cmd.output().expect("spawn the child");
     let _ = std::fs::remove_dir_all(&dir);
@@ -263,9 +278,12 @@ fn jit_exit_child() {
     let src = std::fs::read_to_string(path).expect("read the program");
     let args = std::env::var(CHILD_ARGS).unwrap_or_default();
     let argv: Vec<String> = args.split('\u{1f}').map(String::from).collect();
-    let program = Compiler::new(super::with_prelude(&src))
-        .compile()
-        .expect("compile failed");
+    let src = if std::env::var_os(CHILD_BARE).is_some() {
+        src
+    } else {
+        super::with_prelude(&src)
+    };
+    let program = Compiler::new(src).compile().expect("compile failed");
     let code = if std::env::var_os(CHILD_OPTIMIZE).is_some() {
         let opts = NativeOptions::new().with_optimize();
         jit_run_with_options(&program, &argv, opts, &mut |_| {})

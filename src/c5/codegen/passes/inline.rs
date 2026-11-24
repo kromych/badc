@@ -1099,13 +1099,13 @@ fn candidacy(
         say(format_args!("no Return block"));
         return false;
     }
-    // Multiple returns merge through the postfix join phi, built only for
-    // an integer value (an FP join phi is out of scope). An aggregate
+    // Multiple returns merge through the postfix join phi. An aggregate
     // return joins its per-return result addresses the same way -- the
-    // postfix copy then reads the merged address -- so only the FP scalar
-    // shape stays out. A flat (single-block) callee has one Return by
-    // construction.
-    if return_blocks > 1 && func.ret_is_fp {
+    // postfix copy then reads the merged address. A `float` or `double`
+    // joins in the FP file, so each returned value must be one it holds:
+    // a floating result or a constant; a `long double` stays out. A flat
+    // (single-block) callee has one Return by construction.
+    if return_blocks > 1 && func.ret_is_fp && fp_join_kind(func).is_none() {
         say(format_args!("{return_blocks} FP Return blocks (need 1)"));
         return false;
     }
@@ -2458,6 +2458,29 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
     }
 }
 
+/// The kind a join phi merging `func`'s floating returns takes: `F32` for a
+/// `float`, `F64` for a `double`, when each `Return` names a floating
+/// result or a constant; `None` otherwise, a `long double` included.
+fn fp_join_kind(func: &FunctionSsa) -> Option<LoadKind> {
+    use crate::c5::compiler::types::{is_double_ty, is_float_ty, is_long_double_ty};
+    let tag = func.ret_type_tag?;
+    let kind = match () {
+        _ if is_long_double_ty(tag) => return None,
+        _ if is_float_ty(tag) => LoadKind::F32,
+        _ if is_double_ty(tag) => LoadKind::F64,
+        _ => return None,
+    };
+    let holds = |v: ValueId| match func.insts.get(v as usize) {
+        Some(Inst::Imm(_)) => true,
+        Some(inst) => crate::c5::codegen::ssa::reg_alloc::produces_fp_result(inst),
+        None => false,
+    };
+    func.blocks
+        .iter()
+        .all(|b| !matches!(b.terminator, Terminator::Return(v) if v == NO_VALUE || !holds(v)))
+        .then_some(kind)
+}
+
 /// Splice a single multi-block callee into `caller` at the call site
 /// named by `(splice_block_idx, call_pc)`. The caller's block layout
 /// after the splice:
@@ -3521,9 +3544,13 @@ fn splice_multi_block(
 
         // Multi-return join: a phi merges each return's value into the call
         // result, then branches to the postfix. The phi lands one id past
-        // the spliced callee body, matching the pre-pass reservation. The
-        // integer kind is safe -- an FP multi-return callee is rejected.
+        // the spliced callee body, matching the pre-pass reservation; a
+        // floating result joins in the FP file (`fp_join_kind`).
         if use_join {
+            let kind = match callee.ret_is_fp && callee.ret_agg.is_none() {
+                true => fp_join_kind(callee).unwrap_or(LoadKind::I64),
+                false => LoadKind::I64,
+            };
             let phi_id = new_insts.len() as u32;
             debug_assert_eq!(
                 phi_id,
@@ -3535,10 +3562,10 @@ fn splice_multi_block(
             );
             new_insts.push(Inst::Phi {
                 incoming: phi_incoming,
-                kind: LoadKind::I64,
+                kind,
             });
             new_inst_src.push(crate::c5::ir::InstSrc::default());
-            new_f32.push(false);
+            new_f32.push(kind == LoadKind::F32);
             new_blocks.push(Block {
                 start_pc: 0,
                 inst_range: phi_id..new_insts.len() as u32,
@@ -6383,16 +6410,18 @@ mod tests {
         }
     }
 
-    /// A two-Return callee is a candidate on the no-aggregate integer
-    /// path (its returns route into a postfix join phi) but not when the
-    /// return is FP (an FP join phi is out of scope).
+    /// A two-Return callee is a candidate whose returns route into a
+    /// postfix join phi: an integer one, a `double` one returning constants,
+    /// which join in the FP file, and not a floating one of a type the join
+    /// does not take (here none recorded).
     #[test]
-    fn multi_return_candidacy_gated_on_integer_no_aggregate() {
+    fn multi_return_candidacy_needs_a_joinable_result() {
         let abi = Target::LinuxX64.abi();
         // block 0: Bz(cond) -> b1 / b2; b1: Return(imm); b2: Return(imm).
-        let two_return = |ret_is_fp: bool| FunctionSsa {
+        let two_return = |ret_is_fp: bool, ret_type_tag: Option<i64>| FunctionSsa {
             n_params: 1,
             ret_is_fp,
+            ret_type_tag,
             insts: alloc::vec![Inst::Imm(0), Inst::Imm(1), Inst::Imm(2)],
             inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: alloc::vec![false; 3],
@@ -6422,10 +6451,17 @@ mod tests {
             ],
             ..Default::default()
         };
-        assert!(is_inline_candidate(&two_return(false), 32, abi, None));
+        assert!(is_inline_candidate(&two_return(false, None), 32, abi, None));
+        let double = Some(crate::c5::token::Ty::Double as i64);
+        assert!(is_inline_candidate(
+            &two_return(true, double),
+            32,
+            abi,
+            None
+        ));
         let mut reason = alloc::string::String::new();
         assert!(!is_inline_candidate(
-            &two_return(true),
+            &two_return(true, None),
             32,
             abi,
             Some(&mut reason)

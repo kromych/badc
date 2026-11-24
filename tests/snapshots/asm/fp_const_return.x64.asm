@@ -25,24 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<sum_zero>:
-               	movl	$0x8, %eax
-               	leaq	-0x1(%rax), %rcx
-               	cmpq	$0x0, (%rdi,%rcx,8)
-               	jne	<addr>
-               	decq	%rax
-               	testl	%eax, %eax
-               	jg	<addr>
-               	testl	%eax, %eax
-               	jne	<addr>
-               	xorps	%xmm0, %xmm0
-               	retq
-               	decq	%rax
-               	movq	(%rdi,%rax,8), %rax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	retq
-
 <main>:
                	subq	$0x58, %rsp
                	leaq	(%rsp), %rax
@@ -75,16 +57,28 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
-               	leaq	0x10(%rsp), %rdi
-               	movl	$0x8, %esi
-               	callq	<addr>
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	movl	$0x8, %eax
+               	leaq	-0x1(%rax), %rdx
+               	cmpq	$0x0, 0x10(%rsp,%rdx,8)
+               	jne	<addr>
+               	decq	%rax
+               	testl	%eax, %eax
+               	jg	<addr>
+               	testl	%eax, %eax
+               	jne	<addr>
+               	xorps	%xmm0, %xmm0
+               	xorps	%xmm1, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x58, %rsp
                	retq
+               	xorl	%eax, %eax
                	addq	$0x58, %rsp
                	retq
+               	decq	%rax
+               	movq	0x10(%rsp,%rax,8), %rax
+               	xorps	%xmm0, %xmm0
+               	cvtsi2sd	%rax, %xmm0
+               	jmp	<addr>

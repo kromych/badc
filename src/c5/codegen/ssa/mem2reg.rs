@@ -2851,6 +2851,7 @@ mod tests {
             did_unroll: false,
             did_inline: false,
             frees_rbp: false,
+            fenv_access: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

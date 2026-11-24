@@ -50,6 +50,7 @@ static float64x1_t d1(void) { uint64_t u = r64(); float64x1_t v; memcpy(&v, &u, 
 static uint32x4_t u4(void) { uint32x4_t v; for (int i = 0; i < 4; i++) v[i] = (uint32_t)rnd(); return v; }
 static uint32x2_t u2(void) { uint32x2_t v; for (int i = 0; i < 2; i++) v[i] = (uint32_t)rnd(); return v; }
 #include <fenv.h>
+#pragma STDC FENV_ACCESS ON
 #define R(op) do { \
     float32x4_t r1 = op##q_f32(a); float32x2_t r2 = op##_f32(c); \
     float64x2_t r3 = op##q_f64(e); float64x1_t r4 = op##_f64(g); \

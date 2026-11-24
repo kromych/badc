@@ -655,7 +655,7 @@ fn plan_one(
                 // `addrs` and answers for its own users.
                 _ if addrs.contains_key(&u) => reached = true,
                 // An address the walker formed and nothing reads.
-                Some(inst) if inst.is_pure() && users[u].is_empty() => {}
+                Some(inst) if f.is_pure(inst) && users[u].is_empty() => {}
                 _ => return None,
             }
         }

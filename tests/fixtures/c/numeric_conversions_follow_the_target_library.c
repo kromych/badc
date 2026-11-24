@@ -10,6 +10,7 @@
 #include <fenv.h>
 #include <stdio.h>
 #include <stdlib.h>
+#pragma STDC FENV_ACCESS ON
 
 int main(void) {
     char *e;

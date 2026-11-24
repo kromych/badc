@@ -14,6 +14,7 @@
 #include <immintrin.h>
 #include <stdio.h>
 #include <string.h>
+#pragma STDC FENV_ACCESS ON
 
 typedef unsigned long long u64;
 

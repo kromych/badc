@@ -2205,7 +2205,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v195 LoadIndexed { base=v2245, index=v183, scale=4, kind=F32 } -> d1 [f32]
     v196 Binop { op=fadd, lhs=v192, rhs=v195 }            -> d1 [f32]
     v197 Imm(1073741824)                                  -> d2 [f32]
-    v198 Binop { op=fmul.c, lhs=v196, rhs=v197 }          -> d2 [f32]
+    v198 Undef                                            -> x2 [f32]
     v199 LoadIndexed { base=v2244, index=v183, scale=4, kind=F32 } -> d2 [f32]
     v200 Fma { a=v196, b=v197, c=v192, neg_product=false, neg_addend=true } -> d0 [f32]
     v201 StoreIndexed { base=v148, index=v183, scale=4, value=v200, kind=F32 } -> -

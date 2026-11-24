@@ -20,7 +20,7 @@ fn ent_pc=14 n_params=1 variadic=true locals=3
     v17  Imm(0)                                           -> x2
     v18  Imm(100)                                         -> x2
     v19  Imm(4636737291354636288)                         -> d1
-    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
+    v20  Undef                                            -> x2
     v21  LocalAddr(-8)                                    -> x2
     v22  Imm(0)                                           -> x2
     v23  Load { addr=v14, disp=0, kind=F32 }              -> d1 [f32]
@@ -76,7 +76,7 @@ fn ent_pc=15 n_params=1 variadic=true locals=3
     v17  Imm(0)                                           -> x2
     v18  Imm(1000)                                        -> x2
     v19  Imm(4652007308841189376)                         -> d1
-    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
+    v20  Undef                                            -> x2
     v21  LocalAddr(-10)                                   -> x2
     v22  Imm(12)                                          -> x2
     v23  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x2
@@ -141,7 +141,7 @@ fn ent_pc=16 n_params=1 variadic=true locals=6
     v17  Imm(0)                                           -> x2
     v18  Imm(1000)                                        -> x2
     v19  Imm(4652007308841189376)                         -> d1
-    v20  Binop { op=fmul.c, lhs=v8, rhs=v19 }             -> d1
+    v20  Undef                                            -> x2
     v21  LocalAddr(-3)                                    -> x2
     v22  Imm(0)                                           -> x2
     v23  Load { addr=v14, disp=0, kind=F32 }              -> d1 [f32]
@@ -449,7 +449,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v267 Imm(0)                                           -> x0
     v268 VecExtract { vec=v263, off=0, kind=F32, bytes=16 } -> d2 [f32]
     v269 Imm(1120403456)                                  -> d1 [f32]
-    v270 Binop { op=fmul.c, lhs=v268, rhs=v269 }          -> d3 [f32]
+    v270 Undef                                            -> x0 [f32]
     v271 Imm(12)                                          -> x0
     v272 Imm(0)                                           -> x0
     v273 VecExtract { vec=v263, off=12, kind=F32, bytes=16 } -> d0 [f32]
@@ -488,7 +488,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v302 BinopI { op=add, lhs=v291, rhs_imm=12 }          -> x0
     v303 VecExtract { vec=v293, off=12, kind=F32, bytes=16 } -> d0 [f32]
     v304 Imm(1120403456)                                  -> x0 [f32]
-    v305 Binop { op=fmul.c, lhs=v303, rhs=v269 }          -> d2 [f32]
+    v305 Undef                                            -> x0 [f32]
     v306 BinopI { op=add, lhs=v291, rhs_imm=24 }          -> x0
     v307 Imm(5)                                           -> x0
     v308 Imm(50)                                          -> x0
@@ -531,7 +531,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v341 Imm(4602678819172646912)                         -> d0
     v342 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
     v343 Imm(1120403456)                                  -> d0 [f32]
-    v344 Binop { op=fmul.c, lhs=v342, rhs=v343 }          -> d0 [f32]
+    v344 Undef                                            -> x0 [f32]
     v345 BinopI { op=add, lhs=v330, rhs_imm=8 }           -> x0
     v346 LoadLocal { off=-3, disp=8, kind=F32 }           -> d0 [f32]
     v347 Imm(1092616192)                                  -> d2 [f32]
@@ -566,7 +566,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v372 BinopI { op=add, lhs=v366, rhs_imm=8 }           -> x0
     v373 LoadLocal { off=-8, disp=8, kind=F64 }           -> d1
     v374 Imm(4621819117588971520)                         -> d2
-    v375 Binop { op=fmul.c, lhs=v373, rhs=v374 }          -> d2
+    v375 Undef                                            -> x0
     v376 FpCast { kind=F32ToF64, value=v371 }             -> d0
     v377 Fma { a=v373, b=v374, c=v376, neg_product=false, neg_addend=false } -> d0
     v378 Binop { op=fadd, lhs=v377, rhs=v341 }            -> d0

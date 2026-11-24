@@ -62,8 +62,13 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 const MAX_ROUNDS: usize = 4;
 
 pub(crate) fn run_one(func: &mut FunctionSsa) {
+    // Under `FENV_ACCESS` on a floating operation runs as written (C17
+    // F.8.4): no arithmetic, conversion or SIMD row of constants is
+    // evaluated here.
+    let fenv = func.fenv_access;
     for _ in 0..MAX_ROUNDS {
-        let folded = fold_round(func) | fold_constant_lanes(func) | fold_constant_rows(func);
+        let rows = !fenv && (fold_constant_lanes(func) | fold_constant_rows(func));
+        let folded = fold_round(func) | rows;
         let lanes = fold_lane_reads(func);
         let forwarded = forward_identities(func);
         if !folded && !lanes && !forwarded {
@@ -73,7 +78,9 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
     // After the rounds, which fold a round trip of a constant whole and
     // the lane reads of a constant vector's inserts.
     fold_constant_halves(func);
-    compared_truncations(func);
+    if !fenv {
+        compared_truncations(func);
+    }
 }
 
 /// `(float)(int)x` that only comparisons read is `trunc(x)`: the two are
@@ -1668,6 +1675,7 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             continue;
         }
         if let Inst::FpCast { kind, value } = func.insts[idx]
+            && (!func.fenv_access || matches!(kind, FpCastKind::FpBits | FpCastKind::BitsFp))
             && let Some(&Inst::Imm(k)) = func.insts.get(value as usize)
             && let Some(folded) = eval_fp_cast(kind, k, f32(value as usize), f32(idx))
         {
@@ -1676,6 +1684,7 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             continue;
         }
         if let Inst::Binop { op, lhs, rhs } = func.insts[idx]
+            && !func.fenv_access
             && let Some(&Inst::Imm(l)) = func.insts.get(lhs as usize)
             && let Some(&Inst::Imm(r)) = func.insts.get(rhs as usize)
             && f32(lhs as usize) == f32(idx)
@@ -1928,6 +1937,7 @@ mod tests {
             did_unroll: false,
             did_inline: false,
             frees_rbp: false,
+            fenv_access: false,
             n_params: 0,
             is_variadic: false,
             is_inline: false,

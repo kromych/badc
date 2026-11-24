@@ -436,6 +436,87 @@ impl Misses {
     }
 }
 
+/// A contracted `a * b + c` is one fused operation, also under
+/// `FENV_ACCESS` on, where a multiply left behind unread would still run and
+/// raise the flags of a rounding the expression no longer has.
+#[test]
+fn a_contraction_leaves_no_multiply_under_fenv_access() {
+    const SRC: &str = "#pragma STDC FENV_ACCESS ON\n\
+        double fused(double a, double b, double c) { return a * b + c; }\n";
+    let insns = x64(SRC, "fused");
+    // `mulsd` / `vmulsd`, and a VEX `vfmadd`/`vfmsub` (0F38 map, 0x98-0xBF).
+    assert!(!insns.iter().any(|i| i.op == 0x0F59), "{insns:x?}");
+    assert!(insns.iter().any(|i| i.vex && (0x3898..=0x38BF).contains(&i.op)), "{insns:x?}");
+    let ws = a64(SRC, "fused");
+    // FMUL and FMADD, double precision.
+    assert!(!ws.iter().any(|&w| w & 0xFFE0_FC00 == 0x1E60_0800), "{ws:08x?}");
+    assert!(ws.iter().any(|&w| w & 0xFFE0_8000 == 0x1F40_0000), "{ws:08x?}");
+}
+
+/// Floating arithmetic of a loop's invariants and the conversion of an
+/// invariant `long` run once ahead of the loop with `FENV_ACCESS` off, the
+/// default; under the pragma they stay where the program performs them,
+/// a quotient of constants is not evaluated at translation time, and a
+/// quotient nothing reads is still performed (C17 7.6.1p2, F.8.4, F.9.1).
+#[test]
+fn floating_invariants_move_unless_fenv_access_is_on() {
+    const SRC: &str = "void f(double *a, const double *b, double x, double y, int n)\n\
+        { for (int i = 0; i < n; i++) a[i] = b[i] * (x * y); }\n\
+        void g(double *a, const double *b, long k, int n)\n\
+        { for (int i = 0; i < n; i++) a[i] = b[i] + (double)k; }\n\
+        double third(void) { double a = 1.0, b = 3.0; return a / b; }\n\
+        void unread(double x) { double q = x / 0.0; (void)q; }\n\
+        #pragma STDC FENV_ACCESS ON\n\
+        void f_on(double *a, const double *b, double x, double y, int n)\n\
+        { for (int i = 0; i < n; i++) a[i] = b[i] * (x * y); }\n\
+        void g_on(double *a, const double *b, long k, int n)\n\
+        { for (int i = 0; i < n; i++) a[i] = b[i] + (double)k; }\n\
+        double third_on(void) { double a = 1.0, b = 3.0; return a / b; }\n\
+        void unread_on(double x) { double q = x / 0.0; (void)q; }\n";
+    let mut m = Misses::default();
+    // `mulsd` / `vmulsd` of two registers, `cvtsi2sd`, `divsd` / `vdivsd`.
+    let x_mul = |i: &X64Insn| i.op == 0x0F59 && i.reg_form();
+    let x_cvt = |i: &X64Insn| i.op == 0x0F2A;
+    let x_div = |i: &X64Insn| i.op == 0x0F5E;
+    // FMUL of the two parameters `d0 * d1`, SCVTF from a 64-bit register and
+    // FDIV, double precision.
+    let a_mul =
+        |w: u32| w & 0xFFE0_FC00 == 0x1E60_0800 && (w >> 5) & 31 == 0 && (w >> 16) & 31 == 1;
+    let a_cvt = |w: u32| w & 0xFFFF_FC00 == 0x9E62_0000;
+    let a_div = |w: u32| w & 0xFFE0_FC00 == 0x1E60_1800;
+    for (suffix, on) in [("", false), ("_on", true)] {
+        let f = format!("f{suffix}");
+        let insns = x64(SRC, &f);
+        m.expect(x64_in_loop(&insns, x_mul) == on, || {
+            format!("x86-64 {f}: {insns:x?}")
+        });
+        let ws = a64(SRC, &f);
+        m.expect(a64_in_loop(&ws, a_mul) == on, || {
+            format!("aarch64 {f}: {ws:08x?}")
+        });
+        let g = format!("g{suffix}");
+        let insns = x64(SRC, &g);
+        m.expect(x64_in_loop(&insns, x_cvt) == on, || {
+            format!("x86-64 {g}: {insns:x?}")
+        });
+        let ws = a64(SRC, &g);
+        m.expect(a64_in_loop(&ws, a_cvt) == on, || {
+            format!("aarch64 {g}: {ws:08x?}")
+        });
+        for name in [format!("third{suffix}"), format!("unread{suffix}")] {
+            let insns = x64(SRC, &name);
+            m.expect(insns.iter().any(x_div) == on, || {
+                format!("x86-64 {name}: {insns:x?}")
+            });
+            let ws = a64(SRC, &name);
+            m.expect(ws.iter().any(|&w| a_div(w)) == on, || {
+                format!("aarch64 {name}: {ws:08x?}")
+            });
+        }
+    }
+    m.finish();
+}
+
 /// Every direct branch lands on an instruction that is neither the next one
 /// nor an unconditional branch.
 pub(super) fn a64_branches_land_on_code(ws: &[u32]) -> bool {
@@ -8989,12 +9070,12 @@ fn x64_a_fused_multiply_add_result_takes_a_dying_operands_register() {
     );
 }
 
-/// An integer of 32 bits or fewer converted to `double` in a loop is
-/// converted once ahead of it: the result is exact and sets no flag
-/// (C17 6.3.1.4p2). A 64-bit one, which may round and raise inexact, stays.
+/// An integer converted to `double` in a loop is converted once ahead of
+/// it; under `FENV_ACCESS` on, where a conversion is an operation on the
+/// environment, it stays.
 #[test]
 fn a_narrow_integer_converted_in_a_loop_is_converted_before_it() {
-    const SRC: &str = "void addk(double *a, const double *b, int k, int n) {\n\
+    const BODIES: &str = "void addk(double *a, const double *b, int k, int n) {\n\
     for (int i = 0; i < n; i++) a[i] = b[i] + (double)k;\n\
 }\n\
 void addu(double *a, const double *b, unsigned k, int n) {\n\
@@ -9003,9 +9084,14 @@ void addu(double *a, const double *b, unsigned k, int n) {\n\
 void addl(double *a, const double *b, long k, int n) {\n\
     for (int i = 0; i < n; i++) a[i] = b[i] + (double)k;\n\
 }\n";
+    let on = format!("#pragma STDC FENV_ACCESS ON\n{BODIES}");
     let mut m = Misses::default();
-    for (name, inside) in [("addk", false), ("addu", false), ("addl", true)] {
-        let insns = x64(SRC, name);
+    let cases = [("addk", false), ("addu", false), ("addl", false)]
+        .map(|c| (BODIES, c))
+        .into_iter()
+        .chain([("addk", true), ("addu", true), ("addl", true)].map(|c| (on.as_str(), c)));
+    for (src, (name, inside)) in cases {
+        let insns = x64(src, name);
         // The loop: from a backward branch's target to the branch.
         let body = insns
             .iter()
@@ -9016,9 +9102,12 @@ void addl(double *a, const double *b, long k, int n) {\n\
             .iter()
             .any(|i| i.op == 0x0F2A && body.is_some_and(|(lo, hi)| (lo..hi).contains(&i.at)));
         m.expect(body.is_some() && in_loop == inside, || {
-            format!("x86-64 {name}: converts in the loop: {in_loop}: {insns:x?}")
+            format!(
+                "x86-64 {name} on={}: converts in the loop: {in_loop}: {insns:x?}",
+                src != BODIES
+            )
         });
-        let ws = a64(SRC, name);
+        let ws = a64(src, name);
         let body = ws.iter().enumerate().find_map(|(k, &w)| {
             a64_branch(w, k).and_then(|(t, _)| (t < k as i64).then_some((t as usize, k)))
         });
@@ -9029,7 +9118,10 @@ void addl(double *a, const double *b, long k, int n) {\n\
             .enumerate()
             .any(|(k, &w)| cvt(w) && body.is_some_and(|(lo, hi)| (lo..hi).contains(&k)));
         m.expect(body.is_some() && in_loop == inside, || {
-            format!("aarch64 {name}: converts in the loop: {in_loop}: {ws:08x?}")
+            format!(
+                "aarch64 {name} on={}: converts in the loop: {in_loop}: {ws:08x?}",
+                src != BODIES
+            )
         });
     }
     m.finish();

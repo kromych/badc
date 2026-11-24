@@ -9,6 +9,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#pragma STDC FENV_ACCESS ON
 
 static void flags(void) {
     int f = fetestexcept(FE_ALL_EXCEPT);

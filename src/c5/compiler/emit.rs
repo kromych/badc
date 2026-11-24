@@ -1205,6 +1205,7 @@ impl Compiler {
             is_noinline: self.current_func_attrs.is_noinline,
             is_naked: self.current_func_attrs.is_naked,
             is_noreturn: self.current_func_is_noreturn,
+            fenv_access: self.lex.fenv_access_seen,
             conv: self.current_func_conv,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),

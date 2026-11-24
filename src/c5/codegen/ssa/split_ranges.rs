@@ -137,7 +137,7 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
             }
             // A skipped instruction reads nothing (`spill_traffic` alike).
             if matches!(inst, Inst::Phi { .. })
-                || super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts)
+                || super::emit_common::is_dead_pure_counts(func, inst, idx, &alloc.use_counts)
             {
                 continue;
             }
@@ -273,7 +273,7 @@ fn plan_heads(func: &FunctionSsa, alloc: &Allocation) -> Vec<Head> {
         for idx in block.inst_range.clone() {
             let inst = &func.insts[idx as usize];
             if matches!(inst, Inst::Phi { .. })
-                || super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts)
+                || super::emit_common::is_dead_pure_counts(func, inst, idx, &alloc.use_counts)
             {
                 continue;
             }
@@ -416,7 +416,7 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
         let wb = weights[b];
         for idx in block.inst_range.clone() {
             let inst = &func.insts[idx as usize];
-            if super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts) {
+            if super::emit_common::is_dead_pure_counts(func, inst, idx, &alloc.use_counts) {
                 continue;
             }
             // A copy is one instruction -- a reload, a register move, or a
@@ -584,6 +584,7 @@ mod tests {
         places[0] = Place::Spill(0);
         Allocation {
             places,
+            fenv_access: false,
             spill_count: 1,
             gpr_used: Vec::new(),
             fp_used: Vec::new(),

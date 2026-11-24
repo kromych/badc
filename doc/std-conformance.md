@@ -120,8 +120,17 @@ multiply-add when both are in one expression and the pragma is on. Without
 `-ffp-contract=fast` ignores the pragma and also fuses across expressions when
 the product has no other use.
 
-`#pragma STDC FENV_ACCESS` and `#pragma STDC CX_LIMITED_RANGE` are accepted
-and have no effect.
+`#pragma STDC FENV_ACCESS` is off by default (C17 7.6.1p2 leaves the default
+to the implementation): code that tests the floating-point status flags or
+changes a control mode does so under the pragma, and without it `-O` may
+evaluate floating arithmetic on constants at translation time, move a loop's
+invariant floating arithmetic and conversions ahead of the loop, and remove a
+floating operation nothing reads. In a function any part of which is
+translated with the pragma on, a floating operation is performed where the
+program performs it: none is folded, removed, merged with another, or moved,
+so each raises its flags and reads the rounding mode in effect there (C17
+F.8.4, F.9.1). `#pragma STDC CX_LIMITED_RANGE` is accepted and has no
+effect.
 
 The relational operators `<`, `>`, `<=`, and `>=` on floating operands raise
 `FE_INVALID` for an unordered operand, as IEC 60559's signaling predicates do

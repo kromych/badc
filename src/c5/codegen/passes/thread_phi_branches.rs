@@ -327,7 +327,7 @@ fn chain_is_pure(func: &FunctionSsa, site: &Site) -> bool {
             .clone()
             .all(|i| match &func.insts[i as usize] {
                 Inst::Phi { .. } => c == site.head,
-                inst => inst.is_pure() || inst.is_lifetime_marker(),
+                inst => func.is_pure(inst) || inst.is_lifetime_marker(),
             })
     })
 }

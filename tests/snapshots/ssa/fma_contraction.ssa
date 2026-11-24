@@ -12,7 +12,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   Binop { op=fmul.c, lhs=v1, rhs=v3 }              -> d3
+    v9   Undef                                            -> x0
     v10  Imm(0)                                           -> x0
     v11  Fma { a=v1, b=v3, c=v5, neg_product=false, neg_addend=false } -> d0
     terminator Return(v11)   (exit_acc=v11)
@@ -30,7 +30,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   Binop { op=fmul.c, lhs=v1, rhs=v3 }              -> d3
+    v9   Undef                                            -> x0
     v10  Imm(0)                                           -> x0
     v11  Fma { a=v1, b=v3, c=v5, neg_product=false, neg_addend=true } -> d0
     terminator Return(v11)   (exit_acc=v11)
@@ -49,7 +49,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    v10  Binop { op=fmul.c, lhs=v1, rhs=v3 }              -> d3
+    v10  Undef                                            -> x0
     v11  Fma { a=v1, b=v3, c=v5, neg_product=true, neg_addend=false } -> d0
     terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=3 ---
@@ -66,7 +66,7 @@ fn ent_pc=3 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0 [f32]
     v8   Imm(0)                                           -> x0 [f32]
-    v9   Binop { op=fmul.c, lhs=v1, rhs=v3 }              -> d3 [f32]
+    v9   Undef                                            -> x0 [f32]
     v10  Imm(0)                                           -> x0 [f32]
     v11  Fma { a=v1, b=v3, c=v5, neg_product=false, neg_addend=false } -> d0 [f32]
     terminator Return(v11)   (exit_acc=v11)
@@ -84,7 +84,7 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0 [f32]
     v8   Imm(0)                                           -> x0 [f32]
-    v9   Binop { op=fmul.c, lhs=v1, rhs=v3 }              -> d3 [f32]
+    v9   Undef                                            -> x0 [f32]
     v10  Imm(0)                                           -> x0 [f32]
     v11  Fma { a=v1, b=v3, c=v5, neg_product=false, neg_addend=true } -> d0 [f32]
     terminator Return(v11)   (exit_acc=v11)
@@ -103,7 +103,7 @@ fn ent_pc=5 n_params=3 variadic=false locals=0
     v7   Imm(0)                                           -> x0 [f32]
     v8   Imm(0)                                           -> x0 [f32]
     v9   Imm(0)                                           -> x0 [f32]
-    v10  Binop { op=fmul.c, lhs=v1, rhs=v3 }              -> d3 [f32]
+    v10  Undef                                            -> x0 [f32]
     v11  Fma { a=v1, b=v3, c=v5, neg_product=true, neg_addend=false } -> d0 [f32]
     terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=6 ---

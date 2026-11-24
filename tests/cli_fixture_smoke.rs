@@ -913,6 +913,53 @@ fn inline_stringops_loops_compute_what_the_calls_do() {
     }
 }
 
+/// Under `#pragma STDC FENV_ACCESS ON` a floating operation is performed
+/// where the program performs it, at -O as at -O0: a quotient of constants
+/// raises inexact, a quotient nothing reads raises divide-by-zero, and one
+/// product taken under two rounding modes rounds each way (C17 F.8.4,
+/// F.9.1).
+#[test]
+fn fenv_access_keeps_floating_operations_where_they_are() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-fenv-access");
+    let src = dir.join("f.c");
+    std::fs::write(
+        &src,
+        "#include <fenv.h>\n#pragma STDC FENV_ACCESS ON\n\
+         #define NOINLINE __attribute__((noinline))\n\
+         NOINLINE int inexact(void) { feclearexcept(FE_ALL_EXCEPT); double a = 1.0, b = 3.0;\n\
+             volatile double r = a / b; (void)r; return fetestexcept(FE_INEXACT) != 0; }\n\
+         NOINLINE int divbyzero(double x) { feclearexcept(FE_ALL_EXCEPT); double q = x / 0.0;\n\
+             (void)q; return fetestexcept(FE_DIVBYZERO) != 0; }\n\
+         NOINLINE int rounds(double x, double y) { int saved = fegetround();\n\
+             fesetround(FE_DOWNWARD); double down = x * y;\n\
+             fesetround(FE_UPWARD); double up = x * y;\n\
+             fesetround(saved); return up > down; }\n\
+         int main(void) { volatile double t = 3.0;\n\
+             if (!inexact()) return 1;\n\
+             if (!divbyzero(t)) return 2;\n\
+             if (!rounds(1.0 / t, t)) return 3;\n\
+             return 0; }\n",
+    )
+    .expect("write source");
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("f{opt}"));
+        let built = Command::new(badc)
+            .args(["-q", opt, "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(run.status.code(), Some(0), "{opt}");
+    }
+}
+
 /// Under `--msvc` a quoted include searches cl's way: the including file's
 /// directory, then those of the files including it, innermost first, before
 /// the `-I` directories. Without it the search stops at the including file's

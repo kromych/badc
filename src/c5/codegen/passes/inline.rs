@@ -2027,8 +2027,9 @@ fn live_inst_mask(func: &FunctionSsa) -> Vec<bool> {
         bump(&mut uses, blk.exit_acc);
     }
     let mut live = in_block;
-    let dead =
-        |live: &[bool], uses: &[u32], i: usize| live[i] && func.insts[i].is_pure() && uses[i] == 0;
+    let dead = |live: &[bool], uses: &[u32], i: usize| {
+        live[i] && func.is_pure(&func.insts[i]) && uses[i] == 0
+    };
     let mut work: Vec<usize> = (0..func.insts.len())
         .filter(|&i| dead(&live, &uses, i))
         .collect();
@@ -3787,6 +3788,9 @@ fn splice_multi_block(
         did_unroll: original.did_unroll,
         did_inline: original.did_inline,
         frees_rbp: original.frees_rbp,
+        // A body translated with `FENV_ACCESS` on keeps its operations as
+        // they are wherever it is spliced.
+        fenv_access: original.fenv_access || callee.fenv_access,
     };
 }
 

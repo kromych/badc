@@ -51,6 +51,7 @@ static float64x1_t d1(void) { uint64_t u = r64(); float64x1_t v; memcpy(&v, &u, 
 static uint32x4_t u4(void) { uint32x4_t v; for (int i = 0; i < 4; i++) v[i] = (uint32_t)rnd(); return v; }
 static uint32x2_t u2(void) { uint32x2_t v; for (int i = 0; i < 2; i++) v[i] = (uint32_t)rnd(); return v; }
 #include <fenv.h>
+#pragma STDC FENV_ACCESS ON
 static int32x4_t i32(void) { int32x4_t v; for (int i = 0; i < 4; i++) v[i] = (rnd() & 1) ? (int32_t)rnd() : (int32_t)(rnd() % 1000) - 500; return v; }
 static int64x2_t i64(void) { int64x2_t v; for (int i = 0; i < 2; i++) v[i] = (rnd() & 1) ? (int64_t)rnd() : (int64_t)(rnd() % 100000) - 50000; return v; }
 #define TOI(c) do { \

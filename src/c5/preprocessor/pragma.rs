@@ -147,12 +147,13 @@ impl Preprocessor {
     /// Any other directive is accepted with a warning.
     /// Whether `args` is a pragma whose state holds from its position, which
     /// the line passes through for the lexer to fold in place: `pack`, GCC
-    /// `visibility`, `STDC FP_CONTRACT`, and on the PE targets MSVC's segment
-    /// pragmas.
+    /// `visibility`, `STDC FP_CONTRACT` and `STDC FENV_ACCESS`, and on the PE
+    /// targets MSVC's segment pragmas.
     pub(super) fn lexer_reads_pragma(&self, args: &str) -> bool {
         pragma_is_pack(args)
             || pragma_is_visibility(args, self.dollar())
             || pragma_is_fp_contract(args, self.dollar())
+            || pragma_is_stdc(args, "FENV_ACCESS", self.dollar())
             || (self.target.is_windows() && crate::c5::segment_pragma::is_segment_pragma(args))
     }
 
@@ -291,7 +292,7 @@ impl Preprocessor {
         // `pack` and `once` are consumed elsewhere. The `GCC` / `clang`
         // vendor pragmas (diagnostic selection, `optimize`, `target`,
         // `push_options`, `loop`, ...) and the C99 6.10.6 `STDC` pragmas
-        // (FP_CONTRACT, FENV_ACCESS, CX_LIMITED_RANGE) are compiler hints
+        // (CX_LIMITED_RANGE) are compiler hints
         // / evaluation modes c5 does not act on, and `region` / `endregion`
         // mark an editor's outline. Accept them on every target rather than
         // warning on every occurrence; everything else falls through to the
@@ -1412,6 +1413,16 @@ pub(super) fn pragma_is_fp_contract(args: &str, dollar: Dollar) -> bool {
     };
     let rest = rest.trim_start();
     rest.strip_prefix("FP_CONTRACT")
+        .is_some_and(|r| ident::char_len(r.as_bytes(), 0, dollar) == 0)
+}
+
+/// True when `args` is `STDC <name> ...`.
+pub(super) fn pragma_is_stdc(args: &str, name: &str, dollar: Dollar) -> bool {
+    let Some(rest) = args.trim_start().strip_prefix("STDC") else {
+        return false;
+    };
+    rest.trim_start()
+        .strip_prefix(name)
         .is_some_and(|r| ident::char_len(r.as_bytes(), 0, dollar) == 0)
 }
 

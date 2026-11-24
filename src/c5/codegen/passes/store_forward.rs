@@ -196,7 +196,7 @@ fn emitted_span(func: &FunctionSsa, preds: &[Vec<BlockId>]) -> impl Fn(u32, usiz
                 break;
             };
             at[i as usize] = n;
-            n += u32::from(!inst.is_lifetime_marker() && (used || !inst.is_pure()));
+            n += u32::from(!inst.is_lifetime_marker() && (used || !func.is_pure(inst)));
         }
         ends.push(n);
     }
@@ -1272,7 +1272,7 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                 // A plain load nothing reads is not emitted.
                 ref inst
                     if !writes_memory(inst)
-                        && (!reads(inst) || (uses[i as usize] == 0 && inst.is_pure())) => {}
+                        && (!reads(inst) || (uses[i as usize] == 0 && func.is_pure(inst))) => {}
                 _ => written.clear(),
             }
         }
@@ -1598,6 +1598,7 @@ mod tests {
             did_unroll: false,
             did_inline: false,
             frees_rbp: false,
+            fenv_access: false,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,

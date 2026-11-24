@@ -161,7 +161,7 @@ pub(crate) fn drop_encoded_reads(func: &FunctionSsa, use_counts: &mut [u32]) {
             if taken.contains(&Some(k)) {
                 imm[o] -= 1;
             }
-            if func.insts[o].is_pure() && use_counts[o] == imm[o] {
+            if func.is_pure(&func.insts[o]) && use_counts[o] == imm[o] {
                 work.push(o);
             }
         }

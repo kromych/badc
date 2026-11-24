@@ -54,7 +54,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v17  Imm(0)                                           -> x0
     v18  Imm(10)                                          -> x0
     v19  Imm(4621819117588971520)                         -> d2
-    v20  Binop { op=fmul.c, lhs=v3, rhs=v19 }             -> d2
+    v20  Undef                                            -> x0
     v21  Fma { a=v3, b=v19, c=v16, neg_product=false, neg_addend=false } -> d0
     v22  FpCast { kind=FpToInt, value=v21 }               -> x0
     v23  Imm(0)                                           -> x1
@@ -158,7 +158,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     v5   LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
     v6   Imm(100)                                         -> x0
     v7   Imm(1120403456)                                  -> d2 [f32]
-    v8   Binop { op=fmul.c, lhs=v5, rhs=v7 }              -> d2 [f32]
+    v8   Undef                                            -> x0 [f32]
     v9   LocalAddr(-3)                                    -> x0
     v10  Imm(12)                                          -> x0
     v11  BinopI { op=add, lhs=v3, rhs_imm=12 }            -> x0

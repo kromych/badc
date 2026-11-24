@@ -80,7 +80,7 @@ fn arm_join(
     let live = live_values(func, uses, b);
     let pure = (block.inst_range.clone()).all(|v| {
         let inst = &func.insts[v as usize];
-        speculable(inst) || (inst.is_pure() && !live.contains(&v))
+        speculable(inst) || (func.is_pure(inst) && !live.contains(&v))
     });
     (preds[b as usize] == [head] && live.len() <= ARM_INSTS && pure).then_some(join)
 }

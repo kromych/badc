@@ -788,8 +788,10 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
                     if i >= n {
                         break;
                     }
-                    // Nothing reads it, or its branch consumes it alone.
-                    if use_counts[i] == 0 || pinned[i] {
+                    // Nothing reads it, or its branch consumes it alone; or,
+                    // under `FENV_ACCESS` on, it reads a control mode a call in
+                    // between may set.
+                    if use_counts[i] == 0 || pinned[i] || !func.is_pure(&func.insts[i]) {
                         continue;
                     }
                     let is_f32 = func.f32_values.get(i).copied().unwrap_or(false);
@@ -918,6 +920,7 @@ mod tests {
             did_unroll: false,
             did_inline: false,
             frees_rbp: false,
+            fenv_access: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

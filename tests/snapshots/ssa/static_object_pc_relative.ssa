@@ -182,7 +182,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v6   Load { addr=v2, disp=0, kind=F64 pc_rel }        -> d0
     v7   Imm(2)                                           -> x0
     v8   Imm(4611686018427387904)                         -> d1
-    v9   Binop { op=fmul.c, lhs=v6, rhs=v8 }              -> d1
+    v9   Undef                                            -> x0
     v10  ImmData(56)                                      -> x0
     v11  BinopI { op=add, lhs=v10, rhs_imm=16 }           -> x0
     v12  Load { addr=v10, disp=16, kind=F64 pc_rel }      -> d1

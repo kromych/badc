@@ -2172,7 +2172,7 @@ pub(crate) fn is_dead_pure(
     v: super::super::ir::ValueId,
     alloc: &super::reg_alloc::Allocation,
 ) -> bool {
-    is_dead_pure_counts(inst, v, &alloc.use_counts)
+    !(alloc.fenv_access && inst.touches_fenv()) && inst.is_pure() && read_none(v, &alloc.use_counts)
 }
 
 /// The parameter reads the entry parallel copy may place: the `ParamRef`s
@@ -2305,11 +2305,17 @@ pub(crate) fn inst_emits_nothing(
 /// it before the `Allocation` exists, when it collects the used-register
 /// sets; the two callers must agree on which values produce no code.
 pub(crate) fn is_dead_pure_counts(
+    func: &super::super::ir::FunctionSsa,
     inst: &super::super::ir::Inst,
     v: super::super::ir::ValueId,
     use_counts: &[u32],
 ) -> bool {
-    inst.is_pure() && use_counts.get(v as usize).copied().unwrap_or(0) == 0
+    func.is_pure(inst) && read_none(v, use_counts)
+}
+
+/// Nothing reads `v`.
+fn read_none(v: super::super::ir::ValueId, use_counts: &[u32]) -> bool {
+    use_counts.get(v as usize).copied().unwrap_or(0) == 0
 }
 
 /// Record the native byte offset of a block's first

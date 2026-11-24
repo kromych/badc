@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(4602678819172646912)                         -> d1
-    v5   Binop { op=fmul.c, lhs=v1, rhs=v4 }              -> d2
+    v5   Undef                                            -> x0
     v6   Imm(4607182418800017408)                         -> d2
     v7   Fma { a=v1, b=v4, c=v6, neg_product=false, neg_addend=false } -> d0
     terminator Return(v7)   (exit_acc=v7)

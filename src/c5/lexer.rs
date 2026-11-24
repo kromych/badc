@@ -427,6 +427,19 @@ fn parse_pragma_fp_contract_line(body: &[u8]) -> Option<Option<bool>> {
     }
 }
 
+/// `pragma STDC FENV_ACCESS ON|OFF|DEFAULT` (C17 7.6.1) as the state it
+/// sets, off for `DEFAULT`; `None` for another line.
+fn parse_pragma_fenv_access_line(body: &[u8]) -> Option<bool> {
+    let s = core::str::from_utf8(body).ok()?.trim();
+    let rest = s.strip_prefix("pragma")?.trim_start();
+    let rest = rest.strip_prefix("STDC")?.trim_start();
+    match rest.strip_prefix("FENV_ACCESS")?.trim() {
+        "ON" => Some(true),
+        "OFF" | "DEFAULT" => Some(false),
+        _ => None,
+    }
+}
+
 /// Snapshot of the lexer's positional state plus every attribute
 /// `next()` produces for the current token. See [`Lexer::snapshot`] /
 /// [`Lexer::restore`].
@@ -703,6 +716,14 @@ pub(crate) struct Lexer {
     pub(crate) fp_contract: bool,
     /// The state `FP_CONTRACT DEFAULT` sets, from `-ffp-contract`.
     pub(crate) fp_contract_default: bool,
+    /// Whether `#pragma STDC FENV_ACCESS` is on at the current position
+    /// (C17 7.6.1): code may test the floating-point status flags or run
+    /// under non-default control modes. Scanned inline like `pack`.
+    pub(crate) fenv_access: bool,
+    /// Set whenever `fenv_access` turns on; the compiler clears it to the
+    /// current state at each function body, so it tells whether any of the
+    /// body was translated with the pragma on.
+    pub(crate) fenv_access_seen: bool,
     /// The sections MSVC's segment pragmas name here. Scanned inline like
     /// `pack`.
     pub(crate) segments: crate::c5::segment_pragma::Segments,
@@ -904,6 +925,8 @@ impl Lexer {
             visibility_stack: vec![None],
             fp_contract: true,
             fp_contract_default: true,
+            fenv_access: false,
+            fenv_access_seen: false,
             segments: Default::default(),
             column_places: Vec::new(),
         }
@@ -2130,6 +2153,9 @@ impl Lexer {
                     self.apply_visibility_directive(dir);
                 } else if let Some(state) = parse_pragma_fp_contract_line(body) {
                     self.fp_contract = state.unwrap_or(self.fp_contract_default);
+                } else if let Some(state) = parse_pragma_fenv_access_line(body) {
+                    self.fenv_access = state;
+                    self.fenv_access_seen |= state;
                 } else if let Ok(line) = core::str::from_utf8(body) {
                     self.segments.apply_line(line);
                 }

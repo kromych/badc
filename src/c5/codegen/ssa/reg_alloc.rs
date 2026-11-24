@@ -99,6 +99,9 @@ impl Place {
 pub(crate) struct Allocation {
     /// Where each SSA value lives.
     pub places: Vec<Place>,
+    /// The function's `FunctionSsa::fenv_access`, for the emit's
+    /// dead-value skip ([`super::emit_common::is_dead_pure`]).
+    pub fenv_access: bool,
     /// Total spill slots reserved (in 8-byte units). The emit
     /// pass adds `vstack_slots * 8 + 8 * spill_count` bytes to
     /// the function's `locals_bytes` reservation.
@@ -1751,6 +1754,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     if n_insts == 0 {
         return Allocation {
             places,
+            fenv_access: func.fenv_access,
             spill_count: 0,
             gpr_used: Vec::new(),
             fp_used: Vec::new(),
@@ -2451,7 +2455,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             let inst = &func.insts[p as usize];
             // A dead pure inst and a lifetime marker emit no code.
             inst.is_lifetime_marker()
-                || (inst.is_pure() && use_counts[p as usize] == 0)
+                || (func.is_pure(inst) && use_counts[p as usize] == 0)
                 || (sets_flags && flags_survive(inst))
         });
         if !window_ok {
@@ -2532,7 +2536,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 let inst = &func.insts[p as usize];
                 reads(p)
                     || inst.is_lifetime_marker()
-                    || (inst.is_pure() && use_counts[p as usize] == 0)
+                    || (func.is_pure(inst) && use_counts[p as usize] == 0)
                     || flags_survive(inst)
             });
             if window_ok {
@@ -2585,7 +2589,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
-        if super::emit_common::is_dead_pure_counts(inst, v as ValueId, &use_counts) {
+        if super::emit_common::is_dead_pure_counts(func, inst, v as ValueId, &use_counts) {
             continue;
         }
         match places[v] {
@@ -2709,7 +2713,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 node_cons[node_of[v as usize] as usize].map_or(VecWidth::Scalar, |c| c.wide)
             },
             emitted: &|v| {
-                !super::emit_common::is_dead_pure_counts(&func.insts[v as usize], v, &use_counts)
+                !super::emit_common::is_dead_pure_counts(
+                    func,
+                    &func.insts[v as usize],
+                    v,
+                    &use_counts,
+                )
             },
         },
     );
@@ -2722,6 +2731,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     };
     Allocation {
         places,
+        fenv_access: func.fenv_access,
         spill_count,
         fp_scratch: banks.fp_scratch,
         gpr_used: gpr_used_callee,
@@ -4293,7 +4303,7 @@ fn def_weights(
     for (b, block) in func.blocks.iter().enumerate() {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            if super::emit_common::is_dead_pure_counts(inst, v, use_counts) {
+            if super::emit_common::is_dead_pure_counts(func, inst, v, use_counts) {
                 continue;
             }
             if let Some(&root) = node_of.get(v as usize) {
@@ -4344,7 +4354,7 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
         loop {
             let mut pure_changed = false;
             for (i, inst) in func.insts.iter().enumerate() {
-                if killed[i] || !inst.is_pure() {
+                if killed[i] || !func.is_pure(inst) {
                     continue;
                 }
                 if counts[i] == 0 {
@@ -4451,7 +4461,8 @@ pub(crate) fn operands_read(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool>
         .map(|(v, inst)| {
             let dead_phi =
                 matches!(inst, Inst::Phi { .. }) && use_counts.get(v).copied().unwrap_or(0) == 0;
-            !dead_phi && !super::emit_common::is_dead_pure_counts(inst, v as ValueId, use_counts)
+            !dead_phi
+                && !super::emit_common::is_dead_pure_counts(func, inst, v as ValueId, use_counts)
         })
         .collect()
 }
@@ -5000,7 +5011,12 @@ fn fp_memory_operands(
                 continue;
             }
             let Some(r) = (v + 1..block.inst_range.end as usize).find(|&i| {
-                !super::emit_common::is_dead_pure_counts(&func.insts[i], i as ValueId, use_counts)
+                !super::emit_common::is_dead_pure_counts(
+                    func,
+                    &func.insts[i],
+                    i as ValueId,
+                    use_counts,
+                )
             }) else {
                 continue;
             };
@@ -5138,7 +5154,7 @@ fn stack_arg_loads(
                     && use_counts.get(v as usize) == Some(&1)
                     && blk.inst_range.contains(&v)
                     && v < pc
-                    && ((v + 1)..pc).all(|w| func.insts[w as usize].is_pure())
+                    && ((v + 1)..pc).all(|w| func.is_pure(&func.insts[w as usize]))
                 {
                     out.insert(v, (off, disp, kind));
                 }
@@ -7794,6 +7810,7 @@ int main(void) { return 0; }
             did_unroll: false,
             did_inline: false,
             frees_rbp: false,
+            fenv_access: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -8048,6 +8065,7 @@ int main(void) { return 0; }
             did_unroll: false,
             did_inline: false,
             frees_rbp: false,
+            fenv_access: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

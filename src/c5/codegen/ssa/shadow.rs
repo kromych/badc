@@ -203,6 +203,7 @@ pub(crate) fn walk_program(
         func.is_noinline = f.is_noinline;
         func.is_naked = f.is_naked;
         func.is_noreturn = f.is_noreturn;
+        func.fenv_access = f.fenv_access;
         func.conv = f.conv;
         func.is_weak = weak_names.contains(func.name.as_str());
         func.is_internal = internal_names.contains(func.name.as_str());

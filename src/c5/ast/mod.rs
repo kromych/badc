@@ -932,6 +932,9 @@ pub(crate) struct FinishedFunction {
     /// `_Noreturn` (C11 6.7.4) on any declaration of the function:
     /// propagated onto `FunctionSsa::is_noreturn`.
     pub is_noreturn: bool,
+    /// Some of the body was translated with `#pragma STDC FENV_ACCESS ON`:
+    /// propagated onto `FunctionSsa::fenv_access`.
+    pub fenv_access: bool,
     /// `__attribute__((ms_abi))` / `((sysv_abi))`: propagated onto
     /// `FunctionSsa::conv`. `CallConv::Target` when the definition
     /// follows the target's own convention.
@@ -1608,6 +1611,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             is_noinline: _,
             is_naked: _,
             is_noreturn: _,
+            fenv_access: _,
             conv: _,
             n_locals: _,
             param_tys: _,

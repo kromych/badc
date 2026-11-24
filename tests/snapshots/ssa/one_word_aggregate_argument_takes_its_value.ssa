@@ -125,13 +125,13 @@ fn ent_pc=2 n_params=11 variadic=false locals=2
     v36  LoadLocal { off=-2, kind=F64 }                   -> d1
     v37  Imm(10)                                          -> x0
     v38  Imm(4621819117588971520)                         -> d2
-    v39  Binop { op=fmul.c, lhs=v36, rhs=v38 }            -> d2
+    v39  Undef                                            -> x0
     v40  Fma { a=v36, b=v38, c=v34, neg_product=false, neg_addend=false } -> d0
     v41  LocalAddr(-1)                                    -> x0
     v42  LoadLocal { off=-1, kind=F64 }                   -> d1
     v43  Imm(100)                                         -> x0
     v44  Imm(4636737291354636288)                         -> d2
-    v45  Binop { op=fmul.c, lhs=v42, rhs=v44 }            -> d2
+    v45  Undef                                            -> x0
     v46  Fma { a=v42, b=v44, c=v40, neg_product=false, neg_addend=false } -> d0
     v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0

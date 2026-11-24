@@ -785,6 +785,21 @@ impl Inst {
     /// A volatile load is an access the abstract machine performs even
     /// when the value is unused (C99 5.1.2.3p2, 6.7.3p6), so it is never
     /// pure.
+    /// Whether the instruction raises a floating-point exception flag or
+    /// reads a floating-point control mode (C17 7.6, F.9.1): floating
+    /// arithmetic and comparisons, scalar or vector, a fused multiply-add,
+    /// and every conversion but a bit move. A SIMD row is taken as one.
+    pub(crate) fn touches_fenv(&self) -> bool {
+        match self {
+            Inst::Binop { op, .. } | Inst::BinopI { op, .. } | Inst::VecBinop { op, .. } => {
+                is_fp_op(*op)
+            }
+            Inst::FpCast { kind, .. } => !matches!(kind, FpCastKind::FpBits | FpCastKind::BitsFp),
+            Inst::Fma { .. } | Inst::SimdVal { .. } => true,
+            _ => false,
+        }
+    }
+
     pub(crate) fn is_pure(&self) -> bool {
         matches!(
             self,
@@ -2931,6 +2946,11 @@ pub(crate) struct FunctionSsa {
     /// callee-saved bank, decided ahead of the allocation
     /// (`x86_64::emit::frame_pointer_free`).
     pub frees_rbp: bool,
+    /// Some of the body was translated with `#pragma STDC FENV_ACCESS ON`
+    /// (C17 7.6.1): its floating-point operations raise flags and read the
+    /// control modes the program may test or set, so none is folded,
+    /// removed, speculated or moved (`Inst::touches_fenv`).
+    pub fenv_access: bool,
     /// The `__try` regions.
     pub seh_scopes: Vec<SehScope>,
     /// Per block, the innermost region its code lies in; empty when
@@ -3007,6 +3027,13 @@ impl SspFacts {
 }
 
 impl FunctionSsa {
+    /// [`Inst::is_pure`] in this function: under `FENV_ACCESS` on, an
+    /// instruction that [touches the floating-point environment](Inst::touches_fenv)
+    /// has that as an effect, so it is not removed, merged or moved.
+    pub(crate) fn is_pure(&self, inst: &Inst) -> bool {
+        inst.is_pure() && !(self.fenv_access && inst.touches_fenv())
+    }
+
     pub(crate) fn has_seh(&self) -> bool {
         !self.seh_scopes.is_empty()
     }
@@ -3326,6 +3353,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             did_unroll: _,
             did_inline: _,
             frees_rbp: _,
+            fenv_access: _,
         } = self;
         for i in insts.iter_mut() {
             i.remap_data_offsets(r);

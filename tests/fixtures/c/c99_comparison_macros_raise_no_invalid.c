@@ -6,6 +6,7 @@
 
 #include <fenv.h>
 #include <math.h>
+#pragma STDC FENV_ACCESS ON
 
 // Constant operands fold, NaN and the common type included.
 _Static_assert(!__builtin_islessgreater(1.0, __builtin_nan("")), "<> with NaN");

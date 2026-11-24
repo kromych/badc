@@ -225,8 +225,8 @@ pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa, strict_align: bool) {
 /// block exit accumulators.
 /// A pure value nothing reads, which [`use_counts`] does not count as a
 /// use of its operands.
-fn dead(counts: &[u32], inst: &Inst, i: usize) -> bool {
-    counts.get(i) == Some(&0) && inst.is_pure()
+fn dead(func: &FunctionSsa, counts: &[u32], inst: &Inst, i: usize) -> bool {
+    counts.get(i) == Some(&0) && func.is_pure(inst)
 }
 
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
@@ -259,7 +259,7 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     // A pure value nothing reads goes with the emit's dead-pure skip, and
     // its operands lose that use.
     let mut dead: Vec<usize> = (0..counts.len())
-        .filter(|&i| counts[i] == 0 && func.insts[i].is_pure())
+        .filter(|&i| counts[i] == 0 && func.is_pure(&func.insts[i]))
         .collect();
     while let Some(i) = dead.pop() {
         crate::c5::codegen::ssa::reg_alloc::for_each_operand(&func.insts[i], |v| {
@@ -267,7 +267,7 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
                 && *c > 0
             {
                 *c -= 1;
-                if *c == 0 && func.insts[v as usize].is_pure() {
+                if *c == 0 && func.is_pure(&func.insts[v as usize]) {
                     dead.push(v as usize);
                 }
             }
@@ -344,7 +344,7 @@ fn foldable_scaled_addresses(
     let mut seen: alloc::collections::BTreeMap<ValueId, (u8, u32)> =
         alloc::collections::BTreeMap::new();
     for (i, inst) in func.insts.iter().enumerate() {
-        if dead(counts, inst, i) {
+        if dead(func, counts, inst, i) {
             continue;
         }
         let (addr, width) = match inst {
@@ -456,7 +456,7 @@ fn foldable_displaced_addresses(
     let mut uses: alloc::collections::BTreeMap<ValueId, Vec<(u8, i64, bool)>> =
         alloc::collections::BTreeMap::new();
     for (i, inst) in func.insts.iter().enumerate() {
-        if dead(counts, inst, i) {
+        if dead(func, counts, inst, i) {
             continue;
         }
         let (addr, w, disp, align) = match inst {

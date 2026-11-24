@@ -284,6 +284,7 @@ impl SsaBuilder {
             did_unroll: false,
             did_inline: false,
             frees_rbp: false,
+            fenv_access: false,
         };
         let mut b = Self {
             func,

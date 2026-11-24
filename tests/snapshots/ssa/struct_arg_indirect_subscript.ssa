@@ -257,7 +257,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     v249 Imm(1)                                           -> x1
     v250 Load { addr=v245, disp=0, kind=F64 pc_rel }      -> d1
     v251 Imm(4616189618054758400)                         -> d0
-    v252 Binop { op=fmul.c, lhs=v250, rhs=v251 }          -> d0
+    v252 Undef                                            -> x1
     v253 BinopI { op=add, lhs=v244, rhs_imm=8 }           -> x1
     v254 Load { addr=v245, disp=8, kind=F64 pc_rel }      -> d2
     v255 Imm(4611686018427387904)                         -> d0
@@ -293,7 +293,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     v281 Imm(1)                                           -> x0
     v282 LoadLocal { off=-19, kind=F64 }                  -> d1
     v283 Imm(4616189618054758400)                         -> x0
-    v284 Binop { op=fmul.c, lhs=v282, rhs=v251 }          -> d2
+    v284 Undef                                            -> x0
     v285 BinopI { op=add, lhs=v277, rhs_imm=8 }           -> x0
     v286 LoadLocal { off=-19, disp=8, kind=F64 }          -> d2
     v287 Imm(4611686018427387904)                         -> x0

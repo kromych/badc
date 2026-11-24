@@ -600,12 +600,12 @@ struct PureHoist {
     profit: u64,
 }
 
-/// Arithmetic whose value depends on its operands alone and which neither
-/// traps nor raises a floating-point exception: integer arithmetic --
-/// division by a register can trap, by a constant only `MIN / -1`, which a
-/// divisor other than 0 and -1 rules out -- a bit move between the
-/// register files, and an integer converted to floating where the result's
-/// precision holds it exactly (C17 6.3.1.4p2), which sets no flag.
+/// Arithmetic whose value depends on its operands alone and which does not
+/// trap: integer arithmetic -- division by a register can trap, by a
+/// constant only `MIN / -1`, which a divisor other than 0 and -1 rules out
+/// -- a bit move between the register files, and, with `FENV_ACCESS` off,
+/// floating arithmetic and every conversion: their flags and the rounding
+/// mode they read are then not the program's to observe (C17 7.6.1p2).
 fn invariant_op(func: &FunctionSsa, v: ValueId) -> bool {
     let inst = &func.insts[v as usize];
     let plain = |op: BinOp| {
@@ -627,7 +627,9 @@ fn invariant_op(func: &FunctionSsa, v: ValueId) -> bool {
         )
     };
     match *inst {
-        Inst::Binop { op, .. } => plain(op),
+        Inst::Binop { op, .. } => {
+            plain(op) || (!func.fenv_access && crate::c5::ir::is_fp_arith_op(op))
+        }
         Inst::BinopI { op, rhs_imm, .. } => {
             plain(op)
                 || (matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
@@ -639,46 +641,8 @@ fn invariant_op(func: &FunctionSsa, v: ValueId) -> bool {
             kind: FpCastKind::FpBits | FpCastKind::BitsFp,
             ..
         } => true,
-        Inst::FpCast {
-            kind: kind @ (FpCastKind::IntToFp | FpCastKind::UIntToFp),
-            value,
-        } => {
-            let single = func.f32_values.get(v as usize).copied().unwrap_or(false);
-            let significand = if single { 24 } else { 53 };
-            // A signed value of `bits` is at most 2^(bits - 1) in magnitude.
-            narrow_integer(func, value).is_some_and(|(bits, signed)| {
-                bits - u32::from(signed) <= significand && (kind == FpCastKind::IntToFp || !signed)
-            })
-        }
+        Inst::FpCast { .. } if !func.fenv_access => true,
         _ => false,
-    }
-}
-
-/// The bits and signedness of an integer `v` holds as the extension of a
-/// narrower one: by an `Extend`, by the load that read it, as a parameter
-/// of that type, or by a mask clearing its upper bits.
-fn narrow_integer(func: &FunctionSsa, v: ValueId) -> Option<(u32, bool)> {
-    let kind = match *func.insts.get(v as usize)? {
-        Inst::Extend { kind, .. }
-        | Inst::Load { kind, .. }
-        | Inst::LoadLocal { kind, .. }
-        | Inst::LoadIndexed { kind, .. }
-        | Inst::ParamRef { kind, .. } => kind,
-        Inst::BinopI {
-            op: BinOp::And,
-            rhs_imm,
-            ..
-        } if rhs_imm >= 0 => return Some((64 - rhs_imm.leading_zeros(), false)),
-        _ => return None,
-    };
-    match kind {
-        LoadKind::I8 => Some((8, true)),
-        LoadKind::U8 => Some((8, false)),
-        LoadKind::I16 => Some((16, true)),
-        LoadKind::U16 => Some((16, false)),
-        LoadKind::I32 => Some((32, true)),
-        LoadKind::U32 => Some((32, false)),
-        _ => None,
     }
 }
 
@@ -904,7 +868,7 @@ fn losing_copies(
     for (b, block) in func.blocks.iter().enumerate() {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            if super::emit_common::is_dead_pure_counts(inst, v, &alloc.use_counts) {
+            if super::emit_common::is_dead_pure_counts(func, inst, v, &alloc.use_counts) {
                 continue;
             }
             charge(v, weights[b]);

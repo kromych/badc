@@ -49,6 +49,7 @@ static float64x1_t d1(void) { uint64_t u = r64(); float64x1_t v; memcpy(&v, &u, 
 static uint32x4_t u4(void) { uint32x4_t v; for (int i = 0; i < 4; i++) v[i] = (uint32_t)rnd(); return v; }
 static uint32x2_t u2(void) { uint32x2_t v; for (int i = 0; i < 2; i++) v[i] = (uint32_t)rnd(); return v; }
 #include <fenv.h>
+#pragma STDC FENV_ACCESS ON
 static int8x16_t i8(void) { int8x16_t v; for (int i = 0; i < 16; i++) { uint64_t r = rnd(); v[i] = (r & 3) == 0 ? (int8_t)((r >> 8) % 20 - 10) : (int8_t)(r >> 8); } return v; }
 static int16x8_t i16(void) { int16x8_t v; for (int i = 0; i < 8; i++) { uint64_t r = rnd(); v[i] = (r & 3) == 0 ? (int16_t)((r >> 8) % 40 - 20) : (int16_t)(r >> 8); } return v; }
 static int32x4_t i32(void) { int32x4_t v; for (int i = 0; i < 4; i++) { uint64_t r = rnd(); v[i] = (r & 3) == 0 ? (int32_t)((r >> 8) % 80 - 40) : (int32_t)(r >> 16); } return v; }

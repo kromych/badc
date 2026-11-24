@@ -97,7 +97,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Result<(), ()> {
             };
         }
     }
-    let live = |i: usize| uses[i] > 0 || !func.insts[i].is_pure();
+    let live = |i: usize| uses[i] > 0 || !func.is_pure(&func.insts[i]);
     if (0..func.insts.len()).any(|i| produces_fp_result(&func.insts[i]) && live(i)) {
         return Err(());
     }

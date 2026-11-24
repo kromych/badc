@@ -629,6 +629,7 @@ mod tests {
         let n = places.len();
         Allocation {
             places,
+            fenv_access: false,
             spill_count: 0,
             gpr_used: Vec::new(),
             fp_used: Vec::new(),

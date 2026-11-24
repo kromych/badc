@@ -828,6 +828,7 @@ mod tests {
             did_unroll: false,
             did_inline: false,
             frees_rbp: false,
+            fenv_access: false,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,

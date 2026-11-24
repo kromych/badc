@@ -92,6 +92,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         did_unroll: _,
         did_inline: _,
         frees_rbp: _,
+        fenv_access: _,
     } = func;
     Keyed {
         insts,

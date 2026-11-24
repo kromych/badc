@@ -236,7 +236,7 @@ Disassembly of section .text:
                	callq	*%rcx
                	popq	%r11
                	retq
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <count_yield>:

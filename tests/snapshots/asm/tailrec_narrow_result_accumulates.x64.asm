@@ -44,7 +44,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r11
                	retq
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <golden_sum>:

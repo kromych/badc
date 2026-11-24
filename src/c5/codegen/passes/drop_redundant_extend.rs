@@ -108,8 +108,8 @@ fn observe_args(hi: &mut [bool], work: &mut Vec<ValueId>, args: &[ValueId], low_
 /// source's upper bits. An `And` with a constant whose high word is clear forwards
 /// none: its result's high word is clear whatever the other operand holds. A
 /// return observes the full register unless the declared return type is narrower
-/// than it on every target (`return_is_low_word`), in which case the result rides
-/// the low word and the reading side widens it.
+/// than it at the target (`FunctionSsa::ret_low_word`), in which case the result
+/// rides the low word and the reading side widens it.
 /// Anything not positively classified as low-word-only is treated as observing,
 /// so the result is a conservative over-approximation. Shared with the allocator,
 /// which consults it to skip a `ParamRef` entry sign-extension whose result is
@@ -402,7 +402,7 @@ fn compute_high_observed_through(
     // declared type is narrower than the return register, which carries
     // the result in its low word alone. `Block::exit_acc` names a value
     // and reads none.
-    let ret_low_word = (func.ret_type_tag).is_some_and(crate::c5::codegen::return_is_low_word);
+    let ret_low_word = func.ret_low_word;
     for (b, block) in func.blocks.iter().enumerate() {
         if func.low_word_tests.get(b).copied().unwrap_or(false)
             || addressing
@@ -1402,6 +1402,7 @@ mod tests {
             did_inline: false,
             frees_rbp: false,
             fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

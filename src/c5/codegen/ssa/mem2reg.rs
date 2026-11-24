@@ -2852,6 +2852,7 @@ mod tests {
             did_inline: false,
             frees_rbp: false,
             fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

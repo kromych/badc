@@ -285,6 +285,7 @@ impl SsaBuilder {
             did_inline: false,
             frees_rbp: false,
             fenv_access: false,
+            ret_low_word: false,
         };
         let mut b = Self {
             func,
@@ -694,10 +695,11 @@ impl SsaBuilder {
         self.push(Inst::RetPart { slot: 0, kind })
     }
 
-    /// Record the declared return type. See
-    /// [`FunctionSsa::ret_type_tag`].
-    pub(crate) fn set_ret_type_tag(&mut self, tag: i64) {
+    /// Record the declared return type and whether `target` returns it in
+    /// the low word. See [`FunctionSsa::ret_type_tag`].
+    pub(crate) fn set_ret_type_tag(&mut self, tag: i64, target: crate::c5::Target) {
         self.func.ret_type_tag = Some(tag);
+        self.func.ret_low_word = crate::c5::codegen::return_rides_low_word(tag, target);
     }
 
     /// The accumulated per-parameter FP mask. See

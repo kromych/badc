@@ -1603,27 +1603,65 @@ fn a_signed_char_binding_is_told_from_one_without_a_prototype() {
     }
 }
 
-/// `long` is 4 bytes on LLP64 and 8 on LP64, and `return_is_low_word` is
-/// asked before the target is fixed, so it answers for the types that are
-/// narrow on every target and for no others.
+/// A return rides the low word for the integer types narrower than the
+/// register at the target: those below `long` everywhere, and `long` where
+/// it is 4 bytes (LLP64).
 #[test]
-fn only_target_independent_narrow_returns_ride_the_low_word() {
-    use crate::c5::codegen::return_is_low_word;
+fn a_return_narrower_than_the_register_at_the_target_rides_the_low_word() {
+    use crate::c5::codegen::return_rides_low_word;
     use crate::c5::compiler::types::{PLAIN_CHAR_BIT, UNSIGNED_BIT, void_ty};
     use crate::c5::token::Ty;
-    assert!(return_is_low_word(Ty::Char as i64 | PLAIN_CHAR_BIT), "char");
-    for ty in [Ty::Bool, Ty::Char, Ty::Short, Ty::Int] {
-        assert!(return_is_low_word(ty as i64), "{ty:?}");
-        assert!(
-            return_is_low_word(ty as i64 | UNSIGNED_BIT),
-            "unsigned {ty:?}"
+    let targets = [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+    ];
+    for target in targets {
+        assert!(return_rides_low_word(
+            Ty::Char as i64 | PLAIN_CHAR_BIT,
+            target
+        ));
+        for ty in [Ty::Bool, Ty::Char, Ty::Short, Ty::Int] {
+            assert!(return_rides_low_word(ty as i64, target), "{ty:?}");
+            assert!(return_rides_low_word(ty as i64 | UNSIGNED_BIT, target));
+            assert!(!return_rides_low_word(ty as i64 + Ty::Ptr as i64, target));
+        }
+        for ty in [Ty::LongLong, Ty::Float, Ty::Double] {
+            assert!(!return_rides_low_word(ty as i64, target), "{ty:?}");
+        }
+        let long = target.is_windows();
+        assert_eq!(return_rides_low_word(Ty::Long as i64, target), long);
+        assert_eq!(
+            return_rides_low_word(Ty::Long as i64 | UNSIGNED_BIT, target),
+            long
         );
-        assert!(!return_is_low_word(ty as i64 + Ty::Ptr as i64), "{ty:?} *");
+        assert!(!return_rides_low_word(void_ty(), target));
     }
-    for ty in [Ty::Long, Ty::LongLong, Ty::Float, Ty::Double] {
-        assert!(!return_is_low_word(ty as i64), "{ty:?}");
+}
+
+/// A function returning a 32-bit `long` (LLP64) leaves the bits above it
+/// unwritten, as one returning `int` does; under LP64 the conversion from
+/// `int` widens. Both exits of a recursive one alike.
+#[test]
+fn a_32_bit_long_return_takes_no_widening() {
+    use super::codegen::function_bytes;
+    const SRC: &str = "long id(int n) { return n; }\n\
+long f(int n) { if (n < 2) return n; return f(n - 1) + f(n - 2); }\n";
+    // movsxd r64, r/m32.
+    let widen = |i: &X64Insn| i.op == 0x63 && i.rex & 0x08 != 0;
+    for (target, want) in [(Target::WindowsX64, 0), (Target::LinuxX64, 1)] {
+        let obj = object_at(SRC, target, true);
+        let insns = x64_insns(&function_bytes(&obj, "id"));
+        assert_eq!(
+            insns.iter().filter(|i| widen(i)).count(),
+            want,
+            "{target:?} id: {insns:x?}"
+        );
     }
-    assert!(!return_is_low_word(void_ty()));
+    let obj = object_at(SRC, Target::WindowsX64, true);
+    let insns = x64_insns(&function_bytes(&obj, "f"));
+    assert!(!insns.iter().any(widen), "f: {insns:x?}");
 }
 
 /// Imports returning each narrow integer type, read (`read_*`) and called for

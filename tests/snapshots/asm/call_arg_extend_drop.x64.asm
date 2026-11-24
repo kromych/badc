@@ -57,7 +57,7 @@ Disassembly of section .text:
                	popq	%r14
                	popq	%r11
                	retq
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <main>:

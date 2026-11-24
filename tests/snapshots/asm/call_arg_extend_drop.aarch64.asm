@@ -64,7 +64,6 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	sxtw	x0, w0
                	ret
 
 <main>:

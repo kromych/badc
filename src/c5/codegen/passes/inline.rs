@@ -3756,6 +3756,7 @@ fn splice_multi_block(
         sve_pcs: original.sve_pcs,
         ret_is_fp: original.ret_is_fp,
         ret_type_tag: original.ret_type_tag,
+        ret_low_word: original.ret_low_word,
         indirect_result_slot: original.indirect_result_slot,
         computed_goto_targets: original
             .computed_goto_targets

@@ -250,7 +250,6 @@ Disassembly of section .text:
                	blr	x2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w0
                	ret
 
 <count_yield>:

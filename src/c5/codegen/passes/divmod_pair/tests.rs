@@ -206,6 +206,8 @@ where
     b.return_(out);
     let mut func = b.finish();
     func.ret_type_tag = ret;
+    func.ret_low_word = ret
+        .is_some_and(|t| crate::c5::codegen::return_rides_low_word(t, crate::c5::Target::LinuxX64));
     func.div32 = (func.insts.iter())
         .map(|i| matches!(i, Inst::Binop { op, .. } if crate::c5::ir::is_divmod_op(*op)))
         .collect();

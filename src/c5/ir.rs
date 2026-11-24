@@ -2840,6 +2840,10 @@ pub(crate) struct FunctionSsa {
     /// tail-call conversion compares the caller's and callee's recipes
     /// and keeps the regular call-then-extend path when they differ.
     pub ret_type_tag: Option<i64>,
+    /// The return value rides the return register's low word
+    /// (`codegen::return_rides_low_word` at the target): no reader of the
+    /// returned value sees bits 32..63.
+    pub ret_low_word: bool,
     /// Negative frame slot holding the caller-supplied indirect-result
     /// address (AAPCS64 x8) for a function returning an aggregate
     /// larger than 16 bytes. The prologue stores x8 here; the callee
@@ -3354,6 +3358,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             did_inline: _,
             frees_rbp: _,
             fenv_access: _,
+            ret_low_word: _,
         } = self;
         for i in insts.iter_mut() {
             i.remap_data_offsets(r);

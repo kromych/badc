@@ -261,6 +261,21 @@ pub(crate) fn early_exit(func: &FunctionSsa, plan: &[ArgPlacement]) -> Option<Ea
     } else {
         Some(simplify(cx.expr(r)?))
     };
+    // A return riding the low word reads no sign extension above it.
+    let ret = ret.map(|e| match e {
+        ShadowExpr::Param {
+            reg,
+            kind: LoadKind::I32 | LoadKind::U32,
+        } if func.ret_low_word => ShadowExpr::Param {
+            reg,
+            kind: LoadKind::I64,
+        },
+        ShadowExpr::Extend {
+            value,
+            kind: LoadKind::I32 | LoadKind::U32,
+        } if func.ret_low_word => *value,
+        e => e,
+    });
     // A test no parameter reaches is decided before the call: its early
     // return is taken always or never.
     let test = match test {

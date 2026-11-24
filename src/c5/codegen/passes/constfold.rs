@@ -1938,6 +1938,7 @@ mod tests {
             did_inline: false,
             frees_rbp: false,
             fenv_access: false,
+            ret_low_word: false,
             n_params: 0,
             is_variadic: false,
             is_inline: false,

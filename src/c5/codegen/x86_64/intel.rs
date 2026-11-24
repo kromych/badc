@@ -526,7 +526,37 @@ fn terms(s: &str) -> Vec<(bool, &str)> {
     }
     out.push((neg, &s[start..]));
     out.retain(|(_, t)| !t.trim().is_empty());
-    out
+    // A group of added terms holding a register is its terms, as GNU as and
+    // clang read `[(r11 + 0) + 4 * rax]`.
+    out.into_iter()
+        .flat_map(|(neg, t)| match grouped(t) {
+            Some(inner) if !neg && holds_register(inner) => terms(inner),
+            _ => alloc::vec![(neg, t)],
+        })
+        .collect()
+}
+
+/// The inside of `t` when one pair of parentheses encloses all of it.
+fn grouped(t: &str) -> Option<&str> {
+    let inner = t.trim().strip_prefix('(')?.strip_suffix(')')?;
+    let mut depth = 0i32;
+    for c in inner.bytes() {
+        match c {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ => {}
+        }
+        if depth < 0 {
+            return None;
+        }
+    }
+    (depth == 0).then_some(inner)
+}
+
+/// Whether a word of `s` names a register.
+fn holds_register(s: &str) -> bool {
+    s.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .any(|w| register(w).is_some())
 }
 
 /// The C operator an Intel-syntax operator word stands for in an

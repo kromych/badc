@@ -4018,6 +4018,9 @@ f:
     mov eax, (3 SHL 4) or 1
     mov ecx, 12 MOD 5
     mov edx, 64 SHR 2 XOR 1
+    mov esi, [(r11 + 0) + 4 * rsi]
+    mov [((rsp + K) + 1 * 8)], r11d
+    lea rax, [(rax + rcx*2) + 3]
     cqo
     imul rax, qword ptr [rbx], 8
     shl dword ptr [rax], cl
@@ -4079,6 +4082,9 @@ f:
     mov $((3 << 4) | 1), %eax
     mov $(12 % 5), %ecx
     mov $(64 >> 2 ^ 1), %edx
+    movl (%r11,%rsi,4), %esi
+    movl %r11d, K+8(%rsp)
+    leaq 3(%rax,%rcx,2), %rax
     cqto
     imulq $8, (%rbx), %rax
     shll %cl, (%rax)

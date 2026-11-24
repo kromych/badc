@@ -229,6 +229,53 @@ fn sizeof_int128_is_predefined() {
     );
 }
 
+/// On Linux the feature-test macros come from the program's request, as
+/// the GNU C library's `<features.h>` derives them, once a C library header
+/// is included: nothing is predefined, the defaults stand when nothing is
+/// requested, a requested POSIX level stands alone and silently, and
+/// `_GNU_SOURCE` implies the rest. `<features.h>` is served there.
+#[test]
+fn feature_test_macros_derive_from_the_request_on_linux() {
+    let probe = "_DEFAULT_SOURCE _POSIX_SOURCE _POSIX_C_SOURCE _XOPEN_SOURCE";
+    let derived = |target: Target, head: &str| {
+        let mut pp = Preprocessor::new(target.id_str(), target, "0.1.0");
+        let out = pp
+            .process(&alloc::format!("{head}\n{probe}\n"))
+            .expect("preprocessor failed");
+        assert!(codes(&pp).is_empty(), "{head}: {:?}", codes(&pp));
+        String::from(
+            out.lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("")
+                .trim(),
+        )
+    };
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        assert_eq!(derived(target, ""), probe);
+        for (head, want) in [
+            ("#include <stdio.h>", "1 1 200809L _XOPEN_SOURCE"),
+            (
+                "#define _POSIX_C_SOURCE 202405L\n#include <unistd.h>",
+                "_DEFAULT_SOURCE _POSIX_SOURCE 202405L _XOPEN_SOURCE",
+            ),
+            (
+                "#define _GNU_SOURCE\n#include <string.h>",
+                "1 1 200809L 700",
+            ),
+            (
+                "#define _XOPEN_SOURCE 600\n#include <stdlib.h>",
+                "_DEFAULT_SOURCE 1 200112L 600",
+            ),
+            ("#include <features.h>", "1 1 200809L _XOPEN_SOURCE"),
+            ("#include <stddef.h>", probe),
+        ] {
+            assert_eq!(derived(target, head), want, "{head}");
+        }
+    }
+    assert_eq!(derived(Target::MacOSAarch64, "#include <stdio.h>"), probe);
+}
+
 #[test]
 fn trigraphs_are_replaced_in_phase_one_when_enabled() {
     // C17 5.2.1.1: the nine trigraphs, `???=` keeping its first `?`, and
@@ -5833,9 +5880,6 @@ fn target_predefines_are_locked() {
         ("__unix__", "1"),
         ("__GLIBC__", "2"),
         ("__GLIBC_MINOR__", "17"),
-        ("_DEFAULT_SOURCE", "1"),
-        ("_POSIX_SOURCE", "1"),
-        ("_POSIX_C_SOURCE", "200809L"),
     ];
     // The object format's, not the OS's: the Linux targets are the ELF ones.
     const ELF: &[(&str, &str)] = &[("__ELF__", "1")];

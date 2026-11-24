@@ -488,13 +488,29 @@ impl Preprocessor {
         for root in self.own_header_roots.iter() {
             let candidate = join_include_path(root, name);
             if let Ok(body) = std::fs::read_to_string(&candidate) {
+                let body = self.after_features(name, body);
                 let mut found = Resolved::own(body, name, Some(candidate), SearchStep::Own);
                 found.dir = Some(root.clone());
                 return Some(found);
             }
         }
-        embedded_header(name, self.target, from_own)
-            .map(|b| Resolved::own(b.to_string(), name, None, SearchStep::Own))
+        embedded_header(name, self.target, from_own).map(|b| {
+            let body = self.after_features(name, b.to_string());
+            Resolved::own(body, name, None, SearchStep::Own)
+        })
+    }
+
+    /// On Linux a C library header is entered after `<features.h>`, which
+    /// derives the feature-test macros from the program's request as the GNU
+    /// C library's headers do by including it first; `#line` keeps the
+    /// header's own line numbers.
+    fn after_features(&self, name: &str, body: String) -> String {
+        let linux = matches!(self.target, Target::LinuxX64 | Target::LinuxAarch64);
+        if linux && crate::c5::headers::follows_features(name) {
+            alloc::format!("#include <features.h>\n#line 1\n{body}")
+        } else {
+            body
+        }
     }
 
     /// Look `name` up from `start`, visiting the [`SearchStep`]s in order:

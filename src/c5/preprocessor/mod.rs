@@ -1131,14 +1131,6 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             // baseline.
             ("__GLIBC__", "2"),
             ("__GLIBC_MINOR__", "17"),
-            // The feature-test state glibc's <features.h> derives with
-            // no request macro set. The bundled headers stand in for
-            // glibc's, so it has to come from here or a header keying
-            // on it misreads the environment. Installed before the CLI's
-            // lists, so `-D` / `-U` win.
-            ("_DEFAULT_SOURCE", "1"),
-            ("_POSIX_SOURCE", "1"),
-            ("_POSIX_C_SOURCE", "200809L"),
         ],
     ),
     (

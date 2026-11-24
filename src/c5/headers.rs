@@ -233,6 +233,16 @@ const COMPILER_HEADERS: &[&str] = &[
     "cpuid.h",
 ];
 
+/// Whether `name` is a C library header the registry carries, other than
+/// `<features.h>`: on Linux each is entered after `<features.h>`, as the GNU
+/// C library's headers include it first.
+pub(crate) fn follows_features(name: &str) -> bool {
+    name != "features.h"
+        && !INTRINSIC_HEADERS.contains(&name)
+        && !COMPILER_HEADERS.contains(&name)
+        && registry_entry(name).is_some()
+}
+
 /// Whether `name` is an intrinsic header ([`INTRINSIC_HEADERS`]).
 pub(crate) fn intrinsic_header(name: &str) -> bool {
     INTRINSIC_HEADERS.contains(&name)
@@ -381,6 +391,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("sys/utime.h", WINDOWS),
     header!("netdb.h", POSIX),
     header!("err.h", POSIX),
+    header!("features.h", LINUX),
     header!("ucontext.h", POSIX),
     header!("sys/ucontext.h", POSIX),
     header!("sys/prctl.h", LINUX),

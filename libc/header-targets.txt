@@ -94,6 +94,7 @@ utime.h	y	y	y	y	y
 sys/utime.h	-	-	-	y	y
 netdb.h	y	y	y	-	-
 err.h	y	y	y	-	-
+features.h	-	y	y	-	-
 ucontext.h	p	y	y	-	-
 sys/ucontext.h	y	y	y	-	-
 sys/prctl.h	-	y	y	-	-

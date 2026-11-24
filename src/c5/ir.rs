@@ -2062,14 +2062,17 @@ impl AsmBlock {
     }
 
     /// True when the template names the stack pointer (a token
-    /// [`sp_tokens`] finds). Such asm can capture or switch the stack
-    /// -- the setjmp / longjmp / stack-switch idioms -- so an activation
-    /// of the surrounding frame may stay live while later code in the
-    /// same frame runs, and may be resumed afterwards. Lifetimes are then
-    /// not bounded by the CFG or the C block structure, and frame-storage
-    /// sharing decisions must exclude the function.
+    /// [`sp_tokens`] finds) other than as text a directive keeps from every
+    /// instruction ([`directive_keeps_token`]). Such asm can capture or
+    /// switch the stack -- the setjmp / longjmp / stack-switch idioms -- so
+    /// an activation of the surrounding frame may stay live while later code
+    /// in the same frame runs, and may be resumed afterwards. Lifetimes are
+    /// then not bounded by the CFG or the C block structure, and
+    /// frame-storage sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
-        self.names_bound_operand(false) || sp_tokens(&self.template).next().is_some()
+        let t = &self.template;
+        self.names_bound_operand(false)
+            || sp_tokens(t).any(|(start, _)| !directive_keeps_token(t, start))
     }
 
     /// True when the template may leave the stack pointer moved, as a stack
@@ -2181,13 +2184,80 @@ fn sp_tokens(t: &[u8]) -> impl Iterator<Item = (usize, usize)> + '_ {
 /// first) or of a compare, test or push, or a mention in a directive. An exchange
 /// and BMI2 `mulx`, which writes two, count every operand as written. Labels ahead
 /// of the mnemonic, glued to it or not, are skipped; mnemonics match in any case.
-fn reads_sp_token(t: &[u8], start: usize, end: usize, syntax: crate::c5::asm::AsmComments) -> bool {
-    let x86 = syntax == crate::c5::asm::AsmComments::X86;
-    let att = start > 0 && t[start - 1] == b'%';
-    let line_start = t[..start]
+/// The statement holding `t[pos]`, split at newlines and `;`: its end, and
+/// the span of its first word past any labels -- the mnemonic or directive.
+fn statement_head(t: &[u8], pos: usize) -> (usize, usize, usize) {
+    let line_start = t[..pos]
         .iter()
         .rposition(|&b| b == b'\n' || b == b';')
         .map_or(0, |p| p + 1);
+    let line_end = t[pos..]
+        .iter()
+        .position(|&b| b == b'\n' || b == b';')
+        .map_or(t.len(), |p| pos + p);
+    let skip_blank = |at: usize| {
+        (at..line_end)
+            .find(|&k| !t[k].is_ascii_whitespace())
+            .unwrap_or(line_end)
+    };
+    let word_end = |at: usize| {
+        (at..line_end)
+            .find(|&k| t[k].is_ascii_whitespace())
+            .unwrap_or(line_end)
+    };
+    let label_byte =
+        |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'$' | b'%' | b'=');
+    let mut at = skip_blank(line_start);
+    while let Some(colon) = (at..line_end)
+        .find(|&k| !label_byte(t[k]))
+        .filter(|&k| k > at && t[k] == b':')
+    {
+        at = skip_blank(colon + 1);
+    }
+    (line_end, at, word_end(at))
+}
+
+/// Whether the token at `t[start]` is text a directive keeps from every
+/// instruction: an argument of any directive but a repetition (`.irp`,
+/// `.irpc`) whose body, to its `.endr`, holds an instruction the token may
+/// be substituted into.
+fn directive_keeps_token(t: &[u8], start: usize) -> bool {
+    let (line_end, at, ops_at) = statement_head(t, start);
+    let word = &t[at..ops_at];
+    if !word.starts_with(b".") || ops_at > start {
+        return false;
+    }
+    let repeats = |w: &[u8]| {
+        [&b".irp"[..], b".irpc", b".rept"]
+            .iter()
+            .any(|d| w.eq_ignore_ascii_case(d))
+    };
+    if !repeats(word) {
+        return true;
+    }
+    let (mut depth, mut pos) = (1, line_end + 1);
+    while pos < t.len() {
+        let (end, at, ops_at) = statement_head(t, pos);
+        let w = &t[at..ops_at];
+        if repeats(w) {
+            depth += 1;
+        } else if w.eq_ignore_ascii_case(b".endr") {
+            depth -= 1;
+            if depth == 0 {
+                return true;
+            }
+        } else if !w.is_empty() && !w.starts_with(b".") {
+            return false;
+        }
+        pos = end + 1;
+    }
+    true
+}
+
+fn reads_sp_token(t: &[u8], start: usize, end: usize, syntax: crate::c5::asm::AsmComments) -> bool {
+    let x86 = syntax == crate::c5::asm::AsmComments::X86;
+    let att = start > 0 && t[start - 1] == b'%';
+    let (_, mut at, mut ops_at) = statement_head(t, start);
     let line_end = t[end..]
         .iter()
         .position(|&b| b == b'\n' || b == b';')
@@ -2202,16 +2272,6 @@ fn reads_sp_token(t: &[u8], start: usize, end: usize, syntax: crate::c5::asm::As
             .find(|&k| t[k].is_ascii_whitespace())
             .unwrap_or(line_end)
     };
-    let label_byte =
-        |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'$' | b'%' | b'=');
-    let mut at = skip_blank(line_start);
-    while let Some(colon) = (at..start)
-        .find(|&k| !label_byte(t[k]))
-        .filter(|&k| k > at && t[k] == b':')
-    {
-        at = skip_blank(colon + 1);
-    }
-    let mut ops_at = word_end(at);
     let prefixes: [&[u8]; 6] = [b"lock", b"rep", b"repe", b"repne", b"repz", b"repnz"];
     if x86
         && prefixes

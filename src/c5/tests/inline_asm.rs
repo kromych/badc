@@ -166,6 +166,32 @@ fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
     }
 }
 
+/// A stack-pointer name a directive keeps from every instruction -- a
+/// register list a repetition compares by name, an expression -- is no
+/// reference; one a repetition substitutes into an instruction, or one an
+/// instruction names, is.
+#[test]
+fn a_directive_naming_the_stack_pointer_keeps_it_from_the_instructions() {
+    for (template, sp) in [
+        (
+            ".irp rs,rax,rsp\n.ifc %0, %%\\rs\n.long 1\n.endif\n.endr",
+            false,
+        ),
+        (
+            "1: movl %k0,%%ds\n.pushsection __ex_table\n.irp rs,esp,ebp\n.set n, 1\n.endr\n.popsection",
+            false,
+        ),
+        (".set slot, rsp", false),
+        (".irp rs,rsp\nmov %%\\rs, %0\n.endr", true),
+        (".irp rs,rsp\n.irp n,1\npush %%\\rs\n.endr\n.endr", true),
+        (".irp rs,rsp\n.irp n,1\n.endr\n.endr\npush %%rax", false),
+        (".long 0; mov %%rsp, %0", true),
+        ("lbl: mov %%rsp, %0", true),
+    ] {
+        assert_eq!(sp_block(template).references_sp(), sp, "{template}");
+    }
+}
+
 /// A memory operand based on sp leaves it in place unless AArch64 writes the
 /// base back, and so does sp as a source operand, a compared or pushed one,
 /// or a mention in a comment or a directive; sp as the destination, an
@@ -3396,6 +3422,33 @@ fn x64_frame_bytes(text: &[u8]) -> i32 {
         }
         frame += 8;
     }
+}
+
+/// Two objects whose lifetimes do not overlap share storage beside an asm
+/// statement whose directives compare register names, `rsp` among them, as
+/// they do beside a `nop`; an instruction reading the stack pointer keeps
+/// each object in storage of its own.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x64_a_register_list_in_a_directive_leaves_slot_sharing_alone() {
+    let frame = |template: &str| {
+        let src = alloc::format!(
+            "void use(char *);\n\
+             void f(void)\n\
+             {{\n\
+                 {{ char a[64]; use(a); }}\n\
+                 {{ char b[64]; use(b); }}\n\
+                 __asm__ volatile(\"{template}\" : : \"r\"(0) : \"r11\");\n\
+             }}\n"
+        );
+        x64_frame_bytes(&asm_text(&src, crate::Target::LinuxX64, true))
+    };
+    let shared = frame("nop");
+    assert_eq!(
+        frame(".irp rs,rax,rsp\\n.ifc %0,%%\\\\rs\\n.set n, 1\\n.endif\\n.endr"),
+        shared
+    );
+    assert!(frame("movq %%rsp, %%r11") > shared);
 }
 
 // Emits a relocatable object, so it needs `native-emit`.

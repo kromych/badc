@@ -2450,7 +2450,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=run_chunk
 fn ent_pc=8 n_params=3 variadic=false locals=0
-  spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=0 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x3
@@ -3094,18 +3094,18 @@ fn ent_pc=8 n_params=3 variadic=false locals=0
     v639 LoadLocal { off=-113, disp=56, kind=I64 }        -> x12
     v640 Imm(0)                                           -> x13
     v641 VecExtract { vec=v555, off=0, kind=I64, bytes=16 } -> x13
-    v642 Imm(0)                                           -> [spill 0]
-    v643 VecExtract { vec=v611, off=8, kind=I64, bytes=16 } -> [spill 0]
-    v644 Imm(0)                                           -> [spill 1]
+    v642 Imm(0)                                           -> x5
+    v643 VecExtract { vec=v611, off=8, kind=I64, bytes=16 } -> x5
+    v644 Imm(0)                                           -> [spill 0]
     v645 LifetimeEnd(0)                                   -> -
     v646 LifetimeEnd(0)                                   -> -
     v647 LifetimeEnd(0)                                   -> -
     v648 LifetimeEnd(0)                                   -> -
     v649 LifetimeEnd(0)                                   -> -
     v650 LifetimeEnd(-113)                                -> -
-    v651 Imm(0)                                           -> [spill 1]
-    v652 LocalAddr(-110)                                  -> [spill 1]
-    v653 Imm(0)                                           -> [spill 1]
+    v651 Imm(0)                                           -> [spill 0]
+    v652 LocalAddr(-110)                                  -> [spill 0]
+    v653 Imm(0)                                           -> [spill 0]
     v654 StoreLocal { off=-110, value=v625, kind=I64 }    -> -
     v655 Imm(0)                                           -> x0
     v656 StoreLocal { off=-110, disp=8, value=v627, kind=I64 } -> -

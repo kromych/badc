@@ -26,14 +26,13 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
+               	subq	$0x10, %rsp
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	callq	<addr>
-               	fstpt	-0x20(%rbp)
-               	fldt	-0x20(%rbp)
+               	fstpt	0x10(%rsp)
+               	fldt	0x10(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movsd	<rip>, %xmm1
@@ -41,13 +40,14 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xb, %eax
-               	leave
+               	addq	$0x10, %rsp
+               	addq	$0x28, %rsp
                	retq
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	callq	<addr>
-               	fstpt	-0x20(%rbp)
-               	fldt	-0x20(%rbp)
+               	fstpt	0x10(%rsp)
+               	fldt	0x10(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movsd	<rip>, %xmm1
@@ -55,25 +55,24 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax
-               	leave
+               	addq	$0x10, %rsp
+               	addq	$0x28, %rsp
                	retq
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movl	$0x35, %edi
-               	leaq	-0x10(%rbp), %r9
+               	leaq	0x20(%rsp), %r9
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	-0x10(%rbp)
-               	subq	$0x10, %rsp
+               	fstpt	0x20(%rsp)
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
                	callq	<addr>
-               	addq	$0x10, %rsp
-               	fstpt	-0x20(%rbp)
-               	fldt	-0x20(%rbp)
+               	fstpt	0x10(%rsp)
+               	fldt	0x10(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movsd	<rip>, %xmm1
@@ -81,8 +80,10 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax
-               	leave
+               	addq	$0x10, %rsp
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x10, %rsp
+               	addq	$0x28, %rsp
                	retq

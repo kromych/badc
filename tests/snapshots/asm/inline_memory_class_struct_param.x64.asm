@@ -59,23 +59,21 @@ Disassembly of section .text:
                	retq
 
 <use_forward>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x38, %rsp
+               	subq	$0x40, %rsp
                	pushq	%rbx
+               	subq	$0x30, %rsp
                	movl	$0x7, %eax
                	movq	(%rdi), %rbx
                	movq	0x8(%rdi), %rcx
                	movq	0x10(%rdi), %rdx
                	movq	0x18(%rdi), %rsi
                	movq	0x20(%rdi), %rdi
-               	leaq	-0x28(%rbp), %r9
-               	movq	%rbx, -0x28(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	movq	%rdx, -0x18(%rbp)
-               	movq	%rsi, -0x10(%rbp)
-               	movq	%rdi, -0x8(%rbp)
-               	subq	$0x30, %rsp
+               	leaq	0x48(%rsp), %r9
+               	movq	%rbx, 0x48(%rsp)
+               	movq	%rcx, 0x50(%rsp)
+               	movq	%rdx, 0x58(%rsp)
+               	movq	%rsi, 0x60(%rsp)
+               	movq	%rdi, 0x68(%rsp)
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
@@ -89,10 +87,10 @@ Disassembly of section .text:
                	movq	%r11, 0x20(%rsp)
                	movq	%rax, %rdi
                	callq	<addr>
-               	addq	$0x30, %rsp
                	addq	%rbx, %rax
+               	addq	$0x30, %rsp
                	popq	%rbx
-               	leave
+               	addq	$0x40, %rsp
                	retq
 
 <use_clobber>:

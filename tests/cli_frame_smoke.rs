@@ -255,26 +255,36 @@ fn check_function(name: &str, insts: &[(String, String)], what: &str) {
             }
         }
         None => {
-            // With no frame pointer, the entry's `sub` is the one move down
-            // and an `add` of the same bytes, right ahead of the return or
-            // the tail jump, the one move back.
+            // With no frame pointer, rsp descends only in the prologue's run
+            // of pushes and `sub`s, and each `add` leads only pops and `add`s
+            // to the return or the tail jump.
             let entry = insts
                 .iter()
                 .position(|(m, _)| {
                     !(m == "endbr64" || m.starts_with("nop") || m.starts_with("call"))
                 })
                 .unwrap_or(0);
+            let prologue_end = entry
+                + insts[entry..]
+                    .iter()
+                    .take_while(|(m, o)| {
+                        m.starts_with("push") || (m.starts_with("sub") && moves_rsp(m, o))
+                    })
+                    .count();
             let first_push = insts.iter().position(|(m, _)| m.starts_with("push"));
             for (j, (m, o)) in insts.iter().enumerate() {
                 assert!(
                     !(m.starts_with("pop") && first_push.is_none_or(|p| j < p)),
                     "{what}: {name}: `{m} {o}` pops with nothing pushed"
                 );
-                let opens = j == entry && m.starts_with("sub");
-                let next = insts.get(j + 1).map_or("", |(m, _)| m.as_str());
+                let opens = j < prologue_end && m.starts_with("sub");
                 let closes = m.starts_with("add")
-                    && insts[entry].1 == *o
-                    && (next.starts_with("ret") || next.starts_with("jmp"));
+                    && insts[j + 1..]
+                        .iter()
+                        .take_while(|(m, _)| !(m.starts_with("ret") || m.starts_with("jmp")))
+                        .all(|(m, o)| {
+                            m.starts_with("pop") || (m.starts_with("add") && moves_rsp(m, o))
+                        });
                 assert!(
                     (!moves_rsp(m, o) || opens || closes) && m != "leave",
                     "{what}: {name}: `{m} {o}` moves rsp outside the frame's entry and exits"

@@ -53,23 +53,22 @@ Disassembly of section .text:
                	retq
 
 <caller>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r12
                	pushq	%rbx
+               	subq	$0x20, %rsp
                	leaq	0x1(%rcx), %rax
                	movl	$0x2, %edi
-               	movq	0x18(%rbp), %rdx
+               	movq	0x48(%rsp), %rdx
                	leaq	(%r8,%r8,8), %rcx
                	leaq	0x2(%rcx), %r12
                	leaq	0x1(%rsi), %r8
                	movl	$0x5, %r9d
-               	movq	0x10(%rbp), %rcx
+               	movq	0x40(%rsp), %rcx
                	incq	%rcx
                	movl	$0x6, %ebx
                	shlq	%rsi
                	addq	$0x5, %rsi
-               	subq	$0x20, %rsp
                	movq	%rcx, (%rsp)
                	movq	%rbx, 0x8(%rsp)
                	movq	%rsi, 0x10(%rsp)
@@ -81,16 +80,16 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
+               	subq	$0x10, %rsp
                	movq	<rip>, %rax # <addr>
                	xorps	%xmm0, %xmm0
                	movq	%rax, %r10
@@ -120,14 +119,12 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	leaq	0x7(%rax), %r13
                	leaq	-<rip>, %rax # <addr>
-               	subq	$0x10, %rsp
                	movq	%r13, (%rsp)
                	movq	%rax, 0x8(%rsp)
                	movq	%rbx, %rsi
                	movq	%r14, %r8
                	movq	%r12, %rcx
                	callq	<addr>
-               	addq	$0x10, %rsp
                	movl	$0x1, %ecx
                	xorl	%edx, %edx
                	cmpq	$0x8, %rax
@@ -176,9 +173,10 @@ Disassembly of section .text:
                	movq	<rip>, %rsi # <addr>
                	cmpq	%rcx, %rsi
                	cmovneq	%rdx, %rax
+               	addq	$0x10, %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
+               	popq	%r11
                	retq

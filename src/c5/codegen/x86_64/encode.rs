@@ -2657,7 +2657,8 @@ fn apply_plt_call_fixups(
 /// unwinds through the frame pointer). The System V pushes follow that
 /// `sub` and are not described. A frame with no pointer is `push rax` for 8
 /// bytes or `sub rsp` steps, each with its probe past one unprobed step,
-/// and the pushes behind them, rbp among them, each a step. A leaf emits none of the above, and any
+/// the pushes behind them, rbp among them, and a `sub rsp` for the
+/// outgoing-argument area, each a step. A leaf emits none of the above, and any
 /// other shape is described as a frameless leaf -- safe (the unwinder
 /// returns off the top-of-stack RA) rather than codes that do not match the
 /// prologue. The test of a return taken ahead of the frame places `push rbp`
@@ -2809,6 +2810,11 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
             };
             fp += len;
             steps.push((fp as u32, S::Push(r)));
+        }
+        // The outgoing-argument area below the pushes.
+        if let Some((n, len)) = sub(at(fp)).filter(|_| !steps.is_empty()) {
+            fp += len;
+            steps.push((fp as u32, S::Alloc(n)));
         }
         // A `mov rbp, rsp` past pushes is a frame record out of order.
         let record = at(fp).starts_with(&[0x48, 0x89, 0xE5]);

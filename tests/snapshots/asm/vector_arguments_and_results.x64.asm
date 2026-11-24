@@ -95,14 +95,13 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
-               	leaq	-0x60(%rbp), %r9
+               	subq	$0x68, %rsp
+               	subq	$0x20, %rsp
+               	leaq	0x20(%rsp), %r9
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	0x40(%rsp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -128,17 +127,18 @@ Disassembly of section .text:
                	cmpq	$-0x24, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x20, %rsp
+               	addq	$0x68, %rsp
                	retq
-               	leaq	-0x20(%rbp), %r9
+               	leaq	0x60(%rsp), %r9
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	leaq	-0x60(%rbp), %rax
+               	leaq	0x20(%rsp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x40(%rbp), %rcx
+               	leaq	0x40(%rsp), %rcx
                	leaq	<rip>, %rdx
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
@@ -160,9 +160,10 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x20, %rsp
+               	addq	$0x68, %rsp
                	retq
-               	leaq	-0x8(%rbp), %r9
+               	leaq	0x78(%rsp), %r9
                	leaq	<rip>, %rax
                	movq	(%rax), %r10
                	movq	%r10, (%r9)
@@ -182,16 +183,16 @@ Disassembly of section .text:
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x20, %rsp
+               	addq	$0x68, %rsp
                	retq
-               	leaq	-0x40(%rbp), %rdi
-               	leaq	-0x60(%rbp), %r9
+               	leaq	0x40(%rsp), %rdi
+               	leaq	0x20(%rsp), %r9
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
                	movups	0x10(%rax), %xmm14
                	movups	%xmm14, 0x10(%r9)
-               	subq	$0x20, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
@@ -202,31 +203,31 @@ Disassembly of section .text:
                	movq	0x18(%r10), %r11
                	movq	%r11, 0x18(%rsp)
                	callq	<addr>
-               	addq	$0x20, %rsp
-               	leaq	-0x40(%rbp), %rax
-               	leaq	-0x60(%rbp), %rcx
+               	leaq	0x40(%rsp), %rax
+               	leaq	0x20(%rsp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
                	movups	0x10(%rax), %xmm14
                	movups	%xmm14, 0x10(%rcx)
-               	movss	-0x60(%rbp), %xmm0
+               	movss	0x20(%rsp), %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x44(%rbp), %xmm0
+               	movss	0x3c(%rsp), %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x20, %rsp
+               	addq	$0x68, %rsp
                	retq
-               	leaq	-0x60(%rbp), %r9
+               	leaq	0x20(%rsp), %r9
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	0x40(%rsp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -245,8 +246,10 @@ Disassembly of section .text:
                	cmpq	$0x8, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x20, %rsp
+               	addq	$0x68, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x20, %rsp
+               	addq	$0x68, %rsp
                	retq

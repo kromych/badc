@@ -639,6 +639,21 @@ fn emit_call_to(code: &mut Vec<u8>, fixups: &mut Vec<Fixup>, target_pc: usize) {
     super::encode::emit_call_rel32(code, 0);
 }
 
+/// The plan a call marshals by: `plan`, whose window rsp descends by and
+/// whose spilled sources the marshal reads that much higher; in a frame with
+/// no pointer the window is the frame's outgoing area (`Frame::out`), which
+/// rsp already points at, so nothing moves.
+fn windowed(plan: &super::CallPlan, frame: Frame) -> Emit<super::CallPlan> {
+    let mut plan = plan.clone();
+    if frame.omit_fp {
+        if plan.scratch_bytes > frame.out {
+            return fail("a call's stack arguments pass the outgoing area");
+        }
+        plan.scratch_bytes = 0;
+    }
+    Ok(plan)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_call(
     code: &mut CodeBuf,
@@ -702,9 +717,7 @@ pub(super) fn emit_call(
         );
         (plan, "Call", None)
     };
-    if frame.omit_fp && plan.scratch_bytes > 0 {
-        return fail("a call moves rsp in a frame with no pointer");
-    }
+    let plan = windowed(&plan, frame)?;
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
@@ -792,9 +805,7 @@ pub(super) fn emit_call_ext(
         )
     };
     let xmm_used = xmm_arg_count(&plan);
-    if frame.omit_fp && plan.scratch_bytes > 0 {
-        return fail("a call moves rsp in a frame with no pointer");
-    }
+    let plan = windowed(&plan, frame)?;
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
@@ -973,9 +984,7 @@ pub(super) fn emit_call_indirect(
                 emit_mov_rr(code, target_scratch, target_r);
             }
         }
-        if frame.omit_fp && plan.scratch_bytes > 0 {
-            return fail("a call moves rsp in a frame with no pointer");
-        }
+        let plan = windowed(&plan, frame)?;
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
@@ -1027,7 +1036,7 @@ pub(super) fn emit_call_indirect(
             let site = "CallIndirect";
             marshal_args(
                 code,
-                &plan,
+                &windowed(&plan, frame)?,
                 (args, &func.insts),
                 &aggs,
                 alloc,

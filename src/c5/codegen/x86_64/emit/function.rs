@@ -1756,6 +1756,10 @@ pub(super) fn restore_callee_saved(
         }
         return;
     }
+    if frame.out > 0 {
+        emit_add_rsp(code, frame.out);
+        ex.push((code.len(), super::X64ExitStep::Dealloc(frame.out)));
+    }
     let base = saved_xmm_off(alloc);
     for (i, &r) in alloc.fp_used.iter().enumerate() {
         emit_movups_xmm_mem(code, Reg(r), Reg::RSP, base + (i as i32) * 16);
@@ -1939,6 +1943,10 @@ fn emit_pointerless_prologue(
     for &r in alloc.gpr_used.iter().rev() {
         emit_push_r(code, Reg(r));
         uw.steps.push((rel(code), PrologueStep::Push(r)));
+    }
+    if frame.out > 0 {
+        emit_sub_rsp(code, frame.out);
+        uw.steps.push((rel(code), PrologueStep::Alloc(frame.out)));
     }
     emit_canary_store(code, frame, abi, extern_data_refs);
     emit_param_homes(code, func, alloc, frame, abi);

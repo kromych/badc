@@ -58,18 +58,17 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	subq	$0x38, %rsp
                	subq	$0x30, %rsp
                	movl	<rip>, %edi # <addr>
                	movq	$-0x7, %rax
                	movl	$0xb2d05e00, %ecx       # imm = 0xB2D05E00
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rax, 0x50(%rsp)
+               	movq	%rcx, 0x58(%rsp)
                	leaq	0x9(%rdi), %rcx
-               	movsbq	-0x10(%rbp), %rdx
+               	movsbq	0x50(%rsp), %rdx
                	addq	$0x18574, %rdx          # imm = 0x18574
-               	movl	-0x8(%rbp), %esi
+               	movl	0x58(%rsp), %esi
                	movslq	%ecx, %rcx
                	addq	$0x64b, %rcx            # imm = 0x64B
                	addq	%rdx, %rcx
@@ -79,7 +78,8 @@ Disassembly of section .text:
                	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x30, %rsp
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x2, %esi
                	movl	$0x12c, %edx            # imm = 0x12C
@@ -87,8 +87,7 @@ Disassembly of section .text:
                	movq	$-0x32, %r8
                	movl	$0x3c, %r9d
                	movq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x8(%rsp)
-               	subq	$0x30, %rsp
+               	movq	%r10, 0x38(%rsp)
                	movq	%rax, (%rsp)
                	movq	$0x320, 0x8(%rsp)       # imm = 0x320
                	movq	$0x9, 0x10(%rsp)
@@ -97,13 +96,14 @@ Disassembly of section .text:
                	movq	%r10, 0x20(%rsp)
                	movq	0x38(%rsp), %r10
                	callq	*%r10
-               	addq	$0x30, %rsp
                	movl	$0xb2d28602, %r11d      # imm = 0xB2D28602
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x30, %rsp
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x2a, %eax
-               	leave
+               	addq	$0x30, %rsp
+               	addq	$0x38, %rsp
                	retq

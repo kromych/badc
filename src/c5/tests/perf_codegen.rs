@@ -2570,10 +2570,12 @@ return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
         !insns.iter().any(|i| imm_dst(i).is_some_and(callee_saved)),
         || format!("x86-64: a constant in a callee-saved register: {insns:x?}"),
     );
-    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
-    m.expect(pushes == 4, || {
-        format!("x86-64: {pushes} pushes, not rbp and three: {insns:x?}")
-    });
+    // rbp is a saved register where the frame keeps no frame pointer.
+    let pointerless = x64_frame_reg(&insns) != RBP;
+    let saves = (insns.iter())
+        .filter(|i| x64_is_save(i) || pointerless && i.op == 0x55 && i.rex == 0)
+        .count();
+    m.expect(saves == 3, || format!("x86-64: {saves} saves, not three: {insns:x?}"));
     m.finish();
 }
 

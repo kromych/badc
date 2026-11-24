@@ -114,15 +114,16 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
+               	subq	$0x30, %rsp
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	testl	%eax, %eax
                	je	<addr>
-               	popq	%rbp
+               	addq	$0x30, %rsp
+               	popq	%r11
                	retq
                	movl	$0x1, %edi
                	movq	$-0x2, %rsi
@@ -131,7 +132,6 @@ Disassembly of section .text:
                	movq	$-0x5, %r8
                	movl	$0xfa, %r9d
                	movq	<rip>, %rax # <addr>
-               	subq	$0x30, %rsp
                	movq	$-0x7, (%rsp)
                	movabsq	$0x11111111ea60, %r10   # imm = 0x11111111EA60
                	movq	%r10, 0x8(%rsp)
@@ -140,13 +140,14 @@ Disassembly of section .text:
                	movabsq	$0x123456789abcdef0, %r10 # imm = 0x123456789ABCDEF0
                	movq	%r10, 0x20(%rsp)
                	callq	*%rax
-               	addq	$0x30, %rsp
                	testl	%eax, %eax
                	je	<addr>
-               	popq	%rbp
+               	addq	$0x30, %rsp
+               	popq	%r11
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbp
+               	addq	$0x30, %rsp
+               	popq	%r11
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$-0x2, %eax

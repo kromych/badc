@@ -6,8 +6,9 @@
 //! after the `sub`. An exit is: the return value staged, the canary check,
 //! `lea rsp` in a frame whose rsp moves, the pops, `leave` (or `pop rbp`
 //! when the pushes were the whole frame), `ret` or the tail `jmp`. A frame
-//! with no pointer is `sub rsp` (`push rax` for 8 bytes) and the pushes, or
-//! in a body that makes no call the pushes alone, and its exits are the
+//! with no pointer is `sub rsp` (`push rax` for 8 bytes), the pushes and a
+//! `sub rsp` for the outgoing-argument area, or in a body that makes no call
+//! the pushes alone, and its exits are the outgoing area's `add rsp`, the
 //! pops, the `add rsp` (`pop r11`) and `ret` or the tail `jmp`. Win64
 //! pushes them right after rbp, ahead of the xmm saves and `lea rbp`, and
 //! an exit takes `lea rsp` onto the last push, the pops and `pop rbp`. No
@@ -119,12 +120,15 @@ struct Frame {
     body: usize,
     early: Option<usize>,
     pointerless: bool,
+    /// A frame with no pointer's outgoing-argument area, below the pushes.
+    out: u32,
 }
 
 impl Frame {
     /// What the frame reserves below where `push rbp` leaves rsp.
     fn bytes(&self) -> u32 {
-        (self.alloc + 8 * self.pushes.len() as u32).saturating_sub(8 * u32::from(self.pointerless))
+        (self.alloc + 8 * self.pushes.len() as u32 + self.out)
+            .saturating_sub(8 * u32::from(self.pointerless))
     }
 }
 
@@ -176,14 +180,16 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
             pushes.push(r);
             i += 1;
         }
+        let out = rsp_adjust(&insns[i], 0xEC).unwrap_or(0);
         return Some(Frame {
             alloc,
             pushes,
             xmm_saves: Vec::new(),
             block: 0,
-            body: i,
+            body: i + usize::from(out > 0),
             early,
             pointerless: true,
+            out,
         });
     }
     let mov = insns[i + 1];
@@ -245,6 +251,7 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
         body: i,
         early,
         pointerless: false,
+        out: 0,
     })
 }
 
@@ -318,6 +325,16 @@ fn check_exit(insns: &[X64Insn], e: usize, frame: &Frame, target: Target, what: 
     }
     // Collected from the teardown backwards, the pops read as the pushes.
     assert_eq!(pops, frame.pushes, "restore order: {}", ctx());
+    // The outgoing area goes first.
+    if frame.out > 0 {
+        assert_eq!(
+            rsp_adjust(&insns[j - 1], 0xC4),
+            Some(frame.out),
+            "outgoing area: {}",
+            ctx()
+        );
+        j -= 1;
+    }
     j
 }
 
@@ -431,11 +448,12 @@ fn no_red_zone_keeps_the_frame_pointer_and_stores_nothing_below_rsp() {
     );
 }
 
-/// A call that passes an argument in memory moves rsp, so its caller keeps
-/// the frame pointer: past the six integer registers, and a `long double`,
-/// which System V passes in memory, to a variadic library function.
+/// A call that passes arguments in memory -- past the six integer
+/// registers, or a `long double`, which System V passes in memory, to a
+/// variadic library function -- stores them at the bottom of its caller's
+/// outgoing-argument area, rsp unmoved; a frame with no such call has none.
 #[test]
-fn a_call_passing_memory_arguments_keeps_the_frame_pointer() {
+fn memory_arguments_go_to_the_outgoing_area() {
     const SRC: &str = "#include <stdio.h>\n\
         long seven(long, long, long, long, long, long, long);\n\
         long many(long a) { return seven(a, a, a, a, a, a, a) + 1; }\n\
@@ -443,10 +461,24 @@ fn a_call_passing_memory_arguments_keeps_the_frame_pointer() {
         void d(double x) { fprintf(stderr, \"%g\", x); fflush(stderr); }\n";
     let target = Target::LinuxX64;
     let obj = object(SRC, target, true, FULL, NativeOptions::new());
-    for (name, pointerless) in [("many", false), ("ld", false), ("d", true)] {
+    for (name, out) in [("many", 16), ("ld", 16), ("d", 0)] {
         let insns = insns_of(&obj, name);
         let frame = frame_of(&insns, target).expect("a frame");
-        assert_eq!(frame.pointerless, pointerless, "{name}: {insns:x?}");
+        assert!(frame.pointerless, "{name}: {insns:x?}");
+        assert_eq!(frame.out, out, "{name}: {insns:x?}");
+        let call = (insns.iter()).position(|i| i.op == 0xE8).expect("a call");
+        let moves = |i: &X64Insn| rsp_adjust(i, 0xEC).is_some() || rsp_adjust(i, 0xC4).is_some();
+        assert!(
+            !insns[frame.body..call].iter().any(moves),
+            "{name}: {insns:x?}"
+        );
+        if out > 0 {
+            let stores_at_rsp = |i: &X64Insn| i.mem_base() == Some(4) && i.disp == 0;
+            assert!(
+                insns[frame.body..call].iter().any(stores_at_rsp),
+                "{name}: {insns:x?}"
+            );
+        }
     }
 }
 

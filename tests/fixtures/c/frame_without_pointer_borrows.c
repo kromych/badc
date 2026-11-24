@@ -1,3 +1,4 @@
+// snapshot-budget: exempt
 /* Lowerings that borrow a register within one instruction -- division and
    the high multiply through rdx:rax, a shift by a variable count through cl,
    an indirect call whose target waits out the argument moves, atomic

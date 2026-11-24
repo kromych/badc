@@ -380,10 +380,9 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
+               	subq	$0x40, %rsp
                	movl	$0x5, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
@@ -402,7 +401,6 @@ Disassembly of section .text:
                	movl	$0x3, %ecx
                	movl	$0x4, %r8d
                	movl	$0x5, %r9d
-               	subq	$0x40, %rsp
                	movq	$0x6, (%rsp)
                	movq	$0x7, 0x8(%rsp)
                	movq	$0x8, 0x10(%rsp)
@@ -412,7 +410,6 @@ Disassembly of section .text:
                	movq	%rdi, 0x30(%rsp)
                	movb	$0x0, %al
                	callq	<addr>
-               	addq	$0x40, %rsp
                	movq	%rbx, %rcx
                	orq	$0x2, %rcx
                	cmpl	$0x4e, %eax
@@ -441,14 +438,12 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm7
                	movsd	<rip>, %xmm8
                	movsd	<rip>, %xmm9
-               	subq	$0x10, %rsp
                	movq	%xmm8, %r10
                	movq	%r10, (%rsp)
                	movq	%xmm9, %r10
                	movq	%r10, 0x8(%rsp)
                	movb	$0x8, %al
                	callq	<addr>
-               	addq	$0x10, %rsp
                	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x8, %rax
@@ -486,7 +481,6 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	subq	$0x40, %rsp
                	movq	$0x7, (%rsp)
                	movq	$0x8, 0x8(%rsp)
                	movq	$0x9, 0x10(%rsp)
@@ -496,12 +490,12 @@ Disassembly of section .text:
                	movq	$0x12c, 0x30(%rsp)      # imm = 0x12C
                	movb	$0x0, %al
                	callq	<addr>
-               	addq	$0x40, %rsp
                	movq	%rbx, %rcx
                	orq	$0x40, %rcx
                	cmpl	$0x28f, %eax            # imm = 0x28F
                	cmoveq	%rbx, %rcx
                	movq	%rcx, %rax
+               	addq	$0x40, %rsp
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

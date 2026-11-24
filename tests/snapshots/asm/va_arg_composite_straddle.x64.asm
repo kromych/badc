@@ -111,19 +111,17 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	$0x6f, -0x10(%rbp)
-               	movq	$0xde, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	subq	$0x20, %rsp
+               	movq	$0x6f, 0x20(%rsp)
+               	movq	$0xde, 0x28(%rsp)
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	leaq	-0x10(%rbp), %rax
-               	subq	$0x20, %rsp
+               	leaq	0x20(%rsp), %rax
                	movq	$0x7, (%rsp)
                	movq	$0x309, 0x18(%rsp)      # imm = 0x309
                	movq	%rax, %r10
@@ -134,5 +132,5 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x20, %rsp
-               	leave
+               	addq	$0x18, %rsp
                	retq

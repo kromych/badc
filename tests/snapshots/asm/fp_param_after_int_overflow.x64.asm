@@ -44,8 +44,8 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
+               	subq	$0x20, %rsp
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
@@ -53,18 +53,17 @@ Disassembly of section .text:
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
                	movsd	<rip>, %xmm0
-               	subq	$0x20, %rsp
                	movq	$0x7, (%rsp)
                	movq	$0x8, 0x8(%rsp)
                	movq	$0x9, 0x10(%rsp)
                	callq	<addr>
-               	addq	$0x20, %rsp
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	addq	$0x20, %rsp
+               	popq	%r11
                	retq
                	movl	$0xa, %edi
                	movl	$0x14, %esi
@@ -73,19 +72,19 @@ Disassembly of section .text:
                	movl	$0x32, %r8d
                	movl	$0x3c, %r9d
                	movsd	<rip>, %xmm0
-               	subq	$0x20, %rsp
                	movq	$0x46, (%rsp)
                	movq	$0x50, 0x8(%rsp)
                	movq	$0x5a, 0x10(%rsp)
                	callq	<addr>
-               	addq	$0x20, %rsp
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	addq	$0x20, %rsp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	addq	$0x20, %rsp
+               	popq	%r11
                	retq

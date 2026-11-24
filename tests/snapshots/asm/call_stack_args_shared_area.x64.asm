@@ -60,10 +60,9 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
+               	subq	$0x30, %rsp
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
@@ -71,13 +70,11 @@ Disassembly of section .text:
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
                	movq	<rip>, %rax # <addr>
-               	subq	$0x20, %rsp
                	movq	$0x7, (%rsp)
                	movq	$0x8, 0x8(%rsp)
                	movq	$0x9, 0x10(%rsp)
                	movq	$0xa, 0x18(%rsp)
                	callq	*%rax
-               	addq	$0x20, %rsp
                	movq	%rax, %rbx
                	movl	$0xa, %edi
                	movl	$0x9, %esi
@@ -86,16 +83,15 @@ Disassembly of section .text:
                	movl	$0x6, %r8d
                	movl	$0x5, %r9d
                	movq	<rip>, %rax # <addr>
-               	subq	$0x30, %rsp
                	movq	$0x4, (%rsp)
                	movq	$0x3, 0x8(%rsp)
                	movq	$0x2, 0x10(%rsp)
                	movq	$0x1, 0x18(%rsp)
                	movq	$0x0, 0x20(%rsp)
                	callq	*%rax
-               	addq	$0x30, %rsp
                	addq	%rbx, %rax
                	subq	$0x6e, %rax
+               	addq	$0x30, %rsp
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

@@ -95,6 +95,10 @@ pub(crate) struct Frame {
     /// The bytes the callee-saved pushes take, the area for them in
     /// `frame_bytes` rounded up to 16.
     pub pushed: u32,
+    /// A frame with no pointer's outgoing-argument area, below the pushes
+    /// and part of `frame_bytes`: the largest stack-argument window of its
+    /// calls, which store their arguments there with rsp left in place.
+    pub out: u32,
 }
 
 impl Frame {
@@ -135,11 +139,11 @@ impl Frame {
 
     /// What the prologue of a frame with no pointer subtracts from rsp
     /// ahead of the `pushed` bytes of pushes: the frame below rbp's place
-    /// and the 8 bytes `push rbp` would take, or nothing.
+    /// down to the pushes and the 8 bytes `push rbp` would take, or nothing.
     pub(crate) fn sp_alloc(&self, pushed: u32) -> u32 {
         match self.pushes_alone {
             true => 0,
-            false => self.frame_bytes - pushed + 8,
+            false => self.frame_bytes - self.out - pushed + 8,
         }
     }
 }
@@ -150,13 +154,13 @@ impl Frame {
 /// prologue left it, so every frame region is addressed from rsp and the
 /// call-frame information follows rsp through the prologue and the
 /// epilogues alone; a lowering keeps what it borrows in the red zone
-/// ([`super::keep`]). Left with one: an rsp the body moves (`alloca`, a
-/// realigned region, a call placing arguments on the stack, the `va_arg`
-/// and `va_copy` lowerings), a frame read as such (the frame-address
-/// intrinsics, `va_start`'s save areas, `-pg`), any asm statement, which
-/// may name rbp, `setjmp`, a naked body, a foreign convention's
-/// callee-saved xmm registers (`ms_abi`), and locals past one unprobed
-/// allocation step.
+/// ([`super::keep`]), and a call places its stack arguments in the frame's
+/// outgoing area ([`Frame::out`]). Left with one: an rsp the body moves
+/// (`alloca`, a realigned region, the `va_arg` and `va_copy` lowerings), a
+/// frame read as such (the frame-address intrinsics, `va_start`'s save
+/// areas, `-pg`), any asm statement, which may name rbp, `setjmp`, a naked
+/// body, a foreign convention's callee-saved xmm registers (`ms_abi`), and
+/// locals or stack arguments past one unprobed allocation step.
 pub(crate) fn frame_pointer_free(
     func: &FunctionSsa,
     target: Target,
@@ -184,11 +188,32 @@ pub(crate) fn frame_pointer_free(
     {
         return false;
     }
-    func.insts.iter().all(|inst| match inst {
-        Inst::InlineAsm { .. } => false,
-        Inst::Intrinsic { kind, .. } => {
-            I::from_i64(*kind).is_some_and(|i| !intrinsic_keeps_frame(i, abi) && i != I::VaArg)
-        }
+    let out = func
+        .insts
+        .iter()
+        .filter_map(|i| call_stack_bytes(func, i, abi, target))
+        .max();
+    out.unwrap_or(0) <= super::ssa::emit_common::MAX_UNPROBED_STACK_STEP
+        && func.insts.iter().all(|inst| match inst {
+            Inst::InlineAsm { .. } => false,
+            Inst::Intrinsic { kind, .. } => {
+                I::from_i64(*kind).is_some_and(|i| !intrinsic_keeps_frame(i, abi) && i != I::VaArg)
+            }
+            _ => true,
+        })
+}
+
+/// The bytes of stack arguments `inst` passes, a call's; `None` for any
+/// other instruction. System V places a variadic call's arguments as a
+/// named one's.
+fn call_stack_bytes(
+    func: &FunctionSsa,
+    inst: &Inst,
+    abi: super::Abi,
+    target: Target,
+) -> Option<u32> {
+    let widths = crate::c5::ir::ArgWidths::default();
+    let (args, arg_aggs, fp_arg_mask, abi) = match inst {
         Inst::Call {
             args,
             arg_aggs,
@@ -202,29 +227,23 @@ pub(crate) fn frame_pointer_free(
             fp_arg_mask,
             callee_conv,
             ..
-        } => {
-            let abi = super::call::callee_abi(abi, target, *callee_conv);
-            let aggs = super::ssa::emit_common::build_call_aggs(func, args, arg_aggs, abi);
-            let widths = crate::c5::ir::ArgWidths::default();
-            let n = args.len();
-            super::plan_call_args_aggs(n, n, fp_arg_mask, abi, &aggs, false, widths).scratch_bytes
-                == 0
-        }
-        // System V places a variadic call's arguments as a named one's.
+        } => (
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            super::call::callee_abi(abi, target, *callee_conv),
+        ),
         Inst::CallExt {
             args,
             arg_aggs,
             fp_arg_mask,
             ..
-        } => {
-            let aggs = super::ssa::emit_common::build_call_aggs(func, args, arg_aggs, abi);
-            let widths = crate::c5::ir::ArgWidths::default();
-            let n = args.len();
-            super::plan_call_args_aggs(n, n, fp_arg_mask, abi, &aggs, false, widths).scratch_bytes
-                == 0
-        }
-        _ => true,
-    })
+        } => (args, arg_aggs, fp_arg_mask, abi),
+        _ => return None,
+    };
+    let aggs = super::ssa::emit_common::build_call_aggs(func, args, arg_aggs, abi);
+    let n = args.len();
+    Some(super::plan_call_args_aggs(n, n, fp_arg_mask, abi, &aggs, false, widths).scratch_bytes)
 }
 
 pub(crate) fn compute_frame(
@@ -363,6 +382,7 @@ pub(crate) fn compute_frame_with_tail_calls(
         red_zone: abi.red_zone,
         pushes_alone: false,
         pushed: alloc.gpr_used.len() as u32 * 8,
+        out: 0,
         align_region_off: if static_region_bytes > 0 {
             -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes + static_region_bytes)
                 as i64)
@@ -376,6 +396,13 @@ pub(crate) fn compute_frame_with_tail_calls(
     if func.frees_rbp && !is_full_leaf(func, frame, alloc, abi) {
         debug_assert!(alloc.fp_used.is_empty() && !frame.dynamic_sp && frame.saves_top == 0);
         frame.omit_fp = true;
+        let windows = func
+            .insts
+            .iter()
+            .filter_map(|i| call_stack_bytes(func, i, abi, target));
+        frame.out = windows.max().unwrap_or(0);
+        frame.frame_bytes += frame.out;
+        frame.parts.outgoing += frame.out;
         frame.pushes_alone = !frame.keeps_record && frame.parts.total() == frame.parts.saved_regs;
     }
     frame

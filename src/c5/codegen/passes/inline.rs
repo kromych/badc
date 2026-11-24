@@ -3,11 +3,9 @@
 //! Runs under `-O` after `ssa_mem2reg`, so the candidate filter sees
 //! the promoted form: dead cell loads / stores are gone and the
 //! callee reads its parameters via `ParamRef`. Substitutes eligible
-//! `Inst::Call` sites with the callee's body. Eligibility
-//! is intentionally narrow:
+//! `Inst::Call` sites with the callee's body. A callee is eligible when:
 //!
 //! * caller and callee bodies remain in the same translation unit;
-//! * callee has a single basic block terminating in `Return`;
 //! * callee's body emits at most `body_cap` instructions -- the
 //!   `--inline-cap=N` knob (default 64) for a size-driven candidate, a
 //!   multiple of it for one the source marked `inline` -- counted over
@@ -20,26 +18,21 @@
 //! * callee returns: one declared `_Noreturn`, or whose body no path
 //!   returns from, stays out of line unless the request is mandatory;
 //! * callee's body contains no `TailExt` and no aggregate-returning
-//!   nested call -- otherwise the straight-line shapes whose
-//!   `for_each_operand` walks a known set of `ValueId` fields. A
-//!   `LocalAddr` naming a frame slot is admitted only where the splice
+//!   nested call. A `LocalAddr` naming a frame slot is admitted only where the splice
 //!   has somewhere to send it: a register-passed struct parameter's slot
 //!   relocates into the caller's frame and the prefix copies the argument
 //!   into it, the slot a return delivers through redirects to the
 //!   caller's object, and the reloc path relocates a callee's own slots
 //!   and frame-kept parameter cells into the caller's frame.
 //!
-//! Those constraints cover the small leaf helpers (R / Ch / Maj /
-//! Sigma / sigma in SHA-512, `lerp` / `fastfloor` / `grad` in
-//! Perlin noise) whose call overhead dominates the crypto and
-//! noise-generation perf rows.
-//!
-//! Substitution rewrites each callee `Inst` into the caller's value
-//! space, mapping `ParamRef(i)` to the i-th call argument and other
-//! operands through the caller's running remap. The `Inst::Call`
-//! itself is removed; the callee's `Return(v)` value replaces every
-//! later reference to the call's old `ValueId`. Block boundaries
-//! shift forward, terminators and exit_acc get remapped.
+//! A single-block callee whose frame slots need no relocation is
+//! substituted in place: each callee `Inst` is rewritten into the caller's
+//! value space, `ParamRef(i)` mapping to the i-th call argument, the
+//! `Inst::Call` is removed, and the callee's `Return(v)` value replaces
+//! every later reference to the call's `ValueId`. Any other callee goes
+//! through `splice_multi_block`, which splits the caller's block at the
+//! call, appends the callee's blocks between the halves, relocates its
+//! frame slots into the caller's frame and joins its returns.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;

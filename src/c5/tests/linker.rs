@@ -7269,15 +7269,15 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
 }
 
 /// The test of an early return moves the frame's first instruction --
-/// `push rbp`, or `sub rsp` with no frame pointer -- off the entry; the
-/// note carries where it went and where the return is, so the merged-image
-/// decoder reads the frame the lowering built.
+/// `push rbp`, or with no frame pointer the `push rax` pad, a `sub rsp` or
+/// a register's push -- off the entry; the note carries where it went and
+/// where the return is, so the merged-image decoder reads the frame the
+/// lowering built.
 #[test]
 fn a_frame_past_an_early_return_decodes_from_its_anchor() {
     use crate::c5::linker::{link_native_objects, parse_native_elf};
     let src = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
-    // `push rbp; mov rbp, rsp`, or with no frame pointer `push rax`, the pad.
-    for (omit, opener) in [(false, &[0x55, 0x48, 0x89, 0xE5][..]), (true, &[0x50])] {
+    for omit in [false, true] {
         let tu = reloc_tu_with(src, crate::c5::Target::LinuxX64, true, Some(omit));
         let obj = parse_native_elf(&tu).expect("parse");
         assert_eq!(obj.early_returns.len(), 1, "{:x?}", obj.early_returns);
@@ -7291,11 +7291,16 @@ fn a_frame_past_an_early_return_decodes_from_its_anchor() {
         );
         let post = merged.prologue_ends[&entry];
         let text = &merged.text;
-        assert_eq!(
-            &text[at as usize..at as usize + opener.len()],
-            opener,
-            "omit={omit}"
-        );
+        // The frame's first instruction and its length; the banks' caps
+        // decide which one a frame with no pointer opens with.
+        let first = match &text[at as usize..] {
+            [0x55, 0x48, 0x89, 0xE5, ..] if !omit => 1,
+            [0x48, 0x83, 0xEC, ..] if omit => 4,
+            [0x48, 0x81, 0xEC, ..] if omit => 7,
+            [0x41, 0x54..=0x57, ..] if omit => 2,
+            [0x50 | 0x53 | 0x55, ..] if omit => 1,
+            other => panic!("omit={omit}: no frame at the anchor: {:02x?}", &other[..8]),
+        };
         let n = text.len() as u32;
         let decode = |frame_start| {
             crate::c5::codegen::decode_x86_64_prologue_unwind(
@@ -7308,7 +7313,7 @@ fn a_frame_past_an_early_return_decodes_from_its_anchor() {
         };
         let uw = decode(at as u32);
         assert!(!uw.leaf);
-        assert_eq!(uw.steps[0].0, (at - entry) as u32 + 1, "omit={omit}");
+        assert_eq!(uw.steps[0].0, (at - entry) as u32 + first, "omit={omit}");
         // Without the anchor the entry reads as a frameless leaf.
         assert!(decode(0).leaf);
     }

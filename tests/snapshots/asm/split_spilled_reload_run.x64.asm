@@ -32,11 +32,12 @@ Disassembly of section .text:
                	retq
 
 <hot>:
-               	subq	$0x50, %rsp
+               	subq	$0x38, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	movq	%rdi, %rax
                	xorl	%ebx, %ebx
@@ -54,35 +55,32 @@ Disassembly of section .text:
                	leaq	0x6(%r14), %rdi
                	movq	0x30(%rax), %r15
                	leaq	0x7(%r15), %r10
-               	movq	%r10, 0x60(%rsp)
-               	movq	0x38(%rax), %r10
-               	movq	%r10, 0x68(%rsp)
-               	addq	$0x8, %r10
                	movq	%r10, 0x58(%rsp)
+               	movq	0x38(%rax), %rbp
+               	leaq	0x8(%rbp), %r10
+               	movq	%r10, 0x50(%rsp)
                	movq	%r12, %r10
                	xorq	%r13, %r10
-               	movq	%r10, 0x50(%rsp)
+               	movq	%r10, 0x48(%rsp)
                	movq	0x8(%rax), %r12
                	movq	%r12, %r10
                	xorq	%r14, %r10
-               	movq	%r10, 0x48(%rsp)
+               	movq	%r10, 0x40(%rsp)
                	movq	0x10(%rax), %r13
                	xorq	%r13, %r15
                	movq	0x18(%rax), %r14
-               	movq	%r14, %r10
-               	xorq	0x68(%rsp), %r10
-               	movq	%r10, 0x68(%rsp)
+               	xorq	%r14, %rbp
                	movq	0x20(%rax), %r10
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x38(%rsp)
                	movq	(%rax), %r10
+               	movq	%r10, 0x30(%rsp)
+               	movq	0x38(%rsp), %r10
+               	addq	0x30(%rsp), %r10
                	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
                	movq	0x28(%rax), %r10
-               	movq	%r10, 0x38(%rsp)
+               	movq	%r10, 0x30(%rsp)
                	addq	%r12, %r10
-               	movq	%r10, 0x38(%rsp)
+               	movq	%r10, 0x30(%rsp)
                	movq	0x30(%rax), %r12
                	addq	%r12, %r13
                	movq	0x38(%rax), %rax
@@ -144,32 +142,34 @@ Disassembly of section .text:
                	xorq	%r8, %rcx
                	xorq	%r9, %rcx
                	xorq	%rdi, %rcx
-               	xorq	0x60(%rsp), %rcx
                	xorq	0x58(%rsp), %rcx
                	xorq	0x50(%rsp), %rcx
                	xorq	0x48(%rsp), %rcx
-               	xorq	%r15, %rcx
-               	xorq	0x68(%rsp), %rcx
                	xorq	0x40(%rsp), %rcx
+               	xorq	%r15, %rcx
+               	xorq	%rbp, %rcx
                	xorq	0x38(%rsp), %rcx
+               	xorq	0x30(%rsp), %rcx
                	xorq	%r13, %rcx
                	movq	%rcx, %rax
                	xorq	%r14, %rax
                	xorq	%rbx, %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x50, %rsp
+               	addq	$0x38, %rsp
                	retq
 
 <weird>:
-               	subq	$0x80, %rsp
+               	subq	$0x78, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	movq	(%rdi), %rax
                	leaq	0x1(%rax), %rbx
@@ -181,67 +181,64 @@ Disassembly of section .text:
                	leaq	0x4(%r15), %r14
                	movq	0x20(%rdi), %rcx
                	addq	$0x5, %rcx
-               	movq	0x28(%rdi), %r10
-               	movq	%r10, 0x98(%rsp)
-               	movq	%r10, %rdx
-               	addq	$0x6, %rdx
+               	movq	0x28(%rdi), %rbp
+               	leaq	0x6(%rbp), %rdx
                	movq	0x30(%rdi), %r10
-               	movq	%r10, 0x90(%rsp)
+               	movq	%r10, 0x98(%rsp)
                	movq	%r10, %r8
                	addq	$0x7, %r8
                	movq	0x38(%rdi), %r10
-               	movq	%r10, 0x88(%rsp)
+               	movq	%r10, 0x90(%rsp)
                	movq	%r10, %r9
                	addq	$0x8, %r9
                	movq	%rax, %r10
                	xorq	%r15, %r10
-               	movq	%r10, 0x80(%rsp)
+               	movq	%r10, 0x88(%rsp)
                	movq	0x8(%rdi), %rax
                	movq	%rax, %r10
-               	xorq	0x98(%rsp), %r10
-               	movq	%r10, 0x78(%rsp)
+               	xorq	%rbp, %r10
+               	movq	%r10, 0x80(%rsp)
                	movq	0x10(%rdi), %r15
                	movq	%r15, %r10
+               	xorq	0x98(%rsp), %r10
+               	movq	%r10, 0x78(%rsp)
+               	movq	0x18(%rdi), %rbp
+               	movq	%rbp, %r10
                	xorq	0x90(%rsp), %r10
-               	movq	%r10, 0x70(%rsp)
-               	movq	0x18(%rdi), %r10
-               	movq	%r10, 0x98(%rsp)
-               	xorq	0x88(%rsp), %r10
-               	movq	%r10, 0x88(%rsp)
+               	movq	%r10, 0x90(%rsp)
                	movq	0x20(%rdi), %r10
-               	movq	%r10, 0x90(%rsp)
+               	movq	%r10, 0x98(%rsp)
                	movq	(%rdi), %r10
-               	movq	%r10, 0x68(%rsp)
-               	movq	0x90(%rsp), %r10
-               	addq	0x68(%rsp), %r10
-               	movq	%r10, 0x68(%rsp)
+               	movq	%r10, 0x70(%rsp)
+               	movq	0x98(%rsp), %r10
+               	addq	0x70(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
                	movq	0x28(%rdi), %r10
-               	movq	%r10, 0x90(%rsp)
+               	movq	%r10, 0x98(%rsp)
                	addq	%rax, %r10
-               	movq	%r10, 0x60(%rsp)
+               	movq	%r10, 0x68(%rsp)
                	movq	0x30(%rdi), %rax
                	leaq	(%rax,%r15), %r10
-               	movq	%r10, 0x58(%rsp)
+               	movq	%r10, 0x60(%rsp)
                	movq	0x38(%rdi), %rax
-               	movq	%rax, %r10
-               	addq	0x98(%rsp), %r10
-               	movq	%r10, 0x90(%rsp)
+               	leaq	(%rax,%rbp), %r10
+               	movq	%r10, 0x98(%rsp)
                	testl	%esi, %esi
                	jne	<addr>
                	movq	%rbx, %rdi
-               	xorq	0x90(%rsp), %rdi
+               	xorq	0x98(%rsp), %rdi
                	movq	<rip>, %rax # <addr>
-               	movq	%rsi, 0x30(%rsp)
-               	movq	%rcx, 0x50(%rsp)
-               	movq	%rdx, 0x48(%rsp)
-               	movq	%r8, 0x40(%rsp)
-               	movq	%r9, 0x38(%rsp)
+               	movq	%rsi, 0x38(%rsp)
+               	movq	%rcx, 0x58(%rsp)
+               	movq	%rdx, 0x50(%rsp)
+               	movq	%r8, 0x48(%rsp)
+               	movq	%r9, 0x40(%rsp)
                	callq	*%rax
-               	movq	0x30(%rsp), %rsi
-               	movq	0x50(%rsp), %rcx
-               	movq	0x48(%rsp), %rdx
-               	movq	0x40(%rsp), %r8
-               	movq	0x38(%rsp), %r9
+               	movq	0x38(%rsp), %rsi
+               	movq	0x58(%rsp), %rcx
+               	movq	0x50(%rsp), %rdx
+               	movq	0x48(%rsp), %r8
+               	movq	0x40(%rsp), %r9
                	testb	$0x1, %sil
                	je	<addr>
                	xorl	%eax, %eax
@@ -291,62 +288,48 @@ Disassembly of section .text:
                	xorq	%rdx, %rax
                	xorq	%r8, %rax
                	xorq	%r9, %rax
+               	xorq	0x88(%rsp), %rax
                	xorq	0x80(%rsp), %rax
                	xorq	0x78(%rsp), %rax
+               	xorq	0x90(%rsp), %rax
                	xorq	0x70(%rsp), %rax
-               	xorq	0x88(%rsp), %rax
                	xorq	0x68(%rsp), %rax
                	xorq	0x60(%rsp), %rax
-               	xorq	0x58(%rsp), %rax
-               	xorq	0x90(%rsp), %rax
+               	xorq	0x98(%rsp), %rax
                	xorq	%r15, %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x80, %rsp
+               	addq	$0x78, %rsp
                	retq
                	movl	%eax, %edi
-               	leaq	(%rbx,%rdi), %r10
-               	movq	%r10, 0x98(%rsp)
-               	xorq	0x98(%rsp), %r15
-               	leaq	(%rbx,%rbx,2), %r10
-               	movq	%r10, 0x98(%rsp)
-               	addq	0x98(%rsp), %r15
-               	movq	%r15, %r10
-               	shrq	$0x3, %r10
-               	movq	%r10, 0x98(%rsp)
-               	movq	%rbx, %r10
-               	xorq	0x98(%rsp), %r10
-               	movq	%r10, 0x98(%rsp)
-               	subq	0x98(%rsp), %r15
-               	leaq	(%r12,%rdi), %r10
-               	movq	%r10, 0x98(%rsp)
-               	xorq	0x98(%rsp), %r15
-               	leaq	(%r12,%r12,2), %r10
-               	movq	%r10, 0x98(%rsp)
-               	addq	0x98(%rsp), %r15
-               	movq	%r15, %r10
-               	shrq	$0x3, %r10
-               	movq	%r10, 0x98(%rsp)
-               	movq	%r12, %r10
-               	xorq	0x98(%rsp), %r10
-               	movq	%r10, 0x98(%rsp)
-               	subq	0x98(%rsp), %r15
-               	leaq	(%r13,%rdi), %r10
-               	movq	%r10, 0x98(%rsp)
-               	xorq	0x98(%rsp), %r15
-               	leaq	(%r13,%r13,2), %r10
-               	movq	%r10, 0x98(%rsp)
-               	addq	0x98(%rsp), %r15
-               	movq	%r15, %r10
-               	shrq	$0x3, %r10
-               	movq	%r10, 0x98(%rsp)
-               	movq	%r13, %r10
-               	xorq	0x98(%rsp), %r10
-               	movq	%r10, 0x98(%rsp)
-               	subq	0x98(%rsp), %r15
+               	leaq	(%rbx,%rdi), %rbp
+               	xorq	%rbp, %r15
+               	leaq	(%rbx,%rbx,2), %rbp
+               	addq	%rbp, %r15
+               	movq	%r15, %rbp
+               	shrq	$0x3, %rbp
+               	xorq	%rbx, %rbp
+               	subq	%rbp, %r15
+               	leaq	(%r12,%rdi), %rbp
+               	xorq	%rbp, %r15
+               	leaq	(%r12,%r12,2), %rbp
+               	addq	%rbp, %r15
+               	movq	%r15, %rbp
+               	shrq	$0x3, %rbp
+               	xorq	%r12, %rbp
+               	subq	%rbp, %r15
+               	leaq	(%r13,%rdi), %rbp
+               	xorq	%rbp, %r15
+               	leaq	(%r13,%r13,2), %rbp
+               	addq	%rbp, %r15
+               	movq	%r15, %rbp
+               	shrq	$0x3, %rbp
+               	xorq	%r13, %rbp
+               	subq	%rbp, %r15
                	addq	%r14, %rdi
                	xorq	%r15, %rdi
                	leaq	(%r14,%r14,2), %r15

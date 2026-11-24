@@ -563,14 +563,14 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=reference
 fn ent_pc=4 n_params=3 variadic=false locals=0
-  spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=1 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
     v1   ParamPart(0, part=1, kind=I64)                   -> x6
     v2   ParamPart(1, part=0, kind=I64)                   -> x2
     v3   ParamPart(1, part=1, kind=I64)                   -> x1
     v4   AllocaInit(0)                                    -> -
-    v5   ParamRef(2, kind=I64)                            -> [spill 1]
+    v5   ParamRef(2, kind=I64)                            -> [spill 0]
     v6   StoreLocal { off=-30, value=v0, kind=I64 }       -> -
     v7   LocalAddr(-30)                                   -> x0
     v8   StoreLocal { off=-30, disp=8, value=v1, kind=I64 } -> -
@@ -663,13 +663,13 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v82  BinopI { op=shru, lhs=v40, rhs_imm=6 }           -> x8
     v83  Neg(v82)                                         -> x8
     v84  BinopI { op=xor, lhs=v83, rhs_imm=-1 }           -> x15
-    v85  Binop { op=shru, lhs=v76, rhs=v79 }              -> [spill 0]
+    v85  Binop { op=shru, lhs=v76, rhs=v79 }              -> x5
     v86  Binop { op=shl, lhs=v76, rhs=v81 }               -> x9
     v87  BinopI { op=shl, lhs=v86, rhs_imm=1 }            -> x9
     v88  Binop { op=shru, lhs=v74, rhs=v79 }              -> x0
     v89  Binop { op=or, lhs=v88, rhs=v87 }                -> x0
     v90  Binop { op=and, lhs=v89, rhs=v84 }               -> x0
-    v91  Binop { op=and, lhs=v85, rhs=v83 }               -> x9
+    v91  Binop { op=and, lhs=v85, rhs=v83 }               -> x5
     v92  Binop { op=or, lhs=v90, rhs=v91 }                -> x0
     v93  Binop { op=and, lhs=v85, rhs=v84 }               -> x8
     v94  Imm(0)                                           -> x8

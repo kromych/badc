@@ -53,88 +53,85 @@ Disassembly of section .text:
                	retq
 
 <ints>:
-               	subq	$0x70, %rsp
+               	subq	$0x68, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
-               	movq	%rdi, 0x78(%rsp)
-               	movq	%rsi, 0x70(%rsp)
+               	movq	%rdi, 0x80(%rsp)
+               	movq	%rsi, 0x78(%rsp)
                	xorl	%ebx, %ebx
-               	movq	0x78(%rsp), %r10
+               	movq	0x80(%rsp), %r10
                	movq	(%r10), %rax
-               	movq	0x78(%rsp), %r10
+               	movq	0x80(%rsp), %r10
                	movq	0x8(%r10), %r10
-               	movq	%r10, 0x80(%rsp)
-               	movq	0x78(%rsp), %r10
-               	movq	0x10(%r10), %r10
                	movq	%r10, 0x88(%rsp)
-               	movq	0x78(%rsp), %r10
-               	movq	0x18(%r10), %rdi
-               	movq	0x78(%rsp), %r10
-               	movq	0x20(%r10), %rsi
-               	movq	0x78(%rsp), %r10
-               	movq	0x28(%r10), %r9
-               	movq	0x78(%rsp), %r10
-               	movq	0x30(%r10), %r8
-               	movq	0x78(%rsp), %r10
-               	movq	0x38(%r10), %rdx
-               	movq	0x78(%rsp), %r10
-               	movq	0x40(%r10), %rcx
-               	movq	0x78(%rsp), %r10
+               	movq	0x80(%rsp), %r10
+               	movq	0x10(%r10), %rdi
+               	movq	0x80(%rsp), %r10
+               	movq	0x18(%r10), %rsi
+               	movq	0x80(%rsp), %r10
+               	movq	0x20(%r10), %r9
+               	movq	0x80(%rsp), %r10
+               	movq	0x28(%r10), %r8
+               	movq	0x80(%rsp), %r10
+               	movq	0x30(%r10), %rdx
+               	movq	0x80(%rsp), %r10
+               	movq	0x38(%r10), %rcx
+               	movq	0x80(%rsp), %r10
+               	movq	0x40(%r10), %rbp
+               	movq	0x80(%rsp), %r10
                	movq	0x48(%r10), %r15
-               	movq	0x78(%rsp), %r10
+               	movq	0x80(%rsp), %r10
                	movq	0x50(%r10), %r14
-               	movq	0x78(%rsp), %r10
+               	movq	0x80(%rsp), %r10
                	movq	0x58(%r10), %r13
-               	movq	0x78(%rsp), %r10
+               	movq	0x80(%rsp), %r10
                	movq	0x60(%r10), %r12
-               	movq	0x78(%rsp), %r10
+               	movq	0x80(%rsp), %r10
                	movq	0x68(%r10), %r10
-               	movq	%r10, 0x78(%rsp)
+               	movq	%r10, 0x80(%rsp)
                	jmp	<addr>
                	incq	%rbx
-               	cmpl	0x70(%rsp), %ebx
+               	cmpl	0x78(%rsp), %ebx
                	jge	<addr>
                	addq	%rbx, %rax
-               	movq	0x80(%rsp), %r10
-               	xorq	%rax, %r10
-               	movq	%r10, 0x80(%rsp)
                	movq	0x88(%rsp), %r10
-               	addq	0x80(%rsp), %r10
+               	xorq	%rax, %r10
                	movq	%r10, 0x88(%rsp)
-               	xorq	0x88(%rsp), %rdi
-               	addq	%rdi, %rsi
-               	xorq	%rsi, %r9
-               	addq	%r9, %r8
-               	xorq	%r8, %rdx
-               	addq	%rdx, %rcx
-               	xorq	%rcx, %r15
+               	addq	0x88(%rsp), %rdi
+               	xorq	%rdi, %rsi
+               	addq	%rsi, %r9
+               	xorq	%r9, %r8
+               	addq	%r8, %rdx
+               	xorq	%rdx, %rcx
+               	addq	%rcx, %rbp
+               	xorq	%rbp, %r15
                	addq	%r15, %r14
                	xorq	%r14, %r13
                	addq	%r13, %r12
-               	movq	0x78(%rsp), %r10
+               	movq	0x80(%rsp), %r10
                	xorq	%r12, %r10
-               	movq	%r10, 0x78(%rsp)
+               	movq	%r10, 0x80(%rsp)
                	testb	$0x7, %bl
                	jne	<addr>
-               	movq	%rdi, 0x30(%rsp)
-               	movq	%rsi, 0x38(%rsp)
-               	movq	%r9, 0x40(%rsp)
-               	movq	%r8, 0x48(%rsp)
-               	movq	%rdx, 0x50(%rsp)
-               	movq	%rcx, 0x58(%rsp)
+               	movq	%rdi, 0x38(%rsp)
+               	movq	%rsi, 0x40(%rsp)
+               	movq	%r9, 0x48(%rsp)
+               	movq	%r8, 0x50(%rsp)
+               	movq	%rdx, 0x58(%rsp)
+               	movq	%rcx, 0x60(%rsp)
                	movq	%rax, %rdi
                	callq	<addr>
-               	movq	0x30(%rsp), %rdi
-               	movq	0x38(%rsp), %rsi
-               	movq	0x40(%rsp), %r9
-               	movq	0x48(%rsp), %r8
-               	movq	0x50(%rsp), %rdx
-               	movq	0x58(%rsp), %rcx
+               	movq	0x38(%rsp), %rdi
+               	movq	0x40(%rsp), %rsi
+               	movq	0x48(%rsp), %r9
+               	movq	0x50(%rsp), %r8
+               	movq	0x58(%rsp), %rdx
+               	movq	0x60(%rsp), %rcx
                	jmp	<addr>
-               	addq	0x80(%rsp), %rax
                	addq	0x88(%rsp), %rax
                	addq	%rdi, %rax
                	addq	%rsi, %rax
@@ -142,17 +139,19 @@ Disassembly of section .text:
                	addq	%r8, %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
+               	addq	%rbp, %rax
                	addq	%r15, %rax
                	addq	%r14, %rax
                	addq	%r13, %rax
                	addq	%r12, %rax
-               	addq	0x78(%rsp), %rax
+               	addq	0x80(%rsp), %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x70, %rsp
+               	addq	$0x68, %rsp
                	retq
 
 <ints_ref>:

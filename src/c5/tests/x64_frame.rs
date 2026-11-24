@@ -75,11 +75,12 @@ fn insns_of(obj: &[u8], name: &str) -> Vec<X64Insn> {
     x64_insns(&function_bytes(obj, name))
 }
 
-/// The registers the target's convention has the callee preserve, less rbp.
+/// The registers the target's convention has the callee preserve: rbp is
+/// one where a frame with no pointer saves it as such, on System V.
 fn callee_saved(target: Target) -> &'static [u8] {
     match target {
         Target::WindowsX64 => &[3, 6, 7, 12, 13, 14, 15],
-        _ => &[3, 12, 13, 14, 15],
+        _ => &[3, 5, 12, 13, 14, 15],
     }
 }
 
@@ -135,20 +136,27 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
     let entry = insns
         .iter()
         .position(|x| !matches!(x.op, 0x0F1E | 0x0F1F | 0x90 | 0xE8))?;
-    let opens = |x: &X64Insn| {
-        x.op == 0x55 && x.rex == 0
-            || rsp_adjust(x, 0xEC).is_some()
-            || stack_op(x, 0x50, target).is_some()
+    // The frame record: `push rbp; mov rbp, rsp`, or Win64's `push rbp`.
+    let record = |k: usize| {
+        let sets_rbp = |m: &X64Insn| m.op == 0x89 && m.rex_w() && m.modrm == Some(0xE5);
+        insns[k].op == 0x55
+            && insns[k].rex == 0
+            && (target == Target::WindowsX64 || insns.get(k + 1).is_some_and(sets_rbp))
+    };
+    let opens = |k: usize| {
+        record(k)
+            || rsp_adjust(&insns[k], 0xEC).is_some()
+            || stack_op(&insns[k], 0x50, target).is_some()
     };
     let mut i = entry;
     let mut early = None;
-    if !opens(&insns[i]) {
+    if !opens(i) {
         let test = insns[i..]
             .iter()
             .position(|x| x.op == 0xC3 || x.is_jmp() || x.is_jcc())?
             + i;
         i = test + 1;
-        if !(insns[test].is_jcc() && insns.get(i).is_some_and(opens)) {
+        if !(insns[test].is_jcc() && i < insns.len() && opens(i)) {
             return None;
         }
         let to = insns[test].target();
@@ -160,7 +168,7 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
         );
     }
     let sub = rsp_adjust(&insns[i], 0xEC);
-    if sub.is_some() || stack_op(&insns[i], 0x50, target).is_some() {
+    if !record(i) {
         let alloc = sub.unwrap_or(0);
         let mut pushes = Vec::new();
         i += usize::from(sub.is_some());
@@ -334,10 +342,12 @@ fn check_object(obj: &[u8], target: Target, what: &str) -> usize {
         for &e in &exits {
             check_exit(&insns, e, &frame, target, &what);
         }
-        // Every pop of a callee-saved register belongs to an exit.
+        // Every pop of a callee-saved register belongs to an exit; a frame
+        // record's rbp is no such register.
         let pops = insns[frame.body..]
             .iter()
-            .filter(|x| stack_op(x, 0x58, target).is_some())
+            .filter_map(|x| stack_op(x, 0x58, target))
+            .filter(|&r| r != 5 || frame.pointerless)
             .count();
         assert_eq!(pops, exits.len() * frame.pushes.len(), "{what}: {insns:x?}");
     }
@@ -459,6 +469,27 @@ fn stack_parameters_are_read_past_the_pushes_alone() {
         .map(|i| i.disp)
         .min();
     assert_eq!(first, Some(8 * frame.pushes.len() as i64 + 8), "{insns:x?}");
+}
+
+/// A frame with no pointer gives rbp out as a sixth callee-saved register,
+/// which its prologue pushes and each exit pops as any other; with the
+/// frame pointer, rbp holds the frame record alone.
+#[test]
+fn a_frame_with_no_pointer_gives_rbp_out() {
+    const SRC: &str = "long leaf6(long, long, long, long, long, long);\n\
+        long mid6(long a, long b, long c, long d, long e, long f) {\n\
+        long x = leaf6(f, e, d, c, b, a);\n\
+        return x + a * 3 + b * 5 + c * 7 + d * 11 + e * 13 + f * 17; }\n";
+    let target = Target::LinuxX64;
+    for (form, saves_rbp) in [(None, true), (Some(false), false)] {
+        let insns = insns_of(&object(SRC, target, true, FULL, with_form(form)), "mid6");
+        let frame = frame_of(&insns, target).expect("a frame");
+        assert_eq!(frame.pointerless, saves_rbp, "{form:?}: {insns:x?}");
+        assert_eq!(frame.pushes.contains(&5), saves_rbp, "{form:?}: {insns:x?}");
+        for e in exits(&insns, frame.pointerless) {
+            check_exit(&insns, e, &frame, target, "mid6");
+        }
+    }
 }
 
 /// Kept out of its own recursive calls, which would add levels to its frame.

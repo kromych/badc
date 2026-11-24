@@ -827,6 +827,7 @@ mod tests {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,

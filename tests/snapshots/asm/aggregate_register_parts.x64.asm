@@ -295,49 +295,50 @@ Disassembly of section .text:
                	retq
 
 <spill>:
-               	subq	$0x30, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	movq	%rdx, %rbx
                	imulq	%rcx, %rbx
                	movq	%r8, %r12
                	imulq	%r9, %r12
-               	movq	0x60(%rsp), %rax
-               	movq	0x68(%rsp), %r13
+               	movq	0x50(%rsp), %rax
+               	movq	0x58(%rsp), %r13
                	movq	%rax, %r14
                	imulq	%r13, %r14
                	addq	%r8, %rdx
                	leaq	(%rdx,%rax), %r15
                	leaq	(%rcx,%r9), %rax
                	addq	%rax, %r13
-               	movq	%rbx, %r10
-               	xorq	%r12, %r10
-               	movq	%r10, 0x48(%rsp)
+               	movq	%rbx, %rbp
+               	xorq	%r12, %rbp
                	movq	%r14, %r10
                	xorq	%r15, %r10
-               	movq	%r10, 0x40(%rsp)
-               	imulq	$0x7, %r13, %r10
                	movq	%r10, 0x38(%rsp)
+               	imulq	$0x7, %r13, %r10
+               	movq	%r10, 0x30(%rsp)
                	callq	<addr>
                	leaq	(%rbx,%r12), %rcx
                	addq	%r14, %rcx
                	addq	%r15, %rcx
                	addq	%r13, %rcx
-               	addq	0x48(%rsp), %rcx
-               	addq	0x40(%rsp), %rcx
+               	addq	%rbp, %rcx
                	addq	0x38(%rsp), %rcx
+               	addq	0x30(%rsp), %rcx
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	addq	%rcx, %rax
                	addq	%rdx, %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x30, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <self_assign>:

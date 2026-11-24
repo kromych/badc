@@ -6096,9 +6096,6 @@ pub(crate) struct Abi {
     /// A call whose result the function returns unchanged may become a
     /// jump. Per-run (from [`NativeOptions::sibling_calls`]).
     pub sibling_calls: bool,
-    /// A function whose body keeps rsp fixed keeps no frame pointer.
-    /// Per-run (from [`NativeOptions::omit_frame_pointer`]).
-    pub omit_frame_pointer: bool,
     /// Code may store below rsp. Per-run (from [`NativeOptions::red_zone`]).
     pub red_zone: bool,
     /// Registers the emitters may not pick as scratch or inline-asm
@@ -6248,7 +6245,6 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
-                omit_frame_pointer: false,
                 red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
@@ -6269,7 +6265,6 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
-                omit_frame_pointer: false,
                 red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
@@ -6290,7 +6285,6 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
-                omit_frame_pointer: false,
                 red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
@@ -6311,7 +6305,6 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
-                omit_frame_pointer: false,
                 red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
@@ -6332,7 +6325,6 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
-                omit_frame_pointer: false,
                 red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,

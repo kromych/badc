@@ -30,30 +30,31 @@ Disassembly of section .text:
                	retq
 
 <across>:
-               	subq	$0x20, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	movsbq	%dil, %rbx
-               	movq	%r9, 0x38(%rsp)
+               	movq	%r9, %rbp
                	movq	%r8, %r15
                	movq	%rcx, %r14
                	movslq	%edx, %r13
                	movswq	%si, %r12
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rax, 0x30(%rsp)
+               	movq	%rax, 0x38(%rsp)
                	movq	%r12, %rdi
                	callq	<addr>
-               	movq	0x30(%rsp), %r10
+               	movq	0x38(%rsp), %r10
                	addq	%rax, %r10
-               	movq	%r10, 0x30(%rsp)
+               	movq	%r10, 0x38(%rsp)
                	movq	%r13, %rdi
                	callq	<addr>
                	movq	%rax, %r10
-               	movq	0x30(%rsp), %rax
+               	movq	0x38(%rsp), %rax
                	addq	%r10, %rax
                	shlq	%rax
                	addq	%rbx, %rax
@@ -62,15 +63,15 @@ Disassembly of section .text:
                	andq	$0xff, %r14
                	addq	%r14, %rax
                	addq	%r15, %rax
-               	movq	0x38(%rsp), %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	addq	%rcx, %rax
+               	andq	$0xffff, %rbp           # imm = 0xFFFF
+               	addq	%rbp, %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x20, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <leaf>:

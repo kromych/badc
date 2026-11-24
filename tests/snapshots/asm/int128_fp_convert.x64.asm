@@ -513,15 +513,16 @@ Disassembly of section .text:
                	retq
 
 <chk_from_fp>:
-               	subq	$0x30, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	movq	%rdi, %r13
-               	movq	%rdx, 0x38(%rsp)
-               	movq	%rsi, 0x40(%rsp)
+               	movq	%rdx, 0x30(%rsp)
+               	movq	%rsi, 0x38(%rsp)
                	movsd	%xmm0, <rip> # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movq	%xmm0, %rcx
@@ -554,14 +555,10 @@ Disassembly of section .text:
                	shlxq	%rdx, %r9, %r12
                	shrxq	%rbx, %r9, %r15
                	shrq	%r15
-               	shlxq	%rdx, %rax, %r10
-               	movq	%r10, 0x48(%rsp)
-               	movq	%r15, %r10
-               	movq	0x48(%rsp), %r15
-               	orq	%r10, %r15
-               	movq	%r12, %r10
-               	andq	%r8, %r10
-               	movq	%r10, 0x48(%rsp)
+               	shlxq	%rdx, %rax, %rbp
+               	orq	%rbp, %r15
+               	movq	%r12, %rbp
+               	andq	%r8, %rbp
                	andq	%r8, %r15
                	andq	%rsi, %r12
                	orq	%r12, %r15
@@ -577,10 +574,9 @@ Disassembly of section .text:
                	andq	%r12, %r8
                	movq	%rcx, %rdx
                	xorq	$-0x1, %rdx
-               	movq	0x48(%rsp), %rax
-               	andq	%rdx, %rax
+               	andq	%rdx, %rbp
                	andq	%rcx, %r9
-               	orq	%rax, %r9
+               	orq	%rbp, %r9
                	andq	%r15, %rdx
                	andq	%r8, %rcx
                	orq	%rcx, %rdx
@@ -606,15 +602,16 @@ Disassembly of section .text:
                	andq	%rdx, %rcx
                	cmpq	%r13, %rcx
                	jne	<addr>
-               	cmpq	0x40(%rsp), %r9
+               	cmpq	0x38(%rsp), %r9
                	je	<addr>
-               	movq	0x38(%rsp), %rax
+               	movq	0x30(%rsp), %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x30, %rsp
+               	addq	$0x18, %rsp
                	retq
                	movsd	<rip>, %xmm0 # <addr>
                	movq	%xmm0, %rdx
@@ -647,14 +644,10 @@ Disassembly of section .text:
                	shlxq	%r8, %rdi, %r14
                	shrxq	%r12, %rdi, %r15
                	shrq	%r15
-               	shlxq	%r8, %rax, %r10
-               	movq	%r10, 0x48(%rsp)
-               	movq	%r15, %r10
-               	movq	0x48(%rsp), %r15
-               	orq	%r10, %r15
-               	movq	%r14, %r10
-               	andq	%r9, %r10
-               	movq	%r10, 0x48(%rsp)
+               	shlxq	%r8, %rax, %rbp
+               	orq	%rbp, %r15
+               	movq	%r14, %rbp
+               	andq	%r9, %rbp
                	andq	%r9, %r15
                	andq	%rsi, %r14
                	orq	%r14, %r15
@@ -669,10 +662,9 @@ Disassembly of section .text:
                	andq	%r14, %r9
                	movq	%rdx, %rax
                	xorq	$-0x1, %rax
-               	movq	0x48(%rsp), %rdi
-               	andq	%rax, %rdi
+               	andq	%rax, %rbp
                	andq	%rdx, %rsi
-               	orq	%rdi, %rsi
+               	orq	%rbp, %rsi
                	andq	%r15, %rax
                	andq	%r9, %rdx
                	orq	%rax, %rdx
@@ -711,24 +703,26 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	cmpq	%r13, %rax
                	jne	<addr>
-               	cmpq	0x40(%rsp), %rsi
+               	cmpq	0x38(%rsp), %rsi
                	je	<addr>
-               	movq	0x38(%rsp), %rax
+               	movq	0x30(%rsp), %rax
                	incq	%rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x30, %rsp
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x30, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <chk_from_fp_neg>:

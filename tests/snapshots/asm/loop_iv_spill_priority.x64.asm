@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <hot>:
-               	subq	$0x20, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	xorl	%eax, %eax
                	movl	(%rdi), %ecx
@@ -48,8 +48,7 @@ Disassembly of section .text:
                	movl	0x18(%rdi), %ecx
                	leaq	0x7(%rcx), %r15
                	movl	0x1c(%rdi), %ecx
-               	leaq	0x8(%rcx), %r10
-               	movq	%r10, 0x38(%rsp)
+               	leaq	0x8(%rcx), %rbp
                	movq	%rax, %rcx
                	movq	%rax, %rdx
                	andq	$0x7, %rdx
@@ -72,13 +71,13 @@ Disassembly of section .text:
                	xorq	%r14, %rcx
                	movq	%rcx, %rax
                	xorq	%r15, %rax
-               	xorq	0x38(%rsp), %rax
+               	xorq	%rbp, %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x20, %rsp
                	retq
 
 <main>:

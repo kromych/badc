@@ -82,8 +82,9 @@ pub(crate) struct Frame {
     pub wide_regs: bool,
     /// The regions `frame_bytes` sums.
     pub parts: super::ssa::emit_common::FrameStack,
-    /// The function keeps no frame pointer ([`omits_frame_pointer`]): rbp is
-    /// left alone, and the frame is addressed from rsp ([`Frame::fp_addr`]).
+    /// The function keeps no frame pointer ([`frame_pointer_free`]): rbp is a
+    /// callee-saved register, and the frame is addressed from rsp
+    /// ([`Frame::fp_addr`]).
     pub omit_fp: bool,
     /// Code may store below rsp ([`super::Abi::red_zone`]).
     pub red_zone: bool,
@@ -143,35 +144,39 @@ impl Frame {
     }
 }
 
-/// Whether `func` keeps no frame pointer under `Abi::omit_frame_pointer`:
-/// on System V ELF, a body that keeps rsp where its prologue left it, so
-/// every frame region is addressed from rsp and the call-frame information
-/// follows rsp through the prologue and the epilogues alone; a lowering
-/// keeps what it borrows in the red zone ([`super::keep`]). Left with one:
-/// an rsp the body moves (`alloca`, a realigned region, a call placing
-/// arguments on the stack, the `va_arg` and `va_copy` lowerings), a frame
-/// read as such (the frame-address intrinsics, `va_start`'s
-/// save areas, `-pg`), any asm statement, which may name the frame through
-/// rbp, `setjmp`, a naked body, callee-saved xmm registers (an `ms_abi`
-/// function), and a frame the prologue allocates in probed steps.
-fn omits_frame_pointer(
+/// Whether `func` keeps no frame pointer under `-fomit-frame-pointer`,
+/// decided ahead of the allocation, which then gives rbp out as a
+/// callee-saved register: on System V ELF, a body that keeps rsp where its
+/// prologue left it, so every frame region is addressed from rsp and the
+/// call-frame information follows rsp through the prologue and the
+/// epilogues alone; a lowering keeps what it borrows in the red zone
+/// ([`super::keep`]). Left with one: an rsp the body moves (`alloca`, a
+/// realigned region, a call placing arguments on the stack, the `va_arg`
+/// and `va_copy` lowerings), a frame read as such (the frame-address
+/// intrinsics, `va_start`'s save areas, `-pg`), any asm statement, which
+/// may name rbp, `setjmp`, a naked body, a foreign convention's
+/// callee-saved xmm registers (`ms_abi`), and locals past one unprobed
+/// allocation step.
+pub(crate) fn frame_pointer_free(
     func: &FunctionSsa,
-    alloc: &Allocation,
-    abi: super::Abi,
     target: Target,
-    frame: &Frame,
+    native: &super::NativeOptions,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
-    let allocated = frame.frame_bytes + 8 - alloc.gpr_used.len() as u32 * 8;
-    if !abi.omit_frame_pointer
-        || !abi.red_zone
-        || !alloc.fp_used.is_empty()
-        || allocated > super::ssa::emit_common::MAX_UNPROBED_STACK_STEP
-        || target != Target::LinuxX64
+    let abi = {
+        let mut a = target.abi_for(func.conv);
+        let entry = super::FunctionEntry::of(func, native);
+        a.mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
+        a
+    };
+    if target != Target::LinuxX64
+        || !native.omits_frame_pointer()
+        || target.abi_row(func.conv) != target
         || abi.mcount_frame
-        || frame.dynamic_sp
-        || frame.realign_align > 0
-        || frame.saves_top > 0
+        || super::ssa::emit_common::uses_dynamic_alloca(func)
+        || func.frame_align > 16
+        || super::ssa::emit_common::slots16(func.locals.max(0) as u32)
+            > super::ssa::emit_common::MAX_UNPROBED_STACK_STEP
         || func.is_naked
         || func.has_returns_twice_call
         || func.has_seh()
@@ -368,9 +373,8 @@ pub(crate) fn compute_frame_with_tail_calls(
     // A full leaf or naked body has nothing to address, no rbp to restore rsp from.
     frame.dynamic_sp |=
         func.has_sp_moving_asm(target) && !func.is_naked && !is_full_leaf(func, frame, alloc, abi);
-    if omits_frame_pointer(func, alloc, abi, target, &frame)
-        && !is_full_leaf(func, frame, alloc, abi)
-    {
+    if func.frees_rbp && !is_full_leaf(func, frame, alloc, abi) {
+        debug_assert!(alloc.fp_used.is_empty() && !frame.dynamic_sp && frame.saves_top == 0);
         frame.omit_fp = true;
         frame.pushes_alone = !frame.keeps_record && frame.parts.total() == frame.parts.saved_regs;
     }

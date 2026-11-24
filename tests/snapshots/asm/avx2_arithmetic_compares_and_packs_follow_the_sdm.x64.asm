@@ -886,14 +886,15 @@ Disassembly of section .text:
                	retq
 
 <model_horizontal>:
-               	subq	$0x50, %rsp
+               	subq	$0x48, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	movq	%rdi, 0x68(%rsp)
-               	movq	%r9, 0x30(%rsp)
+               	movq	%r9, 0x38(%rsp)
                	movq	%r8, 0x50(%rsp)
                	movq	%rcx, 0x58(%rsp)
                	movslq	%edx, %r13
@@ -901,35 +902,33 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	cltd
                	idivl	%r13d
-               	movq	%rax, %r8
+               	movq	%rax, %rbp
                	xorl	%r10d, %r10d
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x48(%rsp)
                	leaq	-0x1(%r13), %rbx
                	movq	%r13, %rax
                	shlq	$0x3, %rax
                	leaq	-0x1(%rax), %rcx
-               	movslq	%ecx, %r9
-               	movq	%rax, 0x38(%rsp)
+               	movslq	%ecx, %r8
+               	movq	%rax, 0x40(%rsp)
                	xorl	%r15d, %r15d
-               	movq	0x40(%rsp), %rax
-               	shlq	$0x4, %rax
-               	movq	0x30(%rsp), %r14
-               	addq	%rax, %r14
-               	movq	%rax, 0x48(%rsp)
-               	movq	%r8, %rax
+               	movq	0x48(%rsp), %r9
+               	shlq	$0x4, %r9
+               	movq	0x38(%rsp), %r14
+               	addq	%r9, %r14
+               	movq	%rbp, %rax
                	shlq	%rax
                	cmpl	%eax, %r15d
                	jge	<addr>
-               	cmpl	%r8d, %r15d
+               	cmpl	%ebp, %r15d
                	movq	0x68(%rsp), %r10
                	movq	0x60(%rsp), %r11
                	movq	%r11, %rax
                	cmovlq	%r10, %rax
-               	movq	%rax, %r12
-               	addq	0x48(%rsp), %r12
+               	leaq	(%rax,%r9), %r12
                	movl	%r15d, %eax
                	cltd
-               	idivl	%r8d
+               	idivl	%ebp
                	movq	%rdx, %rdi
                	shlq	%rdi
                	xorl	%ecx, %ecx
@@ -948,11 +947,11 @@ Disassembly of section .text:
                	jge	<addr>
                	cmpl	$0x8, %r13d
                	jge	<addr>
-               	shrxq	%r9, %rcx, %rax
+               	shrxq	%r8, %rcx, %rax
                	testb	$0x1, %al
                	je	<addr>
                	movq	$-0x1, %rax
-               	movq	0x38(%rsp), %rdx
+               	movq	0x40(%rsp), %rdx
                	movslq	%edx, %rdx
                	shlxq	%rdx, %rax, %rax
                	orq	%rax, %rcx
@@ -972,11 +971,11 @@ Disassembly of section .text:
                	jge	<addr>
                	cmpl	$0x8, %r13d
                	jge	<addr>
-               	shrxq	%r9, %rdx, %rax
+               	shrxq	%r8, %rdx, %rax
                	testb	$0x1, %al
                	je	<addr>
                	movq	$-0x1, %rax
-               	movq	0x38(%rsp), %rsi
+               	movq	0x40(%rsp), %rsi
                	movslq	%esi, %rsi
                	shlxq	%rsi, %rax, %rax
                	orq	%rax, %rdx
@@ -990,10 +989,10 @@ Disassembly of section .text:
                	testl	%r10d, %r10d
                	je	<addr>
                	movl	$0x1, %eax
-               	shlxq	%r9, %rax, %rax
+               	shlxq	%r8, %rax, %rax
                	negq	%rax
                	movl	$0x1, %ecx
-               	shlxq	%r9, %rcx, %rcx
+               	shlxq	%r8, %rcx, %rcx
                	decq	%rcx
                	cmpq	%rax, %rdx
                	jge	<addr>
@@ -1019,20 +1018,21 @@ Disassembly of section .text:
                	cmovgq	%rcx, %rdx
                	jmp	<addr>
                	incq	%r15
-               	movq	%r8, %rax
+               	movq	%rbp, %rax
                	shlq	%rax
                	cmpl	%eax, %r15d
                	jl	<addr>
-               	addq	$0x1, 0x40(%rsp)
-               	movq	0x40(%rsp), %rax
+               	addq	$0x1, 0x48(%rsp)
+               	movq	0x48(%rsp), %rax
                	cmpl	$0x2, %eax
                	jl	<addr>
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x50, %rsp
+               	addq	$0x48, %rsp
                	retq
 
 <check_horizontal>:

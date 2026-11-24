@@ -283,6 +283,7 @@ impl SsaBuilder {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
         };
         let mut b = Self {
             func,

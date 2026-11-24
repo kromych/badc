@@ -5,7 +5,9 @@
    x87 conversions -- with many values live across each, in functions whose
    x86-64 frame has no frame pointer at -O. Stack-passed parameters are read
    from a frame that allocates nothing and from one with locals, and a tail
-   call leaves a frame. The exit code names the first mismatch. */
+   call leaves a frame, and six values live across calls take rbp as a
+   callee-saved register in caller and callee alike. The exit code names
+   the first mismatch. */
 
 #define NOINLINE __attribute__((noinline))
 
@@ -97,6 +99,19 @@ NOINLINE ll tail(ll a, ll b) {
     return sub6(t, a, b, t + a, t + b, a * b);
 }
 
+NOINLINE ll leaf6(ll a, ll b, ll c, ll d, ll e, ll f) { return a ^ b ^ c ^ d ^ e ^ f; }
+
+NOINLINE ll mid6(ll a, ll b, ll c, ll d, ll e, ll f) {
+    ll x = leaf6(f, e, d, c, b, a);
+    return x + a * 3 + b * 5 + c * 7 + d * 11 + e * 13 + f * 17;
+}
+
+NOINLINE ll top6(ll a, ll b, ll c, ll d, ll e, ll f) {
+    ll x = mid6(a + 1, b + 1, c + 1, d + 1, e + 1, f + 1);
+    ll y = mid6(b, c, d, e, f, a);
+    return x - y + a * b + c * d + e * f;
+}
+
 int main(void) {
     ll a = in[0], b = in[1], c = in[2], d = in[3], e = in[4], f = in[5], g = in[6], h = in[7];
     if (divs(a, b, c, d, e, f) != 103143)
@@ -124,5 +139,7 @@ int main(void) {
         return 9;
     if (tail(a, b) != 39574)
         return 10;
+    if (top6(a, b, c, d, e, f) != 707)
+        return 11;
     return 0;
 }

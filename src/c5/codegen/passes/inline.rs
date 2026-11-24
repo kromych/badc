@@ -3786,6 +3786,7 @@ fn splice_multi_block(
         has_returns_twice_call: original.has_returns_twice_call,
         did_unroll: original.did_unroll,
         did_inline: original.did_inline,
+        frees_rbp: original.frees_rbp,
     };
 }
 

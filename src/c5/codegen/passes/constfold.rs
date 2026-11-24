@@ -1927,6 +1927,7 @@ mod tests {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
             n_params: 0,
             is_variadic: false,
             is_inline: false,

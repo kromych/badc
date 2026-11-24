@@ -51,12 +51,16 @@ Disassembly of section .text:
                	retq
 
 <msf>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x8, %rsp
                	pushq	%rsi
                	movq	%rdx, %rsi
                	movq	%rcx, %rax
                	cqto
                	idivq	%rsi
                	popq	%rsi
+               	leave
                	retq
 
 <main>:

@@ -41,18 +41,21 @@ Disassembly of section .text:
                	retq
 
 <msf6>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
                	shlq	%rdx
                	leaq	(%rcx,%rdx), %rax
                	leaq	(%r8,%r8,2), %rcx
                	addq	%rcx, %rax
                	shlq	$0x2, %r9
                	addq	%r9, %rax
-               	movq	0x28(%rsp), %rcx
+               	movq	0x30(%rbp), %rcx
                	leaq	(%rcx,%rcx,4), %rcx
                	addq	%rcx, %rax
-               	movq	0x30(%rsp), %rcx
+               	movq	0x38(%rbp), %rcx
                	imulq	$0x6, %rcx, %rcx
                	addq	%rcx, %rax
+               	popq	%rbp
                	retq
 
 <svf6>:

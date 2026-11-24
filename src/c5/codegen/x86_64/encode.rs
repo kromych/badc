@@ -2431,11 +2431,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             entry,
             native.fixed_regs,
             native.optimizes(),
-            (
-                native.sibling_calls,
-                native.omits_frame_pointer(),
-                native.red_zone,
-            ),
+            (native.sibling_calls, native.red_zone),
             native.branches_within_32b,
         )
     }
@@ -2659,8 +2655,9 @@ fn apply_plt_call_fixups(
 /// probe store -- a larger frame lowers to probed page steps with no single
 /// `sub` to read, so the alloc is left out of the codes (the body still
 /// unwinds through the frame pointer). The System V pushes follow that
-/// `sub` and are not described. A frame with no pointer is `sub rsp, N`
-/// (`push rax` for 8) and the pushes behind it, each a step. A leaf emits none of the above, and any
+/// `sub` and are not described. A frame with no pointer is `push rax` for 8
+/// bytes or `sub rsp` steps, each with its probe past one unprobed step,
+/// and the pushes behind them, rbp among them, each a step. A leaf emits none of the above, and any
 /// other shape is described as a frameless leaf -- safe (the unwinder
 /// returns off the top-of-stack RA) rather than codes that do not match the
 /// prologue. The test of a return taken ahead of the frame places `push rbp`
@@ -2724,12 +2721,86 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
         [0x48, 0x81, 0xEC, a, b, c, d, ..] => Some((u32::from_le_bytes([a, b, c, d]), 7)),
         _ => None,
     };
-    // A frame with no pointer: `sub rsp, N` or, for 8, `push rax`, then the
-    // callee-saved pushes.
-    let pad = (at(fp).first() == Some(&0x50)).then_some((8, 1));
-    if let Some((n, len)) = sub(at(fp)).or(pad) {
-        fp += len;
-        let mut steps = alloc::vec![(fp as u32, S::Alloc(n))];
+    // The probe store, `mov qword [rsp], 0`.
+    let probe = [0x48u8, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
+    // A frame record: `push rbp`, then `mov rbp, rsp` or the Win64 block.
+    let framed = |mut fp: usize| -> Option<Vec<(u32, S)>> {
+        if at(fp).first() != Some(&0x55) {
+            return None;
+        }
+        fp += 1;
+        let mut steps = alloc::vec![(fp as u32, S::Push(Reg::RBP.0))];
+        if at(fp).starts_with(&[0x48, 0x89, 0xE5]) {
+            fp += 3;
+            steps.push((fp as u32, S::SetFrame(0)));
+        } else {
+            // rbx, rsi, rdi, then r12..r15 behind REX.B.
+            loop {
+                let (r, len) = match *at(fp) {
+                    [b @ (0x53 | 0x56 | 0x57), ..] => (b - 0x50, 1),
+                    [0x41, b @ 0x54..=0x57, ..] => (b - 0x50 + 8, 2),
+                    _ => break,
+                };
+                fp += len;
+                steps.push((fp as u32, S::Push(r)));
+            }
+            if let Some((n, len)) = sub(at(fp)) {
+                fp += len;
+                steps.push((fp as u32, S::Alloc(n)));
+            }
+            // `movups [rsp + d], xmm`: 0F 11, ModRM rm=100 with SIB 24, mod 00, 01
+            // or 10; xmm8..15 behind REX.R (0x44).
+            loop {
+                let (high, rest) = match at(fp) {
+                    [0x44, rest @ ..] => (8, rest),
+                    rest => (0, rest),
+                };
+                let (xmm, off, len) = match *rest {
+                    [0x0F, 0x11, m, 0x24, ..] if m & 0xC7 == 0x04 => (high + (m >> 3 & 7), 0, 4),
+                    [0x0F, 0x11, m, 0x24, d, ..] if m & 0xC7 == 0x44 && d < 0x80 => {
+                        (high + (m >> 3 & 7), u32::from(d), 5)
+                    }
+                    [0x0F, 0x11, m, 0x24, a, b, c, d, ..] if m & 0xC7 == 0x84 => {
+                        (high + (m >> 3 & 7), u32::from_le_bytes([a, b, c, d]), 8)
+                    }
+                    _ => break,
+                };
+                fp += len + usize::from(high > 0);
+                steps.push((fp as u32, S::SaveXmm { xmm, off }));
+            }
+            // `lea rbp, [rsp + d]`: 48 8D, ModRM reg=101 rm=100, SIB 24.
+            let (off, len) = match *at(fp) {
+                [0x48, 0x8D, 0x6C, 0x24, d, ..] if d < 0x80 => (u32::from(d), 5),
+                [0x48, 0x8D, 0xAC, 0x24, a, b, c, d, ..] => (u32::from_le_bytes([a, b, c, d]), 8),
+                _ => return None,
+            };
+            fp += len;
+            steps.push((fp as u32, S::SetFrame(off)));
+        }
+        // Single when no probe store (`mov qword [rsp], 0`) follows it.
+        if let Some((n, len)) = sub(at(fp))
+            && !at(fp + len).starts_with(&probe)
+        {
+            steps.push(((fp + len) as u32, S::Alloc(n)));
+        }
+        Some(steps)
+    };
+    // A frame with no pointer: `push rax` for 8 bytes, or `sub rsp` steps
+    // each with its probe past one unprobed step, then the callee-saved
+    // pushes, rbp among them.
+    let pointerless = |mut fp: usize| -> Option<Vec<(u32, S)>> {
+        let mut steps = Vec::new();
+        if at(fp).first() == Some(&0x50) {
+            fp += 1;
+            steps.push((fp as u32, S::Alloc(8)));
+        }
+        while let Some((n, len)) = sub(at(fp)) {
+            fp += len;
+            if at(fp).starts_with(&probe) {
+                fp += probe.len();
+            }
+            steps.push((fp as u32, S::Alloc(n)));
+        }
         loop {
             let (r, len) = match *at(fp) {
                 [b @ (0x53 | 0x55 | 0x56 | 0x57), ..] => (b - 0x50, 1),
@@ -2739,68 +2810,11 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
             fp += len;
             steps.push((fp as u32, S::Push(r)));
         }
-        return Some(steps);
-    }
-    if at(fp).first() != Some(&0x55) {
-        return None;
-    }
-    fp += 1;
-    let mut steps = alloc::vec![(fp as u32, S::Push(Reg::RBP.0))];
-    if at(fp).starts_with(&[0x48, 0x89, 0xE5]) {
-        fp += 3;
-        steps.push((fp as u32, S::SetFrame(0)));
-    } else {
-        // rbx, rsi, rdi, then r12..r15 behind REX.B.
-        loop {
-            let (r, len) = match *at(fp) {
-                [b @ (0x53 | 0x56 | 0x57), ..] => (b - 0x50, 1),
-                [0x41, b @ 0x54..=0x57, ..] => (b - 0x50 + 8, 2),
-                _ => break,
-            };
-            fp += len;
-            steps.push((fp as u32, S::Push(r)));
-        }
-        if let Some((n, len)) = sub(at(fp)) {
-            fp += len;
-            steps.push((fp as u32, S::Alloc(n)));
-        }
-        // `movups [rsp + d], xmm`: 0F 11, ModRM rm=100 with SIB 24, mod 00, 01
-        // or 10; xmm8..15 behind REX.R (0x44).
-        loop {
-            let (high, rest) = match at(fp) {
-                [0x44, rest @ ..] => (8, rest),
-                rest => (0, rest),
-            };
-            let (xmm, off, len) = match *rest {
-                [0x0F, 0x11, m, 0x24, ..] if m & 0xC7 == 0x04 => (high + (m >> 3 & 7), 0, 4),
-                [0x0F, 0x11, m, 0x24, d, ..] if m & 0xC7 == 0x44 && d < 0x80 => {
-                    (high + (m >> 3 & 7), u32::from(d), 5)
-                }
-                [0x0F, 0x11, m, 0x24, a, b, c, d, ..] if m & 0xC7 == 0x84 => {
-                    (high + (m >> 3 & 7), u32::from_le_bytes([a, b, c, d]), 8)
-                }
-                _ => break,
-            };
-            fp += len + usize::from(high > 0);
-            steps.push((fp as u32, S::SaveXmm { xmm, off }));
-        }
-        // `lea rbp, [rsp + d]`: 48 8D, ModRM reg=101 rm=100, SIB 24.
-        let (off, len) = match *at(fp) {
-            [0x48, 0x8D, 0x6C, 0x24, d, ..] if d < 0x80 => (u32::from(d), 5),
-            [0x48, 0x8D, 0xAC, 0x24, a, b, c, d, ..] => (u32::from_le_bytes([a, b, c, d]), 8),
-            _ => return None,
-        };
-        fp += len;
-        steps.push((fp as u32, S::SetFrame(off)));
-    }
-    // Single when no probe store (`mov qword [rsp], 0`) follows it.
-    let probe = [0x48u8, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
-    if let Some((n, len)) = sub(at(fp))
-        && !at(fp + len).starts_with(&probe)
-    {
-        steps.push(((fp + len) as u32, S::Alloc(n)));
-    }
-    Some(steps)
+        // A `mov rbp, rsp` past pushes is a frame record out of order.
+        let record = at(fp).starts_with(&[0x48, 0x89, 0xE5]);
+        (!steps.is_empty() && !record).then_some(steps)
+    };
+    framed(fp).or_else(|| pointerless(fp))
 }
 
 // ------------------------------------------------------------------

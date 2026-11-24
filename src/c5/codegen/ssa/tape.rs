@@ -91,6 +91,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         has_returns_twice_call: _,
         did_unroll: _,
         did_inline: _,
+        frees_rbp: _,
     } = func;
     Keyed {
         insts,

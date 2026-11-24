@@ -2927,6 +2927,10 @@ pub(crate) struct FunctionSsa {
     /// saw (the slot did not exist then), so the re-run promotes it. False
     /// for every function the inliner left unchanged.
     pub did_inline: bool,
+    /// The x86-64 frame keeps no frame pointer and rbp joins the
+    /// callee-saved bank, decided ahead of the allocation
+    /// (`x86_64::emit::frame_pointer_free`).
+    pub frees_rbp: bool,
     /// The `__try` regions.
     pub seh_scopes: Vec<SehScope>,
     /// Per block, the innermost region its code lies in; empty when
@@ -3321,6 +3325,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             has_returns_twice_call: _,
             did_unroll: _,
             did_inline: _,
+            frees_rbp: _,
         } = self;
         for i in insts.iter_mut() {
             i.remap_data_offsets(r);

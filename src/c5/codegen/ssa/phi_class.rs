@@ -220,6 +220,7 @@ mod tests {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

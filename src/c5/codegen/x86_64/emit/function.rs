@@ -225,13 +225,12 @@ pub(crate) fn emit_function(
     fixed_regs: super::FixedRegs,
     // `-O`: the block plan may repeat a small test in place of a jump to it.
     repeat_tests: bool,
-    (sibling_calls, omit_frame_pointer, red_zone): (bool, bool, bool),
+    (sibling_calls, red_zone): (bool, bool),
     branches_within_32b: bool,
 ) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
         a.sibling_calls = sibling_calls;
-        a.omit_frame_pointer = omit_frame_pointer;
         a.red_zone = red_zone;
         a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
@@ -1913,14 +1912,29 @@ fn emit_pointerless_prologue(
     mut uw: super::FnUnwind,
     rel: impl Fn(&Vec<u8>) -> u32,
 ) -> super::FnUnwind {
-    let alloc_bytes = frame.sp_alloc(pushed_gpr_bytes(alloc));
-    match alloc_bytes {
+    match frame.sp_alloc(pushed_gpr_bytes(alloc)) {
         0 => {}
-        8 => emit_push_r(code, Reg::RAX),
-        n => emit_stack_alloc(code, n, Some(Reg::R11)),
-    }
-    if alloc_bytes > 0 {
-        uw.steps.push((rel(code), PrologueStep::Alloc(alloc_bytes)));
+        8 => {
+            emit_push_r(code, Reg::RAX);
+            uw.steps.push((rel(code), PrologueStep::Alloc(8)));
+        }
+        // Page by page, each step one the call-frame information follows.
+        n => {
+            let mut left = n;
+            while left > 0 {
+                let step = if left > MAX_UNPROBED_STACK_STEP {
+                    left.min(STACK_PROBE_PAGE)
+                } else {
+                    left
+                };
+                emit_sub_rsp(code, step);
+                if step > MAX_UNPROBED_STACK_STEP {
+                    emit_stack_probe(code);
+                }
+                uw.steps.push((rel(code), PrologueStep::Alloc(step)));
+                left -= step;
+            }
+        }
     }
     for &r in alloc.gpr_used.iter().rev() {
         emit_push_r(code, Reg(r));

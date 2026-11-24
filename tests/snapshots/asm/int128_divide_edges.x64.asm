@@ -499,13 +499,14 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <reference>:
-               	subq	$0x40, %rsp
+               	subq	$0x38, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
-               	movq	%r8, 0x50(%rsp)
+               	movq	%r8, 0x58(%rsp)
                	movq	%rdi, 0x30(%rsp)
                	movq	%rsi, 0x38(%rsp)
                	movq	%rdx, 0x40(%rsp)
@@ -538,16 +539,14 @@ Disassembly of section .text:
                	negq	%r8
                	movq	%r8, %r15
                	xorq	$-0x1, %r15
-               	shrxq	%rax, %r9, %r10
-               	movq	%r10, 0x58(%rsp)
+               	shrxq	%rax, %r9, %rbp
                	shlxq	%r14, %r9, %r9
                	shlq	%r9
                	shrxq	%rax, %r13, %rax
                	orq	%r9, %rax
                	andq	%r15, %rax
-               	movq	0x58(%rsp), %r9
-               	andq	%r8, %r9
-               	orq	%r9, %rax
+               	andq	%r8, %rbp
+               	orq	%rbp, %rax
                	andq	$0x1, %rax
                	orq	%r12, %rax
                	testq	%rbx, %rbx
@@ -601,16 +600,17 @@ Disassembly of section .text:
                	orq	%r8, %rdi
                	orq	%r9, %rdx
                	jmp	<addr>
-               	movq	0x50(%rsp), %rcx
+               	movq	0x58(%rsp), %rcx
                	movq	%rax, (%rcx)
                	movq	%rsi, 0x8(%rcx)
                	movq	%rdi, %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x40, %rsp
+               	addq	$0x38, %rsp
                	retq
 
 <signed_ok>:

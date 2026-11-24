@@ -1206,6 +1206,15 @@ impl RegBanks {
         Self::with_fp_saved(target, fixed, |r| fp_callee_saved(target, r))
     }
 
+    /// With rbp as a callee-saved register where `func` keeps no frame
+    /// pointer (`FunctionSsa::frees_rbp`) and `-ffixed-` leaves it.
+    pub(crate) fn with_free_rbp(mut self, func: &FunctionSsa, fixed: FixedRegs) -> Self {
+        if func.frees_rbp && !fixed.has_gpr(5) {
+            self.callee_gprs.push(5);
+        }
+        self
+    }
+
     /// The banks of an SVE-PCS function that reaches no code of another
     /// standard: z16-z23 are callee-saved as z8-z15 are (AAPCS64 6.1.3), so
     /// z24-z31 come first after z0-z7. A base-PCS callee may change z16-z31.
@@ -1737,7 +1746,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let banks = if func.sve_pcs.is_some() && !super::sve_alloc::reaches_other_pcs(func, target) {
         RegBanks::sve_pcs(target, fixed)
     } else {
-        RegBanks::new(target, fixed)
+        RegBanks::new(target, fixed).with_free_rbp(func, fixed)
     };
     if n_insts == 0 {
         return Allocation {
@@ -2608,7 +2617,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // registers AAPCS64 / SysV / Win64 require the callee to
     // preserve.
     // The set is the definition's own convention's (`conv_target`).
-    let conv_banks = RegBanks::new(conv_target, fixed);
+    let conv_banks = RegBanks::new(conv_target, fixed).with_free_rbp(func, fixed);
     let mut gpr_used_callee: Vec<u8> = gpr_used
         .into_iter()
         .filter(|r| conv_banks.callee_gprs.contains(r))
@@ -7784,6 +7793,7 @@ int main(void) { return 0; }
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -8037,6 +8047,7 @@ int main(void) { return 0; }
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

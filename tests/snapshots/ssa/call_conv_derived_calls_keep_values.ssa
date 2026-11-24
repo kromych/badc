@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=through_types
 fn ent_pc=0 n_params=2 variadic=false locals=0
-  spill_count=11 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=10 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
@@ -30,27 +30,27 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v24  Imm(0)                                           -> x0
     v25  Imm(40)                                          -> x0
     v26  BinopI { op=add, lhs=v5, rhs_imm=40 }            -> x0
-    v27  Load { addr=v5, disp=40, kind=I64, volatile pc_rel } -> [spill 0]
+    v27  Load { addr=v5, disp=40, kind=I64, volatile pc_rel } -> x5
     v28  Imm(0)                                           -> x0
     v29  Imm(48)                                          -> x0
     v30  BinopI { op=add, lhs=v5, rhs_imm=48 }            -> x0
-    v31  Load { addr=v5, disp=48, kind=I64, volatile pc_rel } -> [spill 1]
+    v31  Load { addr=v5, disp=48, kind=I64, volatile pc_rel } -> [spill 0]
     v32  Imm(0)                                           -> x0
     v33  Imm(56)                                          -> x0
     v34  BinopI { op=add, lhs=v5, rhs_imm=56 }            -> x0
-    v35  Load { addr=v5, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
+    v35  Load { addr=v5, disp=56, kind=I64, volatile pc_rel } -> [spill 1]
     v36  Imm(0)                                           -> x0
     v37  ImmData(80)                                      -> x0
-    v38  Load { addr=v37, disp=0, kind=F64, volatile pc_rel } -> [spill 3]
+    v38  Load { addr=v37, disp=0, kind=F64, volatile pc_rel } -> [spill 2]
     v39  Imm(0)                                           -> x0
     v40  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x0
-    v41  Load { addr=v37, disp=8, kind=F64, volatile pc_rel } -> [spill 4]
+    v41  Load { addr=v37, disp=8, kind=F64, volatile pc_rel } -> [spill 3]
     v42  Imm(0)                                           -> x0
     v43  BinopI { op=add, lhs=v37, rhs_imm=16 }           -> x0
-    v44  Load { addr=v37, disp=16, kind=F64, volatile pc_rel } -> [spill 5]
+    v44  Load { addr=v37, disp=16, kind=F64, volatile pc_rel } -> [spill 4]
     v45  Imm(0)                                           -> x0
     v46  BinopI { op=add, lhs=v37, rhs_imm=24 }           -> x0
-    v47  Load { addr=v37, disp=24, kind=F64, volatile pc_rel } -> [spill 6]
+    v47  Load { addr=v37, disp=24, kind=F64, volatile pc_rel } -> [spill 5]
     v48  Imm(0)                                           -> x0
     v49  ImmData(112)                                     -> x0
     v50  Load { addr=v49, disp=0, kind=I64 pc_rel }       -> x0
@@ -65,9 +65,9 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v59  Imm(0)                                           -> x1
     v60  Imm(0)                                           -> x1
     v61  Imm(0)                                           -> x1
-    v62  Copy { value=v1, fp=true }                       -> [spill 7]
-    v63  Copy { value=v3, fp=true }                       -> [spill 8]
-    v64  Copy { value=v50, fp=false }                     -> [spill 9]
+    v62  Copy { value=v1, fp=true }                       -> [spill 6]
+    v63  Copy { value=v3, fp=true }                       -> [spill 7]
+    v64  Copy { value=v50, fp=false }                     -> [spill 8]
     v65  CallIndirect { target=v50, args=[v1, v3], callee_variadic=false, fixed_args=2, fp_return=true, fp_arg_mask=0x3 } -> d0
     v66  Imm(0)                                           -> x0
     v67  Imm(0)                                           -> x0
@@ -113,7 +113,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v107 FpCast { kind=FpToInt, value=v106 }              -> x1
     v108 Binop { op=add, lhs=v87, rhs=v107 }              -> x0
     v109 FpCast { kind=IntToFp, value=v108 }              -> d1
-    v110 Binop { op=fadd, lhs=v65, rhs=v109 }             -> [spill 10]
+    v110 Binop { op=fadd, lhs=v65, rhs=v109 }             -> [spill 9]
     v111 Imm(0)                                           -> x0
     v112 Imm(0)                                           -> x0
     v113 Imm(0)                                           -> x0
@@ -165,7 +165,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v159 Binop { op=add, lhs=v138, rhs=v158 }             -> x0
     v160 FpCast { kind=IntToFp, value=v159 }              -> d1
     v161 Binop { op=fadd, lhs=v116, rhs=v160 }            -> d0
-    v162 Binop { op=fadd, lhs=v110, rhs=v161 }            -> [spill 10]
+    v162 Binop { op=fadd, lhs=v110, rhs=v161 }            -> [spill 9]
     v163 Imm(0)                                           -> x0
     v164 Imm(0)                                           -> x0
     v165 Imm(0)                                           -> x0
@@ -217,7 +217,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v211 Binop { op=add, lhs=v190, rhs=v210 }             -> x0
     v212 FpCast { kind=IntToFp, value=v211 }              -> d1
     v213 Binop { op=fadd, lhs=v168, rhs=v212 }            -> d0
-    v214 Binop { op=fadd, lhs=v162, rhs=v213 }            -> [spill 10]
+    v214 Binop { op=fadd, lhs=v162, rhs=v213 }            -> [spill 9]
     v215 Imm(0)                                           -> x0
     v216 Imm(0)                                           -> x0
     v217 Imm(0)                                           -> x0
@@ -269,7 +269,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v263 Binop { op=add, lhs=v242, rhs=v262 }             -> x0
     v264 FpCast { kind=IntToFp, value=v263 }              -> d1
     v265 Binop { op=fadd, lhs=v220, rhs=v264 }            -> d0
-    v266 Binop { op=fadd, lhs=v214, rhs=v265 }            -> [spill 10]
+    v266 Binop { op=fadd, lhs=v214, rhs=v265 }            -> [spill 9]
     v267 Imm(0)                                           -> x0
     v268 Imm(0)                                           -> x0
     v269 Imm(0)                                           -> x0
@@ -326,7 +326,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=old_style
 fn ent_pc=1 n_params=3 variadic=false locals=0
-  spill_count=7 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=6 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -357,27 +357,27 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v26  Imm(0)                                           -> x0
     v27  Imm(40)                                          -> x0
     v28  BinopI { op=add, lhs=v7, rhs_imm=40 }            -> x0
-    v29  Load { addr=v7, disp=40, kind=I64, volatile pc_rel } -> [spill 0]
+    v29  Load { addr=v7, disp=40, kind=I64, volatile pc_rel } -> x5
     v30  Imm(0)                                           -> x0
     v31  Imm(48)                                          -> x0
     v32  BinopI { op=add, lhs=v7, rhs_imm=48 }            -> x0
-    v33  Load { addr=v7, disp=48, kind=I64, volatile pc_rel } -> [spill 1]
+    v33  Load { addr=v7, disp=48, kind=I64, volatile pc_rel } -> [spill 0]
     v34  Imm(0)                                           -> x0
     v35  Imm(56)                                          -> x0
     v36  BinopI { op=add, lhs=v7, rhs_imm=56 }            -> x0
-    v37  Load { addr=v7, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
+    v37  Load { addr=v7, disp=56, kind=I64, volatile pc_rel } -> [spill 1]
     v38  Imm(0)                                           -> x0
     v39  ImmData(80)                                      -> x0
-    v40  Load { addr=v39, disp=0, kind=F64, volatile pc_rel } -> [spill 3]
+    v40  Load { addr=v39, disp=0, kind=F64, volatile pc_rel } -> [spill 2]
     v41  Imm(0)                                           -> x0
     v42  BinopI { op=add, lhs=v39, rhs_imm=8 }            -> x0
-    v43  Load { addr=v39, disp=8, kind=F64, volatile pc_rel } -> [spill 4]
+    v43  Load { addr=v39, disp=8, kind=F64, volatile pc_rel } -> [spill 3]
     v44  Imm(0)                                           -> x0
     v45  BinopI { op=add, lhs=v39, rhs_imm=16 }           -> x0
-    v46  Load { addr=v39, disp=16, kind=F64, volatile pc_rel } -> [spill 5]
+    v46  Load { addr=v39, disp=16, kind=F64, volatile pc_rel } -> [spill 4]
     v47  Imm(0)                                           -> x0
     v48  BinopI { op=add, lhs=v39, rhs_imm=24 }           -> x0
-    v49  Load { addr=v39, disp=24, kind=F64, volatile pc_rel } -> [spill 6]
+    v49  Load { addr=v39, disp=24, kind=F64, volatile pc_rel } -> [spill 5]
     v50  Imm(0)                                           -> x0
     v51  Imm(0)                                           -> x0
     v52  Imm(0)                                           -> x0
@@ -542,7 +542,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=3
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=int_through_types
 fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=9 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=8 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> x0
@@ -567,27 +567,27 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v20  Imm(0)                                           -> x0
     v21  Imm(40)                                          -> x0
     v22  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x0
-    v23  Load { addr=v1, disp=40, kind=I64, volatile pc_rel } -> [spill 0]
+    v23  Load { addr=v1, disp=40, kind=I64, volatile pc_rel } -> x5
     v24  Imm(0)                                           -> x0
     v25  Imm(48)                                          -> x0
     v26  BinopI { op=add, lhs=v1, rhs_imm=48 }            -> x0
-    v27  Load { addr=v1, disp=48, kind=I64, volatile pc_rel } -> [spill 1]
+    v27  Load { addr=v1, disp=48, kind=I64, volatile pc_rel } -> [spill 0]
     v28  Imm(0)                                           -> x0
     v29  Imm(56)                                          -> x0
     v30  BinopI { op=add, lhs=v1, rhs_imm=56 }            -> x0
-    v31  Load { addr=v1, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
+    v31  Load { addr=v1, disp=56, kind=I64, volatile pc_rel } -> [spill 1]
     v32  Imm(0)                                           -> x0
     v33  ImmData(80)                                      -> x0
-    v34  Load { addr=v33, disp=0, kind=F64, volatile pc_rel } -> [spill 3]
+    v34  Load { addr=v33, disp=0, kind=F64, volatile pc_rel } -> [spill 2]
     v35  Imm(0)                                           -> x0
     v36  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> x0
-    v37  Load { addr=v33, disp=8, kind=F64, volatile pc_rel } -> [spill 4]
+    v37  Load { addr=v33, disp=8, kind=F64, volatile pc_rel } -> [spill 3]
     v38  Imm(0)                                           -> x0
     v39  BinopI { op=add, lhs=v33, rhs_imm=16 }           -> x0
-    v40  Load { addr=v33, disp=16, kind=F64, volatile pc_rel } -> [spill 5]
+    v40  Load { addr=v33, disp=16, kind=F64, volatile pc_rel } -> [spill 4]
     v41  Imm(0)                                           -> x0
     v42  BinopI { op=add, lhs=v33, rhs_imm=24 }           -> x0
-    v43  Load { addr=v33, disp=24, kind=F64, volatile pc_rel } -> [spill 6]
+    v43  Load { addr=v33, disp=24, kind=F64, volatile pc_rel } -> [spill 5]
     v44  Imm(0)                                           -> x0
     v45  ImmData(120)                                     -> x0
     v46  Load { addr=v45, disp=0, kind=I64 pc_rel }       -> x1
@@ -639,7 +639,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v92  Fma { a=v43, b=v90, c=v87, neg_product=false, neg_addend=false } -> d0
     v93  FpCast { kind=FpToInt, value=v92 }               -> x6
     v94  Binop { op=add, lhs=v73, rhs=v93 }               -> x2
-    v95  Binop { op=add, lhs=v51, rhs=v94 }               -> [spill 7]
+    v95  Binop { op=add, lhs=v51, rhs=v94 }               -> [spill 6]
     v96  Imm(0)                                           -> x0
     v97  Imm(0)                                           -> x0
     v98  Imm(0)                                           -> x0
@@ -693,7 +693,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=int_old_style
 fn ent_pc=4 n_params=1 variadic=false locals=0
-  spill_count=7 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=6 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -720,27 +720,27 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v22  Imm(0)                                           -> x0
     v23  Imm(40)                                          -> x0
     v24  BinopI { op=add, lhs=v3, rhs_imm=40 }            -> x0
-    v25  Load { addr=v3, disp=40, kind=I64, volatile pc_rel } -> [spill 0]
+    v25  Load { addr=v3, disp=40, kind=I64, volatile pc_rel } -> x5
     v26  Imm(0)                                           -> x0
     v27  Imm(48)                                          -> x0
     v28  BinopI { op=add, lhs=v3, rhs_imm=48 }            -> x0
-    v29  Load { addr=v3, disp=48, kind=I64, volatile pc_rel } -> [spill 1]
+    v29  Load { addr=v3, disp=48, kind=I64, volatile pc_rel } -> [spill 0]
     v30  Imm(0)                                           -> x0
     v31  Imm(56)                                          -> x0
     v32  BinopI { op=add, lhs=v3, rhs_imm=56 }            -> x0
-    v33  Load { addr=v3, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
+    v33  Load { addr=v3, disp=56, kind=I64, volatile pc_rel } -> [spill 1]
     v34  Imm(0)                                           -> x0
     v35  ImmData(80)                                      -> x0
-    v36  Load { addr=v35, disp=0, kind=F64, volatile pc_rel } -> [spill 3]
+    v36  Load { addr=v35, disp=0, kind=F64, volatile pc_rel } -> [spill 2]
     v37  Imm(0)                                           -> x0
     v38  BinopI { op=add, lhs=v35, rhs_imm=8 }            -> x0
-    v39  Load { addr=v35, disp=8, kind=F64, volatile pc_rel } -> [spill 4]
+    v39  Load { addr=v35, disp=8, kind=F64, volatile pc_rel } -> [spill 3]
     v40  Imm(0)                                           -> x0
     v41  BinopI { op=add, lhs=v35, rhs_imm=16 }           -> x0
-    v42  Load { addr=v35, disp=16, kind=F64, volatile pc_rel } -> [spill 5]
+    v42  Load { addr=v35, disp=16, kind=F64, volatile pc_rel } -> [spill 4]
     v43  Imm(0)                                           -> x0
     v44  BinopI { op=add, lhs=v35, rhs_imm=24 }           -> x0
-    v45  Load { addr=v35, disp=24, kind=F64, volatile pc_rel } -> [spill 6]
+    v45  Load { addr=v35, disp=24, kind=F64, volatile pc_rel } -> [spill 5]
     v46  Imm(0)                                           -> x0
     v47  Imm(0)                                           -> x0
     v48  CallIndirect { target=v1, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0

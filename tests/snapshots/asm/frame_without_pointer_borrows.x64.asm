@@ -189,15 +189,16 @@ Disassembly of section .text:
                	retq
 
 <indirect>:
-               	subq	$0x80, %rsp
+               	subq	$0x78, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	movq	%rsi, %r13
-               	movq	%r9, 0x30(%rsp)
-               	movq	%r8, 0x38(%rsp)
+               	movq	%r9, 0x38(%rsp)
+               	movq	%r8, %rbp
                	movq	%rcx, %r15
                	movq	%rdx, %r14
                	movq	%rdi, 0x40(%rsp)
@@ -214,9 +215,8 @@ Disassembly of section .text:
                	imulq	%rbx, %rsi
                	movq	%r15, %rdx
                	subq	%rbx, %rdx
-               	movq	0x38(%rsp), %rcx
-               	addq	%r12, %rcx
-               	movq	0x30(%rsp), %r8
+               	leaq	(%rbp,%r12), %rcx
+               	movq	0x38(%rsp), %r8
                	xorq	%rbx, %r8
                	movq	0xb0(%rsp), %r9
                	shlq	%r9
@@ -230,11 +230,12 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%r12, %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x80, %rsp
+               	addq	$0x78, %rsp
                	retq
 
 <atomics>:
@@ -531,6 +532,103 @@ Disassembly of section .text:
                	popq	%r11
                	retq
 
+<leaf6>:
+               	xorq	%rdi, %rsi
+               	xorq	%rsi, %rdx
+               	xorq	%rdx, %rcx
+               	movq	%rcx, %rax
+               	xorq	%r8, %rax
+               	xorq	%r9, %rax
+               	retq
+
+<mid6>:
+               	pushq	%rax
+               	pushq	%r15
+               	pushq	%r14
+               	pushq	%r13
+               	pushq	%r12
+               	pushq	%rbp
+               	pushq	%rbx
+               	movq	%rdi, %rbx
+               	movq	%r9, %rbp
+               	movq	%r8, %r15
+               	movq	%rcx, %r14
+               	movq	%rdx, %r13
+               	movq	%rsi, %r12
+               	movq	%rbp, %rdi
+               	movq	%rbx, %r9
+               	movq	%r12, %r8
+               	movq	%r13, %rcx
+               	movq	%r14, %rdx
+               	movq	%r15, %rsi
+               	callq	<addr>
+               	leaq	(%rbx,%rbx,2), %rcx
+               	addq	%rcx, %rax
+               	leaq	(%r12,%r12,4), %rcx
+               	addq	%rcx, %rax
+               	imulq	$0x7, %r13, %rcx
+               	addq	%rcx, %rax
+               	imulq	$0xb, %r14, %rcx
+               	addq	%rcx, %rax
+               	imulq	$0xd, %r15, %rcx
+               	addq	%rcx, %rax
+               	imulq	$0x11, %rbp, %rcx
+               	addq	%rcx, %rax
+               	popq	%rbx
+               	popq	%rbp
+               	popq	%r12
+               	popq	%r13
+               	popq	%r14
+               	popq	%r15
+               	popq	%r11
+               	retq
+
+<top6>:
+               	subq	$0x18, %rsp
+               	pushq	%r15
+               	pushq	%r14
+               	pushq	%r13
+               	pushq	%r12
+               	pushq	%rbp
+               	pushq	%rbx
+               	movq	%rdi, %rbx
+               	movq	%r9, %rbp
+               	movq	%r8, %r15
+               	movq	%rcx, %r14
+               	movq	%rdx, %r13
+               	movq	%rsi, %r12
+               	leaq	0x1(%rbx), %rdi
+               	leaq	0x1(%r12), %rsi
+               	leaq	0x1(%r13), %rdx
+               	leaq	0x1(%r14), %rcx
+               	leaq	0x1(%r15), %r8
+               	leaq	0x1(%rbp), %r9
+               	callq	<addr>
+               	movq	%rax, 0x38(%rsp)
+               	movq	%r12, %rdi
+               	movq	%rbx, %r9
+               	movq	%rbp, %r8
+               	movq	%r15, %rcx
+               	movq	%r14, %rdx
+               	movq	%r13, %rsi
+               	callq	<addr>
+               	movq	0x38(%rsp), %rcx
+               	subq	%rax, %rcx
+               	imulq	%r12, %rbx
+               	leaq	(%rcx,%rbx), %rax
+               	imulq	%r14, %r13
+               	addq	%r13, %rax
+               	imulq	%rbp, %r15
+               	addq	%r15, %rax
+               	popq	%rbx
+               	popq	%rbp
+               	popq	%r12
+               	popq	%r13
+               	popq	%r14
+               	popq	%r15
+               	addq	$0x18, %rsp
+               	retq
+
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -697,6 +795,20 @@ Disassembly of section .text:
                	cmpq	$0x9a96, %rax           # imm = 0x9A96
                	je	<addr>
                	movl	$0xa, %eax
+               	popq	%rbx
+               	popq	%r12
+               	leave
+               	retq
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
+               	movq	0x38(%rsp), %rdx
+               	movq	0x30(%rsp), %rcx
+               	movq	0x28(%rsp), %r8
+               	movq	0x20(%rsp), %r9
+               	callq	<addr>
+               	cmpq	$0x2c3, %rax            # imm = 0x2C3
+               	je	<addr>
+               	movl	$0xb, %eax
                	popq	%rbx
                	popq	%r12
                	leave

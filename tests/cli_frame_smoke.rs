@@ -236,9 +236,15 @@ fn moves_rsp(mnemonic: &str, operands: &str) -> bool {
 
 /// The frame rules over one function's instructions.
 fn check_function(name: &str, insts: &[(String, String)], what: &str) {
-    let frame_at = insts
-        .iter()
-        .position(|(m, o)| m.starts_with("push") && o == "%rbp");
+    // The frame record: `push %rbp` and `mov %rsp, %rbp`, or Win64's block.
+    // With no frame pointer, rbp is pushed as any callee-saved register.
+    let win64 = what.starts_with("windows");
+    let frame_at = (0..insts.len()).find(|&k| {
+        let sets_rbp = insts
+            .get(k + 1)
+            .is_some_and(|(m, o)| m.starts_with("mov") && o == "%rsp, %rbp");
+        insts[k].0.starts_with("push") && insts[k].1 == "%rbp" && (win64 || sets_rbp)
+    });
     match frame_at {
         Some(k) => {
             for (m, o) in &insts[..k] {
@@ -277,7 +283,7 @@ fn check_function(name: &str, insts: &[(String, String)], what: &str) {
         }
     }
     for (j, (m, o)) in insts.iter().enumerate() {
-        if m == "leave" || (m.starts_with("pop") && o == "%rbp") {
+        if m == "leave" || (frame_at.is_some() && m.starts_with("pop") && o == "%rbp") {
             let next = insts.get(j + 1).map(|(m, _)| m.as_str()).unwrap_or("");
             assert!(
                 next.starts_with("ret") || next.starts_with("jmp"),

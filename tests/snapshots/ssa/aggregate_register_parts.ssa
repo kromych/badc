@@ -892,7 +892,7 @@ fn ent_pc=29 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=30 ---
 ; name=spill
 fn ent_pc=30 n_params=7 variadic=false locals=2
-  spill_count=3 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=2 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
     v1   ParamPart(0, part=1, kind=I64)                   -> x6
@@ -928,14 +928,14 @@ fn ent_pc=30 n_params=7 variadic=false locals=2
     v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x0
     v33  Imm(0)                                           -> x0
-    v34  Binop { op=xor, lhs=v16, rhs=v20 }               -> [spill 0]
+    v34  Binop { op=xor, lhs=v16, rhs=v20 }               -> x5
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
-    v38  Binop { op=xor, lhs=v24, rhs=v27 }               -> [spill 1]
+    v38  Binop { op=xor, lhs=v24, rhs=v27 }               -> [spill 0]
     v39  Imm(0)                                           -> x0
     v40  Imm(0)                                           -> x0
-    v41  BinopI { op=mul, lhs=v30, rhs_imm=7 }            -> [spill 2]
+    v41  BinopI { op=mul, lhs=v30, rhs_imm=7 }            -> [spill 1]
     v42  Imm(0)                                           -> x0
     v43  LocalAddr(-2)                                    -> x0
     v44  LoadLocal { off=-2, kind=I64 }                   -> x0

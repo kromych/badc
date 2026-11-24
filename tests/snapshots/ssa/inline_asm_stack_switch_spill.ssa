@@ -133,7 +133,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=on_own_stack
 fn ent_pc=2 n_params=1 variadic=false locals=0
-  spill_count=11 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=10 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -149,30 +149,30 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v11  Imm(0)                                           -> x0
     v12  BinopI { op=sub, lhs=v1, rhs_imm=9 }             -> x15
     v13  Imm(0)                                           -> x0
-    v14  BinopI { op=shl, lhs=v1, rhs_imm=4 }             -> [spill 0]
+    v14  BinopI { op=shl, lhs=v1, rhs_imm=4 }             -> x5
     v15  Imm(0)                                           -> x0
     v16  BinopI { op=mul, lhs=v1, rhs_imm=7 }             -> x0
-    v17  BinopI { op=add, lhs=v16, rhs_imm=2 }            -> [spill 1]
+    v17  BinopI { op=add, lhs=v16, rhs_imm=2 }            -> [spill 0]
     v18  Imm(0)                                           -> x0
-    v19  BinopI { op=xor, lhs=v1, rhs_imm=4660 }          -> [spill 2]
+    v19  BinopI { op=xor, lhs=v1, rhs_imm=4660 }          -> [spill 1]
     v20  Imm(0)                                           -> x0
-    v21  BinopI { op=mul, lhs=v1, rhs_imm=11 }            -> [spill 3]
+    v21  BinopI { op=mul, lhs=v1, rhs_imm=11 }            -> [spill 2]
     v22  Imm(0)                                           -> x0
-    v23  BinopI { op=add, lhs=v1, rhs_imm=100 }           -> [spill 4]
+    v23  BinopI { op=add, lhs=v1, rhs_imm=100 }           -> [spill 3]
     v24  Imm(0)                                           -> x0
     v25  BinopI { op=mul, lhs=v1, rhs_imm=13 }            -> x0
-    v26  BinopI { op=sub, lhs=v25, rhs_imm=5 }            -> [spill 5]
+    v26  BinopI { op=sub, lhs=v25, rhs_imm=5 }            -> [spill 4]
     v27  Imm(0)                                           -> x0
-    v28  BinopI { op=shl, lhs=v1, rhs_imm=9 }             -> [spill 6]
+    v28  BinopI { op=shl, lhs=v1, rhs_imm=9 }             -> [spill 5]
     v29  Imm(0)                                           -> x0
-    v30  BinopI { op=xor, lhs=v1, rhs_imm=30583 }         -> [spill 7]
+    v30  BinopI { op=xor, lhs=v1, rhs_imm=30583 }         -> [spill 6]
     v31  Imm(0)                                           -> x0
-    v32  BinopI { op=mul, lhs=v1, rhs_imm=17 }            -> [spill 8]
+    v32  BinopI { op=mul, lhs=v1, rhs_imm=17 }            -> [spill 7]
     v33  Imm(0)                                           -> x0
-    v34  BinopI { op=add, lhs=v1, rhs_imm=12345 }         -> [spill 9]
+    v34  BinopI { op=add, lhs=v1, rhs_imm=12345 }         -> [spill 8]
     v35  Imm(0)                                           -> x0
     v36  BinopI { op=mul, lhs=v1, rhs_imm=19 }            -> x0
-    v37  BinopI { op=add, lhs=v36, rhs_imm=3 }            -> [spill 10]
+    v37  BinopI { op=add, lhs=v36, rhs_imm=3 }            -> [spill 9]
     v38  Imm(0)                                           -> x0
     v39  Call { target_pc=0, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v40  Imm(0)                                           -> x1

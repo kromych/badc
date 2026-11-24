@@ -264,7 +264,7 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::FunctionEntry::default(),
                     super::super::FixedRegs::NONE,
                     false,
-                    (true, false, true),
+                    (true, true),
                     false,
                 )
             };

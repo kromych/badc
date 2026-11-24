@@ -3516,6 +3516,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 .map(|f| {
                     if target.is_x86_64() {
                         super::vector_slots::fp_lane_loads(f);
+                        f.frees_rbp =
+                            super::super::x86_64::emit::frame_pointer_free(f, target, &native);
                     }
                     super::mem2reg::zero_read_undefs(f);
                     if native.optimizes() && !f.has_seh() {

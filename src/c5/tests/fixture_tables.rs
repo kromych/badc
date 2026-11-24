@@ -84,6 +84,7 @@
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("frame_without_pointer_borrows.c", 0),
     ("mm_malloc_name_macros.c", 42),
     ("builtin_library_functions_need_no_declaration.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
@@ -1658,6 +1659,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("builtin_library_functions_need_no_declaration.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
     ("cpuid_h_reads_the_processor.c", 0),
+    ("frame_without_pointer_borrows.c", 0),
     ("x86_system_builtins_read_the_processor.c", 0),
     ("x86_system_wrappers_execute.c", 0),
     ("msvc_string_intrinsics_execute.c", 0),
@@ -2921,6 +2923,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    ("frame_without_pointer_borrows.c", 0),
     ("mm_malloc_name_macros.c", 42),
     ("builtin_library_functions_need_no_declaration.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
@@ -4128,6 +4131,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("crt_initializer_tables_run.c", 0),
+    ("frame_without_pointer_borrows.c", 0),
     ("tls_callbacks_run.c", 0),
     ("constructor_table_entry_names_its_slot.c", 0),
     ("environ_address_names_the_vector.c", 0),
@@ -5100,6 +5104,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("crt_initializer_tables_run.c", 0),
+    ("frame_without_pointer_borrows.c", 0),
     ("tls_callbacks_run.c", 0),
     ("constructor_table_entry_names_its_slot.c", 0),
     ("isa_availability_follows_cpuid.c", 0),
@@ -6034,6 +6039,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
+    ("frame_without_pointer_borrows.c", 0),
     ("vector_casts_keep_the_bits.c", 0),
     ("named_code_section_bounds.c", 0),
     ("named_data_section_bounds.c", 0),

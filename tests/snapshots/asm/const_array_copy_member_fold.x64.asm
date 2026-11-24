@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <check_field>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	movslq	%esi, %rsi
                	shlq	$0x2, %rsi
@@ -58,13 +55,10 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	popq	%rbx
-               	leave
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movb	$0x8, <rip> # <addr>
                	movzbq	<rip>, %rax # <addr>
                	movzbq	<rip>, %rcx # <addr>
@@ -76,9 +70,9 @@ Disassembly of section .text:
                	cmpl	$0x1, %edx
                	jne	<addr>
                	movl	$0x1, %eax
-               	movl	%eax, -0x8(%rbp)
+               	movl	%eax, 0x8(%rsp)
                	leaq	<rip>, %rsi # <addr>
-               	movslq	-0x8(%rbp), %rcx
+               	movslq	0x8(%rsp), %rcx
                	shlq	$0x2, %rcx
                	addq	%rsi, %rcx
                	movzbq	(%rcx), %rdx
@@ -105,7 +99,7 @@ Disassembly of section .text:
                	movq	%rsi, %r8
                	callq	<addr>
                	movl	<rip>, %eax # <addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	incq	%rax

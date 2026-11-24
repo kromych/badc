@@ -26,20 +26,18 @@ Disassembly of section .text:
                	int3
 
 <relay_out_of_line>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	movswq	%r8w, %r8
                	andq	$0xff, %r9
-               	movsbq	0x10(%rbp), %r10
+               	movsbq	0x40(%rsp), %r10
                	movq	%r10, 0x28(%rsp)
-               	movq	0x18(%rbp), %r10
+               	movq	0x48(%rsp), %r10
                	movq	%r10, 0x20(%rsp)
-               	movl	0x20(%rbp), %r10d
+               	movl	0x50(%rsp), %r10d
                	movq	%r10, 0x18(%rsp)
-               	movq	0x28(%rbp), %r10
+               	movq	0x58(%rsp), %r10
                	movq	%r10, 0x10(%rsp)
-               	movq	0x30(%rbp), %r10
+               	movq	0x60(%rsp), %r10
                	movq	%r10, 0x8(%rsp)
                	movl	<rip>, %eax # <addr>
                	cmpl	%eax, %edi
@@ -50,7 +48,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	movq	%rcx, %rax
                	cmovneq	%rdx, %rax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	%eax, %esi

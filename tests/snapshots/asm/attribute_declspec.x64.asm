@@ -34,15 +34,14 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	callq	<addr>
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

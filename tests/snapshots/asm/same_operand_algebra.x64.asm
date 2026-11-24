@@ -64,18 +64,16 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x1234, -0x8(%rbp)     # imm = 0x1234
-               	movl	-0x8(%rbp), %eax
+               	subq	$0x18, %rsp
+               	movl	$0x1234, 0x8(%rsp)      # imm = 0x1234
+               	movl	0x8(%rsp), %eax
                	orq	$0xf0, %rax
                	andq	$0x1f0, %rax            # imm = 0x1F0
                	cmpl	$0xf0, %eax
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

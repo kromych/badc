@@ -153,145 +153,143 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x58, %rsp
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x50(%rbp)
+               	movq	%rax, (%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x48(%rbp)
+               	movq	%rax, 0x8(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x40(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x38(%rbp)
+               	movq	%rax, 0x18(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x30(%rbp)
+               	movq	%rax, 0x20(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x28(%rbp)
+               	movq	%rax, 0x28(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x20(%rbp)
+               	movq	%rax, 0x30(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x18(%rbp)
+               	movq	%rax, 0x38(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x40(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, 0x48(%rsp)
                	movabsq	$-0x5a5a5a5a5a5a5af9, %rdi # imm = 0xA5A5A5A5A5A5A507
                	xorl	%esi, %esi
-               	movq	-0x50(%rbp), %rax
+               	movq	(%rsp), %rax
                	callq	*%rax
                	andq	$0xff, %rax
                	cmpl	$0x7, %eax
                	jne	<addr>
                	movabsq	$-0x5a5a5a5a5a5a5af9, %rdi # imm = 0xA5A5A5A5A5A5A507
                	movl	$0x2, %esi
-               	movq	-0x50(%rbp), %rax
+               	movq	(%rsp), %rax
                	callq	*%rax
                	andq	$0xff, %rax
                	cmpl	$0x43, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a5a5a5a38, %rdi # imm = 0xA5A5A5A5A5A5A5C8
                	movl	$0x1, %esi
-               	movq	-0x50(%rbp), %rax
+               	movq	(%rsp), %rax
                	callq	*%rax
                	andq	$0xff, %rax
                	cmpl	$0x59, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a5a5afff9, %rdi # imm = 0xA5A5A5A5A5A50007
                	xorl	%esi, %esi
-               	movq	-0x48(%rbp), %rax
+               	movq	0x8(%rsp), %rax
                	callq	*%rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	$0x7, %eax
                	jne	<addr>
                	movabsq	$-0x5a5a5a5a5a5a15a0, %rdi # imm = 0xA5A5A5A5A5A5EA60
                	movl	$0x1, %esi
-               	movq	-0x48(%rbp), %rax
+               	movq	0x8(%rsp), %rax
                	callq	*%rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	$0xbf21, %eax           # imm = 0xBF21
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5afffffff9, %rdi # imm = 0xA5A5A5A500000007
                	xorl	%esi, %esi
-               	movq	-0x40(%rbp), %rax
+               	movq	0x10(%rsp), %rax
                	callq	*%rax
                	cmpl	$0x7, %eax
                	jne	<addr>
                	movabsq	$-0x5a5a5a5afffffff9, %rdi # imm = 0xA5A5A5A500000007
                	movl	$0x2, %esi
-               	movq	-0x40(%rbp), %rax
+               	movq	0x10(%rsp), %rax
                	callq	*%rax
                	cmpl	$0x43, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a00000010, %rdi # imm = 0xA5A5A5A5FFFFFFF0
                	movl	$0x1, %esi
-               	movq	-0x40(%rbp), %rax
+               	movq	0x10(%rsp), %rax
                	callq	*%rax
                	cmpl	$-0x2f, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a5a5a5a05, %rdi # imm = 0xA5A5A5A5A5A5A5FB
                	xorl	%esi, %esi
-               	movq	-0x38(%rbp), %rax
+               	movq	0x18(%rsp), %rax
                	callq	*%rax
                	movsbq	%al, %rax
                	cmpl	$-0x5, %eax
                	jne	<addr>
                	movabsq	$-0x5a5a5a5a5a5a5a05, %rdi # imm = 0xA5A5A5A5A5A5A5FB
                	movl	$0x2, %esi
-               	movq	-0x38(%rbp), %rax
+               	movq	0x18(%rsp), %rax
                	callq	*%rax
                	movsbq	%al, %rax
                	cmpl	$-0xb, %eax
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a5a5a0005, %rdi # imm = 0xA5A5A5A5A5A5FFFB
                	xorl	%esi, %esi
-               	movq	-0x30(%rbp), %rax
+               	movq	0x20(%rsp), %rax
                	callq	*%rax
                	movswq	%ax, %rax
                	cmpl	$-0x5, %eax
                	jne	<addr>
                	movabsq	$-0x5a5a5a5a5a5a0005, %rdi # imm = 0xA5A5A5A5A5A5FFFB
                	movl	$0x2, %esi
-               	movq	-0x30(%rbp), %rax
+               	movq	0x20(%rsp), %rax
                	callq	*%rax
                	movswq	%ax, %rax
                	cmpl	$-0xb, %eax
                	je	<addr>
                	movl	$0x7, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a00000005, %rdi # imm = 0xA5A5A5A5FFFFFFFB
                	xorl	%esi, %esi
-               	movq	-0x28(%rbp), %rax
+               	movq	0x28(%rsp), %rax
                	callq	*%rax
                	cmpl	$-0x5, %eax
                	jne	<addr>
                	movabsq	$-0x5a5a5a5a00000005, %rdi # imm = 0xA5A5A5A5FFFFFFFB
                	movl	$0x2, %esi
-               	movq	-0x28(%rbp), %rax
+               	movq	0x28(%rsp), %rax
                	callq	*%rax
                	cmpl	$-0xb, %eax
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movq	$-0x5, %rdi
                	movl	$0x2, %esi
@@ -304,63 +302,63 @@ Disassembly of section .text:
                	cmpq	$0x3ffffffd, %rax       # imm = 0x3FFFFFFD
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a5a5a5aff, %rdi # imm = 0xA5A5A5A5A5A5A501
                	xorl	%esi, %esi
-               	movq	-0x20(%rbp), %rax
+               	movq	0x30(%rsp), %rax
                	callq	*%rax
                	andq	$0xff, %rax
                	cmpl	$0x1, %eax
                	jne	<addr>
                	movabsq	$-0x5a5a5a5a5a5a5aff, %rdi # imm = 0xA5A5A5A5A5A5A501
                	movl	$0x3, %esi
-               	movq	-0x20(%rbp), %rax
+               	movq	0x30(%rsp), %rax
                	callq	*%rax
                	testb	$-0x1, %al
                	jne	<addr>
                	movl	$0x1, %esi
-               	movq	-0x20(%rbp), %rax
+               	movq	0x30(%rsp), %rax
                	movabsq	$-0x5a5a5a5a5a5a5b00, %rdi # imm = 0xA5A5A5A5A5A5A500
                	callq	*%rax
                	andq	$0xff, %rax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0xa, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5affffffff, %rdi # imm = 0xA5A5A5A500000001
                	xorl	%esi, %esi
-               	movq	-0x18(%rbp), %rax
+               	movq	0x38(%rsp), %rax
                	callq	*%rax
                	cmpl	$0x1, %eax
                	jne	<addr>
                	movabsq	$-0x5a5a5a5affffffff, %rdi # imm = 0xA5A5A5A500000001
                	movl	$0x3, %esi
-               	movq	-0x18(%rbp), %rax
+               	movq	0x38(%rsp), %rax
                	callq	*%rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0xb, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a00000010, %rdi # imm = 0xA5A5A5A5FFFFFFF0
-               	movq	-0x10(%rbp), %rax
+               	movq	0x40(%rsp), %rax
                	callq	*%rax
                	movl	$0xfffffff1, %r11d      # imm = 0xFFFFFFF1
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xc, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a00000005, %rdi # imm = 0xA5A5A5A5FFFFFFFB
-               	movq	-0x8(%rbp), %rax
+               	movq	0x48(%rsp), %rax
                	callq	*%rax
                	cmpq	$-0x6, %rax
                	je	<addr>
                	movl	$0xd, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x58, %rsp
                	retq

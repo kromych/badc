@@ -1144,7 +1144,10 @@ fn x64_constant_store_is_one_instruction_in_every_form() {
             ][..],
         ),
         ("at", &[&[0xC7, 0x04, 0xB7, 0x2A, 0x00, 0x00, 0x00]]),
-        ("frame", &[&[0xC7, 0x45, 0xF8, 0x03, 0x00, 0x00, 0x00]]),
+        (
+            "frame",
+            &[&[0xC7, 0x44, 0x24, 0x08, 0x03, 0x00, 0x00, 0x00]],
+        ),
         ("seg", &[&[0x65, 0x48, 0xC7, 0x07, 0xFE, 0xFF, 0xFF, 0xFF]]),
         (
             "flt",
@@ -4573,9 +4576,9 @@ int flag(long x) { int ok = 1; if (f(x)) ok = 0; return ok; }\n";
             !insns.iter().any(|i| imm_dst(i).is_some_and(callee_saved)),
             || format!("x86-64 {name}: a constant in a callee-saved register: {insns:x?}"),
         );
-        let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
-        m.expect(pushes == 1, || {
-            format!("x86-64 {name}: {pushes} pushes, not rbp alone: {insns:x?}")
+        let pushes = insns.iter().filter(|i| x64_is_save(i)).count();
+        m.expect(pushes == 0, || {
+            format!("x86-64 {name}: {pushes} saves: {insns:x?}")
         });
     }
     let insns = x64(SRC, "fm");
@@ -6093,6 +6096,24 @@ fn x64_is_store(i: &X64Insn) -> bool {
 
 const RBP: u8 = 5;
 
+/// The register `insns` address their frame from: rbp where the prologue
+/// sets it (`mov rbp, rsp`), else rsp, in a frame with no pointer.
+fn x64_frame_reg(insns: &[X64Insn]) -> u8 {
+    let sets_rbp = |i: &X64Insn| i.op == 0x89 && i.rex_w() && i.modrm == Some(0xE5);
+    if insns.iter().any(sets_rbp) { RBP } else { 4 }
+}
+
+/// An access to the frame addressed from `fr` ([`x64_frame_reg`]): through
+/// rsp, at or above it, past the red zone below.
+fn x64_in_frame(i: &X64Insn, fr: u8) -> bool {
+    i.mem_base() == Some(fr) && (fr == RBP || i.disp >= 0)
+}
+
+/// A `push` of rbx or r12-r15: a callee-saved register's save.
+fn x64_is_save(i: &X64Insn) -> bool {
+    i.op == 0x53 && i.rex & 1 == 0 || matches!(i.op, 0x54..=0x57) && i.rex & 1 == 1
+}
+
 /// Type punning through the address of a parameter (#1159's shape): one
 /// store of the incoming register into the slot and one read of it back.
 const BITS: &str = "unsigned long long bits(double d) { return *(unsigned long long *)&d; }\n";
@@ -6112,10 +6133,11 @@ fn a_load_through_a_local_address_folds_the_frame_offset() {
         format!("aarch64 bits: a frame address is materialized: {ws:08x?}")
     });
     let insns = x64(BITS, "bits");
+    let fr = x64_frame_reg(&insns);
     m.expect(
         !insns
             .iter()
-            .any(|i| i.op == 0x8D && i.mem_base() == Some(RBP)),
+            .any(|i| i.op == 0x8D && i.mem_base() == Some(fr)),
         || format!("x86-64 bits: a frame address is materialized: {insns:x?}"),
     );
     // The address the call takes is not an access, so it still materializes.
@@ -6124,10 +6146,11 @@ fn a_load_through_a_local_address_folds_the_frame_offset() {
         format!("aarch64 keep: the escaping address is gone: {ws:08x?}")
     });
     let insns = x64(KEEP, "keep");
+    let fr = x64_frame_reg(&insns);
     m.expect(
         insns
             .iter()
-            .any(|i| i.op == 0x8D && i.mem_base() == Some(RBP)),
+            .any(|i| i.op == 0x8D && i.mem_base() == Some(fr)),
         || format!("x86-64 keep: the escaping address is gone: {insns:x?}"),
     );
     m.finish();
@@ -6147,9 +6170,10 @@ fn an_address_taken_parameter_is_homed_once() {
         format!("aarch64 bits: {stores} stores into the frame: {ws:08x?}")
     });
     let insns = x64(BITS, "bits");
+    let fr = x64_frame_reg(&insns);
     let stores = insns
         .iter()
-        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .filter(|i| x64_is_store(i) && x64_in_frame(i, fr))
         .count();
     m.expect(stores == 1, || {
         format!("x86-64 bits: {stores} stores into the frame: {insns:x?}")
@@ -6167,9 +6191,10 @@ fn an_address_taken_parameter_is_homed_once() {
     // A body store narrower than the read past it leaves the prologue's
     // bytes observable, so both stores stand.
     let insns = x64(WIDE, "wide");
+    let fr = x64_frame_reg(&insns);
     let stores = insns
         .iter()
-        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .filter(|i| x64_is_store(i) && x64_in_frame(i, fr))
         .count();
     m.expect(stores == 2, || {
         format!("x86-64 wide: {stores} stores into the frame: {insns:x?}")
@@ -6201,9 +6226,10 @@ fn a_floating_parameter_homes_from_its_own_bank() {
         || format!("aarch64 wide: the home store crosses banks: {ws:08x?}"),
     );
     let insns = x64(WIDE, "wide");
+    let fr = x64_frame_reg(&insns);
     let home = insns
         .iter()
-        .find(|i| x64_is_store(i) && i.mem_base() == Some(RBP));
+        .find(|i| x64_is_store(i) && x64_in_frame(i, fr));
     m.expect(home.is_some_and(|i| i.op == 0x0F11), || {
         format!("x86-64 wide: the home store crosses banks: {insns:x?}")
     });
@@ -6239,9 +6265,10 @@ fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
         format!("aarch64 narrow: {stores} stores into the frame: {ws:08x?}")
     });
     let insns = x64(NARROW, "narrow");
+    let fr = x64_frame_reg(&insns);
     let stores = insns
         .iter()
-        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .filter(|i| x64_is_store(i) && x64_in_frame(i, fr))
         .count();
     m.expect(stores == 2, || {
         format!("x86-64 narrow: {stores} stores into the frame: {insns:x?}")
@@ -6257,7 +6284,8 @@ fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
         format!("aarch64 vol: {stores} stores, {loads} loads: {ws:08x?}")
     });
     let insns = x64(VOL, "vol");
-    let frame = |i: &&X64Insn| i.mem_base() == Some(RBP);
+    let fr = x64_frame_reg(&insns);
+    let frame = |i: &&X64Insn| x64_in_frame(i, fr);
     let stores = insns.iter().filter(|i| x64_is_store(i) && frame(i)).count();
     let loads = insns
         .iter()
@@ -7397,9 +7425,13 @@ fn aggregate_copy_saves_nothing_and_moves_sixteen_bytes() {
             || format!("aarch64 {name}: the pairs and the loop: {ws:08x?}"),
         );
         let insns = x64(COPIES, name);
-        let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
-        let pops = insns.iter().filter(|i| matches!(i.op, 0x58..=0x5F)).count();
-        m.expect(pushes == usize::from(frame) && pops == 0, || {
+        let pushes = insns.iter().filter(|i| x64_is_save(i)).count();
+        // The pops of callee-saved registers and rbp; the pad's is r11.
+        let pops = (insns.iter())
+            .filter(|i| matches!(i.op, 0x58..=0x5F) && !(i.op == 0x5B && i.rex & 1 == 1))
+            .count();
+        let frame_pops = usize::from(frame && x64_frame_reg(&insns) == RBP);
+        m.expect(pushes == 0 && pops == frame_pops, || {
             format!("x86-64 {name}: {pushes} pushes and {pops} pops: {insns:x?}")
         });
         let loads = insns.iter().filter(|i| i.op == 0x0F10).count();
@@ -7519,9 +7551,9 @@ fn constant_parts_are_set_again_after_a_call() {
             && after_call.iter().any(|i| i.op == 0xBA && i.imm == 8),
         || format!("x86-64 across: the parts are not set after the call: {insns:x?}"),
     );
-    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
-    m.expect(pushes == 1, || {
-        format!("x86-64 across: {pushes} pushes, not rbp alone: {insns:x?}")
+    let pushes = insns.iter().filter(|i| x64_is_save(i)).count();
+    m.expect(pushes == 0, || {
+        format!("x86-64 across: {pushes} saves: {insns:x?}")
     });
     m.finish();
 }
@@ -8114,9 +8146,11 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
     .compile()
     .expect("compile");
     let groups = |on: bool| {
+        // The frame form is fixed: the premise is a layout with a crossing.
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             branches_within_32b: on,
+            omit_frame_pointer: Some(false),
             ..NativeOptions::new().with_optimize()
         };
         // The full banks, whatever caps the environment sets.
@@ -8436,20 +8470,22 @@ long mix(int n) {\n\
     return s;\n\
 }\n";
     let insns = x64(SRC, "mix");
-    // Every indexed access names rbp as its SIB base.
+    let fr = x64_frame_reg(&insns);
+    // Every indexed access names the frame register as its SIB base.
     let indexed = |i: &X64Insn| {
         i.modrm.is_some_and(|m| m >> 6 != 3 && m & 7 == 4)
             && i.sib.is_some_and(|b| (b >> 3) & 7 != 4)
     };
     let stray = (insns.iter())
-        .filter(|i| indexed(i) && i.sib.is_some_and(|b| b & 7 != 5 || i.rex & 1 != 0))
+        .filter(|i| indexed(i) && i.sib.is_some_and(|b| b & 7 != fr || i.rex & 1 != 0))
         .count();
     assert_eq!(stray, 0, "{insns:x?}");
-    // ModRM rm = 100 (SIB) with SIB base = rbp (101) and a displacement.
+    // ModRM rm = 100 (SIB) with SIB base the frame register and the object's
+    // offset: below rbp, or above rsp.
     let off_frame = |i: &X64Insn| {
         i.modrm.is_some_and(|m| m >> 6 != 3 && m & 7 == 4)
-            && i.sib.is_some_and(|b| b & 7 == 5)
-            && i.disp < 0
+            && i.sib.is_some_and(|b| b & 7 == fr)
+            && (i.disp < 0) == (fr == RBP)
     };
     let loads = insns
         .iter()
@@ -8460,7 +8496,7 @@ long mix(int n) {\n\
         .filter(|i| i.op == 0x89 && off_frame(i))
         .count();
     let frame_leas = (insns.iter())
-        .filter(|i| i.op == 0x8D && i.mem_base() == Some(5))
+        .filter(|i| i.op == 0x8D && i.mem_base() == Some(fr))
         .count();
     assert!(loads >= 2 && stores >= 1 && frame_leas == 1, "{insns:x?}");
 }
@@ -8734,7 +8770,11 @@ int plain(int x) { if (x > 0) return x; slow(x); return 0; }\n";
     for (name, predicted) in [("hinted", true), ("plain", false)] {
         let insns = x64_insns(&function_bytes(&obj, name));
         let ret = insns.iter().position(|i| i.op == 0xC3);
-        let push = insns.iter().position(|i| i.op == 0x55 && i.rex == 0);
+        // `push rbp`, or `sub rsp` or the pad `push rax` in a frame with no
+        // pointer.
+        let push = (insns.iter()).position(|i| {
+            matches!(i.op, 0x50 | 0x55) && i.rex == 0 || i.op == 0x83 && i.modrm == Some(0xEC)
+        });
         assert!(insns.first().is_some_and(|i| !i.is_jcc()), "{name}");
         assert!(
             insns.get(1).is_some_and(X64Insn::is_jcc),
@@ -9148,7 +9188,9 @@ void many(void) { fill(1); fill(2); fill(3); fill(4); }\n";
         .filter(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
         .map(|i| i.imm)
         .collect();
-    assert_eq!(frame, [16], "{insns:x?}");
+    // With no frame pointer the `sub` takes the 8 bytes `push rbp` would.
+    let record = if x64_frame_reg(&insns) == RBP { 0 } else { 8 };
+    assert_eq!(frame, [16 + record], "{insns:x?}");
 }
 
 /// A word copied out of memory into a local, as a read of an unaligned
@@ -9166,7 +9208,8 @@ unsigned long words(const u16 *p, int n) {\n\
   for (int i = 0; i < n; i++) { u32 a = read_u32(p + i); sink(a); s += a; }\n\
   return s + tag; }\n";
     let insns = x64(SRC, "words");
-    let frame_address = |i: &&X64Insn| i.op == 0x8D && i.mem_base() == Some(5);
+    let fr = x64_frame_reg(&insns);
+    let frame_address = |i: &&X64Insn| i.op == 0x8D && i.mem_base() == Some(fr);
     assert_eq!(insns.iter().filter(frame_address).count(), 1, "{insns:x?}");
 }
 

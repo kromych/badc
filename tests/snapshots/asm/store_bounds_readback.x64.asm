@@ -36,38 +36,34 @@ Disassembly of section .text:
                	retq
 
 <volatile_object>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x3, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movl	$0x3, 0x8(%rsp)
                	movl	<rip>, %eax # <addr>
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	movl	%eax, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
                	testl	%eax, %eax
                	setge	%al
                	movzbq	%al, %rax
-               	movl	-0x8(%rbp), %ecx
+               	movl	0x8(%rsp), %ecx
                	cmpl	$0x1ff, %ecx            # imm = 0x1FF
                	setle	%cl
                	movzbq	%cl, %rcx
                	shlq	%rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x30, %rsp
                	pushq	%rbx
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	0x20(%rsp), %rdi
                	callq	<addr>
-               	leaq	-0x18(%rbp), %rdi
+               	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movl	<rip>, %eax # <addr>
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	movl	%eax, -0x18(%rbp)
+               	movl	%eax, 0x18(%rsp)
                	movl	<rip>, %eax # <addr>
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	movsbq	%al, %rax
@@ -128,15 +124,15 @@ Disassembly of section .text:
                	orq	$0x10, %rbx
                	cmpl	$0x3, %ecx
                	cmoveq	%rax, %rbx
-               	leaq	-0x18(%rbp), %rdi
+               	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movl	<rip>, %eax # <addr>
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	movl	%eax, -0x18(%rbp)
-               	leaq	-0x18(%rbp), %rdi
+               	movl	%eax, 0x18(%rsp)
+               	leaq	0x18(%rsp), %rdi
                	movq	$-0x7, %rsi
                	callq	<addr>
-               	movl	-0x18(%rbp), %eax
+               	movl	0x18(%rsp), %eax
                	testl	%eax, %eax
                	setl	%cl
                	movzbq	%cl, %rcx
@@ -149,16 +145,16 @@ Disassembly of section .text:
                	orq	$0x20, %rcx
                	cmpl	$0x3, %eax
                	cmovneq	%rcx, %rbx
-               	leaq	-0x18(%rbp), %rdi
+               	leaq	0x18(%rsp), %rdi
                	movq	%rdi, <rip> # <addr>
                	callq	<addr>
                	movl	<rip>, %eax # <addr>
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	movl	%eax, -0x18(%rbp)
+               	movl	%eax, 0x18(%rsp)
                	movq	<rip>, %rdi # <addr>
                	movq	$-0x3, %rsi
                	callq	<addr>
-               	movl	-0x18(%rbp), %eax
+               	movl	0x18(%rsp), %eax
                	testl	%eax, %eax
                	setl	%cl
                	movzbq	%cl, %rcx
@@ -178,5 +174,5 @@ Disassembly of section .text:
                	cmoveq	%rbx, %rcx
                	movq	%rcx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x30, %rsp
                	retq

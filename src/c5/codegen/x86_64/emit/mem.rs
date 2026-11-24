@@ -344,8 +344,10 @@ fn emit_load_fp_mem(
             code.push(p);
         }
         super::encode::emit_fld_m80(code, base, disp);
-        super::encode::emit_fstp_m64(code, Reg::RSP, -8);
-        emit_movsd_xmm_mem(code, dd, Reg::RSP, -8);
+        let round_trip = x87_round_trip(code, frame);
+        super::encode::emit_fstp_m64(code, Reg::RSP, round_trip);
+        emit_movsd_xmm_mem(code, dd, Reg::RSP, round_trip);
+        x87_round_trip_end(code, frame);
         fp_spill_dst_to_slot(code, dst, dd, frame);
         return Ok(());
     }
@@ -354,7 +356,7 @@ fn emit_load_fp_mem(
     // `movss` / `movsd` it replaces does.
     if let Some(a) = bound {
         let width = if matches!(kind, LoadKind::F32) { 4 } else { 8 };
-        let acc = emit_narrow_compose(code, base, disp, width, a, &[]);
+        let acc = emit_narrow_compose(code, frame, base, disp, width, a, &[]);
         super::encode::emit_movq_xmm_r(code, dd, acc);
         if matches!(kind, LoadKind::F32) && !keep_f32 {
             emit_cvtss2sd(code, dd, dd);
@@ -434,8 +436,10 @@ fn emit_store_fp_mem(
         // `fld m64` widens the f64 exactly; `fstp m80` writes the 10
         // significant bytes and leaves the object's padding untouched.
         // The round trip rides the red zone.
-        emit_movsd_mem_xmm(code, Reg::RSP, -8, dn);
-        super::encode::emit_fld_m64(code, Reg::RSP, -8);
+        let round_trip = x87_round_trip(code, frame);
+        emit_movsd_mem_xmm(code, Reg::RSP, round_trip, dn);
+        super::encode::emit_fld_m64(code, Reg::RSP, round_trip);
+        x87_round_trip_end(code, frame);
         if let Some(p) = seg {
             code.push(p);
         }
@@ -452,7 +456,7 @@ fn emit_store_fp_mem(
     };
     let narrowed = |code: &mut Vec<u8>, src: Reg, width: u32, a: u32| {
         super::encode::emit_movq_r_xmm(code, SCRATCH_R11, src);
-        emit_narrow_store(code, SCRATCH_R11, base, disp, width, a);
+        emit_narrow_store(code, frame, SCRATCH_R11, (base, disp), width, a);
     };
     if matches!(kind, StoreKind::F32) {
         let src = if value_is_f32 {
@@ -500,12 +504,12 @@ pub(super) fn local_slot_base_disp(
             .map(|m| m.off)
     {
         if frame.align_region_off != 0 {
-            (Reg::RBP, frame.align_region_off + region_off)
+            frame.fp_addr64(frame.align_region_off + region_off)
         } else {
             (frame.region_base.map_or(Reg::RSP, Reg), region_off)
         }
     } else {
-        (Reg::RBP, local_slot_off(off, func, frame, abi))
+        frame.fp_addr64(local_slot_off(off, func, frame, abi))
     }
 }
 
@@ -1354,7 +1358,7 @@ pub(super) fn emit_load(
         return fail("Load: dst not int reg / spill");
     };
     match bound {
-        Some(a) => emit_narrow_load(code, rd, base, disp, kind, a),
+        Some(a) => emit_narrow_load(code, frame, rd, (base, disp), kind, a),
         None => emit_load_kind_mem(code, kind, rd, base, disp, seg, hi),
     }
     spill_dst_to_slot(code, dst, rd, frame);
@@ -1408,7 +1412,7 @@ pub(super) fn emit_store(
         return fail("Store: value Place not int reg / spill");
     };
     match bound {
-        Some(a) => emit_narrow_store(code, rs, base, disp, int_store_width(kind), a),
+        Some(a) => emit_narrow_store(code, frame, rs, (base, disp), int_store_width(kind), a),
         None => emit_store_kind_mem(code, kind, base, disp, rs, seg),
     }
     // Stored value also feeds dst when the allocator wants it
@@ -1506,15 +1510,37 @@ pub(super) fn emit_copy_unit(
     emit_store_unit(code, width, dst, disp, temp);
 }
 
+/// The rsp displacement of the eight bytes an x87 conversion passes a value
+/// through: the red zone's first slot ([`super::keep`]), or with no red zone
+/// a slot the conversion reserves, ended by [`x87_round_trip_end`]. `lea`
+/// moves rsp and leaves the flags alone.
+fn x87_round_trip(code: &mut Vec<u8>, frame: Frame) -> i32 {
+    if frame.red_zone {
+        return -8;
+    }
+    emit_lea_r_mem(code, Reg::RSP, Reg::RSP, -8);
+    0
+}
+
+/// Release what [`x87_round_trip`] reserved.
+fn x87_round_trip_end(code: &mut Vec<u8>, frame: Frame) {
+    if !frame.red_zone {
+        emit_lea_r_mem(code, Reg::RSP, Reg::RSP, 8);
+    }
+}
+
 /// Registers a lowering borrows at one site: the free ones of its
 /// candidate list (`site_registers`) first, then ones holding a live
-/// value, each pushed and popped again by [`Self::restore`]. No call
+/// value, each pushed, or kept in the red zone in a frame with no pointer
+/// ([`super::keep`]), and restored by [`Self::restore`]. No call
 /// intervenes, so the transient stack misalignment is harmless.
 pub(super) struct SiteRegs {
     free: Vec<u8>,
     held: Vec<u8>,
     next_free: usize,
     saved: Vec<Reg>,
+    /// The first red-zone slot, in a frame with no pointer.
+    keep: Option<i32>,
 }
 
 impl SiteRegs {
@@ -1523,16 +1549,24 @@ impl SiteRegs {
         v: super::super::ir::ValueId,
         candidates: &[u8],
         taken: &[u8],
-        fixed: super::FixedRegs,
+        frame: Frame,
     ) -> Self {
         let (free, held) =
-            super::ssa::emit_common::site_registers(alloc, v, candidates, taken, fixed);
+            super::ssa::emit_common::site_registers(alloc, v, candidates, taken, frame.fixed_regs);
         Self {
             free,
             held,
             next_free: 0,
             saved: Vec::new(),
+            keep: frame.omit_fp.then_some(super::keep::SITE),
         }
+    }
+
+    /// Keep borrowed registers from red-zone slot `k` on, past the slots
+    /// another instance at the same site holds.
+    pub(super) fn keeping_from(mut self, k: i32) -> Self {
+        self.keep = self.keep.map(|_| k);
+        self
     }
 
     /// The next free register, if any.
@@ -1549,15 +1583,31 @@ impl SiteRegs {
             return Some(r);
         }
         let r = Reg(self.held.get(self.saved.len()).copied()?);
-        emit_push_r(code, r);
+        match self.keep {
+            Some(k) => {
+                let k = k + self.saved.len() as i32;
+                if k > super::keep::LAST {
+                    return None;
+                }
+                let (base, disp) = super::keep_slot(k);
+                emit_mov_mem_r(code, base, disp, r);
+            }
+            None => emit_push_r(code, r),
+        }
         self.saved.push(r);
         Some(r)
     }
 
-    /// Pop the saved registers, the last pushed first.
+    /// Restore the saved registers, the last saved first.
     pub(super) fn restore(&self, code: &mut Vec<u8>) {
-        for &r in self.saved.iter().rev() {
-            emit_pop_r(code, r);
+        for (i, &r) in self.saved.iter().enumerate().rev() {
+            match self.keep {
+                Some(k) => {
+                    let (base, disp) = super::keep_slot(k + i as i32);
+                    emit_mov_r_mem(code, r, base, disp);
+                }
+                None => emit_pop_r(code, r),
+            }
         }
     }
 
@@ -1568,6 +1618,9 @@ impl SiteRegs {
 
     /// The bytes the pushes moved rsp down by.
     pub(super) fn saved_bytes(&self) -> u32 {
+        if self.keep.is_some() {
+            return 0;
+        }
         8 * self.saved.len() as u32
     }
 }
@@ -1640,6 +1693,7 @@ pub(super) fn emit_agg_load_sse(
     align: u32,
     strict_align: bool,
     tmp: Reg,
+    frame: Frame,
 ) {
     if super::super::access_unit(disp.max(0) as u32, width, align, strict_align) == width {
         if width == 4 {
@@ -1650,10 +1704,10 @@ pub(super) fn emit_agg_load_sse(
         return;
     }
     debug_assert!(base.0 != Reg::RAX.0 && tmp.0 != Reg::RAX.0);
-    emit_push_r(code, Reg::RAX);
+    super::save_across(code, frame, Reg::RAX, super::keep::SSE_PART);
     emit_agg_load_int(code, tmp, base, disp, width, align, strict_align, Reg::RAX);
     super::encode::emit_movq_xmm_r(code, dst, tmp);
-    emit_pop_r(code, Reg::RAX);
+    super::restore_across(code, frame, Reg::RAX, super::keep::SSE_PART);
 }
 
 /// Load one SSE-bank register slot of an aggregate from `[base +
@@ -1672,6 +1726,7 @@ pub(super) fn emit_agg_load_slot_sse(
     align: u32,
     strict_align: bool,
     tmp: Reg,
+    frame: Frame,
 ) {
     match class {
         super::abi_classify::RegClass::Vector => {
@@ -1680,7 +1735,17 @@ pub(super) fn emit_agg_load_slot_sse(
         super::abi_classify::RegClass::Vector256 => {
             super::encode::emit_vmovups_ymm_mem(code, dst, base, disp)
         }
-        _ => emit_agg_load_sse(code, dst, base, disp, width, align, strict_align, tmp),
+        _ => emit_agg_load_sse(
+            code,
+            dst,
+            base,
+            disp,
+            width,
+            align,
+            strict_align,
+            tmp,
+            frame,
+        ),
     }
 }
 
@@ -1768,6 +1833,7 @@ fn int_store_width(kind: StoreKind) -> u32 {
 /// must not have `base` in r11.
 fn emit_narrow_compose(
     code: &mut Vec<u8>,
+    frame: Frame,
     base: Reg,
     disp: i32,
     width: u32,
@@ -1778,17 +1844,24 @@ fn emit_narrow_compose(
     let mut blocked = alloc::vec![base.0, acc.0];
     blocked.extend_from_slice(avoid);
     let tmp = narrow_borrow(&blocked);
-    emit_push_r(code, tmp);
+    super::save_across(code, frame, tmp, super::keep::NARROW);
     emit_agg_load_int(code, acc, base, disp, width, align, true, tmp);
-    emit_pop_r(code, tmp);
+    super::restore_across(code, frame, tmp, super::keep::NARROW);
     acc
 }
 
 /// Lower an integer load bounded by `align` into `rd`, sign-extending
 /// the composed value when the kind is signed.
-fn emit_narrow_load(code: &mut Vec<u8>, rd: Reg, base: Reg, disp: i32, kind: LoadKind, align: u32) {
+fn emit_narrow_load(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    rd: Reg,
+    (base, disp): (Reg, i32),
+    kind: LoadKind,
+    align: u32,
+) {
     let (width, signed) = int_load_shape(kind);
-    let acc = emit_narrow_compose(code, base, disp, width, align, &[rd.0]);
+    let acc = emit_narrow_compose(code, frame, base, disp, width, align, &[rd.0]);
     match (signed, width) {
         (true, 4) => super::encode::emit_movsxd_r_r(code, rd, acc),
         (true, 2) => super::encode::emit_movsx_r_r16(code, rd, acc),
@@ -1800,9 +1873,16 @@ fn emit_narrow_load(code: &mut Vec<u8>, rd: Reg, base: Reg, disp: i32, kind: Loa
 
 /// Store companion to [`emit_narrow_load`]: write the low `width`
 /// bytes of `rs` to `[base + disp]` in `align`-wide pieces.
-fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, base: Reg, disp: i32, width: u32, align: u32) {
+fn emit_narrow_store(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    rs: Reg,
+    (base, disp): (Reg, i32),
+    width: u32,
+    align: u32,
+) {
     let tmp = narrow_borrow(&[base.0, rs.0]);
-    emit_push_r(code, tmp);
+    super::save_across(code, frame, tmp, super::keep::NARROW);
     let off = disp.max(0) as u32;
     for (i, (o, w)) in super::super::access_pieces(off, width, align, true).enumerate() {
         let at = disp + (o - off) as i32;
@@ -1815,7 +1895,7 @@ fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, base: Reg, disp: i32, width: u
         };
         emit_store_unit(code, w, base, at, src);
     }
-    emit_pop_r(code, tmp);
+    super::restore_across(code, frame, tmp, super::keep::NARROW);
 }
 
 /// [`emit_narrow_store`] of a constant, sign-extended from `imm`: each

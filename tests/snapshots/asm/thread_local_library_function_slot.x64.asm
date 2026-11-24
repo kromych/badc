@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	<rip>, %rsi # <addr>
                	movq	%fs:0x0, %rdx
                	addq	$-0x8, %rdx
@@ -59,15 +58,13 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	sete	%al
                	movzbq	%al, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <__c5_sys_strlen>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	movq	%rdi, (%rsp)
+               	movq	(%rsp), %rdi
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq

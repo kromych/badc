@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x4, %edi
                	callq	<addr>
                	movq	%rax, %rsi
@@ -36,5 +35,5 @@ Disassembly of section .text:
                	movl	$0xa6968, (%rsi)        # imm = 0xA6968
                	callq	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

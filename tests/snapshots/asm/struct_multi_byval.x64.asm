@@ -26,19 +26,17 @@ Disassembly of section .text:
                	int3
 
 <take_many>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x28(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x20(%rbp)
-               	movq	0x20(%rbp), %r10
-               	movq	%r10, -0x18(%rbp)
-               	movq	0x28(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movq	0x30(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
+               	subq	$0x38, %rsp
+               	movq	0x40(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x48(%rsp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movq	0x50(%rsp), %r10
+               	movq	%r10, 0x18(%rsp)
+               	movq	0x58(%rsp), %r10
+               	movq	%r10, 0x20(%rsp)
+               	movq	0x60(%rsp), %r10
+               	movq	%r10, 0x28(%rsp)
                	movq	%rdi, %rax
                	shrq	$0x20, %rax
                	movq	%rdx, %rsi
@@ -49,32 +47,32 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
-               	movl	-0x28(%rbp), %ecx
+               	movl	0x8(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	-0x24(%rbp), %ecx
+               	movl	0xc(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	-0x20(%rbp), %ecx
+               	movl	0x10(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	-0x1c(%rbp), %ecx
+               	movl	0x14(%rsp), %ecx
                	addq	%rcx, %rax
                	addq	$0x7d0, %rax            # imm = 0x7D0
-               	movl	-0x18(%rbp), %ecx
+               	movl	0x18(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	-0x14(%rbp), %ecx
+               	movl	0x1c(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	-0x10(%rbp), %ecx
+               	movl	0x20(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	-0xc(%rbp), %ecx
+               	movl	0x24(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	-0x8(%rbp), %ecx
+               	movl	0x28(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	-0x4(%rbp), %ecx
+               	movl	0x2c(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x38(%rbp), %ecx
+               	movl	0x68(%rsp), %ecx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	movq	%rax, <rip> # <addr>
-               	leave
+               	addq	$0x38, %rsp
                	retq
 
 <main>:

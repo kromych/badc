@@ -208,17 +208,16 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	popq	%rbp
+               	popq	%r11
                	jmp	<addr>

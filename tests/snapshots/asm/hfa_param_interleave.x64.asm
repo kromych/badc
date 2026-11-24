@@ -26,31 +26,29 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rax
+               	subq	$0x28, %rsp
+               	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	leaq	-0x18(%rbp), %rax
+               	leaq	0x8(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	leaq	-0x10(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movss	-0x20(%rbp), %xmm0
-               	movss	-0x1c(%rbp), %xmm1
+               	movss	(%rsp), %xmm0
+               	movss	0x4(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0x18(%rbp), %xmm1
+               	movss	0x8(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0x14(%rbp), %xmm1
+               	movss	0xc(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0x10(%rbp), %xmm1
+               	movss	0x10(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0xc(%rbp), %xmm1
+               	movss	0x14(%rsp), %xmm1
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1
                	addss	%xmm1, %xmm0
@@ -63,8 +61,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

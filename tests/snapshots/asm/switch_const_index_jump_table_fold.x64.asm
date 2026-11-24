@@ -26,50 +26,48 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movl	$0x5, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	%eax, 0x8(%rsp)
+               	movslq	0x8(%rsp), %rcx
                	cmpq	$0x8, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
                	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%edx, %edx
-               	movl	%edx, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	%edx, 0x8(%rsp)
+               	movslq	0x8(%rsp), %rcx
                	cmpq	$0x8, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
                	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
-               	movl	$0x7, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	$0x7, 0x8(%rsp)
+               	movslq	0x8(%rsp), %rcx
                	cmpq	$0x8, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
                	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	$0x9, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	$0x9, 0x8(%rsp)
+               	movslq	0x8(%rsp), %rcx
                	cmpq	$0x8, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
                	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	%rdx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

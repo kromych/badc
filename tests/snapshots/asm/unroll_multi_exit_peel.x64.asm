@@ -78,9 +78,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	pushq	%r12
                	pushq	%rbx
                	movl	$0x1, %eax
@@ -116,7 +114,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movq	$-0x2, %rdi
                	callq	<addr>
@@ -125,7 +123,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x1, %eax
                	movq	%rax, <rip> # <addr>
@@ -178,7 +176,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movq	$0x1, <rip> # <addr>
                	movq	$0x2, <rip> # <addr>
@@ -235,7 +233,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movq	$-0x1, <rip> # <addr>
                	movq	$0x2, <rip> # <addr>
@@ -292,7 +290,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x1, %eax
                	movq	%rax, <rip> # <addr>
@@ -811,27 +809,27 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x9, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x8, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x7, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x6, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x2, %edx
                	movq	<rip>, %rsi # <addr>

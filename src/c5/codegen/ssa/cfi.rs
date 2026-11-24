@@ -1448,12 +1448,22 @@ pub(crate) fn x64_frame_ops(u: &crate::c5::codegen::FnUnwind, early: Option<u32>
         };
         out.push((first, CfiOp::RememberState));
         let mut kept = saved.clone();
+        // With no frame pointer the CFA follows rsp up through each step.
+        let mut sp_cfa = cfa;
         for &(at, step) in &exit.steps {
             match step {
-                E::Pop(r) if r != 5 => {
+                E::Pop(r) if r != 5 || fp.is_none() => {
                     let reg = number(r, false);
                     kept.retain(|&k| k != reg);
                     out.push((at, CfiOp::Restore(CfiReg::Num(reg))));
+                    if fp.is_none() {
+                        sp_cfa -= 8;
+                        out.push((at, CfiOp::DefCfaOffset(sp_cfa)));
+                    }
+                }
+                E::Dealloc(n) => {
+                    sp_cfa -= i64::from(n);
+                    out.push((at, CfiOp::DefCfaOffset(sp_cfa)));
                 }
                 E::Pop(_) | E::Leave => {
                     entry(&mut out, at, &kept);
@@ -1966,6 +1976,41 @@ mod frame_tests {
         assert_eq!(rows[&0x32], row((6, 16), &ra_rbp, false));
         assert_eq!(rows[&0x33], entry);
         assert_eq!(rows[&0x34], rows[&12], "the body's rules past the `ret`");
+        assert_eq!(rows[&0x38], entry, "the early return");
+    }
+
+    /// A frame with no pointer: `sub rsp, 24`, then rbx and r12 pushed; an
+    /// epilogue popping both and adding the 24 back. The CFA stays rsp-based
+    /// and follows every step down and back up.
+    #[test]
+    fn x86_64_a_frame_with_no_pointer_follows_rsp() {
+        use crate::c5::codegen::{FnUnwind, PrologueStep as P, X64Exit, X64ExitStep as E};
+        let u = FnUnwind {
+            begin: 0x200,
+            end: 0x240,
+            leaf: false,
+            steps: alloc::vec![(4, P::Alloc(24)), (5, P::Push(3)), (7, P::Push(12))],
+            saves: Vec::new(),
+            exits: alloc::vec![X64Exit {
+                steps: alloc::vec![
+                    (0x31, E::Pop(12)),
+                    (0x32, E::Pop(3)),
+                    (0x36, E::Dealloc(24))
+                ],
+                end: 0x37,
+            }],
+        };
+        let entry = row((7, 8), &[(16, -8)], false);
+        let rows = rows_from(&x64_frame_ops(&u, Some(0x38)), &entry);
+        let body = [(3, -40), (12, -48), (16, -8)];
+        assert_eq!(rows[&0], entry);
+        assert_eq!(rows[&4], row((7, 32), &[(16, -8)], false));
+        assert_eq!(rows[&5], row((7, 40), &[(3, -40), (16, -8)], false));
+        assert_eq!(rows[&7], row((7, 48), &body, false));
+        assert_eq!(rows[&0x31], row((7, 40), &[(3, -40), (16, -8)], false));
+        assert_eq!(rows[&0x32], row((7, 32), &[(16, -8)], false));
+        assert_eq!(rows[&0x36], entry);
+        assert_eq!(rows[&0x37], rows[&7], "the body's rules past the `ret`");
         assert_eq!(rows[&0x38], entry, "the early return");
     }
 }

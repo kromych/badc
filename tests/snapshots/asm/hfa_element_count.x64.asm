@@ -26,10 +26,8 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x10(%rbp), %rax
+               	subq	$0x28, %rsp
+               	leaq	0x10(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
@@ -41,30 +39,30 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movabsq	$0x400000003f800000, %rcx # imm = 0x400000003F800000
-               	movq	%rcx, -0x10(%rbp)
-               	movl	$0x40400000, -0x8(%rbp) # imm = 0x40400000
-               	movss	-0x10(%rbp), %xmm0
+               	movq	%rcx, 0x10(%rsp)
+               	movl	$0x40400000, 0x18(%rsp) # imm = 0x40400000
+               	movss	0x10(%rsp), %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movss	-0xc(%rbp), %xmm0
+               	movss	0x14(%rsp), %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x8(%rbp), %xmm0
+               	movss	0x18(%rsp), %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	leaq	-0x8(%rbp), %rcx
+               	leaq	0x18(%rsp), %rcx
                	leaq	<rip>, %rdx
                	movq	(%rdx), %r10
                	movq	%r10, (%rcx)
@@ -77,7 +75,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
@@ -97,9 +95,9 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	leaq	-0x18(%rbp), %rax
+               	leaq	0x8(%rsp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -116,7 +114,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xf, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
@@ -137,7 +135,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x10, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movss	<rip>, %xmm2
                	movss	<rip>, %xmm3
@@ -150,7 +148,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x11, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movsd	<rip>, %xmm2
                	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
@@ -159,8 +157,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x12, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

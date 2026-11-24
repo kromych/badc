@@ -26,30 +26,27 @@ Disassembly of section .text:
                	int3
 
 <apply>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <apply_bare>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <passthrough>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <doubler>:

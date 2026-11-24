@@ -2786,6 +2786,24 @@ pub(crate) struct FnUnwind {
     pub exits: alloc::vec::Vec<X64Exit>,
 }
 
+impl FnUnwind {
+    /// For a frame with no pointer, rsp's distance below where `push rbp`
+    /// would have put rbp once the prologue is done: what the steps move
+    /// rsp, less those 8 bytes. `None` for a frame that sets rbp.
+    pub(crate) fn sp_frame_base(&self) -> Option<i64> {
+        let mut moved = 0i64;
+        for &(_, step) in &self.steps {
+            match step {
+                PrologueStep::Push(_) => moved += 8,
+                PrologueStep::Alloc(n) => moved += i64::from(n),
+                PrologueStep::SaveXmm { .. } => {}
+                PrologueStep::SetFrame(_) => return None,
+            }
+        }
+        Some(moved - 8)
+    }
+}
+
 /// A callee save after rbp is set: machine register `reg`, an xmm register
 /// when `xmm`, `below_fp` bytes below rbp, stored by the instruction ending
 /// at `at` bytes from [`FnUnwind::begin`].
@@ -2812,6 +2830,8 @@ pub(crate) enum X64ExitStep {
     Pop(u8),
     /// `leave`.
     Leave,
+    /// `add rsp, n`, dropping a frame with no pointer.
+    Dealloc(u32),
 }
 
 /// One x86_64 prologue instruction an unwinder replays.
@@ -2953,6 +2973,7 @@ impl UnwindSteps {
                         match s {
                             X64ExitStep::Pop(r) => step(at, 0, r, 0, 0, 0),
                             X64ExitStep::Leave => step(at, 1, 0, 0, 0, 0),
+                            X64ExitStep::Dealloc(n) => step(at, 2, 0, 0, 0, n),
                         }
                     }
                 }
@@ -3082,10 +3103,11 @@ impl UnwindSteps {
                     }
                     let steps = (1..=n as usize)
                         .map(|i| {
-                            let (at, [tag, reg, ..], _) = field(len + 12 * i)?;
+                            let (at, [tag, reg, ..], value) = field(len + 12 * i)?;
                             match tag {
                                 0 => Some((at, X64ExitStep::Pop(reg))),
                                 1 => Some((at, X64ExitStep::Leave)),
+                                2 => Some((at, X64ExitStep::Dealloc(value))),
                                 _ => None,
                             }
                         })
@@ -4795,6 +4817,16 @@ pub struct NativeOptions {
     /// returns into the frame that made it, which a frame-pointer unwinder
     /// walking the call chain relies on.
     pub sibling_calls: bool,
+    /// `-fomit-frame-pointer` (`Some(true)`) or `-fno-omit-frame-pointer`
+    /// (`Some(false)`); `None` omits it under `-O`. An x86-64 System V
+    /// function whose body keeps rsp fixed then addresses its frame from
+    /// rsp and keeps no rbp record (`x86_64::emit::frame`).
+    pub omit_frame_pointer: Option<bool>,
+    /// `-mno-red-zone` (false): x86-64 code stores nothing below rsp, as
+    /// code that runs where an interrupt or exception pushes onto the
+    /// current stack must (System V AMD64 3.2.2 grants the 128 bytes below
+    /// rsp to the function). Every frame then keeps its pointer.
+    pub red_zone: bool,
     /// `-fno-plt`: a call to a function the link resolves loads the
     /// callee's address from its GOT entry and calls through it, with no
     /// PLT stub between, in x86-64 ELF objects and in aarch64 ELF objects
@@ -5301,6 +5333,8 @@ impl NativeOptions {
             jump_tables: true,
             conserve_stack: false,
             sibling_calls: true,
+            omit_frame_pointer: None,
+            red_zone: true,
             no_plt: false,
             unroll_loops: true,
             pic: false,
@@ -5356,6 +5390,17 @@ impl NativeOptions {
     /// build with the `optimizer` feature.
     pub(crate) const fn optimizes(&self) -> bool {
         cfg!(feature = "optimizer") && self.optimize
+    }
+
+    /// Whether a function may keep no frame pointer: as
+    /// [`Self::omit_frame_pointer`] says, else under `-O`. Such a frame keeps
+    /// the registers a lowering borrows in the red zone.
+    pub(crate) const fn omits_frame_pointer(&self) -> bool {
+        let asked = match self.omit_frame_pointer {
+            Some(on) => on,
+            None => self.optimizes(),
+        };
+        asked && self.red_zone
     }
 
     /// Set [`Self::output_kind`] = [`OutputKind::SharedLibrary`]
@@ -6051,6 +6096,11 @@ pub(crate) struct Abi {
     /// A call whose result the function returns unchanged may become a
     /// jump. Per-run (from [`NativeOptions::sibling_calls`]).
     pub sibling_calls: bool,
+    /// A function whose body keeps rsp fixed keeps no frame pointer.
+    /// Per-run (from [`NativeOptions::omit_frame_pointer`]).
+    pub omit_frame_pointer: bool,
+    /// Code may store below rsp. Per-run (from [`NativeOptions::red_zone`]).
+    pub red_zone: bool,
     /// Registers the emitters may not pick as scratch or inline-asm
     /// operands. Per-run (from [`NativeOptions::fixed_regs`]).
     pub fixed_regs: FixedRegs,
@@ -6198,6 +6248,8 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                omit_frame_pointer: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
@@ -6217,6 +6269,8 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                omit_frame_pointer: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
@@ -6236,6 +6290,8 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                omit_frame_pointer: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
@@ -6255,6 +6311,8 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                omit_frame_pointer: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
@@ -6274,6 +6332,8 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                omit_frame_pointer: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },

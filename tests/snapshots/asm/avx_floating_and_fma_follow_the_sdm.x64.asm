@@ -26,31 +26,29 @@ Disassembly of section .text:
                	int3
 
 <_mm_shuffle_ps>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movslq	%edi, %rdi
-               	movups	%xmm0, -0x20(%rbp)
-               	movups	%xmm1, -0x10(%rbp)
+               	movups	%xmm0, (%rsp)
+               	movups	%xmm1, 0x10(%rsp)
                	movq	%rdi, %rdx
                	andq	$0x3, %rdx
-               	movl	-0x20(%rbp,%rdx,4), %edx
+               	movl	(%rsp,%rdx,4), %edx
                	vmovd	%edx, %xmm0
                	movq	%rdi, %rdx
                	sarq	$0x2, %rdx
                	andq	$0x3, %rdx
-               	movl	-0x20(%rbp,%rdx,4), %eax
+               	movl	(%rsp,%rdx,4), %eax
                	vpinsrd	$0x1, %eax, %xmm0, %xmm0
                	movq	%rdi, %rax
                	sarq	$0x4, %rax
                	andq	$0x3, %rax
-               	movl	-0x10(%rbp,%rax,4), %eax
+               	movl	0x10(%rsp,%rax,4), %eax
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
                	sarq	$0x6, %rdi
                	andq	$0x3, %rdi
-               	movl	-0x10(%rbp,%rdi,4), %eax
+               	movl	0x10(%rsp,%rdi,4), %eax
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <_mm256_permute_pd>:
@@ -83,9 +81,7 @@ Disassembly of section .text:
                	retq
 
 <rnd_f>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
@@ -125,9 +121,9 @@ Disassembly of section .text:
                	movl	$0x3f800000, %ecx       # imm = 0x3F800000
                	testl	%edi, %edi
                	cmoveq	%rcx, %rax
-               	movl	%eax, -0x8(%rbp)
-               	movss	-0x8(%rbp), %xmm0
-               	leave
+               	movl	%eax, 0x8(%rsp)
+               	movss	0x8(%rsp), %xmm0
+               	addq	$0x18, %rsp
                	retq
                	shrq	$0x10, %rax
                	jmp	<addr>

@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r12
                	pushq	%rbx
                	movl	$0x40, %edi
@@ -37,7 +36,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
@@ -144,7 +143,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	%rdi, %r8
                	movq	%rcx, %rax
@@ -153,7 +152,7 @@ Disassembly of section .text:
                	addq	%r8, %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	%rbx, %r8
                	jmp	<addr>

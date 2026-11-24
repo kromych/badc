@@ -26,17 +26,15 @@ Disassembly of section .text:
                	int3
 
 <tail>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x20(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x18(%rbp)
-               	movq	0x20(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movq	0x28(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
+               	subq	$0x28, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, (%rsp)
+               	movq	0x38(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x40(%rsp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movq	0x48(%rsp), %r10
+               	movq	%r10, 0x18(%rsp)
                	shlq	%rsi
                	leaq	(%rdi,%rsi), %rax
                	leaq	(%rdx,%rdx,2), %rdx
@@ -45,10 +43,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	leaq	(%r8,%r8,4), %rcx
                	addq	%rcx, %rax
-               	movq	-0x20(%rbp), %rcx
+               	movq	(%rsp), %rcx
                	imulq	$0x6, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	-0x18(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	imulq	$0x7, %rcx, %rcx
                	addq	%rcx, %rax
                	cvttsd2si	%xmm0, %rcx
@@ -56,23 +54,21 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	leaq	(%r9,%r9,8), %rcx
                	addq	%rcx, %rax
-               	movq	-0x10(%rbp), %rcx
+               	movq	0x10(%rsp), %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	-0x8(%rbp), %rcx
+               	movq	0x18(%rsp), %rcx
                	imulq	$0xb, %rcx, %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <four>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movq	0x20(%rsp), %r10
+               	movq	%r10, (%rsp)
+               	movq	0x28(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
                	shlq	%rsi
                	leaq	(%rdi,%rsi), %rax
                	leaq	(%rdx,%rdx,2), %rdx
@@ -83,27 +79,25 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	imulq	$0x6, %r9, %rcx
                	addq	%rcx, %rax
-               	movq	-0x10(%rbp), %rcx
+               	movq	(%rsp), %rcx
                	imulq	$0x7, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	-0x8(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	shlq	$0x3, %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <fp>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x20(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x18(%rbp)
-               	movq	0x20(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movq	0x28(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
+               	subq	$0x28, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, (%rsp)
+               	movq	0x38(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x40(%rsp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movq	0x48(%rsp), %r10
+               	movq	%r10, 0x18(%rsp)
                	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	vfmadd231sd	<rip>, %xmm2, %xmm0 # xmm0 = (xmm2 * mem) + xmm0
                	vfmadd231sd	<rip>, %xmm3, %xmm0 # xmm0 = (xmm3 * mem) + xmm0
@@ -111,17 +105,17 @@ Disassembly of section .text:
                	vfmadd231sd	<rip>, %xmm5, %xmm0 # xmm0 = (xmm5 * mem) + xmm0
                	vfmadd231sd	<rip>, %xmm6, %xmm0 # xmm0 = (xmm6 * mem) + xmm0
                	vfmadd231sd	<rip>, %xmm7, %xmm0 # xmm0 = (xmm7 * mem) + xmm0
-               	movsd	-0x20(%rbp), %xmm1
+               	movsd	(%rsp), %xmm1
                	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
-               	movsd	-0x18(%rbp), %xmm1
+               	movsd	0x8(%rsp), %xmm1
                	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
-               	movq	-0x10(%rbp), %rax
+               	movq	0x10(%rsp), %rax
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
-               	movsd	-0x8(%rbp), %xmm1
+               	movsd	0x18(%rsp), %xmm1
                	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <make>:

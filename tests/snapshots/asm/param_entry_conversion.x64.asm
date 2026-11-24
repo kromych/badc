@@ -30,9 +30,7 @@ Disassembly of section .text:
                	retq
 
 <across>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x20, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -72,7 +70,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x20, %rsp
                	retq
 
 <leaf>:
@@ -97,8 +95,7 @@ Disassembly of section .text:
                	retq
 
 <permute>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -121,7 +118,7 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <low>:
@@ -130,61 +127,59 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x20(%rbp)
+               	movq	%rax, (%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x18(%rbp)
+               	movq	%rax, 0x8(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, 0x18(%rsp)
                	movabsq	$0x5a5a5a5a5a5a5afb, %rdi # imm = 0x5A5A5A5A5A5A5AFB
                	movabsq	$-0x5a5a5a5a5a5a012c, %rsi # imm = 0xA5A5A5A5A5A5FED4
                	movabsq	$0x5a5a5a5afffffff0, %rdx # imm = 0x5A5A5A5AFFFFFFF0
                	movabsq	$-0x5a5a5a5a5a5a5a38, %rcx # imm = 0xA5A5A5A5A5A5A5C8
                	movq	$-0x3e8, %r8            # imm = 0xFC18
                	movabsq	$0x5a5a5a5a5a5aff00, %r9 # imm = 0x5A5A5A5A5A5AFF00
-               	movq	-0x20(%rbp), %rax
+               	movq	(%rsp), %rax
                	callq	*%rax
                	cmpq	$0xf81d, %rax           # imm = 0xF81D
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a5a5a5a9c, %rdi # imm = 0xA5A5A5A5A5A5A564
                	movabsq	$0x5a5a5a5a5a5afffe, %rsi # imm = 0x5A5A5A5A5A5AFFFE
                	movabsq	$-0x5a5a5a5af8a432eb, %rdx # imm = 0xA5A5A5A5075BCD15
                	movabsq	$0x5a5a5a5afffffff9, %rcx # imm = 0x5A5A5A5AFFFFFFF9
-               	movq	-0x18(%rbp), %rax
+               	movq	0x8(%rsp), %rax
                	callq	*%rax
                	movabsq	$0x5af3266f22b8, %r11   # imm = 0x5AF3266F22B8
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movabsq	$-0x5a5a5a5a00009c40, %rdi # imm = 0xA5A5A5A5FFFF63C0
                	movabsq	$0x5a5a5a5a5a5a04d2, %rsi # imm = 0x5A5A5A5A5A5A04D2
                	movabsq	$-0x5a5a5a5a5a5a5a80, %rdx # imm = 0xA5A5A5A5A5A5A580
-               	movq	-0x10(%rbp), %rax
+               	movq	0x10(%rsp), %rax
                	callq	*%rax
                	cmpq	$-0x10c090e, %rax       # imm = 0xFEF3F6F2
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movabsq	$0x5a5a5a5a00000003, %rdi # imm = 0x5A5A5A5A00000003
                	movabsq	$-0x5a5a5a5a00000002, %rsi # imm = 0xA5A5A5A5FFFFFFFE
-               	movq	-0x8(%rbp), %rax
+               	movq	0x18(%rsp), %rax
                	callq	*%rax
                	cmpl	$-0x5, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

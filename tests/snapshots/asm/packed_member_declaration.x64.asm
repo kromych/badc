@@ -26,29 +26,27 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	$0x3, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	subq	$0x18, %rsp
+               	movq	$0x3, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
                	andq	$-0xfffff01, %rax       # imm = 0xF00000FF
                	orq	$0x8000100, %rax        # imm = 0x8000100
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x5(%rbp), %eax
+               	movl	%eax, 0x8(%rsp)
+               	movl	0xb(%rsp), %eax
                	andq	$-0xfffff1, %rax        # imm = 0xFF00000F
                	orq	$0x7ffff0, %rax         # imm = 0x7FFFF0
-               	movl	%eax, -0x5(%rbp)
-               	movb	$0x4, -0x2(%rbp)
-               	movsbq	-0x8(%rbp), %rax
+               	movl	%eax, 0xb(%rsp)
+               	movb	$0x4, 0xe(%rsp)
+               	movsbq	0x8(%rsp), %rax
                	cmpl	$0x3, %eax
                	jne	<addr>
-               	movl	-0x8(%rbp), %eax
+               	movl	0x8(%rsp), %eax
                	sarq	$0x8, %rax
                	shlq	$0x2c, %rax
                	sarq	$0x2c, %rax
                	cmpl	$0xfff80001, %eax       # imm = 0xFFF80001
                	jne	<addr>
-               	movl	-0x5(%rbp), %eax
+               	movl	0xb(%rsp), %eax
                	movq	%rax, %rcx
                	sarq	$0x4, %rcx
                	shlq	$0x2c, %rcx
@@ -57,8 +55,8 @@ Disassembly of section .text:
                	jne	<addr>
                	andq	$-0xfffff1, %rax        # imm = 0xFF00000F
                	orq	$0xfffff0, %rax         # imm = 0xFFFFF0
-               	movl	%eax, -0x5(%rbp)
-               	movl	-0x8(%rbp), %ecx
+               	movl	%eax, 0xb(%rsp)
+               	movl	0x8(%rsp), %ecx
                	sarq	$0x8, %rcx
                	shlq	$0x2c, %rcx
                	sarq	$0x2c, %rcx
@@ -69,15 +67,15 @@ Disassembly of section .text:
                	sarq	$0x2c, %rax
                	cmpl	$-0x1, %eax
                	jne	<addr>
-               	movsbq	-0x2(%rbp), %rax
+               	movsbq	0xe(%rsp), %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x17, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x16, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

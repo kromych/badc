@@ -32,20 +32,17 @@ Disassembly of section .text:
                	retq
 
 <caller>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%rdi, %rdx
                	movl	$0x7, %eax
                	movq	%rsi, %rdi
                	movq	%rax, %rsi
                	callq	*%rdx
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x30, %rsp
                	pushq	%rbx
                	movq	<rip>, %rbx # <addr>
                	movq	<rip>, %r10 # <addr>
@@ -76,7 +73,7 @@ Disassembly of section .text:
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x30, %rsp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

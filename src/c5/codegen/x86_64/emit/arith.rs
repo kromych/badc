@@ -1478,7 +1478,7 @@ fn emit_binop_rdx_rax(
     // the remainder; a register rd overwrites anyway is not saved.
     let preserve_rax = rd.0 != Reg::RAX.0 && implicit_holds_live(alloc, v, Reg::RAX, frame);
     let preserve_rdx = rd.0 != Reg::RDX.0 && implicit_holds_live(alloc, v, Reg::RDX, frame);
-    let pushed_bytes = (preserve_rax as i32 + preserve_rdx as i32) * 8;
+    let pushed_bytes = saved_shift(frame, u32::from(preserve_rax) + u32::from(preserve_rdx));
 
     // The one-operand forms accept r/m64, so a spilled operand is named
     // through its slot (shifted by the pushes) and a register operand
@@ -1490,7 +1490,7 @@ fn emit_binop_rdx_rax(
     let rm_operand = match rhs_place {
         Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => RmOperand::Reg(Reg(r)),
         Place::Spill(slot) => {
-            let (sb, off) = spill_slot_addr_shifted(frame, slot, pushed_bytes as u32);
+            let (sb, off) = spill_slot_addr_shifted(frame, slot, pushed_bytes);
             RmOperand::Mem(sb, off)
         }
         Place::IntReg(r) => {
@@ -1508,10 +1508,10 @@ fn emit_binop_rdx_rax(
     };
 
     if preserve_rax {
-        emit_push_r(code, Reg::RAX);
+        save_across(code, frame, Reg::RAX, keep::RAX);
     }
     if preserve_rdx {
-        emit_push_r(code, Reg::RDX);
+        save_across(code, frame, Reg::RDX, keep::RDX);
     }
     // rax := lhs (dividend low half, or multiplicand).
     if rn.0 != Reg::RAX.0 {
@@ -1551,10 +1551,10 @@ fn emit_binop_rdx_rax(
         emit_mov_rr(code, rd, result_src);
     }
     if preserve_rdx {
-        emit_pop_r(code, Reg::RDX);
+        restore_across(code, frame, Reg::RDX, keep::RDX);
     }
     if preserve_rax {
-        emit_pop_r(code, Reg::RAX);
+        restore_across(code, frame, Reg::RAX, keep::RAX);
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
@@ -1579,7 +1579,7 @@ pub(super) fn emit_udiv128(
     let (hi, lo) = (place_of(alloc, hi), place_of(alloc, lo));
     let preserve_rax = rd != Reg::RAX && implicit_holds_live(alloc, v, Reg::RAX, frame);
     let preserve_rdx = rd != Reg::RDX && implicit_holds_live(alloc, v, Reg::RDX, frame);
-    let pushed = (u32::from(preserve_rax) + u32::from(preserve_rdx)) * 8;
+    let pushed = saved_shift(frame, u32::from(preserve_rax) + u32::from(preserve_rdx));
     let rm = match place_of(alloc, divisor) {
         Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => Ok(Reg(r)),
         Place::IntReg(r) => {
@@ -1590,10 +1590,10 @@ pub(super) fn emit_udiv128(
         _ => return fail("Udiv128: divisor not int reg / spill"),
     };
     if preserve_rax {
-        emit_push_r(code, Reg::RAX);
+        save_across(code, frame, Reg::RAX, keep::RAX);
     }
     if preserve_rdx {
-        emit_push_r(code, Reg::RDX);
+        save_across(code, frame, Reg::RDX, keep::RDX);
     }
     let load = |code: &mut CodeBuf, to: Reg, from: Place| match from {
         Place::IntReg(r) => {
@@ -1628,10 +1628,10 @@ pub(super) fn emit_udiv128(
     }
     emit_mov_rr(code, rd, Reg::RAX);
     if preserve_rdx {
-        emit_pop_r(code, Reg::RDX);
+        restore_across(code, frame, Reg::RDX, keep::RDX);
     }
     if preserve_rax {
-        emit_pop_r(code, Reg::RAX);
+        restore_across(code, frame, Reg::RAX, keep::RAX);
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
@@ -1707,7 +1707,7 @@ fn emit_shift_by_count_reg(
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
         && implicit_holds_live(alloc, v, Reg::RCX, frame);
     if rcx_holds_live {
-        emit_push_r(code, Reg::RCX);
+        save_across(code, frame, Reg::RCX, keep::RCX);
     }
     match count {
         ShiftCount::Reg(r) if r.0 != Reg::RCX.0 => emit_mov_rr(code, Reg::RCX, r),
@@ -1716,7 +1716,7 @@ fn emit_shift_by_count_reg(
     }
     do_shift(code, rd);
     if rcx_holds_live {
-        emit_pop_r(code, Reg::RCX);
+        restore_across(code, frame, Reg::RCX, keep::RCX);
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())

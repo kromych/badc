@@ -81,8 +81,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x1, <rip> # <addr>
                	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
                                                 # <addr>
@@ -90,7 +89,7 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	incq	%rax
                	movl	%eax, <rip> # <addr>
@@ -100,14 +99,14 @@ Disassembly of section .text:
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x3, %edi
                	callq	<addr>
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, <rip> # <addr>
                	movl	$0x2, <rip> # <addr>
@@ -119,7 +118,7 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x8, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x0, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
@@ -135,7 +134,7 @@ Disassembly of section .text:
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0xc, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, <rip> # <addr>
                	movl	$0x4, <rip> # <addr>
@@ -147,11 +146,11 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0xe, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0xa, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

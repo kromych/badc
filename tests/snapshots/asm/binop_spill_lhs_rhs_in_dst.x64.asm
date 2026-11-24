@@ -41,21 +41,19 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movabsq	$0x70000000c, %rax      # imm = 0x70000000C
-               	movq	%rax, -0x18(%rbp)
+               	movq	%rax, 0x8(%rsp)
                	movabsq	$0x50000000f, %rax      # imm = 0x50000000F
-               	movq	%rax, -0x10(%rbp)
-               	movl	$0xa, -0x8(%rbp)
+               	movq	%rax, 0x10(%rsp)
+               	movl	$0xa, 0x18(%rsp)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	movl	-0x18(%rbp,%rcx,4), %esi
+               	movl	0x8(%rsp,%rcx,4), %esi
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	$0x4, %ecx
                	jle	<addr>
                	addq	$0xa, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq

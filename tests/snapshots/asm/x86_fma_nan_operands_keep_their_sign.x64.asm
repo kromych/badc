@@ -26,21 +26,17 @@ Disassembly of section .text:
                	int3
 
 <bits>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movss	%xmm0, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	leave
+               	subq	$0x18, %rsp
+               	movss	%xmm0, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
+               	addq	$0x18, %rsp
                	retq
 
 <val>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x8(%rbp)
-               	movss	-0x8(%rbp), %xmm0
-               	leave
+               	subq	$0x18, %rsp
+               	movl	%edi, 0x8(%rsp)
+               	movss	0x8(%rsp), %xmm0
+               	addq	$0x18, %rsp
                	retq
 
 <main>:

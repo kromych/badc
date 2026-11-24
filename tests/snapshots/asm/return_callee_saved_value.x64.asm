@@ -26,12 +26,11 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi
                	callq	<addr>
                	leaq	<rip>, %rdi
                	callq	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

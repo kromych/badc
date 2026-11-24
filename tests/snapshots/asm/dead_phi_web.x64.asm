@@ -79,9 +79,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r12
                	pushq	%rbx
                	movq	<rip>, %r12 # <addr>
@@ -99,7 +97,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	%r12, %rdi
                	movq	%rcx, %rdx
@@ -110,7 +108,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%edi, %edi
                	movl	$0x3, %edx
@@ -122,7 +120,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%esi, %esi
                	movl	$0x1, %edx
@@ -133,7 +131,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	%r12, %rdi
                	movq	%r12, %rdx
@@ -144,7 +142,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	%r12, %rdi
                	movq	%rbx, %rdx
@@ -156,7 +154,7 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	<rip>, %edi # <addr>
                	callq	<addr>
@@ -165,5 +163,5 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq

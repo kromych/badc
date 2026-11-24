@@ -26,10 +26,8 @@ Disassembly of section .text:
                	int3
 
 <wsum>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movss	0x10(%rbp), %xmm8
-               	movss	0x18(%rbp), %xmm9
+               	movss	0x8(%rsp), %xmm8
+               	movss	0x10(%rsp), %xmm9
                	vmulss	<rip>, %xmm1, %xmm1
                	vfmadd132ss	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	vfmadd231ss	<rip>, %xmm2, %xmm0 # xmm0 = (xmm2 * mem) + xmm0
@@ -41,7 +39,6 @@ Disassembly of section .text:
                	vfmadd231ss	<rip>, %xmm8, %xmm0 # xmm0 = (xmm8 * mem) + xmm0
                	vfmadd231ss	<rip>, %xmm9, %xmm0 # xmm0 = (xmm9 * mem) + xmm0
                	cvttss2si	%xmm0, %rax
-               	popq	%rbp
                	retq
 
 <main>:

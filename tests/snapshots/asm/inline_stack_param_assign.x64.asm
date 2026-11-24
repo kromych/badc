@@ -26,8 +26,6 @@ Disassembly of section .text:
                	int3
 
 <mash_outline>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movswq	%r8w, %r8
                	subq	%rsi, %r8
                	movswq	%r8w, %r8
@@ -35,21 +33,21 @@ Disassembly of section .text:
                	leaq	0x3(%r9), %rax
                	movq	%rax, %r9
                	andq	$0xff, %r9
-               	movzwq	0x18(%rbp), %rax
+               	movzwq	0x10(%rsp), %rax
                	shlq	%rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movw	%ax, 0x18(%rbp)
-               	movl	0x20(%rbp), %esi
+               	movw	%ax, 0x10(%rsp)
+               	movl	0x18(%rsp), %esi
                	addq	%rdi, %rsi
-               	movl	%esi, 0x20(%rbp)
+               	movl	%esi, 0x18(%rsp)
                	movslq	%esi, %rdi
-               	movq	0x28(%rbp), %rsi
+               	movq	0x20(%rsp), %rsi
                	subq	%rdx, %rsi
-               	movq	%rsi, 0x28(%rbp)
-               	movsbq	0x10(%rbp), %rdx
+               	movq	%rsi, 0x20(%rsp)
+               	movsbq	0x8(%rsp), %rdx
                	addq	%rsi, %rdx
-               	movq	%rdx, 0x28(%rbp)
-               	movl	0x30(%rbp), %esi
+               	movq	%rdx, 0x20(%rsp)
+               	movl	0x28(%rsp), %esi
                	addq	%r9, %r8
                	addq	%r8, %rax
                	addq	%rdi, %rax
@@ -57,7 +55,6 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	movl	%ecx, %ecx
                	addq	%rcx, %rax
-               	popq	%rbp
                	retq
 
 <main>:

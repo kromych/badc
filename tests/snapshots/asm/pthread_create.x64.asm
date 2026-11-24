@@ -30,9 +30,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r12
                	pushq	%rbx
                	xorl	%edi, %edi
@@ -47,16 +45,16 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	movq	%rsi, %rcx
                	callq	*%r12
-               	movq	-0x10(%rbp), %rdi
-               	leaq	-0x8(%rbp), %rsi
+               	movq	0x10(%rsp), %rdi
+               	leaq	0x18(%rsp), %rsi
                	callq	*%rbx
-               	movq	-0x8(%rbp), %rax
+               	movq	0x18(%rsp), %rax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq

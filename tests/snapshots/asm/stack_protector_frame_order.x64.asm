@@ -26,56 +26,54 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movq	%fs:0x28, %r11
-               	movq	%r11, -0x8(%rbp)
+               	movq	%r11, 0x18(%rsp)
                	xorl	%r11d, %r11d
                	xorl	%eax, %eax
-               	movb	$0x3, -0x20(%rbp,%rax)
+               	movb	$0x3, (%rsp,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
-               	movsbq	-0x20(%rbp), %rax
-               	movsbq	-0x11(%rbp), %rcx
+               	movsbq	(%rsp), %rax
+               	movsbq	0xf(%rsp), %rcx
                	addq	%rcx, %rax
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%fs:0x28, %r11
-               	cmpq	-0x8(%rbp), %r11
+               	cmpq	0x18(%rsp), %r11
                	je	<addr>
                	callq	<addr>
                	xorl	%r11d, %r11d
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	leaq	-0x20(%rbp), %rax
-               	movl	$0x9, -0x20(%rbp)
+               	leaq	(%rsp), %rax
+               	movl	$0x9, (%rsp)
                	leaq	0x4(%rax), %rcx
                	xorl	%eax, %eax
                	movb	$0x4, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movl	-0x20(%rbp), %eax
-               	movsbq	-0x15(%rbp), %rcx
+               	movl	(%rsp), %eax
+               	movsbq	0xb(%rsp), %rcx
                	addq	%rcx, %rax
                	cmpl	$0xd, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%fs:0x28, %r11
-               	cmpq	-0x8(%rbp), %r11
+               	cmpq	0x18(%rsp), %r11
                	je	<addr>
                	callq	<addr>
                	xorl	%r11d, %r11d
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
                	movq	%fs:0x28, %r11
-               	cmpq	-0x8(%rbp), %r11
+               	cmpq	0x18(%rsp), %r11
                	je	<addr>
                	callq	<addr>
                	xorl	%r11d, %r11d
-               	leave
+               	addq	$0x28, %rsp
                	retq

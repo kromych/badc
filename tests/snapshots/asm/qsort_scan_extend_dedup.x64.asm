@@ -28,9 +28,7 @@ Disassembly of section .text:
 <qs>:
                	cmpl	%edx, %esi
                	jge	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -82,14 +80,12 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x10, %rsp
                	retq
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x108, %rsp            # imm = 0x108
+               	subq	$0x110, %rsp            # imm = 0x110
                	pushq	%rbx
                	movl	$0x3039, %ecx           # imm = 0x3039
                	xorl	%eax, %eax
@@ -98,19 +94,19 @@ Disassembly of section .text:
                	movl	%ecx, %esi
                	shrq	$0x10, %rsi
                	subq	$0x4000, %rsi           # imm = 0x4000
-               	movl	%esi, -0x100(%rbp,%rax,4)
+               	movl	%esi, 0x10(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	leaq	-0x100(%rbp), %rbx
+               	leaq	0x10(%rsp), %rbx
                	xorl	%esi, %esi
                	movl	$0x3f, %edx
                	movq	%rbx, %rdi
                	callq	<addr>
                	movl	$0x1, %eax
-               	movl	-0x100(%rbp,%rax,4), %ecx
+               	movl	0x10(%rsp,%rax,4), %ecx
                	leaq	-0x1(%rax), %rsi
-               	movl	-0x100(%rbp,%rsi,4), %edx
+               	movl	0x10(%rsp,%rsi,4), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	incq	%rax
@@ -118,9 +114,9 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x110, %rsp            # imm = 0x110
                	retq
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x110, %rsp            # imm = 0x110
                	retq

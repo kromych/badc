@@ -26,40 +26,38 @@ Disassembly of section .text:
                	int3
 
 <_mm_i32gather_epi32>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %rcx
+               	movups	%xmm14, 0x10(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, 0x40(%rsp)
                	jmp	<addr>
-               	movl	-0x8(%rbp), %r8d
-               	movl	%r8d, -0x30(%rbp,%rax,4)
+               	movl	0x58(%rsp), %r8d
+               	movl	%r8d, 0x30(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	-0x50(%rbp,%rax,4), %r8d
-               	movl	%r8d, -0x8(%rbp)
-               	movl	-0x40(%rbp,%rax,4), %r8d
+               	movl	0x10(%rsp,%rax,4), %r8d
+               	movl	%r8d, 0x58(%rsp)
+               	movl	0x20(%rsp,%rax,4), %r8d
                	testl	%r8d, %r8d
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movslq	-0x20(%rbp,%rax,4), %rbx
+               	leaq	0x58(%rsp), %r8
+               	movslq	0x40(%rsp,%rax,4), %rbx
                	shlq	$0x3, %rbx
                	addq	%rdi, %rbx
                	movl	(%rbx), %r10d
                	movl	%r10d, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm256_i32gather_epi32>:
@@ -118,40 +116,38 @@ Disassembly of section .text:
                	retq
 
 <_mm_i32gather_epi64>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %rcx
+               	movups	%xmm14, 0x10(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, 0x40(%rsp)
                	jmp	<addr>
-               	movq	-0x8(%rbp), %r8
-               	movq	%r8, -0x30(%rbp,%rax,8)
+               	movq	0x58(%rsp), %r8
+               	movq	%r8, 0x30(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	-0x50(%rbp,%rax,8), %r8
-               	movq	%r8, -0x8(%rbp)
-               	movq	-0x40(%rbp,%rax,8), %r8
+               	movq	0x10(%rsp,%rax,8), %r8
+               	movq	%r8, 0x58(%rsp)
+               	movq	0x20(%rsp,%rax,8), %r8
                	testq	%r8, %r8
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movslq	-0x20(%rbp,%rax,4), %rbx
+               	leaq	0x58(%rsp), %r8
+               	movslq	0x40(%rsp,%rax,4), %rbx
                	shlq	$0x3, %rbx
                	addq	%rdi, %rbx
                	movq	(%rbx), %r10
                	movq	%r10, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm256_i32gather_epi64>:
@@ -210,9 +206,7 @@ Disassembly of section .text:
                	retq
 
 <_mm_i64gather_epi32>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	movslq	%esi, %rsi
                	xorl	%eax, %eax
@@ -220,33 +214,33 @@ Disassembly of section .text:
                	vmovd	%ecx, %xmm1
                	vpinsrd	$0x1, %ecx, %xmm1, %xmm1
                	movq	%rax, %xmm14
-               	movups	%xmm14, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %r8
+               	movups	%xmm14, 0x10(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %r8
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%r8)
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, 0x40(%rsp)
                	jmp	<addr>
-               	movl	-0x8(%rbp), %r9d
-               	movl	%r9d, -0x30(%rbp,%rax,4)
+               	movl	0x58(%rsp), %r9d
+               	movl	%r9d, 0x30(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movl	-0x50(%rbp,%rax,4), %r8d
-               	movl	%r8d, -0x8(%rbp)
-               	movl	-0x40(%rbp,%rax,4), %r8d
+               	movl	0x10(%rsp,%rax,4), %r8d
+               	movl	%r8d, 0x58(%rsp)
+               	movl	0x20(%rsp,%rax,4), %r8d
                	testl	%r8d, %r8d
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movq	-0x20(%rbp,%rax,8), %r9
+               	leaq	0x58(%rsp), %r8
+               	movq	0x40(%rsp,%rax,8), %r9
                	imulq	%rsi, %r9
                	addq	%rdi, %r9
                	movl	(%r9), %r10d
                	movl	%r10d, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm256_i64gather_epi32>:
@@ -292,41 +286,39 @@ Disassembly of section .text:
                	retq
 
 <_mm_i64gather_epi64>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	movslq	%esi, %rsi
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %r8
+               	movups	%xmm14, 0x10(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %r8
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%r8)
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, 0x40(%rsp)
                	jmp	<addr>
-               	movq	-0x8(%rbp), %r9
-               	movq	%r9, -0x30(%rbp,%rax,8)
+               	movq	0x58(%rsp), %r9
+               	movq	%r9, 0x30(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	-0x50(%rbp,%rax,8), %r8
-               	movq	%r8, -0x8(%rbp)
-               	movq	-0x40(%rbp,%rax,8), %r8
+               	movq	0x10(%rsp,%rax,8), %r8
+               	movq	%r8, 0x58(%rsp)
+               	movq	0x20(%rsp,%rax,8), %r8
                	testq	%r8, %r8
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movq	-0x20(%rbp,%rax,8), %r9
+               	leaq	0x58(%rsp), %r8
+               	movq	0x40(%rsp,%rax,8), %r9
                	imulq	%rsi, %r9
                	addq	%rdi, %r9
                	movq	(%r9), %r10
                	movq	%r10, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm256_i64gather_epi64>:
@@ -386,40 +378,38 @@ Disassembly of section .text:
                	retq
 
 <_mm_i32gather_ps>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %rcx
+               	movups	%xmm14, 0x10(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, 0x40(%rsp)
                	jmp	<addr>
-               	movl	-0x8(%rbp), %r8d
-               	movl	%r8d, -0x30(%rbp,%rax,4)
+               	movl	0x58(%rsp), %r8d
+               	movl	%r8d, 0x30(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
-               	movl	-0x50(%rbp,%rax,4), %r8d
-               	movl	%r8d, -0x8(%rbp)
-               	movl	-0x40(%rbp,%rax,4), %r8d
+               	movl	0x10(%rsp,%rax,4), %r8d
+               	movl	%r8d, 0x58(%rsp)
+               	movl	0x20(%rsp,%rax,4), %r8d
                	testl	%r8d, %r8d
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movslq	-0x20(%rbp,%rax,4), %rbx
+               	leaq	0x58(%rsp), %r8
+               	movslq	0x40(%rsp,%rax,4), %rbx
                	shlq	$0x3, %rbx
                	addq	%rdi, %rbx
                	movl	(%rbx), %r10d
                	movl	%r10d, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm256_i32gather_ps>:
@@ -478,40 +468,38 @@ Disassembly of section .text:
                	retq
 
 <_mm_i32gather_pd>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %rcx
+               	movups	%xmm14, 0x10(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, 0x40(%rsp)
                	jmp	<addr>
-               	movq	-0x8(%rbp), %r8
-               	movq	%r8, -0x30(%rbp,%rax,8)
+               	movq	0x58(%rsp), %r8
+               	movq	%r8, 0x30(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	-0x50(%rbp,%rax,8), %r8
-               	movq	%r8, -0x8(%rbp)
-               	movq	-0x40(%rbp,%rax,8), %r8
+               	movq	0x10(%rsp,%rax,8), %r8
+               	movq	%r8, 0x58(%rsp)
+               	movq	0x20(%rsp,%rax,8), %r8
                	testq	%r8, %r8
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movslq	-0x20(%rbp,%rax,4), %rbx
+               	leaq	0x58(%rsp), %r8
+               	movslq	0x40(%rsp,%rax,4), %rbx
                	shlq	$0x3, %rbx
                	addq	%rdi, %rbx
                	movq	(%rbx), %r10
                	movq	%r10, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm256_i32gather_pd>:
@@ -570,45 +558,41 @@ Disassembly of section .text:
                	retq
 
 <_mm_mask_i64gather_ps>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	movslq	%esi, %rsi
-               	movups	%xmm0, -0x50(%rbp)
-               	movups	%xmm2, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %rax
+               	movups	%xmm0, 0x10(%rsp)
+               	movups	%xmm2, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movups	%xmm1, -0x20(%rbp)
+               	movups	%xmm1, 0x40(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movl	-0x8(%rbp), %r9d
-               	movl	%r9d, -0x30(%rbp,%rax,4)
+               	movl	0x58(%rsp), %r9d
+               	movl	%r9d, 0x30(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movl	-0x50(%rbp,%rax,4), %r8d
-               	movl	%r8d, -0x8(%rbp)
-               	movl	-0x40(%rbp,%rax,4), %r8d
+               	movl	0x10(%rsp,%rax,4), %r8d
+               	movl	%r8d, 0x58(%rsp)
+               	movl	0x20(%rsp,%rax,4), %r8d
                	testl	%r8d, %r8d
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movq	-0x20(%rbp,%rax,8), %r9
+               	leaq	0x58(%rsp), %r8
+               	movq	0x40(%rsp,%rax,8), %r9
                	imulq	%rsi, %r9
                	addq	%rdi, %r9
                	movl	(%r9), %r10d
                	movl	%r10d, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm_i64gather_ps>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	movslq	%esi, %rsi
                	xorl	%eax, %eax
@@ -616,33 +600,33 @@ Disassembly of section .text:
                	vmovd	%ecx, %xmm1
                	vpinsrd	$0x1, %ecx, %xmm1, %xmm1
                	movq	%rax, %xmm14
-               	movups	%xmm14, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %r8
+               	movups	%xmm14, 0x10(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %r8
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%r8)
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, 0x40(%rsp)
                	jmp	<addr>
-               	movl	-0x8(%rbp), %r9d
-               	movl	%r9d, -0x30(%rbp,%rax,4)
+               	movl	0x58(%rsp), %r9d
+               	movl	%r9d, 0x30(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movl	-0x50(%rbp,%rax,4), %r8d
-               	movl	%r8d, -0x8(%rbp)
-               	movl	-0x40(%rbp,%rax,4), %r8d
+               	movl	0x10(%rsp,%rax,4), %r8d
+               	movl	%r8d, 0x58(%rsp)
+               	movl	0x20(%rsp,%rax,4), %r8d
                	testl	%r8d, %r8d
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movq	-0x20(%rbp,%rax,8), %r9
+               	leaq	0x58(%rsp), %r8
+               	movq	0x40(%rsp,%rax,8), %r9
                	imulq	%rsi, %r9
                	addq	%rdi, %r9
                	movl	(%r9), %r10d
                	movl	%r10d, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm256_mask_i64gather_ps>:
@@ -728,77 +712,73 @@ Disassembly of section .text:
                	retq
 
 <_mm_mask_i64gather_pd>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	movslq	%esi, %rsi
-               	movups	%xmm0, -0x50(%rbp)
-               	movups	%xmm2, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %rax
+               	movups	%xmm0, 0x10(%rsp)
+               	movups	%xmm2, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movups	%xmm1, -0x20(%rbp)
+               	movups	%xmm1, 0x40(%rsp)
                	xorl	%eax, %eax
                	jmp	<addr>
-               	movq	-0x8(%rbp), %r9
-               	movq	%r9, -0x30(%rbp,%rax,8)
+               	movq	0x58(%rsp), %r9
+               	movq	%r9, 0x30(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	-0x50(%rbp,%rax,8), %r8
-               	movq	%r8, -0x8(%rbp)
-               	movq	-0x40(%rbp,%rax,8), %r8
+               	movq	0x10(%rsp,%rax,8), %r8
+               	movq	%r8, 0x58(%rsp)
+               	movq	0x20(%rsp,%rax,8), %r8
                	testq	%r8, %r8
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movq	-0x20(%rbp,%rax,8), %r9
+               	leaq	0x58(%rsp), %r8
+               	movq	0x40(%rsp,%rax,8), %r9
                	imulq	%rsi, %r9
                	addq	%rdi, %r9
                	movq	(%r9), %r10
                	movq	%r10, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm_i64gather_pd>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%rbx
                	movslq	%esi, %rsi
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
-               	movups	%xmm14, -0x50(%rbp)
-               	movups	%xmm1, -0x40(%rbp)
-               	leaq	-0x30(%rbp), %r8
+               	movups	%xmm14, 0x10(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %r8
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%r8)
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, 0x40(%rsp)
                	jmp	<addr>
-               	movq	-0x8(%rbp), %r9
-               	movq	%r9, -0x30(%rbp,%rax,8)
+               	movq	0x58(%rsp), %r9
+               	movq	%r9, 0x30(%rsp,%rax,8)
                	incq	%rax
                	cmpl	$0x2, %eax
                	jge	<addr>
-               	movq	-0x50(%rbp,%rax,8), %r8
-               	movq	%r8, -0x8(%rbp)
-               	movq	-0x40(%rbp,%rax,8), %r8
+               	movq	0x10(%rsp,%rax,8), %r8
+               	movq	%r8, 0x58(%rsp)
+               	movq	0x20(%rsp,%rax,8), %r8
                	testq	%r8, %r8
                	jge	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movq	-0x20(%rbp,%rax,8), %r9
+               	leaq	0x58(%rsp), %r8
+               	movq	0x40(%rsp,%rax,8), %r9
                	imulq	%rsi, %r9
                	addq	%rdi, %r9
                	movq	(%r9), %r10
                	movq	%r10, (%r8)
                	jmp	<addr>
-               	movups	-0x30(%rbp), %xmm0
+               	movups	0x30(%rsp), %xmm0
                	popq	%rbx
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <_mm256_mask_i64gather_pd>:
@@ -897,9 +877,7 @@ Disassembly of section .text:
                	retq
 
 <prepare>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x48, %rsp
+               	subq	$0x50, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -1039,8 +1017,8 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%rdx, %rax
                	imulq	0x50(%rsp), %rax
-               	movq	$0x0, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
+               	movq	$0x0, 0x68(%rsp)
+               	leaq	0x68(%rsp), %rdi
                	leaq	<rip>, %rcx # <addr>
                	addq	$0x200, %rcx            # imm = 0x200
                	leaq	(%rcx,%rax), %rsi
@@ -1048,7 +1026,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdx
                	callq	<addr>
                	movq	0x30(%rsp), %r9
-               	movq	-0x8(%rbp), %rdx
+               	movq	0x68(%rsp), %rdx
                	movq	%rbx, %rcx
                	imulq	%r9, %rcx
                	xorl	%eax, %eax
@@ -1067,8 +1045,8 @@ Disassembly of section .text:
                	jl	<addr>
                	jmp	<addr>
                	leaq	0x40(%r12), %rax
-               	movq	$0x0, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
+               	movq	$0x0, 0x68(%rsp)
+               	leaq	0x68(%rsp), %rdi
                	movq	%rbx, %rcx
                	imulq	%r9, %rcx
                	movslq	%ecx, %rcx
@@ -1077,7 +1055,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdx
                	callq	<addr>
                	movq	0x30(%rsp), %r9
-               	movq	-0x8(%rbp), %rdx
+               	movq	0x68(%rsp), %rdx
                	jmp	<addr>
                	movl	$0x7f, %ecx
                	jmp	<addr>
@@ -1091,7 +1069,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x50, %rsp
                	retq
 
 <check_gathers>:
@@ -10026,8 +10004,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r12
                	pushq	%rbx
                	xorl	%eax, %eax
@@ -10075,5 +10052,5 @@ Disassembly of section .text:
                	movq	%r12, %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -28,9 +28,7 @@ Disassembly of section .text:
 <free_tree>:
                	testq	%rdi, %rdi
                	je	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x20, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	0x8(%rbx), %rcx
@@ -41,7 +39,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rbx, %rdi
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	jmp	<addr>
                	movq	0x8(%rcx), %rdi
                	movq	%rcx, 0x18(%rsp)
@@ -68,9 +66,7 @@ Disassembly of section .text:
                	retq
 
 <insert>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
@@ -84,7 +80,7 @@ Disassembly of section .text:
                	movq	$0x0, 0x10(%rax)
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	(%rbx), %rax
                	cmpq	%rax, %r12
@@ -102,7 +98,7 @@ Disassembly of section .text:
                	movq	%rbx, %rax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	(%rcx), %rax
                	cmpq	%rax, %r12
@@ -151,9 +147,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	xorl	%edi, %edi
                	movl	$0x32, %esi
@@ -169,5 +163,5 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

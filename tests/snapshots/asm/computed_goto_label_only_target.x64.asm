@@ -26,17 +26,15 @@ Disassembly of section .text:
                	int3
 
 <only_indirect>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
+               	subq	$0x18, %rsp
+               	movq	%rdi, (%rsp)
                	leaq	<rip>, %rax # <addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x10(%rbp), %eax
+               	movl	(%rsp), %eax
                	addq	$0x2, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <selected>:
@@ -50,16 +48,14 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x1, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movl	$0x1, 0x8(%rsp)
                	movl	$0x5, %edi
                	callq	<addr>
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x5, %edi
                	xorl	%esi, %esi
@@ -67,7 +63,7 @@ Disassembly of section .text:
                	cmpl	$0xf, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x5, %edi
                	movl	$0x1, %esi
@@ -75,16 +71,16 @@ Disassembly of section .text:
                	cmpl	$0x19, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x5, %edi
-               	movl	-0x8(%rbp), %esi
+               	movl	0x8(%rsp), %esi
                	callq	<addr>
                	cmpl	$0x19, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

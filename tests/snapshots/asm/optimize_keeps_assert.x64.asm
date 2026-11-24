@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <__c5_assert_fail>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x7, %ecx
                	leaq	<rip>, %rax
                	movq	%rsi, %rdx
@@ -40,8 +39,7 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
                	movl	$0x7, %edx

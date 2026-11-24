@@ -26,42 +26,40 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x100, %rsp            # imm = 0x100
-               	leaq	-0x100(%rbp), %rax
+               	subq	$0x108, %rsp            # imm = 0x108
+               	leaq	(%rsp), %rax
                	leaq	0x80(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x80, %rcx
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
-               	leaq	-0x80(%rbp), %rdi
+               	leaq	0x80(%rsp), %rdi
                	xorl	%esi, %esi
                	movl	$0x80, %edx
                	callq	<addr>
-               	movl	$0x3, -0x80(%rbp)
-               	movl	$0x8, -0x44(%rbp)
-               	movl	$0x14, -0x3c(%rbp)
-               	movzbq	-0x80(%rbp), %rax
+               	movl	$0x3, 0x80(%rsp)
+               	movl	$0x8, 0xbc(%rsp)
+               	movl	$0x14, 0xc4(%rsp)
+               	movzbq	0x80(%rsp), %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0xa, %eax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
-               	movzbq	-0x44(%rbp), %rax
+               	movzbq	0xbc(%rsp), %rax
                	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0xb, %eax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
-               	movzbq	-0x3c(%rbp), %rax
+               	movzbq	0xc4(%rsp), %rax
                	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0xc, %eax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq

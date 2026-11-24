@@ -5466,8 +5466,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -5514,10 +5513,10 @@ Disassembly of section .text:
                	movl	$0xa6, %eax
                	testq	%rax, %rax
                	je	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	%rdx, %rax
                	lock

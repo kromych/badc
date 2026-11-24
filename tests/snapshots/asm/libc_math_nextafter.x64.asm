@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	callq	<addr>
@@ -36,7 +35,7 @@ Disassembly of section .text:
                	comisd	%xmm1, %xmm0
                	jb	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorps	%xmm1, %xmm1
                	callq	<addr>
@@ -45,7 +44,7 @@ Disassembly of section .text:
                	comisd	%xmm0, %xmm1
                	jb	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movapd	%xmm0, %xmm1
                	callq	<addr>
@@ -54,7 +53,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movsd	<rip>, %xmm0
                	callq	<addr>
@@ -62,7 +61,7 @@ Disassembly of section .text:
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movsd	<rip>, %xmm0
                	callq	<addr>
@@ -70,7 +69,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movsd	<rip>, %xmm0
                	callq	<addr>
@@ -78,7 +77,7 @@ Disassembly of section .text:
                	cmpq	$-0x2, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movss	<rip>, %xmm0
                	movss	<rip>, %xmm1
@@ -87,7 +86,7 @@ Disassembly of section .text:
                	comiss	%xmm0, %xmm1
                	jb	<addr>
                	movl	$0x7, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movss	<rip>, %xmm0
                	callq	<addr>
@@ -95,8 +94,8 @@ Disassembly of section .text:
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

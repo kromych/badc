@@ -42,8 +42,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%fs:0x0, %rax
                	addq	$-0x50, %rax
                	movq	(%rax), %rax
@@ -136,7 +135,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	%rax, %rcx
                	jmp	<addr>

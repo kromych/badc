@@ -98,9 +98,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	callq	<addr>
                	cmpl	$0x2a, %eax
@@ -156,9 +154,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	cmoveq	%rcx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq
-               	movl	$0x2, %eax
+               	addb	%bh, 0x2(%rax)
                	jmp	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>

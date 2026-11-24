@@ -30,9 +30,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, <rip> # <addr>
@@ -53,5 +51,5 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	subq	$0x2, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

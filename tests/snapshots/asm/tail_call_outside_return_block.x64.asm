@@ -49,8 +49,7 @@ Disassembly of section .text:
                	retq
 
 <wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	orq	$0x40000, %rdi          # imm = 0x40000
                	callq	<addr>
                	testq	%rax, %rax
@@ -58,7 +57,7 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	testb	$0x4, %cl
                	je	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	0x10(%rax), %rcx
                	testb	$0x2, %cl
@@ -70,8 +69,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	xorl	%edx, %edx
@@ -83,14 +81,14 @@ Disassembly of section .text:
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

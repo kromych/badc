@@ -26,8 +26,6 @@ Disassembly of section .text:
                	int3
 
 <weigh17>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	shlq	%rsi
                	leaq	(%rdi,%rsi), %rax
                	leaq	(%rdx,%rdx,2), %rdx
@@ -38,40 +36,39 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	imulq	$0x6, %r9, %rcx
                	addq	%rcx, %rax
-               	movq	0x10(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	imulq	$0x7, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x18(%rbp), %rcx
+               	movq	0x10(%rsp), %rcx
                	shlq	$0x3, %rcx
                	addq	%rcx, %rax
-               	movq	0x20(%rbp), %rcx
+               	movq	0x18(%rsp), %rcx
                	leaq	(%rcx,%rcx,8), %rcx
                	addq	%rcx, %rax
-               	movq	0x28(%rbp), %rcx
+               	movq	0x20(%rsp), %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x30(%rbp), %rcx
+               	movq	0x28(%rsp), %rcx
                	imulq	$0xb, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x38(%rbp), %rcx
+               	movq	0x30(%rsp), %rcx
                	imulq	$0xc, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x40(%rbp), %rcx
+               	movq	0x38(%rsp), %rcx
                	imulq	$0xd, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x48(%rbp), %rcx
+               	movq	0x40(%rsp), %rcx
                	imulq	$0xe, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x50(%rbp), %rcx
+               	movq	0x48(%rsp), %rcx
                	imulq	$0xf, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x58(%rbp), %rcx
+               	movq	0x50(%rsp), %rcx
                	shlq	$0x4, %rcx
                	addq	%rcx, %rax
-               	movq	0x60(%rbp), %rcx
+               	movq	0x58(%rsp), %rcx
                	imulq	$0x11, %rcx, %rcx
                	addq	%rcx, %rax
-               	popq	%rbp
                	retq
 
 <through>:
@@ -138,8 +135,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	<rip>, %rdi # <addr>
                	movl	$0x3, %esi
                	movl	$0x5, %edx
@@ -149,5 +145,5 @@ Disassembly of section .text:
                	cmpq	$0x4bf, %rax            # imm = 0x4BF
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq

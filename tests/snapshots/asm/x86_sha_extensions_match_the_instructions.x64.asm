@@ -26,15 +26,13 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x20, %rsp
                	pushq	%rbx
                	movabsq	$-0x32e2fdfa50a5fdd5, %rax # imm = 0xCD1D0205AF5A022B
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	movabsq	$-0x3de0216ac152a3aa, %rcx # imm = 0xC21FDE953EAD5C56
                	xorl	%eax, %eax
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rcx, 0x18(%rsp)
                	movl	$0xdaa9b5f, %edi        # imm = 0xDAA9B5F
                	movl	$0xd665ca49, %ecx       # imm = 0xD665CA49
                	movl	$0xa70480db, %esi       # imm = 0xA70480DB
@@ -49,7 +47,7 @@ Disassembly of section .text:
                	movl	%edi, %ebx
                	rorl	$0x1b, %ebx
                	addq	%rbx, %r9
-               	movl	-0x10(%rbp,%rax,4), %ebx
+               	movl	0x10(%rsp,%rax,4), %ebx
                	addq	%rbx, %r9
                	addq	%r9, %r8
                	addq	$0x5a827999, %r8        # imm = 0x5A827999
@@ -78,13 +76,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movabsq	$-0x32e2fdfa50a5fdd5, %rax # imm = 0xCD1D0205AF5A022B
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	movabsq	$-0x3de0216ac152a3aa, %rcx # imm = 0xC21FDE953EAD5C56
                	xorl	%eax, %eax
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rcx, 0x18(%rsp)
                	movl	$0xdaa9b5f, %edi        # imm = 0xDAA9B5F
                	movl	$0xd665ca49, %esi       # imm = 0xD665CA49
                	movl	$0xa70480db, %edx       # imm = 0xA70480DB
@@ -96,7 +94,7 @@ Disassembly of section .text:
                	movl	%edi, %ebx
                	rorl	$0x1b, %ebx
                	addq	%rbx, %r9
-               	movl	-0x10(%rbp,%rax,4), %ebx
+               	movl	0x10(%rsp,%rax,4), %ebx
                	addq	%rbx, %r9
                	addq	%r9, %r8
                	addq	$0x6ed9eba1, %r8        # imm = 0x6ED9EBA1
@@ -125,13 +123,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movabsq	$-0x32e2fdfa50a5fdd5, %rax # imm = 0xCD1D0205AF5A022B
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	movabsq	$-0x3de0216ac152a3aa, %rcx # imm = 0xC21FDE953EAD5C56
                	xorl	%eax, %eax
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rcx, 0x18(%rsp)
                	movl	$0xdaa9b5f, %edi        # imm = 0xDAA9B5F
                	movl	$0xd665ca49, %esi       # imm = 0xD665CA49
                	movl	$0xa70480db, %edx       # imm = 0xA70480DB
@@ -148,7 +146,7 @@ Disassembly of section .text:
                	movl	%edi, %ebx
                	rorl	$0x1b, %ebx
                	addq	%rbx, %r9
-               	movl	-0x10(%rbp,%rax,4), %ebx
+               	movl	0x10(%rsp,%rax,4), %ebx
                	addq	%rbx, %r9
                	addq	%r9, %r8
                	movl	$0x8f1bbcdc, %r11d      # imm = 0x8F1BBCDC
@@ -178,13 +176,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movabsq	$-0x32e2fdfa50a5fdd5, %rax # imm = 0xCD1D0205AF5A022B
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	movabsq	$-0x3de0216ac152a3aa, %rcx # imm = 0xC21FDE953EAD5C56
                	xorl	%eax, %eax
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rcx, 0x18(%rsp)
                	movl	$0xdaa9b5f, %edi        # imm = 0xDAA9B5F
                	movl	$0xd665ca49, %esi       # imm = 0xD665CA49
                	movl	$0xa70480db, %edx       # imm = 0xA70480DB
@@ -196,7 +194,7 @@ Disassembly of section .text:
                	movl	%edi, %ebx
                	rorl	$0x1b, %ebx
                	addq	%rbx, %r9
-               	movl	-0x10(%rbp,%rax,4), %ebx
+               	movl	0x10(%rsp,%rax,4), %ebx
                	addq	%rbx, %r9
                	addq	%r9, %r8
                	movl	$0xca62c1d6, %r11d      # imm = 0xCA62C1D6
@@ -226,9 +224,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq

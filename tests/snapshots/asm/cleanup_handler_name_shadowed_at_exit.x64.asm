@@ -33,55 +33,47 @@ Disassembly of section .text:
                	retq
 
 <on_return>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x7, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	movl	$0x7, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movl	$0xc, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <on_break>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r12
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	movq	%rbx, %r12
                	jmp	<addr>
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	incq	%rbx
-               	movl	%ebx, -0x8(%rbp)
+               	movl	%ebx, 0x18(%rsp)
                	addq	$0x2, %r12
                	cmpl	$0x2, %ebx
                	jne	<addr>
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	%r12, %rax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <at_function_end>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x64, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	movl	$0x64, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0x0, <rip> # <addr>
                	movl	$0x1, %edi
@@ -123,5 +115,5 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

@@ -33,8 +33,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
                	movl	(%rax), %ecx
@@ -45,7 +44,7 @@ Disassembly of section .text:
                	cmpl	$0xb, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	callq	<addr>
                	ud2

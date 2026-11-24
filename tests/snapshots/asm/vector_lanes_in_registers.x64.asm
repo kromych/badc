@@ -277,36 +277,34 @@ Disassembly of section .text:
                	retq
 
 <three>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
-               	movq	%rdi, -0x60(%rbp)
-               	leaq	-0x18(%rbp), %rcx
+               	subq	$0x68, %rsp
+               	movq	%rdi, (%rsp)
+               	leaq	0x48(%rsp), %rcx
                	vmovd	%xmm0, %r11d
                	vmovd	%r11d, %xmm0
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
-               	movsd	%xmm0, -0x18(%rbp)
+               	movsd	%xmm0, 0x48(%rsp)
                	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vmovd	%r11d, %xmm0
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
-               	movsd	%xmm0, -0x10(%rbp)
+               	movsd	%xmm0, 0x50(%rsp)
                	vmovd	%xmm2, %r11d
                	vmovd	%r11d, %xmm0
                	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
-               	movq	-0x60(%rbp), %rax
+               	movsd	%xmm0, 0x58(%rsp)
+               	movq	(%rsp), %rax
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	leave
+               	addq	$0x68, %rsp
                	retq
 
 <main>:

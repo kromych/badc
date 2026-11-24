@@ -163,6 +163,7 @@ const DW_ATE_FLOAT: u8 = 0x04;
 
 const DW_OP_REG29: u8 = 0x6d; // aarch64 frame pointer x29
 const DW_OP_REG6: u8 = 0x56; // x86_64 frame pointer rbp
+const DW_OP_BREG7: u8 = 0x77; // x86_64 rsp plus an offset
 const DW_OP_FBREG: u8 = 0x91; // fbreg N (SLEB128 N)
 const DW_OP_ADDR: u8 = 0x03; // addr <target address size>
 const DW_OP_CONST8U: u8 = 0x0e; // const8u <8-byte operand>
@@ -1138,8 +1139,20 @@ impl RelocInfoUnit<'_> {
             if !has_children {
                 continue;
             }
-            write_uleb128(&mut self.body, 1);
-            self.body.push(self.frame_base_op);
+            // An x86-64 frame with no pointer: rsp plus the prologue's
+            // movement, where rbp would stand.
+            let sp_base = (build.fn_unwind.iter())
+                .find(|u| u64::from(u.begin) == lo)
+                .and_then(|u| u.sp_frame_base());
+            if let Some(off) = sp_base {
+                let mut expr = alloc::vec![DW_OP_BREG7];
+                write_sleb128(&mut expr, off);
+                write_uleb128(&mut self.body, expr.len() as u64);
+                self.body.extend_from_slice(&expr);
+            } else {
+                write_uleb128(&mut self.body, 1);
+                self.body.push(self.frame_base_op);
+            }
             for &(v, type_id) in &vars {
                 let type_off = self.type_offsets[type_id];
                 let abbrev = if v.is_parameter {

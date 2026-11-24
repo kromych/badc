@@ -26,34 +26,30 @@ Disassembly of section .text:
                	int3
 
 <opaque>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	leave
+               	subq	$0x18, %rsp
+               	movq	%rdi, 0x8(%rsp)
+               	movq	0x8(%rsp), %rax
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	pushq	%r12
                	pushq	%rbx
-               	movl	$0x3, -0x10(%rbp)
-               	movl	$0x5, -0x8(%rbp)
-               	movl	-0x10(%rbp), %ebx
-               	movl	-0x8(%rbp), %r12d
-               	leaq	-0x20(%rbp), %rdi
+               	movl	$0x3, 0x30(%rsp)
+               	movl	$0x5, 0x38(%rsp)
+               	movl	0x30(%rsp), %ebx
+               	movl	0x38(%rsp), %r12d
+               	leaq	0x20(%rsp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	movb	%bl, -0x20(%rbp)
-               	movb	%r12b, -0x1f(%rbp)
+               	movb	%bl, 0x20(%rsp)
+               	movb	%r12b, 0x21(%rsp)
                	leaq	(%rbx,%r12), %rax
-               	movb	%al, -0x1e(%rbp)
+               	movb	%al, 0x22(%rsp)
                	movq	%rbx, %rax
                	imulq	%r12, %rax
-               	movb	%al, -0x1d(%rbp)
+               	movb	%al, 0x23(%rsp)
                	callq	<addr>
                	movzbq	(%rax), %rcx
                	movq	%rbx, %rdx
@@ -68,11 +64,11 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	leaq	-0x28(%rbp), %rdi
-               	movl	$0x6070809, -0x28(%rbp) # imm = 0x6070809
-               	movl	%ebx, -0x24(%rbp)
+               	leaq	0x18(%rsp), %rdi
+               	movl	$0x6070809, 0x18(%rsp)  # imm = 0x6070809
+               	movl	%ebx, 0x1c(%rsp)
                	callq	<addr>
                	movzbq	(%rax), %rcx
                	cmpl	$0x9, %ecx

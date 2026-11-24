@@ -26,72 +26,62 @@ Disassembly of section .text:
                	int3
 
 <take_f1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	0x10(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
-               	movss	-0x8(%rbp), %xmm1
+               	subq	$0x18, %rsp
+               	movl	0x20(%rsp), %r10d
+               	movl	%r10d, 0x8(%rsp)
+               	movss	0x8(%rsp), %xmm1
                	vmulss	<rip>, %xmm1, %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	cvttsd2si	%xmm0, %rax
                	addq	%rdi, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <take_d1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm1
+               	subq	$0x18, %rsp
+               	movq	0x20(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movsd	0x8(%rsp), %xmm1
                	vmulsd	<rip>, %xmm0, %xmm0
                	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	cvttsd2si	%xmm0, %rax
                	addq	%rdi, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <take_ff>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
-               	movss	-0x8(%rbp), %xmm1
-               	movss	-0x4(%rbp), %xmm2
+               	subq	$0x18, %rsp
+               	movq	0x20(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movss	0x8(%rsp), %xmm1
+               	movss	0xc(%rsp), %xmm2
                	vmulss	<rip>, %xmm2, %xmm2
                	vfmadd132ss	<rip>, %xmm2, %xmm1 # xmm1 = (xmm1 * mem) + xmm2
                	cvtss2sd	%xmm1, %xmm1
                	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	cvttsd2si	%xmm0, %rax
                	addq	%rdi, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <make_f1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movss	%xmm0, -0x8(%rbp)
-               	movq	-0x30(%rbp), %rax
+               	subq	$0x38, %rsp
+               	movq	%rdi, (%rsp)
+               	leaq	0x28(%rsp), %rcx
+               	movss	%xmm0, 0x28(%rsp)
+               	movq	(%rsp), %rax
                	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
-               	leave
+               	addq	$0x38, %rsp
                	retq
 
 <make_d1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rdi, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rax
+               	subq	$0x28, %rsp
+               	movq	%rdi, (%rsp)
+               	movq	(%rsp), %rax
                	movsd	%xmm0, (%rax)
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <peek_f1>:

@@ -26,11 +26,9 @@ Disassembly of section .text:
                	int3
 
 <deep_touch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x100, %rsp            # imm = 0x100
+               	subq	$0x108, %rsp            # imm = 0x108
                	xorl	%eax, %eax
-               	leaq	-0x100(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	addq	%rax, %rcx
                	leaq	(%rdi,%rax), %rdx
                	movb	%dl, (%rcx)
@@ -41,8 +39,8 @@ Disassembly of section .text:
                	jle	<addr>
                	decq	%rdi
                	callq	<addr>
-               	movsbq	-0x100(%rbp), %rax
-               	leave
+               	movsbq	(%rsp), %rax
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
 
 <main>:

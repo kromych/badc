@@ -57,23 +57,20 @@ Disassembly of section .text:
                	retq
 
 <thread_main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0xa, %edi
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	xorl	%edi, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	xorl	%edi, %edi
                	movl	$0x2, %esi
@@ -90,16 +87,16 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x10(%rsp)
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	0x20(%rsp), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	movq	0x18(%rsp), %r11
                	movq	%rsi, %rcx
                	callq	*%r11
-               	movq	-0x10(%rbp), %rdi
-               	leaq	-0x8(%rbp), %rsi
+               	movq	0x20(%rsp), %rdi
+               	leaq	0x28(%rsp), %rsi
                	movq	0x10(%rsp), %r11
                	callq	*%r11
-               	movq	-0x8(%rbp), %rax
-               	leave
+               	movq	0x28(%rsp), %rax
+               	addq	$0x38, %rsp
                	retq

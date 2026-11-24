@@ -383,6 +383,59 @@ fn spill_slot_addr_shifted(frame: Frame, slot: u32, sp_shift: u32) -> (Reg, i32)
     }
 }
 
+/// Red-zone slots (System V AMD64 3.2.2: the 128 bytes below rsp, which
+/// signal and interrupt handlers leave alone) where a lowering in a frame
+/// with no pointer keeps a register it borrows within one instruction, as a
+/// framed one pushes it: rsp stays where the prologue left it, as the
+/// frame's addressing and call-frame information assume. Each lowering owns
+/// its slots, so one running inside another's borrow keeps it. Slot `k` is
+/// `[rsp - 8 * (k + 1)]`; slot 0 is the x87 round trip's.
+pub(super) mod keep {
+    pub(crate) const CALL_TARGET: i32 = 1;
+    pub(crate) const RAX: i32 = 2;
+    pub(crate) const RDX: i32 = 3;
+    pub(crate) const RCX: i32 = 4;
+    pub(crate) const NARROW: i32 = 5;
+    pub(crate) const SSE_PART: i32 = 6;
+    /// Two slots: the comparand's address and rbx.
+    pub(crate) const CAS16: i32 = 7;
+    /// [`super::mem::SiteRegs`], through [`LAST`].
+    pub(crate) const SITE: i32 = 9;
+    pub(crate) const LAST: i32 = 15;
+}
+
+/// The address of red-zone slot `k` ([`keep`]).
+pub(super) const fn keep_slot(k: i32) -> (Reg, i32) {
+    (Reg::RSP, -8 * (k + 1))
+}
+
+/// Keep `r` across a sequence that writes it: in red-zone slot `k` in a
+/// frame with no pointer ([`keep`]), else `push r`.
+fn save_across(code: &mut Vec<u8>, frame: Frame, r: Reg, k: i32) {
+    if frame.omit_fp {
+        let (base, disp) = keep_slot(k);
+        emit_mov_mem_r(code, base, disp, r);
+    } else {
+        emit_push_r(code, r);
+    }
+}
+
+/// How far `saves` calls to [`save_across`] move rsp: the slot offsets a
+/// lowering reads past them grow by it.
+fn saved_shift(frame: Frame, saves: u32) -> u32 {
+    if frame.omit_fp { 0 } else { 8 * saves }
+}
+
+/// Undo [`save_across`].
+fn restore_across(code: &mut Vec<u8>, frame: Frame, r: Reg, k: i32) {
+    if frame.omit_fp {
+        let (base, disp) = keep_slot(k);
+        emit_mov_r_mem(code, r, base, disp);
+    } else {
+        emit_pop_r(code, r);
+    }
+}
+
 /// If `dst` is a `Spill` place, write the just-produced value in
 /// `src` into the spill slot. No-op for register places (the
 /// caller already wrote into the allocator's chosen reg).

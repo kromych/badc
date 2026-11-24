@@ -26,61 +26,59 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x80000000, -0x10(%rbp) # imm = 0x80000000
-               	movl	$0xffffffff, -0x8(%rbp) # imm = 0xFFFFFFFF
-               	movl	-0x10(%rbp), %eax
+               	subq	$0x18, %rsp
+               	movl	$0x80000000, (%rsp)     # imm = 0x80000000
+               	movl	$0xffffffff, 0x8(%rsp)  # imm = 0xFFFFFFFF
+               	movl	(%rsp), %eax
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x10(%rbp), %eax
+               	movl	(%rsp), %eax
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x8(%rbp), %eax
+               	movl	0x8(%rsp), %eax
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	jae	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x8(%rbp), %eax
+               	movl	0x8(%rsp), %eax
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	ja	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x10(%rbp), %eax
+               	movl	(%rsp), %eax
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	jae	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x10(%rbp), %eax
+               	movl	(%rsp), %eax
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	jbe	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x10(%rbp), %eax
+               	movl	(%rsp), %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	addq	%r11, %rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0xd, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x10(%rbp), %eax
+               	movl	(%rsp), %eax
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	je	<addr>
                	movl	$0x18, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

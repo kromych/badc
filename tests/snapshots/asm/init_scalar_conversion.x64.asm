@@ -26,24 +26,22 @@ Disassembly of section .text:
                	int3
 
 <rect_ok>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x20(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x18(%rbp)
-               	movq	0x20(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movq	0x28(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
-               	movsd	-0x20(%rbp), %xmm0
+               	subq	$0x28, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, (%rsp)
+               	movq	0x38(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x40(%rsp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movq	0x48(%rsp), %r10
+               	movq	%r10, 0x18(%rsp)
+               	movsd	(%rsp), %xmm0
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x18(%rbp), %xmm0
+               	movsd	0x8(%rsp), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	sete	%cl
@@ -53,7 +51,7 @@ Disassembly of section .text:
                	andq	%r10, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movsd	-0x10(%rbp), %xmm0
+               	movsd	0x10(%rsp), %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	sete	%cl
@@ -63,7 +61,7 @@ Disassembly of section .text:
                	andq	%r10, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movsd	-0x8(%rbp), %xmm0
+               	movsd	0x18(%rsp), %xmm0
                	movsd	<rip>, %xmm1
                	ucomisd	%xmm1, %xmm0
                	sete	%al
@@ -71,7 +69,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	%rax, %rcx
                	jmp	<addr>

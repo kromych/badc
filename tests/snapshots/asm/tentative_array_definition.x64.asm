@@ -30,8 +30,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	xorl	%eax, %eax
                	movl	$0x1, %esi
                	cmpb	$0x0, <rip> # <addr>
@@ -60,11 +59,11 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rdi # <addr>
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

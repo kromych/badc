@@ -82,6 +82,18 @@ pub(crate) struct Frame {
     pub wide_regs: bool,
     /// The regions `frame_bytes` sums.
     pub parts: super::ssa::emit_common::FrameStack,
+    /// The function keeps no frame pointer ([`omits_frame_pointer`]): rbp is
+    /// left alone, and the frame is addressed from rsp ([`Frame::fp_addr`]).
+    pub omit_fp: bool,
+    /// Code may store below rsp ([`super::Abi::red_zone`]).
+    pub red_zone: bool,
+    /// A frame with no pointer that holds the callee-saved pushes alone, in
+    /// a body that makes no call, which needs no 16-byte rsp: the prologue
+    /// allocates nothing ([`Frame::sp_alloc`]).
+    pub pushes_alone: bool,
+    /// The bytes the callee-saved pushes take, the area for them in
+    /// `frame_bytes` rounded up to 16.
+    pub pushed: u32,
 }
 
 impl Frame {
@@ -95,6 +107,119 @@ impl Frame {
     pub(super) fn canary_slot_off(&self) -> i32 {
         super::ssa::emit_common::CANARY_SLOT_OFF - self.saves_top as i32
     }
+
+    /// `(base, disp)` of the frame byte `off` from rbp: through rbp, or with
+    /// no frame pointer through rsp, [`Frame::sp_to_fp`] below rbp's place.
+    pub(crate) fn fp_addr(&self, off: i32) -> (Reg, i32) {
+        let (base, disp) = self.fp_addr64(i64::from(off));
+        (base, disp as i32)
+    }
+
+    /// [`Frame::fp_addr`] at 64 bits.
+    pub(crate) fn fp_addr64(&self, off: i64) -> (Reg, i64) {
+        if self.omit_fp {
+            (Reg::RSP, off + self.sp_to_fp())
+        } else {
+            (Reg::RBP, off)
+        }
+    }
+
+    /// In a frame with no pointer, how far above rsp rbp would stand.
+    fn sp_to_fp(&self) -> i64 {
+        match self.pushes_alone {
+            true => i64::from(self.pushed) - 8,
+            false => i64::from(self.frame_bytes),
+        }
+    }
+
+    /// What the prologue of a frame with no pointer subtracts from rsp
+    /// ahead of the `pushed` bytes of pushes: the frame below rbp's place
+    /// and the 8 bytes `push rbp` would take, or nothing.
+    pub(crate) fn sp_alloc(&self, pushed: u32) -> u32 {
+        match self.pushes_alone {
+            true => 0,
+            false => self.frame_bytes - pushed + 8,
+        }
+    }
+}
+
+/// Whether `func` keeps no frame pointer under `Abi::omit_frame_pointer`:
+/// on System V ELF, a body that keeps rsp where its prologue left it, so
+/// every frame region is addressed from rsp and the call-frame information
+/// follows rsp through the prologue and the epilogues alone; a lowering
+/// keeps what it borrows in the red zone ([`super::keep`]). Left with one:
+/// an rsp the body moves (`alloca`, a realigned region, a call placing
+/// arguments on the stack, the `va_arg` and `va_copy` lowerings), a frame
+/// read as such (the frame-address intrinsics, `va_start`'s
+/// save areas, `-pg`), any asm statement, which may name the frame through
+/// rbp, `setjmp`, a naked body, callee-saved xmm registers (an `ms_abi`
+/// function), and a frame the prologue allocates in probed steps.
+fn omits_frame_pointer(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    target: Target,
+    frame: &Frame,
+) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    let allocated = frame.frame_bytes + 8 - alloc.gpr_used.len() as u32 * 8;
+    if !abi.omit_frame_pointer
+        || !abi.red_zone
+        || !alloc.fp_used.is_empty()
+        || allocated > super::ssa::emit_common::MAX_UNPROBED_STACK_STEP
+        || target != Target::LinuxX64
+        || abi.mcount_frame
+        || frame.dynamic_sp
+        || frame.realign_align > 0
+        || frame.saves_top > 0
+        || func.is_naked
+        || func.has_returns_twice_call
+        || func.has_seh()
+        || sysv_variadic_callee(func, abi)
+    {
+        return false;
+    }
+    func.insts.iter().all(|inst| match inst {
+        Inst::InlineAsm { .. } => false,
+        Inst::Intrinsic { kind, .. } => {
+            I::from_i64(*kind).is_some_and(|i| !intrinsic_keeps_frame(i, abi) && i != I::VaArg)
+        }
+        Inst::Call {
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            callee_conv,
+            ..
+        }
+        | Inst::CallIndirect {
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            callee_conv,
+            ..
+        } => {
+            let abi = super::call::callee_abi(abi, target, *callee_conv);
+            let aggs = super::ssa::emit_common::build_call_aggs(func, args, arg_aggs, abi);
+            let widths = crate::c5::ir::ArgWidths::default();
+            let n = args.len();
+            super::plan_call_args_aggs(n, n, fp_arg_mask, abi, &aggs, false, widths).scratch_bytes
+                == 0
+        }
+        // System V places a variadic call's arguments as a named one's.
+        Inst::CallExt {
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            ..
+        } => {
+            let aggs = super::ssa::emit_common::build_call_aggs(func, args, arg_aggs, abi);
+            let widths = crate::c5::ir::ArgWidths::default();
+            let n = args.len();
+            super::plan_call_args_aggs(n, n, fp_arg_mask, abi, &aggs, false, widths).scratch_bytes
+                == 0
+        }
+        _ => true,
+    })
 }
 
 pub(crate) fn compute_frame(
@@ -229,6 +354,10 @@ pub(crate) fn compute_frame_with_tail_calls(
         realign_align,
         region_base,
         realign_region_bytes: if realign_align > 0 { region_bytes } else { 0 },
+        omit_fp: false,
+        red_zone: abi.red_zone,
+        pushes_alone: false,
+        pushed: alloc.gpr_used.len() as u32 * 8,
         align_region_off: if static_region_bytes > 0 {
             -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes + static_region_bytes)
                 as i64)
@@ -239,6 +368,12 @@ pub(crate) fn compute_frame_with_tail_calls(
     // A full leaf or naked body has nothing to address, no rbp to restore rsp from.
     frame.dynamic_sp |=
         func.has_sp_moving_asm(target) && !func.is_naked && !is_full_leaf(func, frame, alloc, abi);
+    if omits_frame_pointer(func, alloc, abi, target, &frame)
+        && !is_full_leaf(func, frame, alloc, abi)
+    {
+        frame.omit_fp = true;
+        frame.pushes_alone = !frame.keeps_record && frame.parts.total() == frame.parts.saved_regs;
+    }
     frame
 }
 
@@ -943,7 +1078,31 @@ pub(super) fn is_full_leaf(
     if !alloc.fp_used.is_empty() {
         return false;
     }
+    // With no red zone an x87 conversion moves rsp, which only a frame
+    // pointer's call-frame rule survives.
+    if !abi.red_zone && converts_through_x87(func) {
+        return false;
+    }
     !frame.keeps_record
+}
+
+/// Whether `func` loads or stores an x87 extended value, which the lowering
+/// converts through eight bytes of memory below rsp.
+fn converts_through_x87(func: &FunctionSsa) -> bool {
+    use crate::c5::ir::{LoadKind as L, StoreKind as S};
+    func.insts.iter().any(|inst| {
+        matches!(
+            inst,
+            Inst::Load { kind: L::F80, .. }
+                | Inst::LoadLocal { kind: L::F80, .. }
+                | Inst::LoadIndexed { kind: L::F80, .. }
+                | Inst::SegLoad { kind: L::F80, .. }
+                | Inst::Store { kind: S::F80, .. }
+                | Inst::StoreLocal { kind: S::F80, .. }
+                | Inst::StoreIndexed { kind: S::F80, .. }
+                | Inst::SegStore { kind: S::F80, .. }
+        )
+    })
 }
 
 /// Each declared parameter's incoming placement from `plan_call_args`;

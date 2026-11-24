@@ -134,8 +134,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r12
                	pushq	%rbx
                	movl	$0x3, %ebx
@@ -157,7 +156,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0xf, %edi
                	callq	<addr>
@@ -166,7 +165,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
@@ -175,7 +174,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x14, %edi
                	callq	<addr>
@@ -184,7 +183,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	$-0x1, %rdi
                	callq	<addr>
@@ -193,7 +192,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	$-0x80000000, %rdi      # imm = 0x80000000
                	callq	<addr>
@@ -202,7 +201,7 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x7fffffff, %edi       # imm = 0x7FFFFFFF
                	callq	<addr>
@@ -211,7 +210,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%edi, %edi
                	callq	<addr>
@@ -220,7 +219,7 @@ Disassembly of section .text:
                	movl	$0xf, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
@@ -257,10 +256,10 @@ Disassembly of section .text:
                	movl	$0x10, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq

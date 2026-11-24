@@ -41,9 +41,7 @@ Disassembly of section .text:
                	retq
 
 <keep_fp>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	vmulsd	%xmm1, %xmm0, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
                	movsd	%xmm0, 0x10(%rsp)
@@ -54,13 +52,11 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm14
                	vaddsd	%xmm0, %xmm14, %xmm0
                	addsd	%xmm1, %xmm0
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <keep_gpr>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -85,7 +81,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x10, %rsp
                	retq
 
 <sv8>:
@@ -99,9 +95,7 @@ Disassembly of section .text:
                	retq
 
 <keep_across_sv8>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	vmulsd	%xmm1, %xmm0, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
                	movsd	<rip>, %xmm8
@@ -124,7 +118,7 @@ Disassembly of section .text:
                	vaddsd	%xmm2, %xmm14, %xmm2
                	vaddsd	%xmm0, %xmm2, %xmm0
                	addsd	%xmm1, %xmm0
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <twice>:
@@ -133,9 +127,7 @@ Disassembly of section .text:
                	retq
 
 <keep_pointer>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -159,7 +151,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x10, %rsp
                	retq
 
 <sv6>:
@@ -181,9 +173,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x68, %rsp
+               	subq	$0x70, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -311,5 +301,5 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x70, %rsp
                	retq

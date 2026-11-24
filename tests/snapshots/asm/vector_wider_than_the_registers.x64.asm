@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <ops_s8x32>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	vmovups	(%rsi), %ymm0
                	vmovups	(%rdx), %ymm1
                	vpaddb	%ymm1, %ymm0, %ymm2
@@ -36,103 +34,103 @@ Disassembly of section .text:
                	vpsubb	%ymm1, %ymm0, %ymm2
                	vmovups	%ymm2, 0x20(%rdi)
                	leaq	0x40(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vpextrb	$0x0, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x0, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x20(%rbp)
+               	movb	%dl, (%rsp)
                	vpextrb	$0x1, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x1, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x1f(%rbp)
+               	movb	%dl, 0x1(%rsp)
                	vpextrb	$0x2, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x2, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x1e(%rbp)
+               	movb	%dl, 0x2(%rsp)
                	vpextrb	$0x3, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x3, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x1d(%rbp)
+               	movb	%dl, 0x3(%rsp)
                	vpextrb	$0x4, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x4, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x1c(%rbp)
+               	movb	%dl, 0x4(%rsp)
                	vpextrb	$0x5, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x5, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x1b(%rbp)
+               	movb	%dl, 0x5(%rsp)
                	vpextrb	$0x6, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x6, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x1a(%rbp)
+               	movb	%dl, 0x6(%rsp)
                	vpextrb	$0x7, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x7, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x19(%rbp)
+               	movb	%dl, 0x7(%rsp)
                	vpextrb	$0x8, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x8, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x18(%rbp)
+               	movb	%dl, 0x8(%rsp)
                	vpextrb	$0x9, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x9, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x17(%rbp)
+               	movb	%dl, 0x9(%rsp)
                	vpextrb	$0xa, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xa, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x16(%rbp)
+               	movb	%dl, 0xa(%rsp)
                	vpextrb	$0xb, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xb, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x15(%rbp)
+               	movb	%dl, 0xb(%rsp)
                	vpextrb	$0xc, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xc, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x14(%rbp)
+               	movb	%dl, 0xc(%rsp)
                	vpextrb	$0xd, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xd, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x13(%rbp)
+               	movb	%dl, 0xd(%rsp)
                	vpextrb	$0xe, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xe, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x12(%rbp)
+               	movb	%dl, 0xe(%rsp)
                	vpextrb	$0xf, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xf, %xmm1, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x11(%rbp)
+               	movb	%dl, 0xf(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x0, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -140,7 +138,7 @@ Disassembly of section .text:
                	vpextrb	$0x0, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x10(%rbp)
+               	movb	%dl, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x1, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -148,7 +146,7 @@ Disassembly of section .text:
                	vpextrb	$0x1, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0xf(%rbp)
+               	movb	%dl, 0x11(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x2, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -156,7 +154,7 @@ Disassembly of section .text:
                	vpextrb	$0x2, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0xe(%rbp)
+               	movb	%dl, 0x12(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x3, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -164,7 +162,7 @@ Disassembly of section .text:
                	vpextrb	$0x3, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0xd(%rbp)
+               	movb	%dl, 0x13(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x4, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -172,7 +170,7 @@ Disassembly of section .text:
                	vpextrb	$0x4, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0xc(%rbp)
+               	movb	%dl, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x5, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -180,7 +178,7 @@ Disassembly of section .text:
                	vpextrb	$0x5, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0xb(%rbp)
+               	movb	%dl, 0x15(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x6, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -188,7 +186,7 @@ Disassembly of section .text:
                	vpextrb	$0x6, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0xa(%rbp)
+               	movb	%dl, 0x16(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x7, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -196,7 +194,7 @@ Disassembly of section .text:
                	vpextrb	$0x7, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x9(%rbp)
+               	movb	%dl, 0x17(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x8, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -204,7 +202,7 @@ Disassembly of section .text:
                	vpextrb	$0x8, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x8(%rbp)
+               	movb	%dl, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x9, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -212,7 +210,7 @@ Disassembly of section .text:
                	vpextrb	$0x9, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x7(%rbp)
+               	movb	%dl, 0x19(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xa, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -220,7 +218,7 @@ Disassembly of section .text:
                	vpextrb	$0xa, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x6(%rbp)
+               	movb	%dl, 0x1a(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xb, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -228,7 +226,7 @@ Disassembly of section .text:
                	vpextrb	$0xb, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x5(%rbp)
+               	movb	%dl, 0x1b(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xc, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -236,7 +234,7 @@ Disassembly of section .text:
                	vpextrb	$0xc, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x4(%rbp)
+               	movb	%dl, 0x1c(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xd, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -244,7 +242,7 @@ Disassembly of section .text:
                	vpextrb	$0xd, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x3(%rbp)
+               	movb	%dl, 0x1d(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xe, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -252,7 +250,7 @@ Disassembly of section .text:
                	vpextrb	$0xe, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x2(%rbp)
+               	movb	%dl, 0x1e(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xf, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -260,7 +258,7 @@ Disassembly of section .text:
                	vpextrb	$0xf, %xmm2, %esi
                	movsbq	%sil, %rsi
                	imulq	%rsi, %rdx
-               	movb	%dl, -0x1(%rbp)
+               	movb	%dl, 0x1f(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	vpand	%ymm1, %ymm0, %ymm2
@@ -277,305 +275,305 @@ Disassembly of section .text:
                	vpxor	%ymm2, %ymm0, %ymm2
                	vmovups	%ymm2, 0xe0(%rdi)
                	leaq	0x100(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vpextrb	$0x0, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x20(%rbp)
+               	movb	%dl, (%rsp)
                	vpextrb	$0x1, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x1f(%rbp)
+               	movb	%dl, 0x1(%rsp)
                	vpextrb	$0x2, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x1e(%rbp)
+               	movb	%dl, 0x2(%rsp)
                	vpextrb	$0x3, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x1d(%rbp)
+               	movb	%dl, 0x3(%rsp)
                	vpextrb	$0x4, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x1c(%rbp)
+               	movb	%dl, 0x4(%rsp)
                	vpextrb	$0x5, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x1b(%rbp)
+               	movb	%dl, 0x5(%rsp)
                	vpextrb	$0x6, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x1a(%rbp)
+               	movb	%dl, 0x6(%rsp)
                	vpextrb	$0x7, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x19(%rbp)
+               	movb	%dl, 0x7(%rsp)
                	vpextrb	$0x8, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x18(%rbp)
+               	movb	%dl, 0x8(%rsp)
                	vpextrb	$0x9, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x17(%rbp)
+               	movb	%dl, 0x9(%rsp)
                	vpextrb	$0xa, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x16(%rbp)
+               	movb	%dl, 0xa(%rsp)
                	vpextrb	$0xb, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x15(%rbp)
+               	movb	%dl, 0xb(%rsp)
                	vpextrb	$0xc, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x14(%rbp)
+               	movb	%dl, 0xc(%rsp)
                	vpextrb	$0xd, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x13(%rbp)
+               	movb	%dl, 0xd(%rsp)
                	vpextrb	$0xe, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x12(%rbp)
+               	movb	%dl, 0xe(%rsp)
                	vpextrb	$0xf, %xmm0, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x11(%rbp)
+               	movb	%dl, 0xf(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x0, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x10(%rbp)
+               	movb	%dl, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x1, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0xf(%rbp)
+               	movb	%dl, 0x11(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x2, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0xe(%rbp)
+               	movb	%dl, 0x12(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x3, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0xd(%rbp)
+               	movb	%dl, 0x13(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x4, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0xc(%rbp)
+               	movb	%dl, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x5, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0xb(%rbp)
+               	movb	%dl, 0x15(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x6, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0xa(%rbp)
+               	movb	%dl, 0x16(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x7, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x9(%rbp)
+               	movb	%dl, 0x17(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x8, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x8(%rbp)
+               	movb	%dl, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x9, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x7(%rbp)
+               	movb	%dl, 0x19(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xa, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x6(%rbp)
+               	movb	%dl, 0x1a(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xb, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x5(%rbp)
+               	movb	%dl, 0x1b(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xc, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x4(%rbp)
+               	movb	%dl, 0x1c(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xd, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x3(%rbp)
+               	movb	%dl, 0x1d(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xe, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x2(%rbp)
+               	movb	%dl, 0x1e(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xf, %xmm2, %edx
                	movsbq	%dl, %rdx
                	shlq	$0x3, %rdx
-               	movb	%dl, -0x1(%rbp)
+               	movb	%dl, 0x1f(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	leaq	0x120(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vpextrb	$0x0, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x20(%rbp)
+               	movb	%dl, (%rsp)
                	vpextrb	$0x1, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x1f(%rbp)
+               	movb	%dl, 0x1(%rsp)
                	vpextrb	$0x2, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x1e(%rbp)
+               	movb	%dl, 0x2(%rsp)
                	vpextrb	$0x3, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x1d(%rbp)
+               	movb	%dl, 0x3(%rsp)
                	vpextrb	$0x4, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x1c(%rbp)
+               	movb	%dl, 0x4(%rsp)
                	vpextrb	$0x5, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x1b(%rbp)
+               	movb	%dl, 0x5(%rsp)
                	vpextrb	$0x6, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x1a(%rbp)
+               	movb	%dl, 0x6(%rsp)
                	vpextrb	$0x7, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x19(%rbp)
+               	movb	%dl, 0x7(%rsp)
                	vpextrb	$0x8, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x18(%rbp)
+               	movb	%dl, 0x8(%rsp)
                	vpextrb	$0x9, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x17(%rbp)
+               	movb	%dl, 0x9(%rsp)
                	vpextrb	$0xa, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x16(%rbp)
+               	movb	%dl, 0xa(%rsp)
                	vpextrb	$0xb, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x15(%rbp)
+               	movb	%dl, 0xb(%rsp)
                	vpextrb	$0xc, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x14(%rbp)
+               	movb	%dl, 0xc(%rsp)
                	vpextrb	$0xd, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x13(%rbp)
+               	movb	%dl, 0xd(%rsp)
                	vpextrb	$0xe, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x12(%rbp)
+               	movb	%dl, 0xe(%rsp)
                	vpextrb	$0xf, %xmm0, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x11(%rbp)
+               	movb	%dl, 0xf(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x0, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x10(%rbp)
+               	movb	%dl, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x1, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0xf(%rbp)
+               	movb	%dl, 0x11(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x2, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0xe(%rbp)
+               	movb	%dl, 0x12(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x3, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0xd(%rbp)
+               	movb	%dl, 0x13(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x4, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0xc(%rbp)
+               	movb	%dl, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x5, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0xb(%rbp)
+               	movb	%dl, 0x15(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x6, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0xa(%rbp)
+               	movb	%dl, 0x16(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x7, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x9(%rbp)
+               	movb	%dl, 0x17(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x8, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x8(%rbp)
+               	movb	%dl, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x9, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x7(%rbp)
+               	movb	%dl, 0x19(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xa, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x6(%rbp)
+               	movb	%dl, 0x1a(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xb, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x5(%rbp)
+               	movb	%dl, 0x1b(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xc, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x4(%rbp)
+               	movb	%dl, 0x1c(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xd, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x3(%rbp)
+               	movb	%dl, 0x1d(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xe, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x2(%rbp)
+               	movb	%dl, 0x1e(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xf, %xmm2, %edx
                	movsbq	%dl, %rdx
                	sarq	$0x5, %rdx
-               	movb	%dl, -0x1(%rbp)
+               	movb	%dl, 0x1f(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	vpcmpgtb	%ymm0, %ymm1, %ymm2
                	vmovups	%ymm2, 0x140(%rdi)
                	leaq	0x160(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vpextrb	$0x0, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x0, %xmm1, %esi
@@ -584,7 +582,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x20(%rbp)
+               	movb	%dl, (%rsp)
                	vpextrb	$0x1, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x1, %xmm1, %esi
@@ -593,7 +591,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x1f(%rbp)
+               	movb	%dl, 0x1(%rsp)
                	vpextrb	$0x2, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x2, %xmm1, %esi
@@ -602,7 +600,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x1e(%rbp)
+               	movb	%dl, 0x2(%rsp)
                	vpextrb	$0x3, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x3, %xmm1, %esi
@@ -611,7 +609,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x1d(%rbp)
+               	movb	%dl, 0x3(%rsp)
                	vpextrb	$0x4, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x4, %xmm1, %esi
@@ -620,7 +618,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x1c(%rbp)
+               	movb	%dl, 0x4(%rsp)
                	vpextrb	$0x5, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x5, %xmm1, %esi
@@ -629,7 +627,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x1b(%rbp)
+               	movb	%dl, 0x5(%rsp)
                	vpextrb	$0x6, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x6, %xmm1, %esi
@@ -638,7 +636,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x1a(%rbp)
+               	movb	%dl, 0x6(%rsp)
                	vpextrb	$0x7, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x7, %xmm1, %esi
@@ -647,7 +645,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x19(%rbp)
+               	movb	%dl, 0x7(%rsp)
                	vpextrb	$0x8, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x8, %xmm1, %esi
@@ -656,7 +654,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x18(%rbp)
+               	movb	%dl, 0x8(%rsp)
                	vpextrb	$0x9, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0x9, %xmm1, %esi
@@ -665,7 +663,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x17(%rbp)
+               	movb	%dl, 0x9(%rsp)
                	vpextrb	$0xa, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xa, %xmm1, %esi
@@ -674,7 +672,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x16(%rbp)
+               	movb	%dl, 0xa(%rsp)
                	vpextrb	$0xb, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xb, %xmm1, %esi
@@ -683,7 +681,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x15(%rbp)
+               	movb	%dl, 0xb(%rsp)
                	vpextrb	$0xc, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xc, %xmm1, %esi
@@ -692,7 +690,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x14(%rbp)
+               	movb	%dl, 0xc(%rsp)
                	vpextrb	$0xd, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xd, %xmm1, %esi
@@ -701,7 +699,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x13(%rbp)
+               	movb	%dl, 0xd(%rsp)
                	vpextrb	$0xe, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xe, %xmm1, %esi
@@ -710,7 +708,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x12(%rbp)
+               	movb	%dl, 0xe(%rsp)
                	vpextrb	$0xf, %xmm0, %edx
                	movsbq	%dl, %rdx
                	vpextrb	$0xf, %xmm1, %esi
@@ -719,7 +717,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x11(%rbp)
+               	movb	%dl, 0xf(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x0, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -730,7 +728,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x10(%rbp)
+               	movb	%dl, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x1, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -741,7 +739,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0xf(%rbp)
+               	movb	%dl, 0x11(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x2, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -752,7 +750,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0xe(%rbp)
+               	movb	%dl, 0x12(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x3, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -763,7 +761,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0xd(%rbp)
+               	movb	%dl, 0x13(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x4, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -774,7 +772,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0xc(%rbp)
+               	movb	%dl, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x5, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -785,7 +783,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0xb(%rbp)
+               	movb	%dl, 0x15(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x6, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -796,7 +794,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0xa(%rbp)
+               	movb	%dl, 0x16(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x7, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -807,7 +805,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x9(%rbp)
+               	movb	%dl, 0x17(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x8, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -818,7 +816,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x8(%rbp)
+               	movb	%dl, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0x9, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -829,7 +827,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x7(%rbp)
+               	movb	%dl, 0x19(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xa, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -840,7 +838,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x6(%rbp)
+               	movb	%dl, 0x1a(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xb, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -851,7 +849,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x5(%rbp)
+               	movb	%dl, 0x1b(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xc, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -862,7 +860,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x4(%rbp)
+               	movb	%dl, 0x1c(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xd, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -873,7 +871,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x3(%rbp)
+               	movb	%dl, 0x1d(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xe, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -884,7 +882,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x2(%rbp)
+               	movb	%dl, 0x1e(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrb	$0xf, %xmm2, %edx
                	movsbq	%dl, %rdx
@@ -895,13 +893,13 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movb	%dl, -0x1(%rbp)
+               	movb	%dl, 0x1f(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	vpcmpeqb	%ymm1, %ymm0, %ymm0
                	vmovups	%ymm0, 0x180(%rdi)
                	vzeroupper
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <check_s8x32>:
@@ -2969,9 +2967,7 @@ Disassembly of section .text:
                	retq
 
 <ops_u16x16>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	vmovups	(%rsi), %ymm0
                	vmovups	(%rdx), %ymm1
                	vpaddw	%ymm1, %ymm0, %ymm2
@@ -2998,63 +2994,63 @@ Disassembly of section .text:
                	vpsrlw	$0x5, %ymm0, %ymm2
                	vmovups	%ymm2, 0x120(%rdi)
                	leaq	0x140(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vpextrw	$0x0, %xmm0, %edx
                	vpextrw	$0x0, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x20(%rbp)
+               	movw	%dx, (%rsp)
                	vpextrw	$0x1, %xmm0, %edx
                	vpextrw	$0x1, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x1e(%rbp)
+               	movw	%dx, 0x2(%rsp)
                	vpextrw	$0x2, %xmm0, %edx
                	vpextrw	$0x2, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x1c(%rbp)
+               	movw	%dx, 0x4(%rsp)
                	vpextrw	$0x3, %xmm0, %edx
                	vpextrw	$0x3, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x1a(%rbp)
+               	movw	%dx, 0x6(%rsp)
                	vpextrw	$0x4, %xmm0, %edx
                	vpextrw	$0x4, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x18(%rbp)
+               	movw	%dx, 0x8(%rsp)
                	vpextrw	$0x5, %xmm0, %edx
                	vpextrw	$0x5, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x16(%rbp)
+               	movw	%dx, 0xa(%rsp)
                	vpextrw	$0x6, %xmm0, %edx
                	vpextrw	$0x6, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x14(%rbp)
+               	movw	%dx, 0xc(%rsp)
                	vpextrw	$0x7, %xmm0, %edx
                	vpextrw	$0x7, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x12(%rbp)
+               	movw	%dx, 0xe(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x0, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3063,7 +3059,7 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x10(%rbp)
+               	movw	%dx, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x1, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3072,7 +3068,7 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0xe(%rbp)
+               	movw	%dx, 0x12(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x2, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3081,7 +3077,7 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0xc(%rbp)
+               	movw	%dx, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x3, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3090,7 +3086,7 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0xa(%rbp)
+               	movw	%dx, 0x16(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x4, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3099,7 +3095,7 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x8(%rbp)
+               	movw	%dx, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x5, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3108,7 +3104,7 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x6(%rbp)
+               	movw	%dx, 0x1a(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x6, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3117,7 +3113,7 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x4(%rbp)
+               	movw	%dx, 0x1c(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x7, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3126,67 +3122,67 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x2(%rbp)
+               	movw	%dx, 0x1e(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	leaq	0x160(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vpextrw	$0x0, %xmm0, %edx
                	vpextrw	$0x0, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x20(%rbp)
+               	movw	%dx, (%rsp)
                	vpextrw	$0x1, %xmm0, %edx
                	vpextrw	$0x1, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x1e(%rbp)
+               	movw	%dx, 0x2(%rsp)
                	vpextrw	$0x2, %xmm0, %edx
                	vpextrw	$0x2, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x1c(%rbp)
+               	movw	%dx, 0x4(%rsp)
                	vpextrw	$0x3, %xmm0, %edx
                	vpextrw	$0x3, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x1a(%rbp)
+               	movw	%dx, 0x6(%rsp)
                	vpextrw	$0x4, %xmm0, %edx
                	vpextrw	$0x4, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x18(%rbp)
+               	movw	%dx, 0x8(%rsp)
                	vpextrw	$0x5, %xmm0, %edx
                	vpextrw	$0x5, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x16(%rbp)
+               	movw	%dx, 0xa(%rsp)
                	vpextrw	$0x6, %xmm0, %edx
                	vpextrw	$0x6, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x14(%rbp)
+               	movw	%dx, 0xc(%rsp)
                	vpextrw	$0x7, %xmm0, %edx
                	vpextrw	$0x7, %xmm1, %esi
                	cmpq	%rsi, %rdx
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x12(%rbp)
+               	movw	%dx, 0xe(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x0, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3195,7 +3191,7 @@ Disassembly of section .text:
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x10(%rbp)
+               	movw	%dx, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x1, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3204,7 +3200,7 @@ Disassembly of section .text:
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0xe(%rbp)
+               	movw	%dx, 0x12(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x2, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3213,7 +3209,7 @@ Disassembly of section .text:
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0xc(%rbp)
+               	movw	%dx, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x3, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3222,7 +3218,7 @@ Disassembly of section .text:
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0xa(%rbp)
+               	movw	%dx, 0x16(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x4, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3231,7 +3227,7 @@ Disassembly of section .text:
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x8(%rbp)
+               	movw	%dx, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x5, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3240,7 +3236,7 @@ Disassembly of section .text:
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x6(%rbp)
+               	movw	%dx, 0x1a(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x6, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3249,7 +3245,7 @@ Disassembly of section .text:
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x4(%rbp)
+               	movw	%dx, 0x1c(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrw	$0x7, %xmm2, %edx
                	vextracti128	$0x1, %ymm1, %xmm2
@@ -3258,13 +3254,13 @@ Disassembly of section .text:
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movw	%dx, -0x2(%rbp)
+               	movw	%dx, 0x1e(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	vpcmpeqw	%ymm1, %ymm0, %ymm0
                	vmovups	%ymm0, 0x180(%rdi)
                	vzeroupper
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <check_u16x16>:
@@ -4024,9 +4020,7 @@ Disassembly of section .text:
                	retq
 
 <ops_s32x8>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	vmovups	(%rsi), %ymm0
                	vmovups	(%rdx), %ymm1
                	vpaddd	%ymm1, %ymm0, %ymm2
@@ -4034,31 +4028,31 @@ Disassembly of section .text:
                	vpsubd	%ymm1, %ymm0, %ymm2
                	vmovups	%ymm2, 0x20(%rdi)
                	leaq	0x40(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vmovd	%xmm0, %edx
                	movslq	%edx, %rdx
                	vmovd	%xmm1, %esi
                	movslq	%esi, %rsi
                	imulq	%rsi, %rdx
-               	movl	%edx, -0x20(%rbp)
+               	movl	%edx, (%rsp)
                	vpextrd	$0x1, %xmm0, %edx
                	movslq	%edx, %rdx
                	vpextrd	$0x1, %xmm1, %esi
                	movslq	%esi, %rsi
                	imulq	%rsi, %rdx
-               	movl	%edx, -0x1c(%rbp)
+               	movl	%edx, 0x4(%rsp)
                	vpextrd	$0x2, %xmm0, %edx
                	movslq	%edx, %rdx
                	vpextrd	$0x2, %xmm1, %esi
                	movslq	%esi, %rsi
                	imulq	%rsi, %rdx
-               	movl	%edx, -0x18(%rbp)
+               	movl	%edx, 0x8(%rsp)
                	vpextrd	$0x3, %xmm0, %edx
                	movslq	%edx, %rdx
                	vpextrd	$0x3, %xmm1, %esi
                	movslq	%esi, %rsi
                	imulq	%rsi, %rdx
-               	movl	%edx, -0x14(%rbp)
+               	movl	%edx, 0xc(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vmovd	%xmm2, %edx
                	movslq	%edx, %rdx
@@ -4066,7 +4060,7 @@ Disassembly of section .text:
                	vmovd	%xmm2, %esi
                	movslq	%esi, %rsi
                	imulq	%rsi, %rdx
-               	movl	%edx, -0x10(%rbp)
+               	movl	%edx, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrd	$0x1, %xmm2, %edx
                	movslq	%edx, %rdx
@@ -4074,7 +4068,7 @@ Disassembly of section .text:
                	vpextrd	$0x1, %xmm2, %esi
                	movslq	%esi, %rsi
                	imulq	%rsi, %rdx
-               	movl	%edx, -0xc(%rbp)
+               	movl	%edx, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrd	$0x2, %xmm2, %edx
                	movslq	%edx, %rdx
@@ -4082,7 +4076,7 @@ Disassembly of section .text:
                	vpextrd	$0x2, %xmm2, %esi
                	movslq	%esi, %rsi
                	imulq	%rsi, %rdx
-               	movl	%edx, -0x8(%rbp)
+               	movl	%edx, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrd	$0x3, %xmm2, %edx
                	movslq	%edx, %rdx
@@ -4090,7 +4084,7 @@ Disassembly of section .text:
                	vpextrd	$0x3, %xmm2, %esi
                	movslq	%esi, %rsi
                	imulq	%rsi, %rdx
-               	movl	%edx, -0x4(%rbp)
+               	movl	%edx, 0x1c(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	vpand	%ymm1, %ymm0, %ymm2
@@ -4113,7 +4107,7 @@ Disassembly of section .text:
                	vpcmpgtd	%ymm0, %ymm1, %ymm2
                	vmovups	%ymm2, 0x140(%rdi)
                	leaq	0x160(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vmovd	%xmm0, %edx
                	movslq	%edx, %rdx
                	vmovd	%xmm1, %esi
@@ -4122,7 +4116,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movl	%edx, -0x20(%rbp)
+               	movl	%edx, (%rsp)
                	vpextrd	$0x1, %xmm0, %edx
                	movslq	%edx, %rdx
                	vpextrd	$0x1, %xmm1, %esi
@@ -4131,7 +4125,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movl	%edx, -0x1c(%rbp)
+               	movl	%edx, 0x4(%rsp)
                	vpextrd	$0x2, %xmm0, %edx
                	movslq	%edx, %rdx
                	vpextrd	$0x2, %xmm1, %esi
@@ -4140,7 +4134,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movl	%edx, -0x18(%rbp)
+               	movl	%edx, 0x8(%rsp)
                	vpextrd	$0x3, %xmm0, %edx
                	movslq	%edx, %rdx
                	vpextrd	$0x3, %xmm1, %esi
@@ -4149,7 +4143,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movl	%edx, -0x14(%rbp)
+               	movl	%edx, 0xc(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vmovd	%xmm2, %edx
                	movslq	%edx, %rdx
@@ -4160,7 +4154,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movl	%edx, -0x10(%rbp)
+               	movl	%edx, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrd	$0x1, %xmm2, %edx
                	movslq	%edx, %rdx
@@ -4171,7 +4165,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movl	%edx, -0xc(%rbp)
+               	movl	%edx, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrd	$0x2, %xmm2, %edx
                	movslq	%edx, %rdx
@@ -4182,7 +4176,7 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movl	%edx, -0x8(%rbp)
+               	movl	%edx, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpextrd	$0x3, %xmm2, %edx
                	movslq	%edx, %rdx
@@ -4193,13 +4187,13 @@ Disassembly of section .text:
                	setge	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
-               	movl	%edx, -0x4(%rbp)
+               	movl	%edx, 0x1c(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	vpcmpeqd	%ymm1, %ymm0, %ymm0
                	vmovups	%ymm0, 0x180(%rdi)
                	vzeroupper
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <check_s32x8>:
@@ -5721,9 +5715,7 @@ Disassembly of section .text:
                	retq
 
 <ops_f32x8>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	vmovups	(%rsi), %ymm0
                	vmovups	(%rdx), %ymm1
                	vaddps	%ymm1, %ymm0, %ymm2
@@ -5735,54 +5727,54 @@ Disassembly of section .text:
                	vdivps	%ymm1, %ymm0, %ymm1
                	vmovups	%ymm1, 0x60(%rdi)
                	leaq	0x80(%rdi), %rax
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	movss	%xmm1, -0x20(%rbp)
+               	movss	%xmm1, (%rsp)
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	movss	%xmm1, -0x1c(%rbp)
+               	movss	%xmm1, 0x4(%rsp)
                	vpermilps	$0x2, %xmm0, %xmm1 # xmm1 = xmm0[2,0,0,0]
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	movss	%xmm1, -0x18(%rbp)
+               	movss	%xmm1, 0x8(%rsp)
                	vpermilps	$0x3, %xmm0, %xmm1 # xmm1 = xmm0[3,0,0,0]
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	movss	%xmm1, -0x14(%rbp)
+               	movss	%xmm1, 0xc(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm1
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	movss	%xmm1, -0x10(%rbp)
+               	movss	%xmm1, 0x10(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm1
                	vpermilps	$0x1, %xmm1, %xmm1 # xmm1 = xmm1[1,0,0,0]
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	movss	%xmm1, -0xc(%rbp)
+               	movss	%xmm1, 0x14(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm1
                	vpermilps	$0x2, %xmm1, %xmm1 # xmm1 = xmm1[2,0,0,0]
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	movss	%xmm1, -0x8(%rbp)
+               	movss	%xmm1, 0x18(%rsp)
                	vextracti128	$0x1, %ymm0, %xmm0
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movss	%xmm0, -0x4(%rbp)
+               	movss	%xmm0, 0x1c(%rsp)
                	vmovups	(%rcx), %ymm14
                	vmovups	%ymm14, (%rax)
                	vzeroupper
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <check_f32x8>:
@@ -7927,13 +7919,12 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
                	callq	<addr>
                	movslq	%eax, %rax
@@ -7980,5 +7971,5 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

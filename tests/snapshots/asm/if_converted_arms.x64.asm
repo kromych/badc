@@ -34,9 +34,7 @@ Disassembly of section .text:
                	retq
 
 <narrow_compare_in_arm>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movl	$0x7, %edi
@@ -56,28 +54,25 @@ Disassembly of section .text:
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq
 
 <late_operands>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movq	0x10(%rbp), %rax
-               	movswq	0x28(%rbp), %rbx
-               	movslq	0x30(%rbp), %r12
+               	movq	0x20(%rsp), %rax
+               	movswq	0x38(%rsp), %rbx
+               	movslq	0x40(%rsp), %r12
                	leaq	(%rbx,%rbx,2), %rbx
                	decq	%r12
-               	movsbq	0x20(%rbp), %r13
+               	movsbq	0x30(%rsp), %r13
                	testl	%r13d, %r13d
                	cmovleq	%r12, %rbx
                	leaq	(%rbx,%rbx,4), %rbx
                	movslq	%ebx, %rbx
                	addq	%rbx, %rax
-               	movsbq	0x20(%rbp), %rbx
+               	movsbq	0x30(%rsp), %rbx
                	addq	%rbx, %rax
                	addq	%rdi, %rax
                	addq	%rsi, %rax
@@ -85,12 +80,11 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x18(%rbp), %rcx
+               	movq	0x28(%rsp), %rcx
                	addq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
                	retq
 
 <swap_if>:

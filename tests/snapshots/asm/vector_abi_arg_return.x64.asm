@@ -42,13 +42,11 @@ Disassembly of section .text:
                	retq
 
 <nine>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movq	0x20(%rsp), %r10
+               	movq	%r10, (%rsp)
+               	movq	0x28(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
                	vpaddb	%xmm1, %xmm0, %xmm0
                	vpaddb	%xmm2, %xmm0, %xmm0
                	vpaddb	%xmm3, %xmm0, %xmm0
@@ -56,9 +54,9 @@ Disassembly of section .text:
                	vpaddb	%xmm5, %xmm0, %xmm0
                	vpaddb	%xmm6, %xmm0, %xmm0
                	vpaddb	%xmm7, %xmm0, %xmm0
-               	movups	-0x10(%rbp), %xmm1
+               	movups	(%rsp), %xmm1
                	vpaddb	%xmm1, %xmm0, %xmm0
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <mixed>:

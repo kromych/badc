@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <rounds>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -77,29 +74,26 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	$0x7, -0x40(%rbp)
-               	movq	$0x1118, -0x38(%rbp)    # imm = 0x1118
-               	movq	$0x2229, -0x30(%rbp)    # imm = 0x2229
-               	movq	$0x333a, -0x28(%rbp)    # imm = 0x333A
-               	movq	$0x444b, -0x20(%rbp)    # imm = 0x444B
-               	movq	$0x555c, -0x18(%rbp)    # imm = 0x555C
-               	movq	$0x666d, -0x10(%rbp)    # imm = 0x666D
-               	leaq	-0x40(%rbp), %rdi
-               	movq	$0x777e, -0x8(%rbp)     # imm = 0x777E
+               	subq	$0x48, %rsp
+               	movq	$0x7, (%rsp)
+               	movq	$0x1118, 0x8(%rsp)      # imm = 0x1118
+               	movq	$0x2229, 0x10(%rsp)     # imm = 0x2229
+               	movq	$0x333a, 0x18(%rsp)     # imm = 0x333A
+               	movq	$0x444b, 0x20(%rsp)     # imm = 0x444B
+               	movq	$0x555c, 0x28(%rsp)     # imm = 0x555C
+               	movq	$0x666d, 0x30(%rsp)     # imm = 0x666D
+               	leaq	(%rsp), %rdi
+               	movq	$0x777e, 0x38(%rsp)     # imm = 0x777E
                	movl	$0x5, %esi
                	callq	<addr>
                	cmpq	$0x14ebf84, %rax        # imm = 0x14EBF84
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq

@@ -26,26 +26,20 @@ Disassembly of section .text:
                	int3
 
 <tail>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	0x10(%rbp), %rax
+               	movq	0x8(%rsp), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	movq	0x18(%rbp), %rcx
+               	movq	0x10(%rsp), %rcx
                	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x20(%rbp), %rcx
+               	movq	0x18(%rsp), %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x28(%rbp), %rcx
+               	movq	0x20(%rsp), %rcx
                	addq	%rcx, %rax
-               	popq	%rbp
                	retq
 
 <pick>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	0x28(%rbp), %rax
-               	popq	%rbp
+               	movq	0x20(%rsp), %rax
                	retq
 
 <main>:

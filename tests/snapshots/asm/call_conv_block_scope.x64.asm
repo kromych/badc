@@ -110,11 +110,10 @@ Disassembly of section .text:
                	retq
 
 <via_list>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <after_declarator>:
@@ -315,15 +314,14 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x4, %edi
                	movl	$0x3, %esi
                	callq	<addr>
                	cmpq	$0x905, %rax            # imm = 0x905
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -331,7 +329,7 @@ Disassembly of section .text:
                	cmpq	$0x905, %rax            # imm = 0x905
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -339,7 +337,7 @@ Disassembly of section .text:
                	cmpq	$0x17, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -347,7 +345,7 @@ Disassembly of section .text:
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -355,7 +353,7 @@ Disassembly of section .text:
                	cmpq	$0x386c7, %rax          # imm = 0x386C7
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -363,7 +361,7 @@ Disassembly of section .text:
                	cmpq	$0x386c5, %rax          # imm = 0x386C5
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -371,13 +369,13 @@ Disassembly of section .text:
                	cmpq	$0xc35, %rax            # imm = 0xC35
                	je	<addr>
                	movl	$0x7, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	callq	<addr>
                	cmpq	$0x15b3, %rax           # imm = 0x15B3
                	je	<addr>
                	movl	$0x8, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -385,7 +383,7 @@ Disassembly of section .text:
                	cmpq	$0xc35, %rax            # imm = 0xC35
                	je	<addr>
                	movl	$0x9, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -393,7 +391,7 @@ Disassembly of section .text:
                	cmpq	$0xc35, %rax            # imm = 0xC35
                	je	<addr>
                	movl	$0xa, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x3, %esi
@@ -401,13 +399,11 @@ Disassembly of section .text:
                	cmpq	$0x915, %rax            # imm = 0x915
                	je	<addr>
                	movl	$0xb, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	addb	%al, (%rax)
-               	addb	%cl, -0x73(%rax)
 
 <ms_ext>:
                	leaq	(%rdx,%rcx,8), %rax

@@ -90,26 +90,24 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	leaq	<rip>, %rdx
                	xorl	%edi, %edi
                	leaq	<rip>, %rsi
                	movl	$0x64, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	%rax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
+               	movq	%rax, (%rsp)
+               	movl	(%rsp), %eax
                	cmpl	$0xaf, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	cmpq	$0x7, %rdx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%edi, %edi
                	leaq	<rip>, %rsi
@@ -117,18 +115,18 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	%rax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
+               	movq	%rax, (%rsp)
+               	movl	(%rsp), %eax
                	cmpl	$0x42, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	cmpq	$0x7, %rdx
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

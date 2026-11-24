@@ -187,65 +187,63 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0xa0, %rsp
-               	leaq	-0xa0(%rbp), %rax
+               	subq	$0xa8, %rsp
+               	leaq	(%rsp), %rax
                	movq	%rax, <rip> # <addr>
                	movl	$0x1, %ecx
-               	movw	%cx, -0xa0(%rbp)
+               	movw	%cx, (%rsp)
                	movl	$0x2, %edx
-               	movw	%dx, -0x22(%rbp)
+               	movw	%dx, 0x7e(%rsp)
                	testb	$0xf, %al
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	0x80(%rsp), %rax
                	movq	%rax, <rip> # <addr>
-               	movq	$0x7, -0x20(%rbp)
-               	movq	$0x8, -0x8(%rbp)
+               	movq	$0x7, 0x80(%rsp)
+               	movq	$0x8, 0x98(%rsp)
                	testb	$0xf, %al
                	jne	<addr>
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0xa8, %rsp
                	retq
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0xa8, %rsp
                	retq
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0xa8, %rsp
                	retq
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0xa8, %rsp
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x7, %eax
-               	leave
+               	addq	$0xa8, %rsp
                	retq
                	cmpq	$0x0, <rip> # <addr>
                	jne	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0xa8, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0xa8, %rsp
                	retq
                	movq	%rdx, %rax
-               	leave
+               	addq	$0xa8, %rsp
                	retq
                	movq	%rcx, %rax
-               	leave
+               	addq	$0xa8, %rsp
                	retq

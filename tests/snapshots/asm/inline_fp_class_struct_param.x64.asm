@@ -49,28 +49,24 @@ Disassembly of section .text:
                	retq
 
 <use_pair_clobber>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	leaq	<rip>, %rax # <addr>
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
                	movsd	<rip>, %xmm0
                	movsd	%xmm0, <rip> # <addr>
                	movsd	<rip>, %xmm0
                	movsd	%xmm0, <rip> # <addr>
-               	movsd	-0x10(%rbp), %xmm0
-               	movsd	-0x8(%rbp), %xmm1
+               	movsd	(%rsp), %xmm0
+               	movsd	0x8(%rsp), %xmm1
                	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	leaq	-0x40(%rbp), %rdi
+               	subq	$0x48, %rsp
+               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdi)
@@ -80,9 +76,9 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	0x20(%rsp), %rdi
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdi)
@@ -94,9 +90,9 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
-               	leaq	-0x30(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdi)
@@ -106,10 +102,10 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	leaq	<rip>, %rax # <addr>
-               	leaq	-0x40(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	callq	<addr>
@@ -118,7 +114,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1
@@ -131,8 +127,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq

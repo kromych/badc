@@ -37,29 +37,27 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	leaq	-0x50(%rbp), %rdi
+               	subq	$0x58, %rsp
+               	leaq	(%rsp), %rdi
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x50(%rbp)
-               	leaq	-0x40(%rbp), %rax
-               	movq	$0x3, -0x30(%rbp)
-               	leaq	-0x20(%rbp), %r8
-               	movq	$0x7, -0x10(%rbp)
+               	movq	%rax, (%rsp)
+               	leaq	0x10(%rsp), %rax
+               	movq	$0x3, 0x20(%rsp)
+               	leaq	0x30(%rsp), %r8
+               	movq	$0x7, 0x40(%rsp)
                	movl	$0x5, %ecx
                	movl	$0x9, %r9d
-               	movl	$0x0, -0x48(%rbp)
-               	leaq	-0x48(%rbp), %rsi
+               	movl	$0x0, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rsi
                	leaq	0x10(%rax), %rdx
                	addq	$0x10, %r8
                	callq	<addr>
-               	movslq	-0x48(%rbp), %rcx
+               	movslq	0x8(%rsp), %rcx
                	addq	%rcx, %rax
                	xorl	%ecx, %ecx
                	movl	$0x1, %edx
                	cmpq	$0xc0d, %rax            # imm = 0xC0D
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x58, %rsp
                	retq

@@ -286,11 +286,9 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <dispatch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	xorl	%edx, %edx
-               	leaq	-0x18(%rbp), %rdi
+               	leaq	0x8(%rsp), %rdi
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdi)
@@ -307,7 +305,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	incq	%rax
                	movzbq	(%rcx,%rax), %rcx
-               	movq	-0x18(%rbp,%rcx,8), %rcx
+               	movq	0x8(%rsp,%rcx,8), %rcx
                	jmpq	*%rcx
                	leaq	<rip>, %rax # <addr>
                	movslq	<rip>, %rcx # <addr>
@@ -322,13 +320,11 @@ Disassembly of section .text:
                	movb	$0x61, (%rax,%rdx)
                	movslq	<rip>, %rdx # <addr>
                	movb	$0x0, (%rax,%rdx)
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -1088,7 +1084,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x10, %rsp
                	retq
                	movq	%rax, %rcx
                	jmp	<addr>

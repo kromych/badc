@@ -101,22 +101,21 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	callq	<addr>
                	cmpq	$0xc, %rax
                	je	<addr>
                	movl	$0x10, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
                	cmpq	$0x8, %rax
                	je	<addr>
                	movl	$0x20, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbp
+               	popq	%r11
                	retq

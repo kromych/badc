@@ -2431,7 +2431,11 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             entry,
             native.fixed_regs,
             native.optimizes(),
-            native.sibling_calls,
+            (
+                native.sibling_calls,
+                native.omits_frame_pointer(),
+                native.red_zone,
+            ),
             native.branches_within_32b,
         )
     }
@@ -2655,7 +2659,8 @@ fn apply_plt_call_fixups(
 /// probe store -- a larger frame lowers to probed page steps with no single
 /// `sub` to read, so the alloc is left out of the codes (the body still
 /// unwinds through the frame pointer). The System V pushes follow that
-/// `sub` and are not described. A leaf emits none of the above, and any
+/// `sub` and are not described. A frame with no pointer is `sub rsp, N`
+/// (`push rax` for 8) and the pushes behind it, each a step. A leaf emits none of the above, and any
 /// other shape is described as a frameless leaf -- safe (the unwinder
 /// returns off the top-of-stack RA) rather than codes that do not match the
 /// prologue. The test of a return taken ahead of the frame places `push rbp`
@@ -2713,17 +2718,34 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
         }
     }
     let at = |i: usize| window.get(i..).unwrap_or(&[]);
-    if at(fp).first() != Some(&0x55) {
-        return None;
-    }
-    fp += 1;
-    let mut steps = alloc::vec![(fp as u32, S::Push(Reg::RBP.0))];
     // `sub rsp, N` == REX.W 0x83 /5 ib or REX.W 0x81 /5 id (modrm 0xEC).
     let sub = |rest: &[u8]| match *rest {
         [0x48, 0x83, 0xEC, imm8, ..] if imm8 < 0x80 => Some((u32::from(imm8), 4)),
         [0x48, 0x81, 0xEC, a, b, c, d, ..] => Some((u32::from_le_bytes([a, b, c, d]), 7)),
         _ => None,
     };
+    // A frame with no pointer: `sub rsp, N` or, for 8, `push rax`, then the
+    // callee-saved pushes.
+    let pad = (at(fp).first() == Some(&0x50)).then_some((8, 1));
+    if let Some((n, len)) = sub(at(fp)).or(pad) {
+        fp += len;
+        let mut steps = alloc::vec![(fp as u32, S::Alloc(n))];
+        loop {
+            let (r, len) = match *at(fp) {
+                [b @ (0x53 | 0x55 | 0x56 | 0x57), ..] => (b - 0x50, 1),
+                [0x41, b @ 0x54..=0x57, ..] => (b - 0x50 + 8, 2),
+                _ => break,
+            };
+            fp += len;
+            steps.push((fp as u32, S::Push(r)));
+        }
+        return Some(steps);
+    }
+    if at(fp).first() != Some(&0x55) {
+        return None;
+    }
+    fp += 1;
+    let mut steps = alloc::vec![(fp as u32, S::Push(Reg::RBP.0))];
     if at(fp).starts_with(&[0x48, 0x89, 0xE5]) {
         fp += 3;
         steps.push((fp as u32, S::SetFrame(0)));

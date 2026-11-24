@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <check_uint>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdx, %r9
                	movl	%edi, %eax
                	xorl	%edx, %edx
@@ -37,7 +35,7 @@ Disassembly of section .text:
                	cmpl	%r9d, %r8d
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	%r8, %rdx
                	imulq	%rsi, %rdx
@@ -46,14 +44,14 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	addq	%r8, %rax
                	addq	%r9, %rcx
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	%rdi, %rax
                	subq	%rdx, %rax
@@ -61,7 +59,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	imulq	%r8, %rsi
                	movq	%rdi, %rax
@@ -70,15 +68,14 @@ Disassembly of section .text:
                	cmpl	%edi, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r12
                	pushq	%rbx
                	xorl	%ecx, %ecx
@@ -144,7 +141,7 @@ Disassembly of section .text:
                	addq	$0x1e, %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	movl	$0x7, %esi
@@ -178,7 +175,7 @@ Disassembly of section .text:
                	movl	$0x34, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x24a0, %eax           # imm = 0x24A0
                	xorl	%ecx, %ecx
@@ -195,15 +192,15 @@ Disassembly of section .text:
                	movl	$0x35, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	addq	$0xa, %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq

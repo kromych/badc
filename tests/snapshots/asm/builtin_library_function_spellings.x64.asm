@@ -63,10 +63,8 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	leaq	-0x20(%rbp), %rdi
+               	subq	$0x38, %rsp
+               	leaq	0x10(%rsp), %rdi
                	movl	$0x20, %esi
                	leaq	<rip>, %rdx
                	movl	$0x2a, %ecx
@@ -77,18 +75,18 @@ Disassembly of section .text:
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rsi
                	movsd	<rip>, %xmm0
                	sqrtsd	%xmm0, %xmm0
@@ -98,16 +96,16 @@ Disassembly of section .text:
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
@@ -124,7 +122,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movsd	<rip>, %xmm1
                	callq	<addr>
@@ -140,7 +138,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
@@ -162,11 +160,11 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movq	%rcx, %rdi
                	callq	<addr>
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	movl	$0x20, %esi
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rcx
@@ -175,14 +173,14 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpl	$0x2, %eax
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0x61, %edi
                	callq	<addr>
@@ -195,7 +193,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jge	<addr>
                	movl	$0xb, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
@@ -205,11 +203,11 @@ Disassembly of section .text:
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0xd, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movl	$0xa, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq

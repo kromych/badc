@@ -79,8 +79,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x2, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
@@ -91,7 +90,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %edi
                	movsd	<rip>, %xmm0
@@ -102,8 +101,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x10, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

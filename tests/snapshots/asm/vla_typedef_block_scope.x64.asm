@@ -134,9 +134,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movl	$0x3, %edi
                	callq	<addr>
                	movq	%rax, %rcx
@@ -154,5 +152,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x64, %ecx
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq

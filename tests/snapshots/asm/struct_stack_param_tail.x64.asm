@@ -26,25 +26,23 @@ Disassembly of section .text:
                	int3
 
 <sum20>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x18(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movl	0x20(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
-               	movss	-0x18(%rbp), %xmm0
-               	movss	-0x14(%rbp), %xmm1
+               	subq	$0x28, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x38(%rsp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movl	0x40(%rsp), %r10d
+               	movl	%r10d, 0x18(%rsp)
+               	movss	0x8(%rsp), %xmm0
+               	movss	0xc(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0x10(%rbp), %xmm1
+               	movss	0x10(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0xc(%rbp), %xmm1
+               	movss	0x14(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	-0x8(%rbp), %xmm1
+               	movss	0x18(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <sum_bytes>:
@@ -62,57 +60,51 @@ Disassembly of section .text:
                	retq
 
 <sum22>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x18(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movl	0x20(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
-               	movzwq	0x24(%rbp), %r10
-               	movw	%r10w, -0x4(%rbp)
-               	leaq	-0x18(%rbp), %rdi
+               	subq	$0x28, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x38(%rsp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movl	0x40(%rsp), %r10d
+               	movl	%r10d, 0x18(%rsp)
+               	movzwq	0x44(%rsp), %r10
+               	movw	%r10w, 0x1c(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	movl	$0x16, %esi
                	callq	<addr>
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <sum23>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x18(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movl	0x20(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
-               	movzwq	0x24(%rbp), %r10
-               	movw	%r10w, -0x4(%rbp)
-               	movzbq	0x26(%rbp), %r10
-               	movb	%r10b, -0x2(%rbp)
-               	leaq	-0x18(%rbp), %rdi
+               	subq	$0x28, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x38(%rsp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movl	0x40(%rsp), %r10d
+               	movl	%r10d, 0x18(%rsp)
+               	movzwq	0x44(%rsp), %r10
+               	movw	%r10w, 0x1c(%rsp)
+               	movzbq	0x46(%rsp), %r10
+               	movb	%r10b, 0x1e(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	movl	$0x17, %esi
                	callq	<addr>
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <sum17>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x18(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movzbq	0x20(%rbp), %r10
-               	movb	%r10b, -0x8(%rbp)
-               	leaq	-0x18(%rbp), %rdi
+               	subq	$0x28, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x38(%rsp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movzbq	0x40(%rsp), %r10
+               	movb	%r10b, 0x18(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	movl	$0x11, %esi
                	callq	<addr>
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <main>:

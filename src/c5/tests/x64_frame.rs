@@ -5,7 +5,10 @@
 //! On System V the frame's bottom holds the callee-saved registers, pushed
 //! after the `sub`. An exit is: the return value staged, the canary check,
 //! `lea rsp` in a frame whose rsp moves, the pops, `leave` (or `pop rbp`
-//! when the pushes were the whole frame), `ret` or the tail `jmp`. Win64
+//! when the pushes were the whole frame), `ret` or the tail `jmp`. A frame
+//! with no pointer is `sub rsp` (`push rax` for 8 bytes) and the pushes, or
+//! in a body that makes no call the pushes alone, and its exits are the
+//! pops, the `add rsp` (`pop r11`) and `ret` or the tail `jmp`. Win64
 //! pushes them right after rbp, ahead of the xmm saves and `lea rbp`, and
 //! an exit takes `lea rsp` onto the last push, the pops and `pop rbp`. No
 //! rsp-relative access and no call may sit between the first pop and the
@@ -52,8 +55,20 @@ fn object(
 
 const FULL: (usize, usize) = (usize::MAX, usize::MAX);
 
+/// `-fno-omit-frame-pointer` (`Some(false)`) and the `-O` default, which
+/// leaves a System V frame without one where the body admits it.
+const FORMS: [Option<bool>; 2] = [Some(false), None];
+
+fn with_form(omit_frame_pointer: Option<bool>) -> NativeOptions {
+    NativeOptions {
+        omit_frame_pointer,
+        ..NativeOptions::new()
+    }
+}
+
+/// `src` under `-O` with the frame pointer.
 fn optimized(src: &str, target: Target) -> Vec<u8> {
-    object(src, target, true, FULL, NativeOptions::new())
+    object(src, target, true, FULL, with_form(Some(false)))
 }
 
 fn insns_of(obj: &[u8], name: &str) -> Vec<X64Insn> {
@@ -74,8 +89,16 @@ fn stack_op(i: &X64Insn, base: u16, target: Target) -> Option<u8> {
     (i.op < base + 8 && callee_saved(target).contains(&r)).then_some(r)
 }
 
-/// `sub rsp, imm` / `add rsp, imm` by ModRM byte (`0xEC` / `0xC4`).
+/// `sub rsp, imm` / `add rsp, imm` by ModRM byte (`0xEC` / `0xC4`), and the
+/// 8-byte pad a frame with no pointer takes as `push rax` / `pop r11`.
 fn rsp_adjust(i: &X64Insn, modrm: u8) -> Option<u32> {
+    let pad = match modrm {
+        0xEC => i.op == 0x50 && i.rex == 0,
+        _ => i.op == 0x5B && i.rex == 0x41,
+    };
+    if pad {
+        return Some(8);
+    }
     (matches!(i.op, 0x81 | 0x83) && i.rex_w() && i.modrm == Some(modrm)).then_some(i.imm as u32)
 }
 
@@ -84,7 +107,8 @@ fn rsp_adjust(i: &X64Insn, modrm: u8) -> Option<u32> {
 /// of the first instruction past them. `early` is the index of the return
 /// the entry's test branches to ahead of the frame. A Win64 save block adds
 /// its xmm saves, `(xmm, offset from rsp)`, and its size, rbp's distance
-/// above the rsp it was set from (0 without the block).
+/// above the rsp it was set from (0 without the block). A frame with no
+/// pointer has its `sub` take the 8 bytes `push rbp` would.
 #[derive(Debug)]
 struct Frame {
     alloc: u32,
@@ -93,31 +117,38 @@ struct Frame {
     block: i64,
     body: usize,
     early: Option<usize>,
+    pointerless: bool,
 }
 
 impl Frame {
+    /// What the frame reserves below where `push rbp` leaves rsp.
     fn bytes(&self) -> u32 {
-        self.alloc + 8 * self.pushes.len() as u32
+        (self.alloc + 8 * self.pushes.len() as u32).saturating_sub(8 * u32::from(self.pointerless))
     }
 }
 
-/// `None` for a function that builds no `push rbp; mov rbp, rsp` frame at
-/// its entry or past the test of an early return, which ends in a `jcc`.
+/// `None` for a function that builds no frame -- `push rbp; mov rbp, rsp`,
+/// or `sub rsp` or a callee-saved push with no frame pointer -- at its
+/// entry or past the test of an early return, which ends in a `jcc`.
 fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
     // `endbr64`, the patchable NOPs, the `-mfentry` call or its NOP.
     let entry = insns
         .iter()
         .position(|x| !matches!(x.op, 0x0F1E | 0x0F1F | 0x90 | 0xE8))?;
-    let push_rbp = |x: &X64Insn| x.op == 0x55 && x.rex == 0;
+    let opens = |x: &X64Insn| {
+        x.op == 0x55 && x.rex == 0
+            || rsp_adjust(x, 0xEC).is_some()
+            || stack_op(x, 0x50, target).is_some()
+    };
     let mut i = entry;
     let mut early = None;
-    if !push_rbp(&insns[i]) {
+    if !opens(&insns[i]) {
         let test = insns[i..]
             .iter()
             .position(|x| x.op == 0xC3 || x.is_jmp() || x.is_jcc())?
             + i;
         i = test + 1;
-        if !(insns[test].is_jcc() && insns.get(i).is_some_and(push_rbp)) {
+        if !(insns[test].is_jcc() && insns.get(i).is_some_and(opens)) {
             return None;
         }
         let to = insns[test].target();
@@ -127,6 +158,25 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
                 .position(|x| x.at == to)
                 .expect("the early return"),
         );
+    }
+    let sub = rsp_adjust(&insns[i], 0xEC);
+    if sub.is_some() || stack_op(&insns[i], 0x50, target).is_some() {
+        let alloc = sub.unwrap_or(0);
+        let mut pushes = Vec::new();
+        i += usize::from(sub.is_some());
+        while let Some(r) = stack_op(&insns[i], 0x50, target) {
+            pushes.push(r);
+            i += 1;
+        }
+        return Some(Frame {
+            alloc,
+            pushes,
+            xmm_saves: Vec::new(),
+            block: 0,
+            body: i,
+            early,
+            pointerless: true,
+        });
     }
     let mov = insns[i + 1];
     let (mut alloc, mut pushes, mut xmm_saves, mut block) = (0, Vec::new(), Vec::new(), 0);
@@ -186,13 +236,18 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
         block,
         body: i,
         early,
+        pointerless: false,
     })
 }
 
 /// Indices of the instructions that leave the function: every `ret`, and a
-/// `jmp` that directly follows the frame teardown.
-fn exits(insns: &[X64Insn]) -> Vec<usize> {
-    let teardown = |x: &X64Insn| x.op == 0xC9 || (x.op == 0x5D && x.rex == 0);
+/// `jmp` that directly follows the frame teardown, `add rsp` in a frame
+/// with no pointer.
+fn exits(insns: &[X64Insn], pointerless: bool) -> Vec<usize> {
+    let teardown = |x: &X64Insn| match pointerless {
+        true => rsp_adjust(x, 0xC4).is_some() || matches!(x.op, 0x58..=0x5F),
+        false => x.op == 0xC9 || (x.op == 0x5D && x.rex == 0),
+    };
     (0..insns.len())
         .filter(|&i| insns[i].op == 0xC3 || (insns[i].is_jmp() && i > 0 && teardown(&insns[i - 1])))
         .collect()
@@ -202,21 +257,35 @@ fn exits(insns: &[X64Insn]) -> Vec<usize> {
 /// exit's shape against `frame`.
 fn check_exit(insns: &[X64Insn], e: usize, frame: &Frame, target: Target, what: &str) -> usize {
     let ctx = || format!("{what}: exit at {:#x}: {insns:x?}", insns[e].at);
-    let t = e - 1;
-    let leave = insns[t].op == 0xC9;
-    assert!(
-        leave || (insns[t].op == 0x5D && insns[t].rex == 0),
-        "no teardown: {}",
-        ctx()
-    );
-    // `pop rbp` alone is right only where the pops return rsp to rbp: on
-    // System V the pushes are the whole frame, past the Win64 block's pops.
-    let want_leave = if frame.block > 0 {
-        frame.pushes.is_empty()
+    let mut t = e - 1;
+    if frame.pointerless {
+        // The pops leave rsp where the `sub` did; with none, the pops end the exit.
+        if frame.alloc == 0 {
+            t = e;
+        } else {
+            assert_eq!(
+                rsp_adjust(&insns[t], 0xC4),
+                Some(frame.alloc),
+                "teardown: {}",
+                ctx()
+            );
+        }
     } else {
-        frame.alloc > 0
-    };
-    assert_eq!(leave, want_leave, "teardown form: {}", ctx());
+        let leave = insns[t].op == 0xC9;
+        assert!(
+            leave || (insns[t].op == 0x5D && insns[t].rex == 0),
+            "no teardown: {}",
+            ctx()
+        );
+        // `pop rbp` alone is right only where the pops return rsp to rbp: on
+        // System V the pushes are the whole frame, past the Win64 block's pops.
+        let want_leave = if frame.block > 0 {
+            frame.pushes.is_empty()
+        } else {
+            frame.alloc > 0
+        };
+        assert_eq!(leave, want_leave, "teardown form: {}", ctx());
+    }
     // Between the pops and the teardown: no rsp-relative operand, no stack
     // operation, no call, no branch.
     let mut j = t;
@@ -258,7 +327,7 @@ fn check_object(obj: &[u8], target: Target, what: &str) -> usize {
         };
         saving += usize::from(!frame.pushes.is_empty());
         // An early return leaves without the frame, with nothing to restore.
-        let exits: Vec<usize> = exits(&insns)
+        let exits: Vec<usize> = exits(&insns, frame.pointerless)
             .into_iter()
             .filter(|&e| frame.early.is_none_or(|at| e < at))
             .collect();
@@ -284,17 +353,18 @@ const SOURCES: &[&str] = &[
 ];
 
 /// Every exit of every function restores what the prologue pushed, on both
-/// conventions, at both levels, and with the banks capped so that values,
-/// return values among them, spill.
+/// conventions, at both levels, with and without the frame pointer, and
+/// with the banks capped so that values, return values among them, spill.
 #[test]
 fn every_exit_mirrors_the_prologue() {
     let mut saving = 0;
     for target in [Target::LinuxX64, Target::WindowsX64] {
-        for optimize in [true, false] {
+        for (optimize, form) in [(true, Some(false)), (true, None), (false, None)] {
             for caps in [FULL, (2, 2), (1, 1)] {
                 for (n, src) in SOURCES.iter().enumerate() {
-                    let obj = object(src, target, optimize, caps, NativeOptions::new());
-                    let what = format!("{target:?} -O={optimize} caps={caps:?} source {n}");
+                    let obj = object(src, target, optimize, caps, with_form(form));
+                    let what =
+                        format!("{target:?} -O={optimize} {form:?} caps={caps:?} source {n}");
                     saving += check_object(&obj, target, &what);
                 }
             }
@@ -304,6 +374,91 @@ fn every_exit_mirrors_the_prologue() {
         saving > 100,
         "{saving} functions with saves: the corpus is too thin"
     );
+}
+
+/// `-mno-red-zone` keeps every frame's pointer, a frame with none keeping
+/// borrowed registers below rsp, and nothing is stored below rsp: the x87
+/// conversion reserves its eight bytes with `lea`, inside a frame whose
+/// call-frame rule does not follow rsp.
+#[test]
+fn no_red_zone_keeps_the_frame_pointer_and_stores_nothing_below_rsp() {
+    const SRC: &str = "long h(long);\n\
+        long one(long a, long b) { long t = h(a); return t / b + t % (a | 1) + (a << (b & 7)); }\n\
+        double ld(long double *p) { return (double)*p; }\n\
+        void st(long double *p, double d) { *p = d; }\n";
+    let target = Target::LinuxX64;
+    let opts = NativeOptions {
+        red_zone: false,
+        ..NativeOptions::new()
+    };
+    let obj = object(SRC, target, true, FULL, opts);
+    for name in ["one", "ld", "st"] {
+        let insns = insns_of(&obj, name);
+        let frame = frame_of(&insns, target).expect("a frame");
+        assert!(!frame.pointerless, "{name}: {insns:x?}");
+        let below = |i: &X64Insn| i.mem_base() == Some(4) && i.disp < 0 && i.op != 0x8D;
+        assert!(!insns.iter().any(below), "{name}: {insns:x?}");
+    }
+    for name in ["ld", "st"] {
+        let insns = insns_of(&obj, name);
+        // `lea rsp, [rsp - 8]` ... `lea rsp, [rsp + 8]`.
+        let lea = |d: i64| {
+            move |i: &X64Insn| {
+                i.op == 0x8D && i.regs().0 == 4 && i.mem_base() == Some(4) && i.disp == d
+            }
+        };
+        assert!(
+            insns.iter().any(lea(-8)) && insns.iter().any(lea(8)),
+            "{name}: {insns:x?}"
+        );
+    }
+    // With the red zone, the same functions keep none.
+    let obj = object(SRC, target, true, FULL, NativeOptions::new());
+    let insns = insns_of(&obj, "one");
+    assert!(
+        frame_of(&insns, target).is_some_and(|f| f.pointerless),
+        "{insns:x?}"
+    );
+}
+
+/// A call that passes an argument in memory moves rsp, so its caller keeps
+/// the frame pointer: past the six integer registers, and a `long double`,
+/// which System V passes in memory, to a variadic library function.
+#[test]
+fn a_call_passing_memory_arguments_keeps_the_frame_pointer() {
+    const SRC: &str = "#include <stdio.h>\n\
+        long seven(long, long, long, long, long, long, long);\n\
+        long many(long a) { return seven(a, a, a, a, a, a, a) + 1; }\n\
+        void ld(long double x) { fprintf(stderr, \"%Lg\", x); fflush(stderr); }\n\
+        void d(double x) { fprintf(stderr, \"%g\", x); fflush(stderr); }\n";
+    let target = Target::LinuxX64;
+    let obj = object(SRC, target, true, FULL, NativeOptions::new());
+    for (name, pointerless) in [("many", false), ("ld", false), ("d", true)] {
+        let insns = insns_of(&obj, name);
+        let frame = frame_of(&insns, target).expect("a frame");
+        assert_eq!(frame.pointerless, pointerless, "{name}: {insns:x?}");
+    }
+}
+
+/// A frame with no pointer that holds its pushes alone reads the first
+/// stack parameter just past them and the return address, whatever their
+/// count, the save area's rounding to 16 aside.
+#[test]
+fn stack_parameters_are_read_past_the_pushes_alone() {
+    const SRC: &str = "long seven(long a0, long a1, long a2, long a3, long a4, long a5, long a6,\n\
+        long a7, signed char c, short s, int i) {\n\
+        long t = c > 0 ? s * 3 : i - 1;\n\
+        return a6 + t * 5 + c + a0 + a1 + a2 + a3 + a4 + a5 + a7; }\n";
+    let target = Target::LinuxX64;
+    let obj = object(SRC, target, true, FULL, NativeOptions::new());
+    let insns = insns_of(&obj, "seven");
+    let frame = frame_of(&insns, target).expect("a frame");
+    assert!(frame.pointerless && frame.alloc == 0, "{insns:x?}");
+    let first = (insns.iter())
+        .filter(|i| i.op == 0x8B && i.mem_base() == Some(4))
+        .map(|i| i.disp)
+        .min();
+    assert_eq!(first, Some(8 * frame.pushes.len() as i64 + 8), "{insns:x?}");
 }
 
 /// Kept out of its own recursive calls, which would add levels to its frame.
@@ -319,7 +474,7 @@ fn pushes_alone_make_the_frame() {
     let early = frame
         .early
         .expect("the base case returns ahead of the frame");
-    let e = *exits(&insns)
+    let e = *exits(&insns, false)
         .iter()
         .rfind(|&&e| e < early)
         .expect("an exit");
@@ -332,8 +487,12 @@ fn pushes_alone_make_the_frame() {
 #[test]
 fn an_odd_push_count_keeps_the_frame_aligned() {
     const SRC: &str = "long h(long);\nlong one(long a) { return h(a) + a; }\n";
-    for target in [Target::LinuxX64, Target::WindowsX64] {
-        let insns = insns_of(&optimized(SRC, target), "one");
+    for (target, form) in [
+        (Target::LinuxX64, Some(false)),
+        (Target::LinuxX64, None),
+        (Target::WindowsX64, None),
+    ] {
+        let insns = insns_of(&object(SRC, target, true, FULL, with_form(form)), "one");
         let frame = frame_of(&insns, target).expect("a frame");
         assert_eq!(frame.pushes.len(), 1, "{target:?}: {insns:x?}");
         assert_eq!(frame.bytes() % 16, 0, "{target:?}: {frame:?}");
@@ -355,7 +514,7 @@ fn a_dynamic_frame_resets_rsp_ahead_of_the_pops() {
             Target::WindowsX64 => 8 * frame.pushes.len() as i64,
             _ => i64::from(frame.bytes()),
         };
-        for e in exits(&insns) {
+        for e in exits(&insns, frame.pointerless) {
             let first_pop = check_exit(&insns, e, &frame, target, "vla");
             let lea = insns[first_pop - 1];
             // `lea rsp, [rbp + disp]`.
@@ -374,33 +533,35 @@ fn a_dynamic_frame_resets_rsp_ahead_of_the_pops() {
 fn the_canary_is_checked_ahead_of_the_pops() {
     const SRC: &str = "void snk(char *); long h(long);\n\
         long guarded(long a) { char b[24]; snk(b); return h(a) + a + b[0]; }\n";
-    let opts = NativeOptions {
-        stack_protect: StackProtect {
-            mode: StackProtector::Strong,
-            ..StackProtect::OFF
-        },
-        ..NativeOptions::new()
-    };
-    let target = Target::LinuxX64;
-    let obj = object(SRC, target, true, FULL, opts);
-    let insns = insns_of(&obj, "guarded");
-    let frame = frame_of(&insns, target).expect("a frame");
-    assert_eq!(frame.pushes.len() % 2, 1, "an odd push count: {insns:x?}");
-    let fails: Vec<u64> = text_relocs(&obj)
-        .into_iter()
-        .filter(|(_, n, _)| n == "__stack_chk_fail")
-        .map(|(at, _, _)| at)
-        .collect();
-    let exits = exits(&insns);
-    assert_eq!(fails.len(), exits.len(), "one check per exit");
-    for e in exits {
-        let first_pop = check_exit(&insns, e, &frame, target, "guarded");
-        // `xor r11d, r11d`, the scratch clear that ends the check.
-        let clear = insns[first_pop - 1];
-        assert!(
-            clear.op == 0x31 && clear.rex == 0x45 && clear.modrm == Some(0xDB),
-            "the check does not end at the pops: {insns:x?}"
-        );
+    for form in FORMS {
+        let opts = NativeOptions {
+            stack_protect: StackProtect {
+                mode: StackProtector::Strong,
+                ..StackProtect::OFF
+            },
+            ..with_form(form)
+        };
+        let target = Target::LinuxX64;
+        let obj = object(SRC, target, true, FULL, opts);
+        let insns = insns_of(&obj, "guarded");
+        let frame = frame_of(&insns, target).expect("a frame");
+        assert_eq!(frame.pushes.len() % 2, 1, "an odd push count: {insns:x?}");
+        let fails: Vec<u64> = text_relocs(&obj)
+            .into_iter()
+            .filter(|(_, n, _)| n == "__stack_chk_fail")
+            .map(|(at, _, _)| at)
+            .collect();
+        let exits = exits(&insns, frame.pointerless);
+        assert_eq!(fails.len(), exits.len(), "one check per exit");
+        for e in exits {
+            let first_pop = check_exit(&insns, e, &frame, target, "guarded");
+            // `xor r11d, r11d`, the scratch clear that ends the check.
+            let clear = insns[first_pop - 1];
+            assert!(
+                clear.op == 0x31 && clear.rex == 0x45 && clear.modrm == Some(0xDB),
+                "{form:?}: the check does not end at the pops: {insns:x?}"
+            );
+        }
     }
 }
 
@@ -432,7 +593,7 @@ fn win64_xmm_saves_sit_in_the_save_block() {
     let reload = |x: &X64Insn| {
         (x.op == 0x0F10 && x.mem_base() == Some(5)).then_some((x.regs().0, x.disp + frame.block))
     };
-    for e in exits(&insns) {
+    for e in exits(&insns, frame.pointerless) {
         let first_pop = check_exit(&insns, e, &frame, target, "mixed");
         // `lea rsp`, and the reloads ahead of it.
         let at = first_pop - 1;
@@ -494,11 +655,15 @@ fn a_tail_jump_pops_what_the_prologue_pushed() {
     const SRC: &str = "long h(long);\n\
         __attribute__((noinline)) long g(long a, long b) { return h(a) + b; }\n\
         long tail(long a, long b) { long t = h(a); return g(t + b, b); }\n";
-    for target in [Target::LinuxX64, Target::WindowsX64] {
-        let insns = insns_of(&optimized(SRC, target), "tail");
+    for (target, form) in [
+        (Target::LinuxX64, Some(false)),
+        (Target::LinuxX64, None),
+        (Target::WindowsX64, None),
+    ] {
+        let insns = insns_of(&object(SRC, target, true, FULL, with_form(form)), "tail");
         let frame = frame_of(&insns, target).expect("a frame");
         assert!(!frame.pushes.is_empty(), "{target:?}: {insns:x?}");
-        let exits = exits(&insns);
+        let exits = exits(&insns, frame.pointerless);
         // Win64 lowers no tail call here; its exits are returns.
         assert!(
             target == Target::WindowsX64 || exits.iter().any(|&e| insns[e].is_jmp()),
@@ -520,7 +685,7 @@ fn a_lifetime_marker_after_the_call_keeps_the_tail_jump() {
     // With no other call, the function keeps no frame to tear down first.
     assert!(
         insns.last().is_some_and(X64Insn::is_jmp)
-            || exits(&insns).iter().any(|&e| insns[e].is_jmp()),
+            || exits(&insns, false).iter().any(|&e| insns[e].is_jmp()),
         "{insns:x?}"
     );
 }
@@ -541,7 +706,7 @@ fn a_tail_jump_out_of_a_realigned_frame_resets_rsp() {
     // `and rsp, -64`.
     let realigns = |x: &X64Insn| x.op == 0x83 && x.modrm == Some(0xE4) && x.imm == -64;
     assert!(insns.iter().any(realigns), "{insns:x?}");
-    let exits = exits(&insns);
+    let exits = exits(&insns, frame.pointerless);
     assert!(exits.iter().any(|&e| insns[e].is_jmp()), "{insns:x?}");
     for e in exits {
         let first_pop = check_exit(&insns, e, &frame, target, "f");
@@ -571,13 +736,16 @@ fn a_spilled_return_value_is_read_ahead_of_the_pops() {
             h(s); return r; }\n";
     let target = Target::LinuxX64;
     let mut from_a_slot = 0;
-    for caps in [(1, 1), (2, 2)] {
-        let obj = object(SRC, target, true, caps, NativeOptions::new());
+    for (caps, form) in [(1, 1), (2, 2)]
+        .into_iter()
+        .flat_map(|c| FORMS.map(|f| (c, f)))
+    {
+        let obj = object(SRC, target, true, caps, with_form(form));
         for name in ["keep", "cold"] {
             let insns = insns_of(&obj, name);
             let frame = frame_of(&insns, target).expect("a frame");
             assert!(!frame.pushes.is_empty(), "{name}: {insns:x?}");
-            for e in exits(&insns) {
+            for e in exits(&insns, frame.pointerless) {
                 let first_pop = check_exit(&insns, e, &frame, target, name);
                 // `mov rax, [rsp + disp]` directly ahead of the pops.
                 let load = insns[first_pop - 1];
@@ -622,7 +790,7 @@ fn a_returned_aggregate_is_read_ahead_of_the_epilogue() {
             let insns = insns_of(&obj, name);
             let frame = frame_of(&insns, target).expect("a frame");
             assert!(!frame.pushes.is_empty(), "{target:?} {name}: {insns:x?}");
-            for e in exits(&insns) {
+            for e in exits(&insns, frame.pointerless) {
                 let reset = check_exit(&insns, e, &frame, target, name) - 1;
                 // `lea rsp, [rbp + disp]`, then nothing reads through another base.
                 let late = insns[reset..e]
@@ -661,7 +829,8 @@ fn the_prologue_decoder_reads_a_frame_with_pushes_behind_every_entry_form() {
         nop_mcount: false,
     };
     let forms = [
-        ("plain", NativeOptions::new()),
+        ("plain", with_form(Some(false))),
+        ("no frame pointer", NativeOptions::new()),
         (
             "patchable + endbr64",
             NativeOptions {
@@ -670,28 +839,28 @@ fn the_prologue_decoder_reads_a_frame_with_pushes_behind_every_entry_form() {
                     cf_protection_branch: true,
                     ..Hardening::NONE
                 },
-                ..NativeOptions::new()
+                ..with_form(Some(false))
             },
         ),
         (
             "-pg -mfentry",
             NativeOptions {
                 profiling: profiling(true),
-                ..NativeOptions::new()
+                ..with_form(Some(false))
             },
         ),
         (
             "-pg",
             NativeOptions {
                 profiling: profiling(false),
-                ..NativeOptions::new()
+                ..with_form(Some(false))
             },
         ),
     ];
     for target in [Target::LinuxX64, Target::WindowsX64] {
         for (what, opts) in forms.clone() {
             // PE/COFF has no patchable entries and no profiling calls.
-            if target == Target::WindowsX64 && what != "plain" {
+            if target == Target::WindowsX64 && !matches!(what, "plain" | "no frame pointer") {
                 continue;
             }
             let obj = object(SRC, target, true, FULL, opts);
@@ -721,7 +890,7 @@ fn the_prologue_decoder_reads_a_frame_with_pushes_behind_every_entry_form() {
                     .collect();
                 assert_eq!(pushes, frame.pushes, "{target:?} {what}: {code:02x?}");
             }
-            for e in exits(&insns) {
+            for e in exits(&insns, frame.pointerless) {
                 check_exit(&insns, e, &frame, target, what);
             }
             if what == "-pg" {

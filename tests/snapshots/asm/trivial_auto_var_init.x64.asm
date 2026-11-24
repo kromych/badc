@@ -94,27 +94,23 @@ Disassembly of section .text:
                	retq
 
 <scalar_long_double>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movl	$0x10, %esi
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <scalar_int128>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movl	$0x10, %esi
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <array_sum>:
@@ -122,52 +118,46 @@ Disassembly of section .text:
                	retq
 
 <array_bytes>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rdi
+               	subq	$0x28, %rsp
+               	leaq	(%rsp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movups	%xmm14, 0x10(%rdi)
                	movl	$0x20, %esi
                	callq	<addr>
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <struct_bytes>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x20, %rsp
                	pushq	%rbx
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movl	$0x1, %esi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-0x10(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	0x4(%rax), %rdi
                	movl	$0x4, %esi
                	callq	<addr>
                	addq	%rax, %rbx
-               	leaq	-0x10(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	0x8(%rax), %rdi
                	movl	$0x8, %esi
                	callq	<addr>
                	addq	%rbx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq
 
 <union_bytes>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	0x8(%rsp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x8, %esi
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <big_array>:
@@ -271,9 +261,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	callq	<addr>
                	callq	<addr>
@@ -343,5 +331,5 @@ Disassembly of section .text:
                	cmpl	$0x64, %eax
                	cmovgq	%rcx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

@@ -26,14 +26,12 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movabsq	$0x400000003, %rax      # imm = 0x400000003
-               	movq	%rax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
+               	movq	%rax, (%rsp)
+               	movl	(%rsp), %eax
                	movl	%eax, <rip> # <addr>
-               	movl	-0xc(%rbp), %ecx
+               	movl	0x4(%rsp), %ecx
                	movl	%ecx, <rip> # <addr>
                	cmpl	$0x3, %eax
                	jne	<addr>
@@ -41,7 +39,7 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movabsq	$0x600000005, %rcx      # imm = 0x600000005
                	movq	%rcx, <rip> # <addr>
@@ -54,20 +52,20 @@ Disassembly of section .text:
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x8(%rbp), %rax
+               	leaq	0x8(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movl	-0x8(%rbp), %eax
-               	movl	-0x4(%rbp), %ecx
+               	movl	0x8(%rsp), %eax
+               	movl	0xc(%rsp), %ecx
                	cmpl	$0x7, %eax
                	jne	<addr>
                	cmpl	$0x8, %ecx
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx # <addr>
@@ -146,11 +144,11 @@ Disassembly of section .text:
                	cmpl	$0x100, %eax            # imm = 0x100
                	jl	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

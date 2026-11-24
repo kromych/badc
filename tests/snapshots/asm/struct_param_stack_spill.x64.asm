@@ -26,58 +26,54 @@ Disassembly of section .text:
                	int3
 
 <f16>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	0x20(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movq	0x28(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, (%rsp)
+               	movq	0x38(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x10(%rbp), %rcx
+               	movq	0x20(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x18(%rbp), %rcx
+               	movq	0x28(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	-0x10(%rbp), %rcx
+               	movq	(%rsp), %rcx
                	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
                	addq	%rcx, %rax
-               	movq	-0x8(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <f12>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	0x20(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movl	0x28(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movq	0x30(%rsp), %r10
+               	movq	%r10, (%rsp)
+               	movl	0x38(%rsp), %r10d
+               	movl	%r10d, 0x8(%rsp)
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x10(%rbp), %rcx
+               	movq	0x20(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x18(%rbp), %rcx
+               	movq	0x28(%rsp), %rcx
                	addq	%rcx, %rax
-               	movl	-0x10(%rbp), %ecx
+               	movl	(%rsp), %ecx
                	imulq	$0x64, %rcx, %rcx
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movl	-0xc(%rbp), %ecx
+               	movl	0x4(%rsp), %ecx
                	imulq	$0xa, %rcx, %rcx
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	-0x8(%rbp), %rcx
+               	movslq	0x8(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <main>:

@@ -225,12 +225,14 @@ pub(crate) fn emit_function(
     fixed_regs: super::FixedRegs,
     // `-O`: the block plan may repeat a small test in place of a jump to it.
     repeat_tests: bool,
-    sibling_calls: bool,
+    (sibling_calls, omit_frame_pointer, red_zone): (bool, bool, bool),
     branches_within_32b: bool,
 ) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
         a.sibling_calls = sibling_calls;
+        a.omit_frame_pointer = omit_frame_pointer;
+        a.red_zone = red_zone;
         a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
@@ -1791,6 +1793,9 @@ fn emit_prologue(
         uw.leaf = true;
         return uw;
     }
+    if frame.omit_fp {
+        return emit_pointerless_prologue(code, func, alloc, frame, abi, extern_data_refs, uw, rel);
+    }
     // Standard frame: push rbp; mov rbp, rsp; sub rsp, frame_bytes.
     emit_push_r(code, Reg::RBP);
     uw.steps.push((rel(code), PrologueStep::Push(Reg::RBP.0)));
@@ -1890,6 +1895,44 @@ fn emit_prologue(
     uw
 }
 
+/// The prologue of a frame with no pointer ([`super::frame::Frame::omit_fp`]):
+/// `sub rsp, N` with the 8 bytes `push rbp` would take, so every region
+/// keeps its offset from where rbp would stand, then the callee-saved
+/// pushes, each a step the call-frame information follows, the canary and
+/// the parameter homes. Eight bytes alone are a `push`: an explicit rsp
+/// operand past the call costs a stack-pointer synchronization uop (Intel
+/// optimization manual, "Stack Pointer Tracker").
+#[allow(clippy::too_many_arguments)]
+fn emit_pointerless_prologue(
+    code: &mut CodeBuf,
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    abi: super::Abi,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    mut uw: super::FnUnwind,
+    rel: impl Fn(&Vec<u8>) -> u32,
+) -> super::FnUnwind {
+    let alloc_bytes = frame.sp_alloc(pushed_gpr_bytes(alloc));
+    match alloc_bytes {
+        0 => {}
+        8 => emit_push_r(code, Reg::RAX),
+        n => emit_stack_alloc(code, n, Some(Reg::R11)),
+    }
+    if alloc_bytes > 0 {
+        uw.steps.push((rel(code), PrologueStep::Alloc(alloc_bytes)));
+    }
+    for &r in alloc.gpr_used.iter().rev() {
+        emit_push_r(code, Reg(r));
+        uw.steps.push((rel(code), PrologueStep::Push(r)));
+    }
+    emit_canary_store(code, frame, abi, extern_data_refs);
+    emit_param_homes(code, func, alloc, frame, abi);
+    emit_struct_param_scatter(code, func, frame, abi);
+    emit_struct_stack_param_copy(code, func, frame, abi);
+    uw
+}
+
 /// Store each register-passed scalar parameter into its home
 /// (`param_home_off`) unless the store is dead (`param_home_store_dead`).
 /// The argument registers are intact here: the frame setup uses rsp, rbp
@@ -1907,12 +1950,12 @@ fn emit_param_homes(
         if dead.get(i).copied().unwrap_or(false) {
             continue;
         }
-        let home = param_home_off(i, func, frame, abi) as i32;
+        let (base, home) = frame.fp_addr(param_home_off(i, func, frame, abi) as i32);
         match *placement {
             super::ArgPlacement::IntReg(r) => {
-                emit_mov_mem_r(code, Reg::RBP, home, Reg(r));
+                emit_mov_mem_r(code, base, home, Reg(r));
             }
-            super::ArgPlacement::FpReg(x) => emit_movsd_mem_xmm(code, Reg::RBP, home, Reg(x)),
+            super::ArgPlacement::FpReg(x) => emit_movsd_mem_xmm(code, base, home, Reg(x)),
             _ => {}
         }
     }
@@ -1946,12 +1989,12 @@ fn emit_struct_stack_param_copy(
         if slot >= 0 {
             continue;
         }
-        let src_off = param_home_off(i, func, frame, abi);
+        let (src_base, src_off) = frame.fp_addr64(param_home_off(i, func, frame, abi));
         let (dst_base, dst_off) = local_slot_base_disp(slot, func, frame, abi);
         let words = (size / 8) as i64;
         for w in 0..words {
             let o = w * 8;
-            emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, (src_off + o) as i32);
+            emit_mov_r_mem(code, SCRATCH_R10, src_base, (src_off + o) as i32);
             emit_mov_mem_r(code, dst_base, (dst_off + o) as i32, SCRATCH_R10);
         }
         // The tail in the widest moves that end inside the object.
@@ -1963,15 +2006,15 @@ fn emit_struct_stack_param_copy(
             let (src, dst) = ((src_off + o) as i32, (dst_off + o) as i32);
             match width {
                 4 => {
-                    super::encode::emit_mov_r32_mem(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_mov_r32_mem(code, SCRATCH_R10, src_base, src);
                     super::encode::emit_mov_mem32_r(code, dst_base, dst, SCRATCH_R10);
                 }
                 2 => {
-                    super::encode::emit_movzx_r_mem16(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_movzx_r_mem16(code, SCRATCH_R10, src_base, src);
                     super::encode::emit_mov_mem16_r(code, dst_base, dst, SCRATCH_R10);
                 }
                 _ => {
-                    super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, src_base, src);
                     super::encode::emit_mov_mem8_r(code, dst_base, dst, SCRATCH_R10);
                 }
             }
@@ -2102,6 +2145,7 @@ fn emit_return(
                     desc.align,
                     abi.strict_align,
                     SCRATCH_R10,
+                    frame,
                 );
                 sse_i += 1;
             } else {
@@ -2304,6 +2348,18 @@ pub(super) fn emit_frame_teardown(
         ex.push((code.len(), S::Pop(Reg::RBP.0)));
         return;
     }
+    if frame.omit_fp {
+        // The pops left rsp where the prologue's allocation did. r11 holds
+        // no return value and no tail call's argument.
+        let bytes = frame.sp_alloc(pushed_gpr_bytes(alloc));
+        match bytes {
+            0 => return,
+            8 => emit_pop_r(code, Reg::R11),
+            n => emit_add_rsp(code, n),
+        }
+        ex.push((code.len(), S::Dealloc(bytes)));
+        return;
+    }
     let rsp_at_bottom = !frame.dynamic_sp || reestablishes_sp(frame, alloc);
     if frame.frame_bytes > pushed_gpr_bytes(alloc) || !rsp_at_bottom {
         super::encode::emit_leave(code);
@@ -2391,7 +2447,8 @@ fn emit_canary_store(
         return;
     }
     emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
-    emit_mov_mem_r(code, Reg::RBP, frame.canary_slot_off(), CANARY_SCRATCH);
+    let (base, disp) = frame.fp_addr(frame.canary_slot_off());
+    emit_mov_mem_r(code, base, disp, CANARY_SCRATCH);
     super::encode::emit_zero_r(code, CANARY_SCRATCH);
 }
 
@@ -2409,14 +2466,8 @@ pub(super) fn emit_canary_check(
         return;
     }
     emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
-    emit_rm(
-        code,
-        Mnem::Cmp,
-        8,
-        CANARY_SCRATCH,
-        Reg::RBP,
-        frame.canary_slot_off(),
-    );
+    let (base, disp) = frame.fp_addr(frame.canary_slot_off());
+    emit_rm(code, Mnem::Cmp, 8, CANARY_SCRATCH, base, disp);
     super::encode::emit_jcc_rel8(code, Cc::E, 0);
     let rel8_at = code.len() - 1;
     emit_extern_branch(code, extern_sites, super::STACK_CHK_FAIL_SYMBOL, true);

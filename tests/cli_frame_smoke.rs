@@ -249,15 +249,29 @@ fn check_function(name: &str, insts: &[(String, String)], what: &str) {
             }
         }
         None => {
+            // With no frame pointer, the entry's `sub` is the one move down
+            // and an `add` of the same bytes, right ahead of the return or
+            // the tail jump, the one move back.
+            let entry = insts
+                .iter()
+                .position(|(m, _)| {
+                    !(m == "endbr64" || m.starts_with("nop") || m.starts_with("call"))
+                })
+                .unwrap_or(0);
             let first_push = insts.iter().position(|(m, _)| m.starts_with("push"));
             for (j, (m, o)) in insts.iter().enumerate() {
                 assert!(
                     !(m.starts_with("pop") && first_push.is_none_or(|p| j < p)),
                     "{what}: {name}: `{m} {o}` pops with nothing pushed"
                 );
+                let opens = j == entry && m.starts_with("sub");
+                let next = insts.get(j + 1).map_or("", |(m, _)| m.as_str());
+                let closes = m.starts_with("add")
+                    && insts[entry].1 == *o
+                    && (next.starts_with("ret") || next.starts_with("jmp"));
                 assert!(
-                    !moves_rsp(m, o) && m != "leave",
-                    "{what}: {name}: `{m} {o}` moves rsp without a frame"
+                    (!moves_rsp(m, o) || opens || closes) && m != "leave",
+                    "{what}: {name}: `{m} {o}` moves rsp outside the frame's entry and exits"
                 );
             }
         }
@@ -280,7 +294,7 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
     std::fs::write(&src, SHAPES).expect("write source");
     let mut checked = 0;
     for target in ["linux-x64", "windows-x64"] {
-        for opt in [&[][..], &["-O"][..]] {
+        for opt in [&[][..], &["-O"][..], &["-O", "-fno-omit-frame-pointer"][..]] {
             let obj = dir.join(format!("shapes-{target}{}.o", opt.join("")));
             run(
                 badc()
@@ -303,21 +317,46 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
                 check_function(name, insts, &what);
             }
             // The stack-passed parameters are read where the caller left
-            // them, above the return address.
+            // them, above the return address: through rbp, or with no frame
+            // pointer through rsp, past the frame and the return address.
             let stack7 = &funcs.iter().find(|(n, _)| n == "stack7").unwrap().1;
-            let incoming = if target == "linux-x64" {
-                "0x18(%rbp)"
-            } else {
-                "0x48(%rbp)"
+            let sets_rbp = stack7
+                .iter()
+                .any(|(m, o)| m.starts_with("push") && o == "%rbp");
+            let below = stack7
+                .iter()
+                .take_while(|(m, o)| m.starts_with("push") || moves_rsp(m, o))
+                .map(|(m, o)| match m.starts_with("push") {
+                    true => 8,
+                    false => immediate(o),
+                })
+                .sum::<u64>();
+            let incoming = match (target, sets_rbp) {
+                ("linux-x64", true) => "0x18(%rbp)".to_string(),
+                ("linux-x64", false) => format!("{:#x}(%rsp)", below + 16),
+                _ => "0x48(%rbp)".to_string(),
             };
             assert!(
-                stack7.iter().any(|(_, o)| o.starts_with(incoming)),
+                stack7.iter().any(|(_, o)| o.starts_with(incoming.as_str())),
                 "{what}: stack7 does not read its last parameter at {incoming}"
             );
             checked += 1;
         }
     }
-    assert_eq!(checked, 4);
+    assert_eq!(checked, 6);
+}
+
+/// The value of an AT&T `$imm, reg` operand pair's immediate.
+fn immediate(operands: &str) -> u64 {
+    let imm = operands
+        .trim_start_matches('$')
+        .split(',')
+        .next()
+        .unwrap_or("");
+    match imm.strip_prefix("0x") {
+        Some(hex) => u64::from_str_radix(hex, 16).unwrap_or(0),
+        None => imm.parse().unwrap_or(0),
+    }
 }
 
 /// Whether `operands` names an argument register. The parameter homes are
@@ -581,7 +620,7 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
     let dir = tempdir("cfi");
     let src = dir.join("shapes.c");
     std::fs::write(&src, SHAPES).expect("write source");
-    for opt in [&[][..], &["-O"][..]] {
+    for opt in [&[][..], &["-O", "-fno-omit-frame-pointer"][..], &["-O"][..]] {
         let exe = dir.join(format!("shapes{}", opt.join("")));
         run(
             badc()
@@ -600,19 +639,37 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
         let what = opt.join(" ");
         let fdes = text.matches("FDE cie=").count();
         let framed = text.matches("DW_CFA_def_cfa_register: RBP").count();
-        let min_framed = if opt.is_empty() { 12 } else { 6 };
+        // With no frame pointer only the variadic and the alloca frames keep rbp.
+        let (min_framed, min_pointerless) = match opt.len() {
+            0 => (12, 0),
+            1 => (2, 4),
+            _ => (6, 0),
+        };
         assert!(
             framed >= min_framed,
             "{what}: {framed} framed FDEs of {fdes}:\n{text}"
         );
-        // Past `push rbp` the CFA moves to rsp + 16 with rbp saved below
-        // it; the coarse post-prologue rule never appears.
-        assert_eq!(
-            text.matches("DW_CFA_def_cfa_offset: +16").count(),
-            framed,
-            "{what}:\n{text}"
+        let mut pointerless = 0;
+        for fde in text.split("FDE cie=").skip(1) {
+            if fde.contains("DW_CFA_def_cfa_register: RBP") {
+                // Past `push rbp` the CFA moves to rsp + 16 with rbp saved
+                // below it.
+                assert!(fde.contains("DW_CFA_def_cfa_offset: +16"), "{what}:\n{fde}");
+                assert!(fde.contains("DW_CFA_offset: RBP -16"), "{what}:\n{fde}");
+            } else if fde.contains("DW_CFA_def_cfa_offset") {
+                // The CFA follows rsp down through the prologue and back to
+                // the entry's rsp + 8 at the end of each exit.
+                pointerless += 1;
+                let exits = fde.matches("DW_CFA_remember_state").count();
+                let back = fde.matches("DW_CFA_def_cfa_offset: +8\n").count();
+                assert!(back >= exits.max(1), "{what}:\n{fde}");
+            }
+        }
+        assert!(
+            pointerless >= min_pointerless,
+            "{what}: {pointerless} with no frame pointer:\n{text}"
         );
-        assert_eq!(text.matches("DW_CFA_offset: RBP -16").count(), framed);
+        // The coarse post-prologue rule never appears.
         assert!(!text.contains("DW_CFA_def_cfa: RBP"), "{what}:\n{text}");
         // A frameless leaf keeps the entry rule throughout: at -O `leaf`,
         // `regs` and `modify` have no frame.

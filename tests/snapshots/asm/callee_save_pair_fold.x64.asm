@@ -38,9 +38,7 @@ Disassembly of section .text:
                	retq
 
 <quad>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -63,12 +61,11 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x10, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x1, %edi
                	callq	<addr>
                	incq	%rax
@@ -76,5 +73,5 @@ Disassembly of section .text:
                	addq	$0x3, %rax
                	addq	$0x4, %rax
                	addq	$0x5, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq

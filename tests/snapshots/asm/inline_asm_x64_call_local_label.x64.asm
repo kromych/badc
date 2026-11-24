@@ -44,14 +44,12 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	callq	<addr>
                	movq	%rax, %rbx
                	callq	<addr>
                	addq	%rbx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

@@ -186,6 +186,11 @@ pub(crate) struct Codegen {
     pub(crate) conserve_stack: bool,
     pub(crate) zero_init_in_bss: bool,
     pub(crate) sibling_calls: bool,
+    /// `-fomit-frame-pointer` / `-fno-omit-frame-pointer`, `None` for the
+    /// default ([`badc::NativeOptions::omit_frame_pointer`]).
+    pub(crate) omit_frame_pointer: Option<bool>,
+    /// `-mred-zone` / `-mno-red-zone` ([`badc::NativeOptions::red_zone`]).
+    pub(crate) red_zone: bool,
     pub(crate) no_plt: bool,
     pub(crate) unroll_loops: bool,
     pub(crate) keep_local_labels: bool,
@@ -232,6 +237,8 @@ impl Default for Codegen {
             conserve_stack: false,
             zero_init_in_bss: true,
             sibling_calls: true,
+            omit_frame_pointer: None,
+            red_zone: true,
             no_plt: false,
             unroll_loops: true,
             keep_local_labels: false,
@@ -1936,6 +1943,10 @@ impl Parser {
             // on the chain.
             "-foptimize-sibling-calls" => code.sibling_calls = true,
             "-fno-optimize-sibling-calls" => code.sibling_calls = false,
+            "-fomit-frame-pointer" => code.omit_frame_pointer = Some(true),
+            "-fno-omit-frame-pointer" => code.omit_frame_pointer = Some(false),
+            "-mred-zone" => code.red_zone = true,
+            "-mno-red-zone" => code.red_zone = false,
             "-fplt" => code.no_plt = false,
             "-fno-plt" => code.no_plt = true,
             "-fasynchronous-unwind-tables" => code.async_unwind_tables = true,
@@ -3391,6 +3402,8 @@ impl Codegen {
         opts.conserve_stack = self.conserve_stack;
         opts.zero_init_in_bss = self.zero_init_in_bss;
         opts.sibling_calls = self.sibling_calls;
+        opts.omit_frame_pointer = self.omit_frame_pointer;
+        opts.red_zone = self.red_zone;
         opts.no_plt = self.no_plt;
         opts.unroll_loops = self.unroll_loops;
         opts.min_function_alignment = self.min_function_alignment.max(self.align_functions);
@@ -4462,6 +4475,23 @@ mod tests {
         assert!(pic.fpic && !pic.fpie);
     }
 
+    /// The last of `-fomit-frame-pointer` and `-fno-omit-frame-pointer`
+    /// wins, as does the last of `-mred-zone` and `-mno-red-zone`.
+    #[test]
+    fn the_frame_pointer_and_red_zone_options_reach_the_emitter() {
+        let x64 = "--target=linux-x64";
+        let c = parse(&[x64, "-fomit-frame-pointer", "-mno-red-zone", "a.c"]).codegen;
+        assert_eq!((c.omit_frame_pointer, c.red_zone), (Some(true), false));
+        let args = [
+            x64,
+            "-fomit-frame-pointer",
+            "-fno-omit-frame-pointer",
+            "-mno-red-zone",
+        ];
+        let c = parse(&[&args[..], &["-mred-zone", "a.c"]].concat()).codegen;
+        assert_eq!((c.omit_frame_pointer, c.red_zone), (Some(false), true));
+    }
+
     #[test]
     fn f_family_reaches_the_front_end_and_the_emitter() {
         let cli = parse(&[
@@ -4485,6 +4515,8 @@ mod tests {
         assert!(cli.codegen.conserve_stack);
         assert!(!cli.codegen.zero_init_in_bss);
         assert!(!cli.codegen.sibling_calls);
+        assert_eq!(cli.codegen.omit_frame_pointer, None);
+        assert!(cli.codegen.red_zone);
         assert_eq!(cli.front.char_signed, Some(true));
         assert!(cli.front.short_wchar);
         assert_eq!(cli.front.strict_flex_arrays, 2);

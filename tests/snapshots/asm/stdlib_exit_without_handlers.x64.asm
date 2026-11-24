@@ -26,15 +26,13 @@ Disassembly of section .text:
                	int3
 
 <handler>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x2, %edi
                	callq	<addr>
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
                	movq	%rsi, %rdx

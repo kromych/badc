@@ -30,8 +30,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	callq	<addr>
                	addq	$0xcb, %rax
@@ -41,5 +40,5 @@ Disassembly of section .text:
                	cmpl	$0x19a, %eax            # imm = 0x19A
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq

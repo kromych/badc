@@ -33,8 +33,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, <rip> # <addr>
                	callq	<addr>
@@ -44,7 +43,7 @@ Disassembly of section .text:
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x3, <rip> # <addr>
                	callq	<addr>
@@ -54,10 +53,10 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	addb	%al, (%rax)
                	addb	%dl, -0x48(%rdx)

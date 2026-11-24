@@ -26,12 +26,10 @@ Disassembly of section .text:
                	int3
 
 <rt>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	leave
+               	subq	$0x18, %rsp
+               	movl	%edi, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
+               	addq	$0x18, %rsp
                	retq
 
 <make_pair>:
@@ -57,9 +55,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movl	$0xb, %edi
                	callq	<addr>
                	movq	%rax, 0x18(%rsp)
@@ -72,19 +68,19 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x63, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	0x18(%rsp), %rax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	0x10(%rsp), %rax
                	cmpl	$0x16, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movl	$0x3, %edi
                	callq	<addr>
@@ -95,12 +91,12 @@ Disassembly of section .text:
                	cmpl	$0x3, %ecx
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movl	$0x64, %edi
                	callq	<addr>
@@ -117,24 +113,24 @@ Disassembly of section .text:
                	cmpl	$0x64, %ecx
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	0x10(%rsp), %rcx
                	cmpl	$0xc8, %ecx
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	0x8(%rsp), %rcx
                	cmpl	$0x12c, %ecx            # imm = 0x12C
                	je	<addr>
                	movl	$0x7, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	cmpl	$0x190, %eax            # imm = 0x190
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
@@ -155,13 +151,13 @@ Disassembly of section .text:
                	cmpl	$0x4, %ecx
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0xa, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

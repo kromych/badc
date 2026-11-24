@@ -34,8 +34,7 @@ Disassembly of section .text:
 <classify>:
                	testq	%rdi, %rdi
                	je	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -72,16 +71,14 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	leaq	-0x40(%rbp), %rdi
+               	subq	$0x48, %rsp
+               	leaq	(%rsp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movups	%xmm14, 0x10(%rdi)
@@ -108,18 +105,18 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rcx, %rsi
                	jmp	<addr>
-               	leaq	-0x40(%rbp), %rdi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	cmpl	$0x68, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq

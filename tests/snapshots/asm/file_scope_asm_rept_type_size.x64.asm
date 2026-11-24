@@ -26,14 +26,13 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rax # <addr>
                	movzbq	(%rax), %rcx
                	cmpl	$0x4, %ecx
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movzbq	0x1(%rax), %rcx
                	cmpl	$0x4, %ecx
@@ -45,7 +44,7 @@ Disassembly of section .text:
                	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movzbq	0x4(%rax), %rcx
                	cmpl	$0x7, %ecx
@@ -64,17 +63,17 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x2a, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	addb	%al, (%rax)
                	addb	%al, (%rax)
-               	addb	%al, (%rax)
+               	addb	%al, (%rsp,%rax)
 
 <rept_run>:
   <addr>: 04 04 04 07 07 07 07 07         ........

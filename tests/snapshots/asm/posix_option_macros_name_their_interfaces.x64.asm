@@ -26,11 +26,10 @@ Disassembly of section .text:
                	int3
 
 <pthread_atfork>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	xorl	%ecx, %ecx
                	callq	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:

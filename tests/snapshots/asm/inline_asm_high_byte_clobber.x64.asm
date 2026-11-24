@@ -146,9 +146,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	movq	<rip>, %rbx # <addr>
                	movq	%rbx, %rsi
@@ -166,7 +164,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	cmoveq	%rcx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq
                	movq	%rbx, %rsi
                	shlq	%rsi

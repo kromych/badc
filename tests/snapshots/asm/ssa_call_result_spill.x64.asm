@@ -42,9 +42,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x38, %rsp
+               	subq	$0x40, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -108,7 +106,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x40, %rsp
                	retq
                	movq	0x58(%rsp), %rax
                	movabsq	$0x440000080000c800, %r11 # imm = 0x440000080000C800
@@ -120,7 +118,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x40, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
@@ -128,5 +126,5 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x40, %rsp
                	retq

@@ -138,8 +138,6 @@ Disassembly of section .text:
                	retq
 
 <expect>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -200,13 +198,10 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0x2, %edi
                	callq	<addr>
@@ -217,7 +212,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq
                	movl	$0x9, %edi
                	callq	<addr>
@@ -228,9 +223,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

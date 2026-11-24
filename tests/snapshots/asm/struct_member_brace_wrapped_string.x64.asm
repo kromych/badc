@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x120, %rsp            # imm = 0x120
+               	subq	$0x128, %rsp            # imm = 0x128
                	leaq	<rip>, %rax # <addr>
                	addq	$0x8, %rax
                	leaq	<rip>, %rcx # <addr>
@@ -48,7 +46,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq
                	leaq	<rip>, %rax # <addr>
                	addq	$0x4, %rax
@@ -69,9 +67,9 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq
-               	leaq	-0x108(%rbp), %rax
+               	leaq	0x18(%rsp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -125,9 +123,9 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq
-               	leaq	-0x120(%rbp), %rax
+               	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -151,8 +149,8 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq

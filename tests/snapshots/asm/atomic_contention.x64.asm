@@ -87,9 +87,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	pushq	%r12
                	pushq	%rbx
                	xorl	%edi, %edi
@@ -111,17 +109,17 @@ Disassembly of section .text:
                	movl	$0x66, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%esi, %esi
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	-<rip>, %rdx # <addr>
                	movq	%rsi, %rcx
                	callq	*%rbx
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %ecx
-               	leaq	-0x20(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	0x8(%rax), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
@@ -129,7 +127,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %ecx
-               	leaq	-0x20(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	0x10(%rax), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
@@ -137,23 +135,23 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %ecx
-               	leaq	-0x20(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	0x18(%rax), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	callq	*%rbx
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	-0x20(%rbp), %rdi
+               	movq	0x10(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	movq	-0x18(%rbp), %rdi
+               	movq	0x18(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	movq	-0x10(%rbp), %rdi
+               	movq	0x20(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	movq	-0x8(%rbp), %rdi
+               	movq	0x28(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
                	movq	<rip>, %rax # <addr>

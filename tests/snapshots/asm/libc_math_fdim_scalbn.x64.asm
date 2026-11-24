@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movsd	<rip>, %xmm0
                	movl	$0x3, %edi
                	callq	<addr>
@@ -36,7 +35,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movsd	<rip>, %xmm0
                	movq	$-0x1, %rdi
@@ -46,7 +45,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movsd	<rip>, %xmm0
                	movl	$0x4, %edi
@@ -56,7 +55,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	movsd	<rip>, %xmm0
@@ -67,7 +66,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
                	movq	%r11, %xmm0
@@ -77,8 +76,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

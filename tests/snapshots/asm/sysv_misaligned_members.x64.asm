@@ -26,89 +26,79 @@ Disassembly of section .text:
                	int3
 
 <take_p1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	0x10(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
-               	movzbq	0x14(%rbp), %r10
-               	movb	%r10b, -0x4(%rbp)
+               	subq	$0x18, %rsp
+               	movl	0x20(%rsp), %r10d
+               	movl	%r10d, 0x8(%rsp)
+               	movzbq	0x24(%rsp), %r10
+               	movb	%r10b, 0xc(%rsp)
                	imulq	$0x3e8, %rdi, %rax      # imm = 0x3E8
-               	movsbq	-0x8(%rbp), %rcx
+               	movsbq	0x8(%rsp), %rcx
                	imulq	$0x64, %rcx, %rcx
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax
-               	movslq	-0x7(%rbp), %rcx
+               	movslq	0x9(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <take_p2>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	0x10(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
-               	movzwq	0x14(%rbp), %r10
-               	movw	%r10w, -0x4(%rbp)
-               	movswq	-0x8(%rbp), %rax
+               	subq	$0x18, %rsp
+               	movl	0x20(%rsp), %r10d
+               	movl	%r10d, 0x8(%rsp)
+               	movzwq	0x24(%rsp), %r10
+               	movw	%r10w, 0xc(%rsp)
+               	movswq	0x8(%rsp), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	movl	-0x6(%rbp), %ecx
+               	movl	0xa(%rsp), %ecx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	addq	$0x3, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <take_p5>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	0x10(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
-               	movzwq	0x14(%rbp), %r10
-               	movw	%r10w, -0x4(%rbp)
-               	movsbq	-0x8(%rbp), %rax
+               	subq	$0x18, %rsp
+               	movl	0x20(%rsp), %r10d
+               	movl	%r10d, 0x8(%rsp)
+               	movzwq	0x24(%rsp), %r10
+               	movw	%r10w, 0xc(%rsp)
+               	movsbq	0x8(%rsp), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
-               	movl	-0x6(%rbp), %ecx
+               	movl	0xa(%rsp), %ecx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	addq	$0x3, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <make_p1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rdi, -0x40(%rbp)
-               	leaq	-0x8(%rbp), %rdx
-               	movb	$0x6, -0x8(%rbp)
-               	movl	$0x4d, -0x7(%rbp)
-               	movq	-0x40(%rbp), %rax
+               	subq	$0x48, %rsp
+               	movq	%rdi, (%rsp)
+               	leaq	0x38(%rsp), %rdx
+               	movb	$0x6, 0x38(%rsp)
+               	movl	$0x4d, 0x39(%rsp)
+               	movq	(%rsp), %rax
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rax)
                	movzbq	0x4(%rdx), %r10
                	movb	%r10b, 0x4(%rax)
-               	leave
+               	addq	$0x48, %rsp
                	retq
 
 <make_p2>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rdi, -0x40(%rbp)
-               	leaq	-0x8(%rbp), %rdx
-               	movw	$0x4, -0x8(%rbp)
-               	movl	$0xb, -0x6(%rbp)
-               	movq	-0x40(%rbp), %rax
+               	subq	$0x48, %rsp
+               	movq	%rdi, (%rsp)
+               	leaq	0x38(%rsp), %rdx
+               	movw	$0x4, 0x38(%rsp)
+               	movl	$0xb, 0x3a(%rsp)
+               	movq	(%rsp), %rax
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rax)
                	movzwq	0x4(%rdx), %r10
                	movw	%r10w, 0x4(%rax)
-               	leave
+               	addq	$0x48, %rsp
                	retq
 
 <make_p3>:

@@ -26,19 +26,17 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0xe8, %rsp
+               	subq	$0xf0, %rsp
                	pushq	%rbx
                	callq	<addr>
                	movq	%rax, %rdx
-               	leaq	-0xd0(%rbp), %rdi
+               	leaq	0x20(%rsp), %rdi
                	leaq	<rip>, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	-0xd0(%rbp), %rdi
+               	leaq	0x20(%rsp), %rdi
                	callq	<addr>
-               	leaq	-0xd0(%rbp), %rdi
+               	leaq	0x20(%rsp), %rdi
                	movl	$0xc2, %esi
                	movl	$0x180, %edx            # imm = 0x180
                	callq	<addr>
@@ -47,9 +45,9 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
+               	addq	$0xf0, %rsp
                	retq
-               	leaq	-0x90(%rbp), %rsi
+               	leaq	0x60(%rsp), %rsi
                	movq	%rcx, 0x18(%rsp)
                	movq	%rcx, %rdi
                	callq	<addr>
@@ -60,13 +58,13 @@ Disassembly of section .text:
                	movl	$0x2, %ebx
                	movq	%rcx, %rdi
                	callq	<addr>
-               	leaq	-0xd0(%rbp), %rdi
+               	leaq	0x20(%rsp), %rdi
                	callq	<addr>
                	movq	%rbx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0xf0, %rsp
                	retq
-               	movl	-0x78(%rbp), %eax
+               	movl	0x78(%rsp), %eax
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	movl	$0x3, %ebx
                	xorl	%edx, %edx

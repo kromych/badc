@@ -100,11 +100,9 @@ Disassembly of section .text:
                	retq
 
 <s16i>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rdi, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rax
+               	subq	$0x28, %rsp
+               	movq	%rdi, (%rsp)
+               	movq	(%rsp), %rax
                	movl	%esi, (%rax)
                	movl	%esi, 0x4(%rax)
                	movl	%esi, 0x8(%rax)
@@ -121,15 +119,13 @@ Disassembly of section .text:
                	movl	%esi, 0x34(%rax)
                	movl	%esi, 0x38(%rax)
                	movl	%esi, 0x3c(%rax)
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <s8l>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rdi, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rax
+               	subq	$0x28, %rsp
+               	movq	%rdi, (%rsp)
+               	movq	(%rsp), %rax
                	movq	%rsi, (%rax)
                	movq	%rsi, 0x8(%rax)
                	movq	%rsi, 0x10(%rax)
@@ -138,7 +134,7 @@ Disassembly of section .text:
                	movq	%rsi, 0x28(%rax)
                	movq	%rsi, 0x30(%rax)
                	movq	%rsi, 0x38(%rax)
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <k_byte>:
@@ -218,17 +214,15 @@ Disassembly of section .text:
                	retq
 
 <lane_of>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	vmovd	%edi, %xmm0
                	vpbroadcastd	%xmm0, %xmm0
-               	movups	%xmm0, -0x10(%rbp)
+               	movups	%xmm0, (%rsp)
                	andq	$0x3, %rsi
-               	movl	-0x10(%rbp,%rsi,4), %eax
+               	movl	(%rsp,%rsi,4), %eax
                	movq	%rdi, %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <dlane_of>:

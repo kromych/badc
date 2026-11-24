@@ -26,20 +26,18 @@ Disassembly of section .text:
                	int3
 
 <half>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	testl	%edi, %edi
                	je	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	(%rsp), %rax
                	vextracti128	$0x1, %ymm0, %xmm0
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, (%rsp)
                	movups	(%rax), %xmm0
                	vzeroupper
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movups	%xmm0, -0x10(%rbp)
+               	leaq	0x10(%rsp), %rax
+               	movups	%xmm0, 0x10(%rsp)
                	jmp	<addr>
 
 <put>:

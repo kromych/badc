@@ -103,82 +103,79 @@ Disassembly of section .text:
                	retq
 
 <declarator_vs_typedef>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0x1, -0x8(%rbp)
+               	subq	$0x28, %rsp
+               	movl	$0x1, 0x18(%rsp)
                	movsd	<rip>, %xmm0
-               	movsd	%xmm0, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rax
+               	movsd	%xmm0, (%rsp)
+               	leaq	(%rsp), %rax
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x35, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movsd	-0x20(%rbp), %xmm1
+               	movsd	(%rsp), %xmm1
                	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
                	subq	$0x6, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rax # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x40, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rax # <addr>
                	testb	$0x1f, %al
                	je	<addr>
                	movl	$0x41, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rax # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x42, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rax # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x43, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rax # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x44, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x45, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rax # <addr>
                	movl	$0x3, <rip> # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x4c, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x9, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

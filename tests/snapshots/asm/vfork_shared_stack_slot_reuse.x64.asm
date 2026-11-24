@@ -26,43 +26,40 @@ Disassembly of section .text:
                	int3
 
 <child_exec>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movl	0x10(%rbp), %ecx
+               	movl	0x8(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x18(%rbp), %ecx
+               	movl	0x10(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x20(%rbp), %ecx
+               	movl	0x18(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x28(%rbp), %ecx
+               	movl	0x20(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x30(%rbp), %ecx
+               	movl	0x28(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x38(%rbp), %ecx
+               	movl	0x30(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x40(%rbp), %ecx
+               	movl	0x38(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x48(%rbp), %ecx
+               	movl	0x40(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x50(%rbp), %ecx
+               	movl	0x48(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x58(%rbp), %ecx
+               	movl	0x50(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x60(%rbp), %ecx
+               	movl	0x58(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x68(%rbp), %ecx
+               	movl	0x60(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x70(%rbp), %ecx
+               	movl	0x68(%rsp), %ecx
                	addq	%rcx, %rax
-               	movl	0x78(%rbp), %ecx
+               	movl	0x70(%rsp), %ecx
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
-               	popq	%rbp
                	retq
 
 <main>:

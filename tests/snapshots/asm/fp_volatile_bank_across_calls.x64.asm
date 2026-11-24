@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <spread>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	vaddsd	<rip>, %xmm0, %xmm3
                	vaddsd	<rip>, %xmm0, %xmm4
                	vaddsd	<rip>, %xmm0, %xmm5
@@ -56,13 +54,11 @@ Disassembly of section .text:
                	movsd	0x8(%rsp), %xmm14
                	vfmadd231sd	(%rsp), %xmm14, %xmm2 # xmm2 = (xmm14 * mem) + xmm2
                	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <across>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x88, %rsp
                	vmulsd	<rip>, %xmm0, %xmm14
                	movsd	%xmm14, 0x78(%rsp)
                	vmulsd	<rip>, %xmm0, %xmm14
@@ -122,12 +118,10 @@ Disassembly of section .text:
                	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
                	movsd	0x20(%rsp), %xmm14
                	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	leave
+               	addq	$0x88, %rsp
                	retq
 
 <across_ref>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -238,13 +232,10 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	callq	<addr>
@@ -255,7 +246,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	shlq	%rax
                	incq	%rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
@@ -273,7 +264,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	shlq	%rax
                	addq	$0x2, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
@@ -348,5 +339,5 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	jmp	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

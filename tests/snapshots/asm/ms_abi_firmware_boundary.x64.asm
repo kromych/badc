@@ -26,12 +26,10 @@ Disassembly of section .text:
                	int3
 
 <step>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	leave
+               	subq	$0x18, %rsp
+               	movq	%rdi, 0x8(%rsp)
+               	movq	0x8(%rsp), %rax
+               	addq	$0x18, %rsp
                	retq
 
 <clobber_vectors>:

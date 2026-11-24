@@ -26,40 +26,37 @@ Disassembly of section .text:
                	int3
 
 <switched>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x220, %rsp            # imm = 0x220
-               	movq	$0x5, -0x208(%rbp)
-               	movq	$0xa, -0x210(%rbp)
-               	movq	$0xf, -0x218(%rbp)
-               	movb	$0x1, -0x200(%rbp)
-               	movq	-0x208(%rbp), %rax
-               	movq	-0x210(%rbp), %rcx
-               	movq	-0x218(%rbp), %rdx
+               	subq	$0x228, %rsp            # imm = 0x228
+               	movq	$0x5, 0x18(%rsp)
+               	movq	$0xa, 0x10(%rsp)
+               	movq	$0xf, 0x8(%rsp)
+               	movb	$0x1, 0x20(%rsp)
+               	movq	0x18(%rsp), %rax
+               	movq	0x10(%rsp), %rcx
+               	movq	0x8(%rsp), %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	movq	%rax, -0x208(%rbp)
-               	movq	-0x210(%rbp), %rax
-               	movq	-0x208(%rbp), %rcx
+               	movq	%rax, 0x18(%rsp)
+               	movq	0x10(%rsp), %rax
+               	movq	0x18(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	%rax, -0x210(%rbp)
-               	movq	-0x218(%rbp), %rax
-               	movq	-0x210(%rbp), %rcx
+               	movq	%rax, 0x10(%rsp)
+               	movq	0x8(%rsp), %rax
+               	movq	0x10(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	%rax, -0x218(%rbp)
-               	movq	-0x208(%rbp), %rax
-               	movq	-0x210(%rbp), %rcx
+               	movq	%rax, 0x8(%rsp)
+               	movq	0x18(%rsp), %rax
+               	movq	0x10(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	-0x218(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	addq	%rcx, %rax
-               	movsbq	-0x200(%rbp), %rcx
+               	movsbq	0x20(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x228, %rsp            # imm = 0x228
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x5, %edi
                	callq	<addr>
                	movl	$0x2a, %ecx
@@ -67,5 +64,5 @@ Disassembly of section .text:
                	cmpq	$0x7e, %rax
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -122,9 +122,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x20, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -167,7 +165,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
@@ -258,7 +256,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movq	$-0x1, %rbx
                	movq	%rbx, %rdi
@@ -400,7 +398,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
@@ -491,7 +489,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movq	$-0x1, %rbx
                	movq	%rbx, %rdi
@@ -631,7 +629,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
@@ -665,7 +663,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movq	$-0x1, <rip> # <addr>
                	movq	$0x2, <rip> # <addr>
@@ -704,7 +702,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
@@ -737,7 +735,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movl	$0x2, %edi
                	movq	$0x1, <rip> # <addr>
@@ -755,7 +753,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movq	$-0x2, %rdi
                	callq	<addr>
@@ -765,7 +763,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	callq	<addr>
                	cmpq	$0x3, %rax
@@ -774,7 +772,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	xorl	%eax, %eax
                	leaq	<rip>, %rdx # <addr>
@@ -791,13 +789,13 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	xorq	$-0x1, %rdx
                	jmp	<addr>

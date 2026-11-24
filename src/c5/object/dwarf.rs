@@ -84,6 +84,7 @@ const DW_FORM_SDATA: u32 = 0x0d;
 const DW_OP_FBREG: u8 = 0x91;
 const DW_OP_BREG29: u8 = 0x8d;
 const DW_OP_BREG6: u8 = 0x76;
+const DW_OP_BREG7: u8 = 0x77;
 const DW_OP_REG_BASE: u8 = 0x50;
 
 const DW_LANG_C99: u8 = 0x0c;
@@ -397,6 +398,10 @@ struct Subprog {
     /// unwind table describes it, and this writer cannot.
     frame_rules: Option<FrameRules>,
     ra_signed_at: Option<u32>,
+    /// `DW_AT_frame_base` as rsp plus this, for an x86-64 frame with no
+    /// pointer ([`crate::c5::codegen::FnUnwind::sp_frame_base`]); else the
+    /// frame register.
+    sp_frame_base: Option<i64>,
     /// Offset of the return taken ahead of the frame, where the entry's
     /// rules hold again.
     early_return: Option<u32>,
@@ -736,6 +741,9 @@ fn collect_subprograms(
             frame_rules: (build.func_prologue_native.contains_key(&ent_pc))
                 .then(|| FrameRules::of(build, CfiArch::of(target), ent_pc, lo)),
             ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
+            sp_frame_base: (build.fn_unwind.iter())
+                .find(|u| u.begin as usize == lo)
+                .and_then(|u| u.sp_frame_base()),
             // A predicted return follows the test, ahead of the frame, and
             // leaves no code after the body to take the entry's rules.
             early_return: early.map(|e| e.exit).filter(|&x| (x as usize) < hi - lo),
@@ -1638,9 +1646,16 @@ impl InfoUnit<'_> {
             body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
             body.push(u8::from(s.prototyped));
             body.push(DW_CC_NORMAL);
-            write_uleb128(body, 2);
-            body.push(frame_base_breg);
-            body.push(0);
+            let mut base = Vec::with_capacity(4);
+            match s.sp_frame_base {
+                Some(off) => {
+                    base.push(DW_OP_BREG7);
+                    write_sleb128(&mut base, off);
+                }
+                None => base.extend([frame_base_breg, 0]),
+            }
+            write_uleb128(body, base.len() as u64);
+            body.extend_from_slice(&base);
             for v in &s.variables {
                 let abbrev = if v.is_parameter {
                     ABBREV_FORMAL_PARAMETER
@@ -2772,6 +2787,7 @@ mod tests {
             prologue_size: 4,
             frame_rules,
             ra_signed_at: None,
+            sp_frame_base: None,
             early_return: None,
             variables: Vec::new(),
             external: true,
@@ -2824,6 +2840,7 @@ mod tests {
             prologue_size: 12,
             frame_rules: Some(frame_rules),
             ra_signed_at: None,
+            sp_frame_base: None,
             early_return: None,
             variables: Vec::new(),
             external: true,
@@ -2928,6 +2945,7 @@ mod tests {
             prologue_size: 12,
             frame_rules: Some(FrameRules::PostPrologue),
             ra_signed_at,
+            sp_frame_base: None,
             early_return: None,
             variables: Vec::new(),
             external: true,
@@ -3319,6 +3337,7 @@ mod info_golden {
             prologue_size: 4,
             frame_rules: Some(FrameRules::PostPrologue),
             ra_signed_at: None,
+            sp_frame_base: None,
             early_return: None,
             variables: alloc::vec![],
             external: true,

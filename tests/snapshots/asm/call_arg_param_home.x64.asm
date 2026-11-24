@@ -26,14 +26,12 @@ Disassembly of section .text:
                	int3
 
 <take>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	0x10(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movl	0x20(%rsp), %r10d
+               	movl	%r10d, 0x8(%rsp)
                	movl	%edi, <rip> # <addr>
                	movl	%esi, <rip> # <addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <pass>:

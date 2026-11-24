@@ -92,14 +92,12 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x48, %rsp
                	xorl	%eax, %eax
                	imulq	$0x25, %rax, %rdx
                	addq	$0xb, %rdx
                	andq	$0xff, %rdx
-               	movb	%dl, -0x40(%rbp,%rax)
+               	movb	%dl, (%rsp,%rax)
                	incq	%rax
                	cmpl	$0x3d, %eax
                	jl	<addr>
@@ -111,7 +109,7 @@ Disassembly of section .text:
                	cmpl	$0x340bc6d9, %eax       # imm = 0x340BC6D9
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	leaq	<rip>, %rsi
@@ -121,8 +119,8 @@ Disassembly of section .text:
                	cmpl	$0x1cf96d7c, %eax       # imm = 0x1CF96D7C
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	movl	$0x2a, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq

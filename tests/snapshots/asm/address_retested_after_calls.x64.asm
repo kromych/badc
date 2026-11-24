@@ -54,8 +54,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <check>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
@@ -70,16 +69,14 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	testq	%rsi, %rsi
                	cmoveq	%rax, %rsi
-               	popq	%rbp
+               	popq	%r11
                	jmp	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x30, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -116,5 +113,5 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x30, %rsp
                	retq

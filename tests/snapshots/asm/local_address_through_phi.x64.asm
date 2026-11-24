@@ -42,19 +42,17 @@ Disassembly of section .text:
                	retq
 
 <dir_length>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x48, %rsp
+               	subq	$0x50, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	leaq	-0x40(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	movl	$0x3f, %esi
                	callq	<addr>
                	movq	%rax, %rcx
                	testq	%rcx, %rcx
                	jle	<addr>
-               	leaq	-0x40(%rbp), %rax
-               	movb	$0x0, -0x40(%rbp,%rcx)
+               	leaq	0x10(%rsp), %rax
+               	movb	$0x0, 0x10(%rsp,%rcx)
                	testq	%rax, %rax
                	je	<addr>
                	movq	%rax, %rdi
@@ -62,7 +60,7 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	<addr>
                	popq	%rbx
-               	leave
+               	addq	$0x50, %rsp
                	retq
                	movq	$-0x1, %rax
                	jmp	<addr>
@@ -73,8 +71,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi
                	callq	<addr>
                	cmpl	$0xd, %eax
@@ -82,7 +79,7 @@ Disassembly of section .text:
                	cmpq	$0x0, <rip> # <addr>
                	je	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

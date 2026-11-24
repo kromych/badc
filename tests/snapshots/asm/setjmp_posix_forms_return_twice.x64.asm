@@ -26,16 +26,14 @@ Disassembly of section .text:
                	int3
 
 <jump_plain>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x3, %esi
                	callq	<addr>
                	ud2
 
 <jump_sig>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x5, %esi
                	callq	<addr>

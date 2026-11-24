@@ -833,9 +833,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	callq	<addr>
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
@@ -873,10 +871,10 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	callq	<addr>
                	movq	(%rax), %rax

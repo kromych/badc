@@ -199,6 +199,11 @@ FORWARD_EXACT = {
     "-fno-builtin", "-ffreestanding", "-fbuiltin", "-fhosted",
     # A unit's opt-out of the frame-size bound `-Wframe-larger-than=` sets.
     "-Wno-frame-larger-than",
+    # The frame pointer, and code that runs where an interrupt or exception
+    # pushes onto the current stack: under -mno-red-zone badc stores nothing
+    # below rsp and keeps the frame pointer, which a frame with none needs
+    # the red zone without.
+    "-fomit-frame-pointer", "-fno-omit-frame-pointer", "-mno-red-zone", "-mred-zone",
 }
 
 FORWARD_PREFIX = (
@@ -302,11 +307,10 @@ IGNORE_EXACT = {
     # relaxations are already what it does.
     "-fno-strict-aliasing", "-fno-delete-null-pointer-checks",
     # What badc already emits: a tentative definition placed in .data rather
-    # than left common, no stack probe, one .text and one .data per object,
-    # and a frame pointer in every function.
+    # than left common, no stack probe, and one .text and one .data per
+    # object.
     "-fno-common", "-fno-stack-check", "-fno-stack-clash-protection",
     "-fno-function-sections", "-fno-data-sections",
-    "-fno-omit-frame-pointer", "-fomit-frame-pointer",
     # Anonymous members of a named struct type are accepted unconditionally,
     # which is what the kernel asks -fms-extensions for.
     "-fms-extensions",
@@ -326,9 +330,8 @@ IGNORE_EXACT = {
     "-mno-80387", "-mno-fp-ret-in-387", "-mno-mmx", "-mno-3dnow",
     "-mno-sse2", "-mno-sse4a", "-mno-avx",
     # badc's System V variadic prologue is what the kernel skips setting `al`
-    # for, and it addresses nothing below the stack pointer: every function
-    # subtracts its frame before using it.
-    "-mskip-rax-setup", "-mno-red-zone",
+    # for.
+    "-mskip-rax-setup",
     # An inliner tuning hint. badc's inliner does not distinguish a callee
     # by its call count, so declining that heuristic asks for what it
     # already does; measured to leave the object unchanged.
@@ -772,8 +775,10 @@ def _self_test() -> int:
         assert rewrite([flag]).argv == [flag], flag
     # The flexible-array level reaches badc, which implements it.
     assert rewrite(["-fstrict-flex-arrays=3"]).argv == ["-fstrict-flex-arrays=3"]
+    for flag in ("-fomit-frame-pointer", "-fno-omit-frame-pointer", "-mno-red-zone"):
+        assert rewrite([flag]) == Rewritten([flag], [], []), flag
     for flag in ("-Wall", "-Werror=return-type", "-Wno-sign-compare",
-                 "-fno-strict-aliasing", "-mno-red-zone", "-falign-loops=1",
+                 "-fno-strict-aliasing", "-falign-loops=1",
                  "-march=x86-64", "-mregparm=3", "-Wl,-r", "-mlittle-endian",
                  "-mabi=lp64", "-fno-optimize-sibling-calls",
                  "-fzero-init-padding-bits=all"):

@@ -26,10 +26,8 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	leaq	-0x40(%rbp), %rax
+               	subq	$0x48, %rsp
+               	leaq	(%rsp), %rax
                	leaq	0x1(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x1, %rcx
@@ -67,7 +65,7 @@ Disassembly of section .text:
                	movq	%rcx, <rip> # <addr>
                	movq	%rsi, %rdx
                	orq	%rax, %rdx
-               	leaq	-0x40(%rbp), %rax
+               	leaq	(%rsp), %rax
                	leaq	0x4(%rax), %rsi
                	subq	%rax, %rsi
                	cmpq	$0x4, %rsi
@@ -86,7 +84,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, <rip> # <addr>
                	orq	%rax, %rdx
-               	leaq	-0x40(%rbp), %rax
+               	leaq	(%rsp), %rax
                	leaq	0x8(%rax), %rsi
                	subq	%rax, %rsi
                	cmpq	$0x8, %rsi
@@ -105,7 +103,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, <rip> # <addr>
                	orq	%rax, %rdx
-               	leaq	-0x40(%rbp), %rax
+               	leaq	(%rsp), %rax
                	leaq	0x10(%rax), %rsi
                	subq	%rax, %rsi
                	cmpq	$0x10, %rsi
@@ -124,5 +122,5 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, <rip> # <addr>
                	orq	%rdx, %rax
-               	leave
+               	addq	$0x48, %rsp
                	retq

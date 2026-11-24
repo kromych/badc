@@ -33,33 +33,31 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x20, %rsp
                	pushq	%rbx
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	xorl	%edx, %edx
-               	movl	%edx, -0x8(%rbp)
+               	movl	%edx, 0x18(%rsp)
                	leaq	<rip>, %rsi
-               	leaq	-0x8(%rbp), %r8
+               	leaq	0x18(%rsp), %r8
                	movl	$0xffff, %ecx           # imm = 0xFFFF
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	<rip>, %rdi
-               	movl	-0x8(%rbp), %edx
+               	movl	0x18(%rsp), %edx
                	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	movl	-0x8(%rbp), %eax
+               	movl	0x18(%rsp), %eax
                	cmpl	$0x10040, %eax          # imm = 0x10040
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

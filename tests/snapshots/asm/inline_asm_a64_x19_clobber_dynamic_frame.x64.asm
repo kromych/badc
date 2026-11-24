@@ -143,14 +143,13 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x20, %edi
                	callq	<addr>
                	cmpq	$0xe0, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x20, %edi
                	movl	$0x1, %esi
@@ -158,7 +157,7 @@ Disassembly of section .text:
                	cmpq	$0x62, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x20, %edi
                	xorl	%esi, %esi
@@ -166,8 +165,8 @@ Disassembly of section .text:
                	cmpq	$0x18e, %rax            # imm = 0x18E
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

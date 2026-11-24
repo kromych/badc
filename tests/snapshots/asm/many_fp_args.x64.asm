@@ -26,8 +26,6 @@ Disassembly of section .text:
                	int3
 
 <sum10>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	addsd	%xmm1, %xmm0
                	addsd	%xmm2, %xmm0
                	addsd	%xmm3, %xmm0
@@ -35,11 +33,10 @@ Disassembly of section .text:
                	addsd	%xmm5, %xmm0
                	addsd	%xmm6, %xmm0
                	addsd	%xmm7, %xmm0
-               	movsd	0x10(%rbp), %xmm1
+               	movsd	0x8(%rsp), %xmm1
                	addsd	%xmm1, %xmm0
-               	movsd	0x18(%rbp), %xmm1
+               	movsd	0x10(%rsp), %xmm1
                	addsd	%xmm1, %xmm0
-               	popq	%rbp
                	retq
 
 <main>:

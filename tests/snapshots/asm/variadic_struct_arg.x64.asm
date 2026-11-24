@@ -83,12 +83,11 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movabsq	$0x400000003, %rsi      # imm = 0x400000003
                	movabsq	$0x600000005, %rdx      # imm = 0x600000005
                	movl	$0x2, %edi
                	movb	$0x0, %al
                	callq	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -32,8 +32,7 @@ Disassembly of section .text:
                	retq
 
 <driver>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x7, <rip> # <addr>
                	movl	$0x23, %edx
                	movl	%edx, <rip> # <addr>
@@ -42,12 +41,11 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	movl	<rip>, %eax # <addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x7, <rip> # <addr>
                	movl	$0x23, %edx
                	movl	%edx, <rip> # <addr>
@@ -56,5 +54,5 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	movl	<rip>, %eax # <addr>
-               	popq	%rbp
+               	popq	%r11
                	retq

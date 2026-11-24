@@ -30,8 +30,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
                	cmpl	$0x2, %eax
                	jne	<addr>
@@ -42,10 +41,11 @@ Disassembly of section .text:
                	cmpl	$0x5, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%bh, 0x2(%rax)
 
 <asm_label_two>:

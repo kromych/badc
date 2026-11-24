@@ -26,43 +26,37 @@ Disassembly of section .text:
                	int3
 
 <sum10>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x10(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x18(%rbp), %rcx
+               	movq	0x10(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x20(%rbp), %rcx
+               	movq	0x18(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x28(%rbp), %rcx
+               	movq	0x20(%rsp), %rcx
                	addq	%rcx, %rax
-               	popq	%rbp
                	retq
 
 <sum11>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x10(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x18(%rbp), %rcx
+               	movq	0x10(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x20(%rbp), %rcx
+               	movq	0x18(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x28(%rbp), %rcx
+               	movq	0x20(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x30(%rbp), %rcx
+               	movq	0x28(%rsp), %rcx
                	addq	%rcx, %rax
-               	popq	%rbp
                	retq
 
 <main>:

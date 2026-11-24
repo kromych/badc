@@ -66,10 +66,8 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rax
+               	subq	$0x28, %rsp
+               	leaq	(%rsp), %rax
                	leaq	0x18(%rax), %rcx
                	subq	%rax, %rcx
                	movq	%rcx, %rdx
@@ -88,7 +86,7 @@ Disassembly of section .text:
                	sarq	$0x2, %rcx
                	subq	$0x3, %rcx
                	addq	%rcx, %rdx
-               	leaq	-0x8(%rbp), %rcx
+               	leaq	0x18(%rsp), %rcx
                	leaq	0x5(%rcx), %rsi
                	subq	%rcx, %rsi
                	leaq	-0x5(%rsi), %rcx
@@ -104,10 +102,10 @@ Disassembly of section .text:
                	subq	$0x2, %rax
                	addq	%rsi, %rax
                	subq	$0x10, %rcx
-               	leaq	-0x20(%rbp), %rdx
+               	leaq	(%rsp), %rdx
                	cmpq	%rdx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq

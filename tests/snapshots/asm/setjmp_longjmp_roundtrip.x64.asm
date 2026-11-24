@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <deep>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
@@ -52,7 +51,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jle	<addr>
                	leaq	-0x1(%rax), %rdi
-               	popq	%rbp
+               	popq	%r11
                	jmp	<addr>
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>

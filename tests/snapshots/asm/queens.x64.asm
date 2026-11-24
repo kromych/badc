@@ -28,9 +28,7 @@ Disassembly of section .text:
 <solve>:
                	cmpl	$0x8, %esi
                	je	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -77,23 +75,21 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x10, %rsp
                	retq
                	movl	$0x1, %eax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rdi
+               	subq	$0x28, %rsp
+               	leaq	(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0x5c, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

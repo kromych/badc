@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <des_round>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0xc8, %rsp
+               	subq	$0xd0, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -420,13 +418,11 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0xd0, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0xa5a5a5a5, %edi       # imm = 0xA5A5A5A5
                	leaq	<rip>, %rsi # <addr>
@@ -503,5 +499,5 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	andq	$0xff, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

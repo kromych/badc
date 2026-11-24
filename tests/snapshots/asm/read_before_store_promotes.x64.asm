@@ -135,9 +135,7 @@ Disassembly of section .text:
                	retq
 
 <stack_arg>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	0x28(%rbp), %rax
+               	movq	0x20(%rsp), %rax
                	decq	%rax
                	addq	$0x2, %rax
                	subq	$0x2, %rax
@@ -149,17 +147,16 @@ Disassembly of section .text:
                	subq	$0x5, %rax
                	addq	$0x6, %rax
                	leaq	-0x6(%rax), %rcx
-               	movq	0x10(%rbp), %rax
+               	movq	0x8(%rsp), %rax
                	addq	%rax, %rcx
                	subq	%rax, %rcx
-               	movq	0x18(%rbp), %rax
+               	movq	0x10(%rsp), %rax
                	addq	%rax, %rcx
                	movq	%rcx, %rdx
                	subq	%rax, %rdx
-               	movq	0x20(%rbp), %rcx
+               	movq	0x18(%rsp), %rcx
                	leaq	(%rdx,%rcx), %rax
                	subq	%rcx, %rax
-               	popq	%rbp
                	retq
 
 <make>:
@@ -167,12 +164,11 @@ Disassembly of section .text:
                	retq
 
 <field_of_result>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x14, %edi
                	callq	<addr>
                	incq	%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:

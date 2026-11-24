@@ -81,8 +81,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x4, %edi
                	movl	$0xa, %esi
                	movl	$0x14, %edx
@@ -95,8 +94,8 @@ Disassembly of section .text:
                	cmpq	$0x4, %rdx
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

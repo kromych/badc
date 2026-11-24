@@ -26,8 +26,6 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -166,7 +164,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movq	%rsi, %rcx
                	shlq	%rcx
@@ -190,7 +187,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movq	%rsi, %rdx
                	shlq	$0x3f, %rdx
@@ -214,7 +210,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movabsq	$0x11223344556677, %r11 # imm = 0x11223344556677
                	movq	%rsi, %rax
@@ -227,7 +222,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movabsq	$0x22446688aaccee, %r11 # imm = 0x22446688AACCEE
                	movq	%rcx, %rax
@@ -240,7 +234,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	movq	%rdx, %rax
@@ -253,7 +246,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movq	%rdi, %rcx
                	shrq	%rcx
@@ -272,7 +264,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movabsq	$-0x7766554433221101, %r11 # imm = 0x8899AABBCCDDEEFF
                	movq	%rdi, %rax
@@ -285,7 +276,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movq	%rdi, %rax
                	shrq	$0x3f, %rax
@@ -298,7 +288,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	xorl	%eax, %eax
                	movl	<rip>, %ecx # <addr>
@@ -333,14 +322,12 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	movl	$0x9, %eax
                	jmp	<addr>
@@ -364,17 +351,14 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
                	retq

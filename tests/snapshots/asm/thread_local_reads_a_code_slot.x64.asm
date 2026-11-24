@@ -30,8 +30,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
                	movq	(%rax), %rax
@@ -42,7 +41,7 @@ Disassembly of section .text:
                	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	-<rip>, %rax # <addr>
                	movq	%fs:0x0, %rcx
@@ -54,5 +53,5 @@ Disassembly of section .text:
                	cmpq	$0x186a0, %rax          # imm = 0x186A0
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq

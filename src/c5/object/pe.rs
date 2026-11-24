@@ -4564,7 +4564,8 @@ mod tests {
     /// instructions, up to the post-prologue anchor, on both x86-64 link
     /// targets. The functions cover a leaf, the pushes as the whole frame (`saves`), an
     /// imm8 and an imm32 `sub` ahead of pushes (`small`, `wide`), a probed
-    /// allocation, and FP work, which on Win64 saves xmm scratch.
+    /// allocation, and FP work, which on Win64 saves xmm scratch; System V
+    /// under `-O` with and without the frame pointer.
     #[test]
     fn structured_and_decoded_unwind_agree_x64() {
         use crate::Compiler;
@@ -4590,14 +4591,16 @@ mod tests {
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
             .compile()
             .expect("compile");
-        for (target, optimize) in [
-            (super::super::Target::WindowsX64, false),
-            (super::super::Target::WindowsX64, true),
-            (super::super::Target::LinuxX64, false),
-            (super::super::Target::LinuxX64, true),
+        for (target, optimize, omit) in [
+            (super::super::Target::WindowsX64, false, true),
+            (super::super::Target::WindowsX64, true, true),
+            (super::super::Target::LinuxX64, false, true),
+            (super::super::Target::LinuxX64, true, false),
+            (super::super::Target::LinuxX64, true, true),
         ] {
             let options = super::super::NativeOptions {
                 optimize,
+                omit_frame_pointer: Some(omit),
                 ..Default::default()
             };
             // The full register pool, so the pressure caps do not change
@@ -4608,7 +4611,7 @@ mod tests {
                 || lower_for(&program, target, options),
             )
             .expect("lower");
-            let (mut framed, mut allocs, mut bare) = (0, 0, 0);
+            let (mut framed, mut allocs, mut bare, mut no_fp) = (0, 0, 0, 0);
             for uw in &build.fn_unwind {
                 let prologue_end = build
                     .func_prologue_native
@@ -4640,15 +4643,24 @@ mod tests {
                     .steps
                     .iter()
                     .any(|s| matches!(s.1, PrologueStep::Alloc(_)));
+                let sets_fp = (uw.steps.iter()).any(|s| matches!(s.1, PrologueStep::SetFrame(_)));
                 framed += usize::from(!uw.leaf);
                 allocs += usize::from(alloc);
                 bare += usize::from(!uw.leaf && !alloc);
+                no_fp += usize::from(!uw.leaf && !sets_fp);
             }
             // Described allocations and frames without one (probed, and
-            // under `-O` the pushes alone) are both present.
+            // under `-O` the pushes alone) are both present; with no frame
+            // pointer every frame but the probed one allocates.
+            let pointerless = target == super::super::Target::LinuxX64 && optimize && omit;
+            let (least_bare, least_no_fp) = match pointerless {
+                true => (1, 4),
+                false => (1 + usize::from(optimize), 0),
+            };
             assert!(
-                framed >= 5 && allocs >= 2 && bare > usize::from(optimize),
-                "{target:?} -O={optimize}: {framed} framed, {allocs} described, {bare} bare"
+                framed >= 5 && allocs >= 2 && bare >= least_bare && no_fp >= least_no_fp,
+                "{target:?} -O={optimize} omit={omit}: {framed} framed, {allocs} described, \
+                 {bare} bare, {no_fp} with no frame pointer"
             );
         }
     }

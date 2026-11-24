@@ -56,21 +56,19 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x3, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
+               	subq	$0x18, %rsp
+               	movl	$0x3, 0x8(%rsp)
+               	movslq	0x8(%rsp), %rax
                	testq	%rax, %rax
                	je	<addr>
                	testq	%rax, %rax
                	je	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x7, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

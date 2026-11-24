@@ -93,12 +93,11 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi
                	movl	$0x2a, %esi
                	movl	$0x7, %edx
                	movb	$0x0, %al
                	callq	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -26,48 +26,46 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x0, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	movl	$0x0, 0x8(%rsp)
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0xc(%rbp), %edi
+               	movl	0x4(%rsp), %edi
                	leaq	<rip>, %rsi
                	movl	$0x5, %edx
                	callq	<addr>
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x10(%rbp), %edi
+               	movl	(%rsp), %edi
                	movl	$0x541b, %esi           # imm = 0x541B
-               	leaq	-0x8(%rbp), %rdx
+               	leaq	0x8(%rsp), %rdx
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x8(%rbp), %eax
+               	movl	0x8(%rsp), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x10(%rbp), %edi
+               	movl	(%rsp), %edi
                	callq	<addr>
-               	movl	-0xc(%rbp), %edi
+               	movl	0x4(%rsp), %edi
                	callq	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

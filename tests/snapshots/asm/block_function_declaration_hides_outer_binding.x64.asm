@@ -50,11 +50,10 @@ Disassembly of section .text:
                	retq
 
 <hides_library>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	$-0x5, %rdi
                	callq	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <composite_prototype>:
@@ -62,8 +61,7 @@ Disassembly of section .text:
                	retq
 
 <hides_with_variadic>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
@@ -71,7 +69,7 @@ Disassembly of section .text:
                	movb	$0x3, %al
                	callq	<addr>
                	vaddsd	<rip>, %xmm0, %xmm0
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <declared_in_an_outer_block>:
@@ -188,9 +186,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	callq	<addr>
                	cmpl	$0x70, %eax
@@ -277,5 +273,5 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

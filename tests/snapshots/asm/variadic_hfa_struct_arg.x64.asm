@@ -87,14 +87,12 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %r9
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %r9
                	movsd	<rip>, %xmm0
-               	movsd	%xmm0, -0x10(%rbp)
+               	movsd	%xmm0, (%rsp)
                	movsd	<rip>, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
+               	movsd	%xmm0, 0x8(%rsp)
                	movl	$0x1, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
@@ -107,5 +105,5 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq

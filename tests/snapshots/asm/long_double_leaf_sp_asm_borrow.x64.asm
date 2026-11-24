@@ -40,11 +40,9 @@ Disassembly of section .text:
                	retq
 
 <narrows>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x88, %rsp
                	xorl	%eax, %eax
-               	leaq	-0x80(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdx, %rcx
@@ -55,7 +53,7 @@ Disassembly of section .text:
                	jl	<addr>
                	callq	<addr>
                	movsd	%xmm0, <rip> # <addr>
-               	leaq	-0x80(%rbp), %rdx
+               	leaq	(%rsp), %rdx
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movq	%rax, %rsi
@@ -67,15 +65,13 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x88, %rsp
                	retq
 
 <widens>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x88, %rsp
                	xorl	%eax, %eax
-               	leaq	-0x80(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	addq	%rdx, %rcx
@@ -85,7 +81,7 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	callq	<addr>
-               	leaq	-0x80(%rbp), %rdx
+               	leaq	(%rsp), %rdx
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movq	%rax, %rsi
@@ -97,12 +93,11 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x88, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
                	cmpq	$0x128, %rax            # imm = 0x128
                	jne	<addr>
@@ -112,7 +107,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movsd	<rip>, %xmm0
                	callq	<addr>
@@ -127,8 +122,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

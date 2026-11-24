@@ -26,35 +26,31 @@ Disassembly of section .text:
                	int3
 
 <pick_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	testl	%esi, %esi
                	je	<addr>
-               	leaq	-0x20(%rbp), %rax
-               	movq	$0x4, -0x20(%rbp)
-               	movq	$0x5, -0x18(%rbp)
+               	leaq	(%rsp), %rax
+               	movq	$0x4, (%rsp)
+               	movq	$0x5, 0x8(%rsp)
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movq	$-0x4, -0x10(%rbp)
-               	movq	$-0x5, -0x8(%rbp)
+               	leaq	0x10(%rsp), %rax
+               	movq	$-0x4, 0x10(%rsp)
+               	movq	$-0x5, 0x18(%rsp)
                	jmp	<addr>
 
 <pick_triple>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	testl	%esi, %esi
                	je	<addr>
-               	leaq	-0x30(%rbp), %rax
-               	movq	$0x2, -0x30(%rbp)
-               	movq	$0x4, -0x28(%rbp)
-               	movq	$0x6, -0x20(%rbp)
+               	leaq	(%rsp), %rax
+               	movq	$0x2, (%rsp)
+               	movq	$0x4, 0x8(%rsp)
+               	movq	$0x6, 0x10(%rsp)
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	movq	0x10(%rax), %rax
@@ -62,17 +58,16 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	leaq	-0x18(%rbp), %rax
+               	leaq	0x18(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movq	$0x0, 0x10(%rax)
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movslq	<rip>, %rax # <addr>
                	movl	$0x5, %ecx
                	xorl	%edx, %edx
@@ -84,7 +79,7 @@ Disassembly of section .text:
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	<rip>, %eax # <addr>
                	testl	%eax, %eax
@@ -95,7 +90,7 @@ Disassembly of section .text:
                	cmpq	$0x195, %rax            # imm = 0x195
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	xorl	%esi, %esi
@@ -103,7 +98,7 @@ Disassembly of section .text:
                	cmpq	$-0x195, %rax           # imm = 0xFE6B
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	movl	$0x1, %esi
@@ -111,7 +106,7 @@ Disassembly of section .text:
                	cmpq	$0x282, %rax            # imm = 0x282
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	xorl	%esi, %esi
@@ -119,11 +114,11 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

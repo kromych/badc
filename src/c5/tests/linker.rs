@@ -1893,6 +1893,16 @@ fn unreferenced_static_function_is_dropped_from_object() {
 /// dead-static tests below exercise.
 #[cfg(test)]
 fn reloc_tu(src: &str, target: crate::c5::Target, optimize: bool) -> alloc::vec::Vec<u8> {
+    reloc_tu_with(src, target, optimize, None)
+}
+
+/// [`reloc_tu`] with `-fomit-frame-pointer` set as `omit_frame_pointer` says.
+fn reloc_tu_with(
+    src: &str,
+    target: crate::c5::Target,
+    optimize: bool,
+    omit_frame_pointer: Option<bool>,
+) -> alloc::vec::Vec<u8> {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
     let copts = CompileOptions {
@@ -1905,6 +1915,7 @@ fn reloc_tu(src: &str, target: crate::c5::Target, optimize: bool) -> alloc::vec:
         .expect("compile");
     let opts = NativeOptions {
         optimize,
+        omit_frame_pointer,
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
@@ -7257,41 +7268,50 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
     }
 }
 
-/// The test of an early return moves `push rbp` off the entry; the note
-/// carries where it went and where the return is, so the merged-image
+/// The test of an early return moves the frame's first instruction --
+/// `push rbp`, or `sub rsp` with no frame pointer -- off the entry; the
+/// note carries where it went and where the return is, so the merged-image
 /// decoder reads the frame the lowering built.
 #[test]
 fn a_frame_past_an_early_return_decodes_from_its_anchor() {
     use crate::c5::linker::{link_native_objects, parse_native_elf};
     let src = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
-    let obj = parse_native_elf(&reloc_tu(src, crate::c5::Target::LinuxX64, true)).expect("parse");
-    assert_eq!(obj.early_returns.len(), 1, "{:x?}", obj.early_returns);
-    let merged = link_native_objects(&[obj]).expect("link");
-    let entry = merged.defined.get("fib").expect("fib is defined").value;
-    let (at, exit) = merged.early_returns[&entry];
-    assert_eq!(
-        merged.text[exit as usize..].first(),
-        Some(&0x48),
-        "`movsxd rax, edi`"
-    );
-    let post = merged.prologue_ends[&entry];
-    let text = &merged.text;
-    assert_eq!(text[at as usize..at as usize + 4], [0x55, 0x48, 0x89, 0xE5]);
-    let n = text.len() as u32;
-    let decode = |frame_start| {
-        crate::c5::codegen::decode_x86_64_prologue_unwind(
-            text,
-            entry as u32,
-            n,
-            post as u32,
-            frame_start,
-        )
-    };
-    let uw = decode(at as u32);
-    assert!(!uw.leaf);
-    assert_eq!(uw.steps[0].0, (at - entry) as u32 + 1);
-    // Without the anchor the entry reads as a frameless leaf.
-    assert!(decode(0).leaf);
+    // `push rbp; mov rbp, rsp`, or with no frame pointer `push rax`, the pad.
+    for (omit, opener) in [(false, &[0x55, 0x48, 0x89, 0xE5][..]), (true, &[0x50])] {
+        let tu = reloc_tu_with(src, crate::c5::Target::LinuxX64, true, Some(omit));
+        let obj = parse_native_elf(&tu).expect("parse");
+        assert_eq!(obj.early_returns.len(), 1, "{:x?}", obj.early_returns);
+        let merged = link_native_objects(&[obj]).expect("link");
+        let entry = merged.defined.get("fib").expect("fib is defined").value;
+        let (at, exit) = merged.early_returns[&entry];
+        assert_eq!(
+            merged.text[exit as usize..].first(),
+            Some(&0x48),
+            "`movsxd rax, edi`"
+        );
+        let post = merged.prologue_ends[&entry];
+        let text = &merged.text;
+        assert_eq!(
+            &text[at as usize..at as usize + opener.len()],
+            opener,
+            "omit={omit}"
+        );
+        let n = text.len() as u32;
+        let decode = |frame_start| {
+            crate::c5::codegen::decode_x86_64_prologue_unwind(
+                text,
+                entry as u32,
+                n,
+                post as u32,
+                frame_start,
+            )
+        };
+        let uw = decode(at as u32);
+        assert!(!uw.leaf);
+        assert_eq!(uw.steps[0].0, (at - entry) as u32 + 1, "omit={omit}");
+        // Without the anchor the entry reads as a frameless leaf.
+        assert!(decode(0).leaf);
+    }
 }
 
 /// Every kind of unwind step reads back from its note record unchanged,

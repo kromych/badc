@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0xb8, %rsp
+               	subq	$0xc0, %rsp
                	pushq	%rbx
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %r10 # <addr>
@@ -48,7 +46,7 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
+               	addq	$0xc0, %rsp
                	retq
                	movl	$0x400, %esi            # imm = 0x400
                	movq	0x28(%rsp), %r11
@@ -58,9 +56,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	leave
+               	addq	$0xc0, %rsp
                	retq
-               	leaq	-0x90(%rbp), %rsi
+               	leaq	0x30(%rsp), %rsi
                	movq	0x20(%rsp), %r11
                	movq	%rbx, %rdi
                	callq	*%r11
@@ -68,7 +66,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
-               	leave
+               	addq	$0xc0, %rsp
                	retq
                	movl	$0x2, %esi
                	movl	$0x1, %edx
@@ -80,12 +78,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
-               	leave
+               	addq	$0xc0, %rsp
                	retq
                	movq	0x10(%rsp), %r11
                	movq	%rbx, %rdi
                	callq	*%r11
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0xc0, %rsp
                	retq

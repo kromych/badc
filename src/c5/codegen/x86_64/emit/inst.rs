@@ -1046,11 +1046,12 @@ fn emit_incoming(
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy
         // serves either width.
+        let (hb, home_off) = frame.fp_addr(home_off);
         let load_home = |code: &mut CodeBuf, r: Reg| {
             if matches!(kind, LoadKind::F32) {
-                emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
+                emit_movss_xmm_mem(code, r, hb, home_off);
             } else {
-                emit_movsd_xmm_mem(code, r, Reg::RBP, home_off);
+                emit_movsd_xmm_mem(code, r, hb, home_off);
             }
         };
         if from_home {
@@ -1091,19 +1092,14 @@ fn emit_incoming(
         }
     };
     let ext = param_entry_ext(kind, v, alloc);
+    let (hb, home_off) = frame.fp_addr(home_off);
     let materialize = |code: &mut CodeBuf, rd: Reg| {
         if from_home {
             match ext {
-                Some(LoadKind::I8) => {
-                    super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
-                }
-                Some(LoadKind::I16) => {
-                    super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
-                }
-                Some(LoadKind::I32) => {
-                    super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
-                }
-                _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
+                Some(LoadKind::I8) => super::encode::emit_movsx_r_mem8(code, rd, hb, home_off),
+                Some(LoadKind::I16) => super::encode::emit_movsx_r_mem16(code, rd, hb, home_off),
+                Some(LoadKind::I32) => super::encode::emit_movsxd_r_mem(code, rd, hb, home_off),
+                _ => emit_mov_r_mem(code, rd, hb, home_off),
             }
         } else {
             emit_sign_extend(code, rd, arg_reg, ext.unwrap_or(LoadKind::I64));

@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <through_types>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x68, %rsp
+               	subq	$0x70, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -247,13 +245,11 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x70, %rsp
                	retq
 
 <old_style>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x48, %rsp
+               	subq	$0x50, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -314,7 +310,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x50, %rsp
                	retq
 
 <through_va_arg>:
@@ -424,9 +420,7 @@ Disassembly of section .text:
                	retq
 
 <int_through_types>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x60, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -523,13 +517,11 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x60, %rsp
                	retq
 
 <int_old_style>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x48, %rsp
+               	subq	$0x50, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -588,13 +580,11 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x50, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x78, %rsp
+               	subq	$0x80, %rsp
                	pushq	%rbx
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
@@ -646,7 +636,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x80, %rsp
                	retq
                	movq	<rip>, %rax # <addr>
                	movsd	<rip>, %xmm0
@@ -718,7 +708,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x80, %rsp
                	retq
                	movl	$0x1, %edi
                	movq	<rip>, %rsi # <addr>
@@ -730,7 +720,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x80, %rsp
                	retq
                	callq	<addr>
                	leaq	0x3e8(%rbx), %rcx
@@ -739,7 +729,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x80, %rsp
                	retq
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %r10 # <addr>
@@ -806,12 +796,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x80, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x80, %rsp
                	retq
+               	addb	%dh, %dl
 
 <svd>:
                	mulsd	%xmm1, %xmm0

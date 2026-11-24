@@ -51,15 +51,13 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	movl	<rip>, %ecx # <addr>
                	cmpl	%eax, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	<rip>, %rcx # <addr>
                	movl	(%rcx), %ecx

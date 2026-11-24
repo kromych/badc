@@ -26,20 +26,18 @@ Disassembly of section .text:
                	int3
 
 <f>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movq	%rdx, 0x18(%rsp)
                	movq	%r8, 0x8(%rsp)
                	movq	%rcx, 0x10(%rsp)
                	movl	$0x64, %eax
                	leaq	<rip>, %rcx # <addr>
                	movl	$0x5, %edx
-               	pushq	%rax
+               	movq	%rax, -0x50(%rsp)
                	lock
                	cmpxchgq	%rdx, (%rcx)
                	movq	%rax, %r10
-               	popq	%rax
+               	movq	-0x50(%rsp), %rax
                	movq	%r10, %rcx
                	cmpq	$0x64, %rcx
                	sete	%dl
@@ -54,17 +52,17 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	cmpq	$0x9, %r8
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	cmpq	$0x9, %rcx
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
@@ -73,18 +71,18 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	leaq	(%rdi,%rsi), %rax
                	addq	0x18(%rsp), %rax
                	addq	0x10(%rsp), %rax
                	addq	0x8(%rsp), %rax
                	addq	%r9, %rax
-               	movq	0x10(%rbp), %rcx
+               	movq	0x30(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x18(%rbp), %rcx
+               	movq	0x38(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq
 
 <main>:

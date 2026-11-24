@@ -1593,7 +1593,7 @@ pub(super) fn emit_mcpy(
     };
     let candidates = copy_temps(abi);
     let taken = [dst_r.0, src_r.0];
-    let mut regs = SiteRegs::new(alloc, v, &candidates, &taken, frame.fixed_regs);
+    let mut regs = SiteRegs::new(alloc, v, &candidates, &taken, frame);
     let width = |left: u32| {
         let mut w = widest;
         while w > left {
@@ -1932,8 +1932,7 @@ pub(super) fn emit_atomic_rmw(
     };
     let a = off_rax(code, a, SCRATCH_R11);
     let x = off_rax(code, x, SCRATCH_R10);
-    let fixed = frame.fixed_regs;
-    let mut acc = SiteRegs::new(alloc, v, &[Reg::RAX.0], &[a.0, x.0], fixed);
+    let mut acc = SiteRegs::new(alloc, v, &[Reg::RAX.0], &[a.0, x.0], frame);
     if acc.take(code) != Some(Reg::RAX) {
         return fail("AtomicRmw: rax is reserved");
     }
@@ -1941,7 +1940,8 @@ pub(super) fn emit_atomic_rmw(
     if let Place::IntReg(r) = dst {
         taken.push(r);
     }
-    let mut temps = SiteRegs::new(alloc, v, &copy_temps(abi), &taken, fixed);
+    let mut temps =
+        SiteRegs::new(alloc, v, &copy_temps(abi), &taken, frame).keeping_from(keep::SITE + 1);
     let Some(t) = temps.take(code) else {
         return fail("AtomicRmw: no register for the retry");
     };
@@ -1986,17 +1986,18 @@ pub(super) fn emit_atomic_cas16(
         }
         Ok(())
     };
+    let pushed = saved_shift(frame, 1);
     operand(code, expected, SCRATCH_R10, 0)?;
-    emit_push_r(code, SCRATCH_R10);
-    operand(code, desired, SCRATCH_R10, 8)?;
-    operand(code, addr, SCRATCH_R11, 8)?;
-    emit_push_r(code, Reg::RBX);
+    save_across(code, frame, SCRATCH_R10, keep::CAS16);
+    operand(code, desired, SCRATCH_R10, pushed)?;
+    operand(code, addr, SCRATCH_R11, pushed)?;
+    save_across(code, frame, Reg::RBX, keep::CAS16 + 1);
     let mut acc = SiteRegs::new(
         alloc,
         v,
         &[Reg::RAX.0, Reg::RCX.0, Reg::RDX.0],
         &[SCRATCH_R10.0, SCRATCH_R11.0],
-        frame.fixed_regs,
+        frame,
     );
     for _ in 0..3 {
         if acc.take(code).is_none() {
@@ -2005,8 +2006,12 @@ pub(super) fn emit_atomic_cas16(
     }
     emit_mov_r_mem(code, Reg::RBX, SCRATCH_R10, 0);
     emit_mov_r_mem(code, Reg::RCX, SCRATCH_R10, 8);
-    let parked = acc.saved_bytes() as i32 + 8;
-    emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, parked);
+    let parked = if frame.omit_fp {
+        keep_slot(keep::CAS16)
+    } else {
+        (Reg::RSP, acc.saved_bytes() as i32 + 8)
+    };
+    emit_mov_r_mem(code, SCRATCH_R10, parked.0, parked.1);
     emit_mov_r_mem(code, Reg::RAX, SCRATCH_R10, 0);
     emit_mov_r_mem(code, Reg::RDX, SCRATCH_R10, 8);
     emit_lock_cmpxchg16b_mem(code, SCRATCH_R11, 0);
@@ -2019,8 +2024,10 @@ pub(super) fn emit_atomic_cas16(
     super::encode::emit_setcc_r8(code, Cc::E, Reg::RCX);
     emit_movzx_r_r8(code, SCRATCH_R10, Reg::RCX);
     acc.restore(code);
-    emit_pop_r(code, Reg::RBX);
-    emit_pop_r(code, SCRATCH_R11);
+    restore_across(code, frame, Reg::RBX, keep::CAS16 + 1);
+    if !frame.omit_fp {
+        emit_pop_r(code, SCRATCH_R11);
+    }
     write_atomic_result(code, dst, SCRATCH_R10, frame);
     Ok(())
 }
@@ -2049,7 +2056,7 @@ pub(super) fn emit_atomic_cas(
     };
     let a = off_rax(code, a, SCRATCH_R11);
     let d = off_rax(code, d, SCRATCH_R10);
-    let mut acc = SiteRegs::new(alloc, v, &[Reg::RAX.0], &[a.0, d.0], frame.fixed_regs);
+    let mut acc = SiteRegs::new(alloc, v, &[Reg::RAX.0], &[a.0, d.0], frame);
     if acc.take(code) != Some(Reg::RAX) {
         return fail("AtomicCas: rax is reserved");
     }

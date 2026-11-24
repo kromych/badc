@@ -47,9 +47,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x30, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -375,14 +373,14 @@ Disassembly of section .text:
                	setb	%al
                	movzbq	%al, %rax
                	addq	%rdx, %rax
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rcx, 0x48(%rsp)
                	cmpl	$0x1, %eax
                	jne	<addr>
                	testq	%rcx, %rcx
                	jne	<addr>
                	xorl	%edi, %edi
                	movl	$0x1, %edx
-               	leaq	-0x8(%rbp), %rcx
+               	leaq	0x48(%rsp), %rcx
                	movq	%r9, 0x38(%rsp)
                	movq	%r8, 0x30(%rsp)
                	movq	%r14, %rsi
@@ -392,11 +390,11 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
+               	movq	0x48(%rsp), %rax
                	cmpq	%r13, %rax
                	jne	<addr>
                	movl	$0x1, %edi
-               	leaq	-0x8(%rbp), %rcx
+               	leaq	0x48(%rsp), %rcx
                	movq	%r9, 0x38(%rsp)
                	movq	%r8, 0x30(%rsp)
                	movq	%r9, %rsi
@@ -406,13 +404,13 @@ Disassembly of section .text:
                	movq	0x30(%rsp), %r8
                	testb	$-0x1, %al
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
+               	movq	0x48(%rsp), %rax
                	leaq	-0x2(%r9), %rcx
                	cmpq	%rcx, %rax
                	jne	<addr>
                	leaq	(%r9,%r9), %rax
                	cmpq	%r9, %rax
-               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, 0x48(%rsp)
                	jb	<addr>
                	movq	%r9, %rcx
                	shlq	%rcx
@@ -425,7 +423,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x30, %rsp
                	retq
                	orq	$0x8, %r8
                	jmp	<addr>

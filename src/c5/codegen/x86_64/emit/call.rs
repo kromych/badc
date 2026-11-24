@@ -169,7 +169,8 @@ impl Marshal<'_> {
             let fp_off =
                 super::ssa::emit_common::c5_slot_to_fp_offset(off, 16, self.frame.locals_shift());
             let disp = i32::try_from(fp_off + i64::from(disp)).ok()?;
-            emit_load_kind_mem(code, kind, scratch, Reg::RBP, disp, None, true);
+            let (base, disp) = self.frame.fp_addr(disp);
+            emit_load_kind_mem(code, kind, scratch, base, disp, None, true);
             return Some(scratch);
         }
         materialize_int_shifted(
@@ -327,6 +328,7 @@ impl Marshal<'_> {
                     align,
                     self.abi.strict_align,
                     SCRATCH_R11,
+                    self.frame,
                 );
             }
         }
@@ -423,6 +425,7 @@ impl Marshal<'_> {
                         align,
                         strict,
                         SCRATCH_R10,
+                        self.frame,
                     );
                 }
             }
@@ -699,6 +702,9 @@ pub(super) fn emit_call(
         );
         (plan, "Call", None)
     };
+    if frame.omit_fp && plan.scratch_bytes > 0 {
+        return fail("a call moves rsp in a frame with no pointer");
+    }
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
@@ -786,6 +792,9 @@ pub(super) fn emit_call_ext(
         )
     };
     let xmm_used = xmm_arg_count(&plan);
+    if frame.omit_fp && plan.scratch_bytes > 0 {
+        return fail("a call moves rsp in a frame with no pointer");
+    }
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
@@ -964,6 +973,9 @@ pub(super) fn emit_call_indirect(
                 emit_mov_rr(code, target_scratch, target_r);
             }
         }
+        if frame.omit_fp && plan.scratch_bytes > 0 {
+            return fail("a call moves rsp in a frame with no pointer");
+        }
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
@@ -1008,41 +1020,67 @@ pub(super) fn emit_call_indirect(
         let Some(target_r) = materialize_int(code, target_place, SCRATCH_R10, frame) else {
             return fail("CallIndirect: target not int reg / spill");
         };
-        let slot_bytes = 16u32;
-        emit_sub_rsp(code, slot_bytes);
-        emit_mov_mem_r(code, Reg::RSP, 0, target_r);
-        if plan.scratch_bytes > 0 {
-            emit_stack_alloc(code, plan.scratch_bytes, None);
+        // A frame with no pointer keeps rsp: the target waits in the red zone.
+        if frame.omit_fp {
+            let (base, disp) = super::keep_slot(super::keep::CALL_TARGET);
+            emit_mov_mem_r(code, base, disp, target_r);
+            let site = "CallIndirect";
+            marshal_args(
+                code,
+                &plan,
+                (args, &func.insts),
+                &aggs,
+                alloc,
+                frame,
+                abi,
+                site,
+            )?;
+            emit_mov_r_mem(code, SCRATCH_R10, base, disp);
+            if sysv_variadic_call {
+                super::encode::emit_mov_al_imm8(code, xmm_used);
+            }
+            clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
+            emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
+            if ends_path {
+                return Ok(());
+            }
+        } else {
+            let slot_bytes = 16u32;
+            emit_sub_rsp(code, slot_bytes);
+            emit_mov_mem_r(code, Reg::RSP, 0, target_r);
+            if plan.scratch_bytes > 0 {
+                emit_stack_alloc(code, plan.scratch_bytes, None);
+            }
+            // The slot joins the rsp shift the marshal applies to its spilled-source
+            // reloads.
+            let mut shifted = plan.clone();
+            shifted.scratch_bytes = plan.scratch_bytes + slot_bytes;
+            marshal_args(
+                code,
+                &shifted,
+                (args, &func.insts),
+                &aggs,
+                alloc,
+                frame,
+                abi,
+                "CallIndirect",
+            )?;
+            // The target slot sits just above the marshal's scratch
+            // window, at [rsp + scratch_bytes] after the second sub.
+            emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, plan.scratch_bytes as i32);
+            if sysv_variadic_call {
+                super::encode::emit_mov_al_imm8(code, xmm_used);
+            }
+            clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
+            emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
+            if ends_path {
+                return Ok(());
+            }
+            if plan.scratch_bytes > 0 {
+                emit_add_rsp(code, plan.scratch_bytes);
+            }
+            emit_add_rsp(code, slot_bytes);
         }
-        // The slot joins the rsp shift the marshal applies to its spilled-source
-        // reloads.
-        let mut shifted = plan.clone();
-        shifted.scratch_bytes = plan.scratch_bytes + slot_bytes;
-        marshal_args(
-            code,
-            &shifted,
-            (args, &func.insts),
-            &aggs,
-            alloc,
-            frame,
-            abi,
-            "CallIndirect",
-        )?;
-        // The target slot sits just above the marshal's scratch
-        // window, at [rsp + scratch_bytes] after the second sub.
-        emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, plan.scratch_bytes as i32);
-        if sysv_variadic_call {
-            super::encode::emit_mov_al_imm8(code, xmm_used);
-        }
-        clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
-        emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
-        if ends_path {
-            return Ok(());
-        }
-        if plan.scratch_bytes > 0 {
-            emit_add_rsp(code, plan.scratch_bytes);
-        }
-        emit_add_rsp(code, slot_bytes);
     }
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
     // caller's result temp.

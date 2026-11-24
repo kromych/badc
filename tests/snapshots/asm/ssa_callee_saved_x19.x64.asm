@@ -32,12 +32,11 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
                	callq	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

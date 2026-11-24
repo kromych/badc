@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <__badc_f32_to_f16>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movq	%rsi, 0x18(%rsp)
                	movl	%edi, %edi
                	movq	%rdi, %rax
@@ -43,7 +41,7 @@ Disassembly of section .text:
                	testl	%edi, %edi
                	jne	<addr>
                	orq	$0x7c00, %rax           # imm = 0x7C00
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	testl	$0x400000, %edi         # imm = 0x400000
                	jne	<addr>
@@ -52,7 +50,7 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	shrq	$0xd, %rcx
                	orq	%rcx, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	testl	%r8d, %r8d
                	jne	<addr>
@@ -60,7 +58,7 @@ Disassembly of section .text:
                	je	<addr>
                	testb	$0x40, %dl
                	je	<addr>
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	orl	$0x2, (%rcx)
                	movq	%rdi, %r9
@@ -138,7 +136,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	cmoveq	%rsi, %rdx
                	orq	%rdx, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	%rcx, %rsi
                	jmp	<addr>
@@ -178,7 +176,7 @@ Disassembly of section .text:
                	movl	%esi, (%rcx)
                	orq	%rdx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	0x18(%rsp), %rsi
                	andq	$0x3, %rsi

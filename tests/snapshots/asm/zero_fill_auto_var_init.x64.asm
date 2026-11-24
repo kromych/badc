@@ -26,10 +26,8 @@ Disassembly of section .text:
                	int3
 
 <uninit_64>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	leaq	-0x40(%rbp), %rax
+               	subq	$0x48, %rsp
+               	leaq	(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
@@ -37,18 +35,16 @@ Disassembly of section .text:
                	movups	%xmm14, 0x30(%rax)
                	movq	%rdi, %rcx
                	andq	$0x7, %rcx
-               	movq	%rdi, -0x40(%rbp,%rcx,8)
-               	movq	-0x40(%rbp), %rax
-               	movq	-0x8(%rbp), %rcx
+               	movq	%rdi, (%rsp,%rcx,8)
+               	movq	(%rsp), %rax
+               	movq	0x38(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x48, %rsp
                	retq
 
 <uninit_256>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x100, %rsp            # imm = 0x100
-               	leaq	-0x100(%rbp), %rax
+               	subq	$0x108, %rsp            # imm = 0x108
+               	leaq	(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
@@ -68,18 +64,16 @@ Disassembly of section .text:
                	movups	%xmm14, 0xf0(%rax)
                	movq	%rdi, %rcx
                	andq	$0x1f, %rcx
-               	movq	%rdi, -0x100(%rbp,%rcx,8)
-               	movq	-0x100(%rbp), %rax
-               	movq	-0x8(%rbp), %rcx
+               	movq	%rdi, (%rsp,%rcx,8)
+               	movq	(%rsp), %rax
+               	movq	0xf8(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
 
 <uninit_264>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x110, %rsp            # imm = 0x110
-               	leaq	-0x108(%rbp), %rcx
+               	subq	$0x118, %rsp            # imm = 0x118
+               	leaq	0x8(%rsp), %rcx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
                	movups	%xmm14, 0x10(%rcx)
@@ -105,11 +99,11 @@ Disassembly of section .text:
                	imulq	$0x21, %rdx, %rax
                	movq	%rdi, %rdx
                	subq	%rax, %rdx
-               	movq	%rdi, -0x108(%rbp,%rdx,8)
-               	movq	-0x108(%rbp), %rax
-               	movq	-0x8(%rbp), %rcx
+               	movq	%rdi, 0x8(%rsp,%rdx,8)
+               	movq	0x8(%rsp), %rax
+               	movq	0x108(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x118, %rsp            # imm = 0x118
                	retq
 
 <uninit_4k>:
@@ -201,9 +195,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%rbx
                	movl	$0x3, %edi
                	callq	<addr>
@@ -219,5 +211,5 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	%rbx, %rax
                	popq	%rbx
-               	leave
+               	addq	$0x10, %rsp
                	retq

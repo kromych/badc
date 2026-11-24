@@ -28,8 +28,7 @@ Disassembly of section .text:
 <fib_lr>:
                	cmpl	$0x2, %edi
                	jl	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -56,49 +55,48 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movslq	%edi, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	xorl	%edi, %edi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0xa, %edi
                	callq	<addr>
                	cmpq	$0x37, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x14, %edi
                	callq	<addr>
                	cmpq	$0x1a6d, %rax           # imm = 0x1A6D
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

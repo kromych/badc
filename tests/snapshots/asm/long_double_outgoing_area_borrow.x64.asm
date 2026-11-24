@@ -26,8 +26,6 @@ Disassembly of section .text:
                	int3
 
 <weigh10>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	shlq	%rsi
                	leaq	(%rdi,%rsi), %rax
                	leaq	(%rdx,%rdx,2), %rdx
@@ -38,19 +36,18 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	imulq	$0x6, %r9, %rcx
                	addq	%rcx, %rax
-               	movq	0x10(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	imulq	$0x7, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	0x18(%rbp), %rcx
+               	movq	0x10(%rsp), %rcx
                	shlq	$0x3, %rcx
                	addq	%rcx, %rax
-               	movq	0x20(%rbp), %rcx
+               	movq	0x18(%rsp), %rcx
                	leaq	(%rcx,%rcx,8), %rcx
                	addq	%rcx, %rax
-               	movq	0x28(%rbp), %rcx
+               	movq	0x20(%rsp), %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
-               	popq	%rbp
                	retq
 
 <mix>:
@@ -213,9 +210,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x38, %rsp
+               	subq	$0x40, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -362,7 +357,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x40, %rsp
                	retq
                	leaq	<rip>, %rax # <addr>
                	fldt	0x10(%rax)
@@ -378,7 +373,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x40, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
@@ -386,5 +381,5 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x40, %rsp
                	retq

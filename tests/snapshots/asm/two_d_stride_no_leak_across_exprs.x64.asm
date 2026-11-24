@@ -26,35 +26,33 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x100, %rsp            # imm = 0x100
+               	subq	$0x108, %rsp            # imm = 0x108
                	xorl	%eax, %eax
-               	leaq	-0x100(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
                	vmulss	<rip>, %xmm0, %xmm0
-               	movss	%xmm0, -0x100(%rbp,%rax,4)
+               	movss	%xmm0, (%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	movss	-0xe0(%rbp), %xmm0
+               	movss	0x20(%rsp), %xmm0
                	movss	<rip>, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
                	movss	<rip>, %xmm0
-               	movss	%xmm0, -0x100(%rbp)
-               	movss	-0x100(%rbp), %xmm1
+               	movss	%xmm0, (%rsp)
+               	movss	(%rsp), %xmm1
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq

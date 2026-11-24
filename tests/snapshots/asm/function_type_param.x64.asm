@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <mixed>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
+               	subq	$0x10, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -43,16 +41,15 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	leave
+               	addq	$0x10, %rsp
                	retq
 
 <apply1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <inc>:

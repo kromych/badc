@@ -105,8 +105,7 @@ Disassembly of section .text:
                	movb	$0x2, %al
                	callq	<addr>
                	movapd	%xmm0, %xmm2
-               	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm2
+               	ucomisd	<rip>, %xmm2
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax

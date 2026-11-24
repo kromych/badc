@@ -721,8 +721,7 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	movsd	0xc0(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x19, %eax

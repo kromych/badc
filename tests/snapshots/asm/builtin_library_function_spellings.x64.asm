@@ -108,9 +108,8 @@ Disassembly of section .text:
                	addq	$0x38, %rsp
                	retq
                	movsd	<rip>, %xmm0
-               	movsd	<rip>, %xmm1
-               	vandpd	<rip>, %xmm1, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	vandpd	<rip>, %xmm0, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movsd	<rip>, %xmm0
@@ -124,15 +123,13 @@ Disassembly of section .text:
                	retq
                	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax

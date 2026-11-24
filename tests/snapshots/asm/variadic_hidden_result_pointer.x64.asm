@@ -128,8 +128,7 @@ Disassembly of section .text:
                	cmpq	$0x16, %rcx
                	jne	<addr>
                	movq	%rdx, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	cmpq	$0x413, %rsi            # imm = 0x413
@@ -156,8 +155,7 @@ Disassembly of section .text:
                	cmpq	$0x16, %rcx
                	jne	<addr>
                	movq	%rdx, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	cmpq	$0x41f, %rsi            # imm = 0x41F

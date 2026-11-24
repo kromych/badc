@@ -33,13 +33,11 @@ Disassembly of section .text:
                	movapd	%xmm1, %xmm2
                	movapd	%xmm2, <rip> # <addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
@@ -67,8 +65,7 @@ Disassembly of section .text:
                	fldln2
                	fstpl	(%rax)
                	movsd	-0x50(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
                	movsd	-0x48(%rbp), %xmm0
@@ -105,18 +102,15 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	movsd	-0x40(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
                	movsd	-0x48(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
                	movss	-0x58(%rbp), %xmm0
-               	movss	<rip>, %xmm1 # <addr>
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
@@ -151,8 +145,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movsd	-0x38(%rbp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
                	leaq	-0x10(%rbp), %rdi
@@ -221,13 +214,11 @@ Disassembly of section .text:
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
                	xorl	%eax, %eax

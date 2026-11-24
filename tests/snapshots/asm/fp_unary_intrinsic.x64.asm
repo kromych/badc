@@ -28,40 +28,35 @@ Disassembly of section .text:
 <main>:
                	movss	<rip>, %xmm0
                	sqrtss	%xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movss	<rip>, %xmm0
                	sqrtss	%xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	movsd	<rip>, %xmm0
                	sqrtsd	%xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	movss	<rip>, %xmm0
-               	movss	<rip>, %xmm1
-               	vandpd	<rip>, %xmm1, %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	vandpd	<rip>, %xmm0, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	movsd	<rip>, %xmm0
-               	movsd	<rip>, %xmm1
-               	vandpd	<rip>, %xmm1, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	vandpd	<rip>, %xmm0, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
@@ -69,50 +64,43 @@ Disassembly of section .text:
                	movss	<rip>, %xmm0
                	sqrtss	%xmm0, %xmm0
                	cvtss2sd	%xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	movsd	<rip>, %xmm0
                	roundsd	$0x9, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	<rip>, %xmm0
                	roundss	$0x9, %xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
                	retq
                	movsd	<rip>, %xmm0
                	roundsd	$0xa, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	<rip>, %xmm0
                	roundss	$0xa, %xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax
                	retq
                	movsd	<rip>, %xmm0
                	roundsd	$0xb, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	<rip>, %xmm0
                	roundss	$0xb, %xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x9, %eax
@@ -129,8 +117,7 @@ Disassembly of section .text:
                	sqrtss	%xmm0, %xmm0
                	vaddss	<rip>, %xmm0, %xmm0
                	roundss	$0x9, %xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xb, %eax

@@ -496,17 +496,15 @@ Disassembly of section .text:
                	movups	(%rax), %xmm0
                	sqrtss	%xmm0, %xmm0
                	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm2
+               	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	jne	<addr>
-               	vpermilps	$0x1, %xmm0, %xmm2 # xmm2 = xmm0[1,0,0,0]
-               	movss	<rip>, %xmm3
-               	ucomiss	%xmm3, %xmm2
+               	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1f, %eax

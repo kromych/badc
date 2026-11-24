@@ -236,8 +236,7 @@ Disassembly of section .text:
                	shlq	$0x7, %rax
                	orq	%rax, %rbx
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -252,8 +251,7 @@ Disassembly of section .text:
                	shlq	$0x9, %rax
                	orq	%rax, %rbx
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b

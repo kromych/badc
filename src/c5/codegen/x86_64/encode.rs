@@ -283,6 +283,24 @@ pub(crate) fn emit_sse_mov_rip(code: &mut Vec<u8>, prefix: u8, store: bool, xmm:
     field
 }
 
+/// `[U]COMISS` / `[U]COMISD lhs, [rip + disp32]`: `0F 2E`, or `0F 2F` for
+/// the signaling form, `66`-prefixed for a double. Returns the
+/// displacement's offset.
+pub(crate) fn emit_comis_rip(code: &mut Vec<u8>, double: bool, signals: bool, lhs: Reg) -> usize {
+    if double {
+        emit_byte(code, 0x66);
+    }
+    if lhs.high() {
+        emit_byte(code, rex(false, true, false, false));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, if signals { 0x2F } else { 0x2E });
+    emit_byte(code, modrm(0b00, lhs.lo(), 0b101));
+    let field = code.len();
+    emit_i32(code, 0);
+    field
+}
+
 /// `VANDPD` (`0x54`) or `VXORPD` (`0x57`) `dst, src, [rip + disp32]`:
 /// `VEX.128.66.0F op /r`. Returns the displacement's offset.
 pub(crate) fn emit_vex_pd_logic_rip(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) -> usize {

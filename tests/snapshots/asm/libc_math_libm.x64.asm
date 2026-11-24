@@ -70,8 +70,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
@@ -118,8 +117,8 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	vsubsd	<rip>, %xmm0, %xmm0
                	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	jbe	<addr>
                	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1

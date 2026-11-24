@@ -64,16 +64,14 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	je	<addr>
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax

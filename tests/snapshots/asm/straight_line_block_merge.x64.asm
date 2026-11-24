@@ -685,8 +685,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movsd	<rip>, %xmm0 # <addr>
                	callq	<addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x14, %ebx
@@ -695,8 +694,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movss	<rip>, %xmm0 # <addr>
                	callq	<addr>
-               	movss	<rip>, %xmm1 # <addr>
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x15, %ebx

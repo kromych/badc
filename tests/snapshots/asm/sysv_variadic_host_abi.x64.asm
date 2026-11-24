@@ -187,8 +187,7 @@ Disassembly of section .text:
                	movq	%r10, (%rsp)
                	movb	$0x8, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax

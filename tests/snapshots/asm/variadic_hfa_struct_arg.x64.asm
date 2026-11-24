@@ -99,10 +99,9 @@ Disassembly of section .text:
                	movsd	0x8(%r10), %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	xorl	%eax, %eax
                	movl	$0x1, %ecx
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
                	addq	$0x18, %rsp

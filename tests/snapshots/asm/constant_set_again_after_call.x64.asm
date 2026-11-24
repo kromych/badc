@@ -242,8 +242,7 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax

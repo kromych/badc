@@ -222,112 +222,101 @@ Disassembly of section .text:
                	vaddss	%xmm4, %xmm3, %xmm7
                	vpermilps	$0x2, %xmm1, %xmm3 # xmm3 = xmm1[2,0,0,0]
                	vpermilps	$0x3, %xmm1, %xmm4 # xmm4 = xmm1[3,0,0,0]
-               	vaddss	%xmm4, %xmm3, %xmm8
+               	vaddss	%xmm4, %xmm3, %xmm4
                	movapd	%xmm2, %xmm3
-               	movss	<rip>, %xmm2
-               	ucomiss	%xmm2, %xmm3
+               	ucomiss	<rip>, %xmm3
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm6, %xmm3
-               	movss	<rip>, %xmm4
-               	ucomiss	%xmm4, %xmm3
+               	movapd	%xmm6, %xmm2
+               	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm7, %xmm3
-               	movss	<rip>, %xmm4
-               	ucomiss	%xmm4, %xmm3
+               	movapd	%xmm7, %xmm2
+               	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm8, %xmm3
-               	movss	<rip>, %xmm4
-               	ucomiss	%xmm4, %xmm3
+               	movapd	%xmm4, %xmm2
+               	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	je	<addr>
                	movl	$0x15, %eax
                	leave
                	retq
-               	vpermilps	$0x0, %xmm0, %xmm3 # xmm3 = xmm0[0,0,0,0]
-               	vpermilps	$0x1, %xmm0, %xmm4 # xmm4 = xmm0[1,0,0,0]
-               	subss	%xmm4, %xmm3
-               	vpermilps	$0x2, %xmm0, %xmm4 # xmm4 = xmm0[2,0,0,0]
-               	vpermilps	$0x3, %xmm0, %xmm6 # xmm6 = xmm0[3,0,0,0]
-               	vsubss	%xmm6, %xmm4, %xmm7
-               	vpermilps	$0x0, %xmm1, %xmm4 # xmm4 = xmm1[0,0,0,0]
-               	vpermilps	$0x1, %xmm1, %xmm6 # xmm6 = xmm1[1,0,0,0]
-               	vsubss	%xmm6, %xmm4, %xmm8
-               	vpermilps	$0x2, %xmm1, %xmm4 # xmm4 = xmm1[2,0,0,0]
+               	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
+               	vpermilps	$0x1, %xmm0, %xmm3 # xmm3 = xmm0[1,0,0,0]
+               	subss	%xmm3, %xmm2
+               	vpermilps	$0x2, %xmm0, %xmm3 # xmm3 = xmm0[2,0,0,0]
+               	vpermilps	$0x3, %xmm0, %xmm4 # xmm4 = xmm0[3,0,0,0]
+               	vsubss	%xmm4, %xmm3, %xmm6
+               	vpermilps	$0x0, %xmm1, %xmm3 # xmm3 = xmm1[0,0,0,0]
+               	vpermilps	$0x1, %xmm1, %xmm4 # xmm4 = xmm1[1,0,0,0]
+               	vsubss	%xmm4, %xmm3, %xmm7
+               	vpermilps	$0x2, %xmm1, %xmm3 # xmm3 = xmm1[2,0,0,0]
                	vpermilps	$0x3, %xmm1, %xmm1 # xmm1 = xmm1[3,0,0,0]
-               	subss	%xmm1, %xmm4
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm3
+               	subss	%xmm1, %xmm3
+               	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm7, %xmm3
-               	ucomiss	%xmm1, %xmm3
+               	movapd	%xmm6, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm8, %xmm3
-               	ucomiss	%xmm1, %xmm3
+               	movapd	%xmm7, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm4, %xmm3
-               	ucomiss	%xmm1, %xmm3
+               	movapd	%xmm3, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x16, %eax
                	leave
                	retq
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
-               	vpermilps	$0x0, %xmm5, %xmm3 # xmm3 = xmm5[0,0,0,0]
-               	subss	%xmm3, %xmm1
-               	vpermilps	$0x1, %xmm0, %xmm3 # xmm3 = xmm0[1,0,0,0]
-               	vpermilps	$0x1, %xmm5, %xmm4 # xmm4 = xmm5[1,0,0,0]
-               	addss	%xmm4, %xmm3
-               	vpermilps	$0x2, %xmm0, %xmm4 # xmm4 = xmm0[2,0,0,0]
-               	vpermilps	$0x2, %xmm5, %xmm6 # xmm6 = xmm5[2,0,0,0]
-               	subss	%xmm6, %xmm4
-               	vpermilps	$0x3, %xmm0, %xmm6 # xmm6 = xmm0[3,0,0,0]
+               	vpermilps	$0x0, %xmm5, %xmm2 # xmm2 = xmm5[0,0,0,0]
+               	subss	%xmm2, %xmm1
+               	vpermilps	$0x1, %xmm0, %xmm2 # xmm2 = xmm0[1,0,0,0]
+               	vpermilps	$0x1, %xmm5, %xmm3 # xmm3 = xmm5[1,0,0,0]
+               	addss	%xmm3, %xmm2
+               	vpermilps	$0x2, %xmm0, %xmm3 # xmm3 = xmm0[2,0,0,0]
+               	vpermilps	$0x2, %xmm5, %xmm4 # xmm4 = xmm5[2,0,0,0]
+               	subss	%xmm4, %xmm3
+               	vpermilps	$0x3, %xmm0, %xmm4 # xmm4 = xmm0[3,0,0,0]
                	vpermilps	$0x3, %xmm5, %xmm5 # xmm5 = xmm5[3,0,0,0]
-               	vaddss	%xmm5, %xmm6, %xmm5
-               	movss	<rip>, %xmm6
-               	ucomiss	%xmm6, %xmm1
+               	addss	%xmm5, %xmm4
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm3
+               	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm4, %xmm3
-               	ucomiss	%xmm1, %xmm3
+               	movapd	%xmm3, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm5, %xmm1
-               	movss	<rip>, %xmm3
-               	ucomiss	%xmm3, %xmm1
+               	movapd	%xmm4, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x17, %eax
                	leave
                	retq
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
-               	vpermilps	$0x3, %xmm0, %xmm3 # xmm3 = xmm0[3,0,0,0]
-               	vpermilps	$0x0, %xmm0, %xmm4 # xmm4 = xmm0[0,0,0,0]
+               	vpermilps	$0x3, %xmm0, %xmm2 # xmm2 = xmm0[3,0,0,0]
+               	vpermilps	$0x0, %xmm0, %xmm3 # xmm3 = xmm0[0,0,0,0]
                	vpermilps	$0x2, %xmm0, %xmm0 # xmm0 = xmm0[2,0,0,0]
-               	movss	<rip>, %xmm5
-               	ucomiss	%xmm5, %xmm1
+               	ucomiss	<rip>, %xmm1
+               	jp	<addr>
+               	jne	<addr>
+               	movapd	%xmm2, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movapd	%xmm3, %xmm1
-               	movss	<rip>, %xmm3
-               	ucomiss	%xmm3, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm4, %xmm1
-               	movss	<rip>, %xmm3
-               	ucomiss	%xmm3, %xmm1
-               	jp	<addr>
-               	jne	<addr>
-               	ucomiss	%xmm2, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x18, %eax
@@ -344,12 +333,10 @@ Disassembly of section .text:
                	vpermilpd	$0x1, %xmm1, %xmm1 # xmm1 = xmm1[1,0]
                	addsd	%xmm1, %xmm0
                	movapd	%xmm2, %xmm1
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x19, %eax
@@ -374,24 +361,21 @@ Disassembly of section .text:
                	subsd	%xmm0, %xmm4
                	vpermilpd	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0]
                	vpermilpd	$0x1, %xmm1, %xmm1 # xmm1 = xmm1[1,0]
-               	subsd	%xmm1, %xmm0
-               	movapd	%xmm2, %xmm1
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	vsubsd	%xmm1, %xmm0, %xmm5
+               	movapd	%xmm2, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm3, %xmm2
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm2
+               	movapd	%xmm3, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm4, %xmm2
-               	movsd	<rip>, %xmm3
-               	ucomisd	%xmm3, %xmm2
+               	movapd	%xmm4, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm0
+               	movapd	%xmm5, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1a, %eax
@@ -399,22 +383,22 @@ Disassembly of section .text:
                	retq
                	movsd	<rip>, %xmm0
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm2
-               	vpermilpd	$0x0, %xmm2, %xmm3 # xmm3 = xmm2[0,0]
-               	movapd	%xmm0, %xmm4
-               	ucomisd	%xmm0, %xmm4
+               	movups	(%rax), %xmm1
+               	vpermilpd	$0x0, %xmm1, %xmm2 # xmm2 = xmm1[0,0]
+               	movapd	%xmm0, %xmm3
+               	ucomisd	%xmm0, %xmm3
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm0, %xmm4
-               	ucomisd	%xmm0, %xmm4
-               	jp	<addr>
-               	jne	<addr>
-               	movapd	%xmm3, %xmm0
-               	ucomisd	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm3
+               	ucomisd	%xmm0, %xmm3
                	jp	<addr>
                	jne	<addr>
                	movapd	%xmm2, %xmm0
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
+               	jp	<addr>
+               	jne	<addr>
+               	movapd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1b, %eax

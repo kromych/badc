@@ -47,12 +47,10 @@ Disassembly of section .text:
                	addq	$0x28, %rsp
                	retq
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	jbe	<addr>
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	comiss	%xmm1, %xmm0
+               	comiss	<rip>, %xmm0
                	jbe	<addr>
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x5, %rax

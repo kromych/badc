@@ -156,8 +156,7 @@ Disassembly of section .text:
                	orq	%rax, %rcx
                	movq	%rcx, %xmm0
                	retq
-               	movsd	<rip>, %xmm0 # <addr>
-               	comisd	%xmm0, %xmm1
+               	comisd	<rip>, %xmm1 # <addr>
                	jae	<addr>
                	movsd	<rip>, %xmm0 # <addr>
                	comisd	%xmm1, %xmm0
@@ -170,10 +169,9 @@ Disassembly of section .text:
                	subsd	%xmm0, %xmm1
                	testl	%edi, %edi
                	jne	<addr>
-               	movsd	<rip>, %xmm2 # <addr>
-               	comisd	%xmm2, %xmm1
+               	comisd	<rip>, %xmm1 # <addr>
                	ja	<addr>
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1 # <addr>
                	jp	<addr>
                	jne	<addr>
                	testb	$0x1, %cl

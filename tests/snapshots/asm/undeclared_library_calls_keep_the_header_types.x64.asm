@@ -35,10 +35,9 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	movsd	0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
                	xorl	%ecx, %ecx
                	movl	$0x1, %edx
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rdx, %rcx
                	cmovpq	%rdx, %rcx
                	xorl	%edx, %edx

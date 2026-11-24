@@ -27,30 +27,26 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movsd	<rip>, %xmm1 # <addr>
-               	movsd	<rip>, %xmm2 # <addr>
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	movsd	<rip>, %xmm2 # <addr>
-               	movsd	<rip>, %xmm3 # <addr>
-               	ucomisd	%xmm3, %xmm2
+               	ucomisd	<rip>, %xmm2 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	retq
                	addsd	%xmm1, %xmm0
                	addsd	%xmm2, %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0 # <addr>
                	ja	<addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1

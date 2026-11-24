@@ -139,7 +139,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 26  start_pc=0
     v84  ImmData(144)                                     -> x0
     v85  Imm(0)                                           -> x0
-    v86  Load { addr=v84, disp=0, kind=F64 pc_rel }       -> d1
+    v86  Load { addr=v84, disp=0, kind=F64 pc_rel }       -> d0
     v87  Imm(4715268809856909312)                         -> x0
     v88  Binop { op=fne, lhs=v86, rhs=v80 }               -> x0
     terminator Bz { cond=v88, target=b28, fall=b27 }   (exit_acc=v88)
@@ -149,7 +149,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v89)   (exit_acc=v89)
   block 28  start_pc=0
     v91  ImmData(152)                                     -> x0
-    v92  Load { addr=v91, disp=0, kind=F64 pc_rel }       -> d1
+    v92  Load { addr=v91, disp=0, kind=F64 pc_rel }       -> d0
     v93  Imm(4715268809856909312)                         -> x0
     v94  Binop { op=fne, lhs=v92, rhs=v80 }               -> x0
     terminator Bz { cond=v94, target=b30, fall=b29 }   (exit_acc=v94)

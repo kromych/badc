@@ -231,8 +231,7 @@ Disassembly of section .text:
                	movw	%r10w, 0xc(%rax)
                	xorps	%xmm0, %xmm0
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	xorps	%xmm0, %xmm0
@@ -440,23 +439,20 @@ Disassembly of section .text:
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
                	vandpd	<rip>, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	ja	<addr>
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	vaddsd	<rip>, %xmm0, %xmm0
                	vandpd	<rip>, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	ja	<addr>
                	movl	$0x2, %edi
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	vaddsd	<rip>, %xmm0, %xmm0
                	vandpd	<rip>, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	jbe	<addr>
                	movl	$0xb, %eax
                	jmp	<addr>
@@ -482,8 +478,7 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	comisd	%xmm1, %xmm0
                	ja	<addr>
-               	movsd	<rip>, %xmm0
-               	comisd	%xmm0, %xmm1
+               	comisd	<rip>, %xmm1
                	jae	<addr>
                	movsd	%xmm1, (%rsp)
                	callq	<addr>

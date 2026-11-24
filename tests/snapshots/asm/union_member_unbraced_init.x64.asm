@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
@@ -55,8 +54,7 @@ Disassembly of section .text:
                	cmpb	$0x0, <rip> # <addr>
                	jne	<addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
@@ -76,8 +74,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	retq
                	movsd	<rip>, %xmm1 # <addr>
-               	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
@@ -85,9 +82,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movsd	<rip>, %xmm1 # <addr>
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	movsd	<rip>, %xmm0 # <addr>
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
@@ -95,13 +91,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movsd	<rip>, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	xorl	%eax, %eax

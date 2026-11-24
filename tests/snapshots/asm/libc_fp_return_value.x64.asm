@@ -31,84 +31,73 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movsd	<rip>, %xmm0
                	sqrtsd	%xmm0, %xmm0
-               	movsd	<rip>, %xmm1
                	xorl	%ecx, %ecx
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
                	movsd	<rip>, %xmm0
                	roundsd	$0x9, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
                	xorl	%ecx, %ecx
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
                	movsd	<rip>, %xmm0
                	roundsd	$0xa, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
                	xorl	%ecx, %ecx
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
                	movsd	<rip>, %xmm0
-               	movsd	<rip>, %xmm1
-               	vandpd	<rip>, %xmm1, %xmm1
+               	vandpd	<rip>, %xmm0, %xmm0
                	xorl	%ecx, %ecx
-               	ucomisd	%xmm0, %xmm1
+               	ucomisd	<rip>, %xmm0
                	movq	%rax, %rbx
                	cmovneq	%rcx, %rbx
                	cmovpq	%rcx, %rbx
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	xorl	%eax, %eax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	movq	%rbx, %r10
                	cmovpq	%rax, %r10
                	cmoveq	%r10, %rax
                	movss	<rip>, %xmm0
                	sqrtss	%xmm0, %xmm0
-               	movss	<rip>, %xmm1
                	xorl	%ecx, %ecx
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
                	movss	<rip>, %xmm0
-               	movss	<rip>, %xmm1
-               	vandpd	<rip>, %xmm1, %xmm1
+               	vandpd	<rip>, %xmm0, %xmm0
                	xorl	%ecx, %ecx
-               	ucomiss	%xmm0, %xmm1
+               	ucomiss	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
                	movss	<rip>, %xmm0
                	sqrtss	%xmm0, %xmm0
                	cvtss2sd	%xmm0, %xmm0
-               	movsd	<rip>, %xmm1
                	xorl	%ecx, %ecx
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
                	movss	<rip>, %xmm0
                	roundss	$0x9, %xmm0, %xmm0
-               	movss	<rip>, %xmm1
                	xorl	%ecx, %ecx
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
                	movss	<rip>, %xmm0
                	roundss	$0xa, %xmm0, %xmm0
-               	movss	<rip>, %xmm1
                	xorl	%ecx, %ecx
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	movq	%rax, %rbx
                	cmovneq	%rcx, %rbx
                	cmovpq	%rcx, %rbx
                	movss	<rip>, %xmm0
                	movss	<rip>, %xmm1
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	xorl	%eax, %eax

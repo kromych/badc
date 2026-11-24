@@ -204,7 +204,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v142 Binop { op=fgt, lhs=v130, rhs=v141 }             -> x2
     v143 Imm(1)                                           -> x2
     v144 Imm(0)                                           -> x6
-    v145 Load { addr=v127, disp=32, kind=F80 }            -> d1
+    v145 Load { addr=v127, disp=32, kind=F80 }            -> d0
     v146 Binop { op=fgt, lhs=v145, rhs=v141 }             -> x1
     v147 Select { cond=v146, a=v143, b=v144, kind=I64 }   -> x2
     terminator Jmp(b1)

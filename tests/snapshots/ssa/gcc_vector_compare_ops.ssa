@@ -4463,25 +4463,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v5388 Imm(4611686018427387904)                         -> x0
     v5389 Imm(1073741824)                                  -> d0 [f32]
     v5390 Imm(0)                                           -> x0
-    v5391 LoadLocal { off=-766, kind=F32 }                 -> d1 [f32]
+    v5391 LoadLocal { off=-766, kind=F32 }                 -> d0 [f32]
     v5392 Binop { op=fgt, lhs=v5391, rhs=v5389 }           -> x2
     v5393 Imm(0)                                           -> x0
     v5394 Neg(v5392)                                       -> x2
     v5395 Imm(0)                                           -> x6
     v5396 BinopI { op=add, lhs=v5387, rhs_imm=4 }          -> x6
-    v5397 LoadLocal { off=-766, disp=4, kind=F32 }         -> d1 [f32]
+    v5397 LoadLocal { off=-766, disp=4, kind=F32 }         -> d0 [f32]
     v5398 Binop { op=fgt, lhs=v5397, rhs=v5389 }           -> x6
     v5399 Neg(v5398)                                       -> x6
     v5400 Imm(0)                                           -> x7
     v5401 Imm(0)                                           -> x7
     v5402 BinopI { op=add, lhs=v5387, rhs_imm=8 }          -> x7
-    v5403 LoadLocal { off=-766, disp=8, kind=F32 }         -> d1 [f32]
+    v5403 LoadLocal { off=-766, disp=8, kind=F32 }         -> d0 [f32]
     v5404 Binop { op=fgt, lhs=v5403, rhs=v5389 }           -> x7
     v5405 Neg(v5404)                                       -> x7
     v5406 Imm(0)                                           -> x9
     v5407 Imm(0)                                           -> x9
     v5408 BinopI { op=add, lhs=v5387, rhs_imm=12 }         -> x9
-    v5409 LoadLocal { off=-766, disp=12, kind=F32 }        -> d1 [f32]
+    v5409 LoadLocal { off=-766, disp=12, kind=F32 }        -> d0 [f32]
     v5410 Binop { op=fgt, lhs=v5409, rhs=v5389 }           -> x9
     v5411 Neg(v5410)                                       -> x9
     v5412 Imm(0)                                           -> x3
@@ -4512,7 +4512,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v1439 Binop { op=fgt, lhs=v1436, rhs=v1438 }           -> x2
     v1440 Imm(-1)                                          -> x2
     v1441 Imm(0)                                           -> x6
-    v1442 LoadIndexed { base=v5387, index=v1427, scale=4, kind=F32 } -> d1 [f32]
+    v1442 LoadIndexed { base=v5387, index=v1427, scale=4, kind=F32 } -> d0 [f32]
     v1443 Binop { op=fgt, lhs=v1442, rhs=v1438 }           -> x7
     v1444 Select { cond=v1443, a=v1440, b=v1441, kind=I64 } -> x2
     terminator Jmp(b281)

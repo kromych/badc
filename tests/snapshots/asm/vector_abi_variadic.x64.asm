@@ -494,8 +494,7 @@ Disassembly of section .text:
                	movups	(%r10), %xmm3
                	movb	$0x4, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
@@ -547,8 +546,7 @@ Disassembly of section .text:
                	movsd	(%r10), %xmm7
                	movb	$0x8, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

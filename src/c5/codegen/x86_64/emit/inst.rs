@@ -394,6 +394,29 @@ pub(super) fn emit_inst(
         | Inst::StoreLocal { .. }
         | Inst::LoadIndexed { .. }
         | Inst::StoreIndexed { .. } => emit_mem_inst(code, inst, v, dst, fcx),
+        // A comparison reads a folded constant as its memory operand.
+        Inst::Binop { op, lhs, rhs }
+            if crate::c5::ir::is_fp_comparison_op(*op)
+                && (alloc.fp_mem_operand.contains(rhs) || alloc.fp_mem_operand.contains(lhs)) =>
+        {
+            let end =
+                super::arith::emit_fp_compare_folded(code, *op, v, dst, *lhs, *rhs, alloc, frame)?;
+            if let Some(end) = end {
+                let folded = if alloc.fp_mem_operand.contains(rhs) {
+                    *rhs
+                } else {
+                    *lhs
+                };
+                note_literal(
+                    &mut out.fp_literals,
+                    end,
+                    func,
+                    folded,
+                    alloc.is_f32(folded),
+                );
+            }
+            Ok(())
+        }
         // The allocator folds a commuting operation's first operand only.
         Inst::Binop { op, lhs, rhs }
             if alloc.fp_mem_operand.contains(rhs) || alloc.fp_mem_operand.contains(lhs) =>

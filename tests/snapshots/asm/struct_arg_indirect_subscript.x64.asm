@@ -70,8 +70,7 @@ Disassembly of section .text:
                	vmulsd	<rip>, %xmm2, %xmm0
                	vfmadd132sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm1 * mem) + xmm0
                	vaddsd	<rip>, %xmm1, %xmm1
-               	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
@@ -80,12 +79,12 @@ Disassembly of section .text:
                	leaq	0x90(%rsp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movsd	0x8(%rsp), %xmm1
-               	movsd	0x10(%rsp), %xmm2
-               	vmulsd	<rip>, %xmm2, %xmm2
-               	vfmadd132sd	<rip>, %xmm2, %xmm1 # xmm1 = (xmm1 * mem) + xmm2
-               	vaddsd	<rip>, %xmm1, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	movsd	0x8(%rsp), %xmm0
+               	movsd	0x10(%rsp), %xmm1
+               	vmulsd	<rip>, %xmm1, %xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
+               	vaddsd	<rip>, %xmm0, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

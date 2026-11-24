@@ -453,8 +453,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movsd	0x58(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x68, %eax

@@ -37,8 +37,7 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jl	<addr>
                	movss	0x20(%rsp), %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax

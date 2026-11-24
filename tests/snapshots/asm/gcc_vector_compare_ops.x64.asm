@@ -2371,25 +2371,24 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	leaq	0x100(%rsp), %r8
-               	movss	<rip>, %xmm0
-               	movss	0x100(%rsp), %xmm1
-               	comiss	%xmm0, %xmm1
+               	movss	0x100(%rsp), %xmm0
+               	comiss	<rip>, %xmm0
                	seta	%dl
                	movzbq	%dl, %rdx
                	xorl	%eax, %eax
                	negq	%rdx
-               	movss	0x104(%rsp), %xmm1
-               	comiss	%xmm0, %xmm1
+               	movss	0x104(%rsp), %xmm0
+               	comiss	<rip>, %xmm0
                	seta	%sil
                	movzbq	%sil, %rsi
                	negq	%rsi
-               	movss	0x108(%rsp), %xmm1
-               	comiss	%xmm0, %xmm1
+               	movss	0x108(%rsp), %xmm0
+               	comiss	<rip>, %xmm0
                	seta	%dil
                	movzbq	%dil, %rdi
                	negq	%rdi
-               	movss	0x10c(%rsp), %xmm1
-               	comiss	%xmm0, %xmm1
+               	movss	0x10c(%rsp), %xmm0
+               	comiss	<rip>, %xmm0
                	seta	%r9b
                	movzbq	%r9b, %r9
                	negq	%r9
@@ -2397,11 +2396,10 @@ Disassembly of section .text:
                	movl	%esi, 0x114(%rsp)
                	movl	%edi, 0x118(%rsp)
                	movl	%r9d, 0x11c(%rsp)
-               	movss	<rip>, %xmm0
                	movq	$-0x1, %rdx
                	xorl	%esi, %esi
-               	movss	0x100(%rsp,%rax,4), %xmm1
-               	comiss	%xmm0, %xmm1
+               	movss	0x100(%rsp,%rax,4), %xmm0
+               	comiss	<rip>, %xmm0
                	cmovbeq	%rsi, %rdx
                	movl	%edx, 0x150(%rsp,%rax,4)
                	incq	%rax

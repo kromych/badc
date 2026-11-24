@@ -5051,8 +5051,9 @@ fn fp_commutes(op: BinOp) -> bool {
 /// x86-64: the floating constants other than +0.0 that every reader takes
 /// as its memory operand, the read-only literal addressed off rip: a
 /// floating add, subtract, multiply or divide of the constant's precision
-/// reading it second, or first where the operation commutes, or a fused
-/// multiply-add reading it once, with no other constant operand. Such a
+/// reading it second, or first where the operation commutes, a fused
+/// multiply-add reading it once, or a comparison reading it on the side
+/// `[u]comis` takes from memory, with no other constant operand. Such a
 /// constant takes no register.
 fn fp_literal_operands(
     func: &FunctionSsa,
@@ -5086,9 +5087,19 @@ fn fp_literal_operands(
                 [false, false, true] => Some(c),
                 _ => None,
             },
+            // A compare's memory side is its second operand, the first of
+            // `<` and `<=`, which the lowering swaps.
+            Inst::Binop { op, lhs, rhs } if crate::c5::ir::is_fp_comparison_op(op) => {
+                let swapped = matches!(crate::c5::ir::fp_relation(op), BinOp::Flt | BinOp::Fle);
+                let (held, mem) = if swapped { (rhs, lhs) } else { (lhs, rhs) };
+                (literal(mem) && !literal(held) && f32(mem) == f32(held)).then_some(mem)
+            }
             _ => None,
         }
-        .filter(|&c| f32(c) == f32(r as ValueId));
+        .filter(|&c| {
+            f32(c) == f32(r as ValueId)
+                || matches!(*inst, Inst::Binop { op, .. } if crate::c5::ir::is_fp_comparison_op(op))
+        });
         for_each_operand(inst, |o| {
             if Some(o) != folded
                 && let Some(h) = held.get_mut(o as usize)

@@ -74,8 +74,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movss	0x28(%rsp), %xmm0
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	0x28(%rsp), %xmm0
@@ -89,14 +88,12 @@ Disassembly of section .text:
                	retq
                	movss	0x30(%rsp), %xmm0
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	0x38(%rsp), %xmm0
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
@@ -106,8 +103,7 @@ Disassembly of section .text:
                	movss	0x30(%rsp), %xmm0
                	leaq	0x8(%rsp), %rdi
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movl	0x8(%rsp), %eax
@@ -119,8 +115,7 @@ Disassembly of section .text:
                	movss	<rip>, %xmm0
                	movl	$0x3, %edi
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
@@ -130,13 +125,11 @@ Disassembly of section .text:
                	movss	<rip>, %xmm0
                	leaq	0x10(%rsp), %rdi
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	0x10(%rsp), %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	ja	<addr>
                	movl	$0x1, %eax
                	retq

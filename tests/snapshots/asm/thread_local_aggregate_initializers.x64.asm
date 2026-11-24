@@ -116,8 +116,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x50, %rax
                	movsd	0x18(%rax), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movsbq	0x11(%rax), %rax
@@ -208,8 +207,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x50, %rax
                	movsd	0x8(%rax), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x15, %eax

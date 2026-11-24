@@ -56,8 +56,7 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	movsd	<rip>, %xmm0
                	callq	*%rax
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax

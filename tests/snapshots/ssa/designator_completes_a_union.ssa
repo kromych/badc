@@ -60,7 +60,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v35  LocalAddr(-2)                                    -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
-    v38  LoadLocal { off=-2, kind=F64 }                   -> d1
+    v38  LoadLocal { off=-2, kind=F64 }                   -> d0
     v39  Imm(4612811918334230528)                         -> x0
     v40  Binop { op=fne, lhs=v38, rhs=v28 }               -> x0
     terminator Bnz { cond=v40, target=b8, fall=b6 }   (exit_acc=v40)
@@ -129,7 +129,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v142 Binop { op=fne, lhs=v140, rhs=v141 }             -> x0
     v143 Imm(1)                                           -> x0
     v144 Imm(0)                                           -> x1
-    v145 Load { addr=v115, disp=0, kind=F64 pc_rel }      -> d1
+    v145 Load { addr=v115, disp=0, kind=F64 pc_rel }      -> d0
     v146 Binop { op=fne, lhs=v145, rhs=v141 }             -> x2
     v147 Select { cond=v146, a=v143, b=v144, kind=I64 }   -> x0
     terminator Jmp(b7)

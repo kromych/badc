@@ -364,8 +364,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm2
                	movb	$0x3, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
@@ -377,8 +376,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
@@ -391,8 +389,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm2
                	movb	$0x3, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
@@ -407,8 +404,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm3
                	movb	$0x4, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
@@ -424,8 +420,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
@@ -445,8 +440,7 @@ Disassembly of section .text:
                	movq	$0x9, 0x10(%rsp)
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax

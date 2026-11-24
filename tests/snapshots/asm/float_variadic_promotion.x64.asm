@@ -134,8 +134,8 @@ Disassembly of section .text:
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
                	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	jbe	<addr>
                	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1

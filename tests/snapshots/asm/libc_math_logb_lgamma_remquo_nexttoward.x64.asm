@@ -31,14 +31,12 @@ Disassembly of section .text:
                	movl	$0x0, 0x68(%rsp)
                	movsd	<rip>, %xmm0
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movsd	<rip>, %xmm0
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
@@ -47,8 +45,7 @@ Disassembly of section .text:
                	retq
                	movss	<rip>, %xmm0
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movabsq	$0x4020000000000000, %rax # imm = 0x4020000000000000
@@ -67,8 +64,7 @@ Disassembly of section .text:
                	fldt	0x30(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
@@ -83,8 +79,7 @@ Disassembly of section .text:
                	movsd	0x58(%rsp), %xmm14
                	vsubsd	%xmm0, %xmm14, %xmm1
                	vandpd	<rip>, %xmm1, %xmm0
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	jbe	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
@@ -98,8 +93,7 @@ Disassembly of section .text:
                	movsd	0x58(%rsp), %xmm14
                	vsubss	%xmm0, %xmm14, %xmm1
                	vandpd	<rip>, %xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	comiss	%xmm1, %xmm0
+               	comiss	<rip>, %xmm0
                	jbe	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp
@@ -154,8 +148,7 @@ Disassembly of section .text:
                	fldt	0x30(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	jbe	<addr>
                	movl	$0x5, %eax
                	addq	$0x20, %rsp
@@ -165,8 +158,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1
                	leaq	0x68(%rsp), %rdi
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movslq	0x68(%rsp), %rax
@@ -185,8 +177,7 @@ Disassembly of section .text:
                	movss	<rip>, %xmm1
                	leaq	0x68(%rsp), %rdi
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movslq	0x68(%rsp), %rax
@@ -229,8 +220,7 @@ Disassembly of section .text:
                	fldt	0x30(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movslq	0x68(%rsp), %rax
@@ -258,8 +248,7 @@ Disassembly of section .text:
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x9, %eax
@@ -279,8 +268,7 @@ Disassembly of section .text:
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xa, %eax
@@ -300,8 +288,7 @@ Disassembly of section .text:
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xb, %eax
@@ -321,8 +308,7 @@ Disassembly of section .text:
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
                	callq	<addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax
@@ -385,8 +371,7 @@ Disassembly of section .text:
                	fldt	0x30(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax
@@ -396,8 +381,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	<rip>, %xmm0
@@ -409,8 +393,7 @@ Disassembly of section .text:
                	movsd	0x58(%rsp), %xmm14
                	vsubss	%xmm0, %xmm14, %xmm1
                	vandpd	<rip>, %xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	comiss	%xmm1, %xmm0
+               	comiss	<rip>, %xmm0
                	jbe	<addr>
                	movl	$0xe, %eax
                	addq	$0x20, %rsp
@@ -445,8 +428,7 @@ Disassembly of section .text:
                	fldt	0x30(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movslq	0x68(%rsp), %rax
@@ -475,8 +457,7 @@ Disassembly of section .text:
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
                	callq	*%rax
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x10, %eax

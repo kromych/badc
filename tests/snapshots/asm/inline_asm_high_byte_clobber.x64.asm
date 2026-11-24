@@ -179,8 +179,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	vmulsd	<rip>, %xmm1, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax

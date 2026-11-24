@@ -54,32 +54,30 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
                	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	movsd	<rip>, %xmm3
                	movsd	<rip>, %xmm2
-               	movsd	<rip>, %xmm4
-               	vfmadd213sd	%xmm4, %xmm2, %xmm3 # xmm3 = (xmm2 * xmm3) + xmm4
-               	ucomisd	%xmm2, %xmm3
+               	movsd	<rip>, %xmm1
+               	movsd	<rip>, %xmm3
+               	vfmadd213sd	%xmm3, %xmm1, %xmm2 # xmm2 = (xmm1 * xmm2) + xmm3
+               	ucomisd	%xmm1, %xmm2
                	jp	<addr>
                	je	<addr>
                	movl	$0xa, %eax
                	retq
+               	movss	<rip>, %xmm1
                	movss	<rip>, %xmm2
                	movss	<rip>, %xmm3
-               	movss	<rip>, %xmm4
-               	vfmadd213ss	%xmm4, %xmm3, %xmm2 # xmm2 = (xmm3 * xmm2) + xmm4
-               	movss	<rip>, %xmm3
-               	ucomiss	%xmm3, %xmm2
+               	vfmadd213ss	%xmm3, %xmm2, %xmm1 # xmm1 = (xmm2 * xmm1) + xmm3
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax

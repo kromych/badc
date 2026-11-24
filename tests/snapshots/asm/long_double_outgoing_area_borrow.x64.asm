@@ -188,13 +188,12 @@ Disassembly of section .text:
                	vmulsd	<rip>, %xmm0, %xmm0
                	cvttsd2si	%xmm0, %rdx
                	addq	%rdx, %rax
-               	movsd	<rip>, %xmm0
                	movl	$0x1, %edx
                	xorl	%esi, %esi
                	fldt	0x20(%rcx)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
-               	comisd	%xmm0, %xmm1
+               	movsd	-0x8(%rsp), %xmm0
+               	comisd	<rip>, %xmm0
                	cmovbeq	%rsi, %rdx
                	addq	%rdx, %rax
                	addq	$0x20, %rsp
@@ -360,8 +359,7 @@ Disassembly of section .text:
                	fldt	0x10(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax

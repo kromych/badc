@@ -1030,7 +1030,7 @@ pub(super) fn emit_binop(
         );
     }
     if let Some((cc, nan_fix)) = fp_compare_cc(op) {
-        return emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame);
+        return emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame).map(|_| ());
     }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("Binop: dst not int reg / spill");
@@ -1142,11 +1142,31 @@ pub(super) fn emit_fp_binop_mem(
     Ok(end)
 }
 
+/// A floating comparison `op` whose constant operand the allocator folds;
+/// the end of that literal's displacement.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_fp_compare_folded(
+    code: &mut CodeBuf,
+    op: BinOp,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    lhs: u32,
+    rhs: u32,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit<Option<usize>> {
+    let Some((cc, nan_fix)) = fp_compare_cc(op) else {
+        return fail("Fcmp: no condition for the operator");
+    };
+    emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame)
+}
+
 /// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signaling
 /// an unordered (NaN) compare. C99 6.5.9p3 requires `==` to yield 0 on NaN
 /// and `!=` to yield 1, so the cc-only `setcc` takes an explicit
 /// AND-with-`setnp` / OR-with-`setp` fixup. A fused branch reads the flags
-/// instead.
+/// instead. A constant the allocator folds (`fp_mem_operand`) is the
+/// compare's memory operand; the displacement's end is returned for it.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_compare(
     code: &mut CodeBuf,
@@ -1159,32 +1179,47 @@ fn emit_fp_compare(
     nan_fix: FpCmpNanFix,
     alloc: &Allocation,
     frame: Frame,
-) -> Emit {
-    let Some(dn) = materialize_fp(code, place_of(alloc, lhs), Reg(frame.fp_scratch[0]), frame)
-    else {
-        return fail("Fcmp: lhs not fp reg / spill / int reg");
+) -> Emit<Option<usize>> {
+    let (first, second) = if fp_compare_swaps_operands(op) {
+        (rhs, lhs)
+    } else {
+        (lhs, rhs)
     };
-    let Some(dm) = materialize_fp(code, place_of(alloc, rhs), Reg(frame.fp_scratch[1]), frame)
-    else {
-        return fail("Fcmp: rhs not fp reg / spill / int reg");
+    let Some(dn) = materialize_fp(
+        code,
+        place_of(alloc, first),
+        Reg(frame.fp_scratch[0]),
+        frame,
+    ) else {
+        return fail("Fcmp: first operand not fp reg / spill / int reg");
     };
     let fused = alloc.branch_fused.get(v as usize).copied().unwrap_or(false);
-    let (dn, dm) = if fp_compare_swaps_operands(op) {
-        (dm, dn)
-    } else {
-        (dn, dm)
-    };
     // The compare width follows the operands' precision (C99 6.3.1.8); a
     // relational operator signals on any NaN: `comisd` (C99 F.3).
     let f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
-    match (f32, crate::c5::ir::fp_compare_signals(op)) {
-        (true, false) => emit_ucomiss(code, dn, dm),
-        (false, false) => emit_ucomisd(code, dn, dm),
-        (true, true) => super::encode::emit_comiss(code, dn, dm),
-        (false, true) => super::encode::emit_comisd(code, dn, dm),
+    let signals = crate::c5::ir::fp_compare_signals(op);
+    let mut literal = None;
+    if alloc.fp_mem_operand.contains(&second) {
+        super::encode::emit_comis_rip(code, !f32, signals, dn);
+        literal = Some(code.len());
+    } else {
+        let Some(dm) = materialize_fp(
+            code,
+            place_of(alloc, second),
+            Reg(frame.fp_scratch[1]),
+            frame,
+        ) else {
+            return fail("Fcmp: second operand not fp reg / spill / int reg");
+        };
+        match (f32, signals) {
+            (true, false) => emit_ucomiss(code, dn, dm),
+            (false, false) => emit_ucomisd(code, dn, dm),
+            (true, true) => super::encode::emit_comiss(code, dn, dm),
+            (false, true) => super::encode::emit_comisd(code, dn, dm),
+        }
     }
     if fused {
-        return Ok(());
+        return Ok(literal);
     }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("Fcmp: dst not int reg / spill");
@@ -1210,7 +1245,7 @@ fn emit_fp_compare(
         }
     }
     spill_dst_to_slot(code, dst, rd, frame);
-    Ok(())
+    Ok(literal)
 }
 
 /// A spilled second operand of an arithmetic or compare op is read in

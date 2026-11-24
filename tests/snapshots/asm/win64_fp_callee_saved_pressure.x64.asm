@@ -204,8 +204,8 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	comisd	%xmm2, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm2, %xmm14
                	jb	<addr>
                	movl	$0x2, %eax
                	addq	$0x18, %rsp

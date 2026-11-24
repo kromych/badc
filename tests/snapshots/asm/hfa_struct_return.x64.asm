@@ -33,8 +33,7 @@ Disassembly of section .text:
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1
                	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax

@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <docall>:
                	movsd	(%rsi), %xmm1
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movq	0x8(%rsi), %rax
@@ -44,26 +43,22 @@ Disassembly of section .text:
                	cmpq	$0xb, %rax
                	jne	<addr>
                	movsd	0x8(%rdx), %xmm1
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
                	movsd	(%rcx), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movsd	0x8(%rcx), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

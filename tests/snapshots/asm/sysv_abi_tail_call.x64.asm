@@ -152,10 +152,9 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x2, %rax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	movq	%rbx, %r10
                	cmovpq	%rax, %r10
                	cmoveq	%r10, %rax

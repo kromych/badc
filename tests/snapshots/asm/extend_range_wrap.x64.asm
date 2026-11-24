@@ -285,8 +285,7 @@ Disassembly of section .text:
                	movl	0x20(%rsp), %edi
                	movl	$0x2, %esi
                	callq	<addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x1a, %eax

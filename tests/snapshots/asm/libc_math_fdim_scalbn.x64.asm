@@ -30,8 +30,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movl	$0x3, %edi
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
@@ -40,8 +39,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movq	$-0x1, %rdi
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
@@ -50,8 +48,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movl	$0x4, %edi
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
@@ -61,8 +58,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	cvtsd2ss	%xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
@@ -71,8 +67,7 @@ Disassembly of section .text:
                	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
                	movq	%r11, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax

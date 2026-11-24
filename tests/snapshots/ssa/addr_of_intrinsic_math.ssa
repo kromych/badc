@@ -127,8 +127,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     terminator Return(v89)   (exit_acc=v89)
   block 16  start_pc=0
     v91  Imm(4619567317775286272)                         -> d0
-    v92  Imm(-4603804719079489536)                        -> d1
-    v93  Intrinsic { kind=Fabs, args=[v92] }              -> d1
+    v92  Imm(-4603804719079489536)                        -> d0
+    v93  Intrinsic { kind=Fabs, args=[v92] }              -> d0
     v94  Binop { op=fne, lhs=v93, rhs=v91 }               -> x0
     terminator Bz { cond=v94, target=b18, fall=b17 }   (exit_acc=v94)
   block 17  start_pc=0

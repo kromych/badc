@@ -294,9 +294,9 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v132 Imm(12)                                          -> x0
     v133 Imm(12)                                          -> x0
     v134 Imm(0)                                           -> x0
-    v135 VecExtract { vec=v83, off=12, kind=F32, bytes=16 } -> d2 [f32]
+    v135 VecExtract { vec=v83, off=12, kind=F32, bytes=16 } -> d1 [f32]
     v136 Imm(2)                                           -> x0
-    v137 Imm(1073741824)                                  -> d1 [f32]
+    v137 Imm(1073741824)                                  -> d0 [f32]
     v138 Binop { op=fne, lhs=v135, rhs=v137 }             -> x0
     v139 Imm(0)                                           -> x1
     v140 Imm(0)                                           -> x1
@@ -317,11 +317,11 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v151 Imm(0)                                           -> x1
     v152 Imm(0)                                           -> x1
     v153 ImmData(24)                                      -> x1
-    v154 Load { addr=v153, disp=0, kind=V128, align=8 }   -> d2
+    v154 Load { addr=v153, disp=0, kind=V128, align=8 }   -> d0
     v155 StoreLocal { off=-89, value=v154, kind=V128 }    -> -
     v156 BinopI { op=add, lhs=v150, rhs_imm=16 }          -> x1
     v157 ImmData(40)                                      -> x1
-    v158 Load { addr=v157, disp=0, kind=V128, align=8 }   -> d2
+    v158 Load { addr=v157, disp=0, kind=V128, align=8 }   -> d0
     v159 StoreLocal { off=-89, disp=16, value=v158, kind=V128 } -> -
     v160 LocalAddr(-89)                                   -> x1
     v161 LocalAddr(-88)                                   -> x1
@@ -329,7 +329,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v163 LifetimeEnd(-89)                                 -> -
     v164 LocalAddr(-88)                                   -> x0
     v165 Imm(0)                                           -> x0
-    v166 LoadLocal { off=-88, kind=F32 }                  -> d2 [f32]
+    v166 LoadLocal { off=-88, kind=F32 }                  -> d0 [f32]
     v167 Imm(1)                                           -> x0
     v168 Imm(1065353216)                                  -> x0 [f32]
     v169 Binop { op=fne, lhs=v166, rhs=v96 }              -> x0
@@ -339,7 +339,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v171 LocalAddr(-88)                                   -> x0
     v172 Imm(12)                                          -> x0
     v173 BinopI { op=add, lhs=v161, rhs_imm=12 }          -> x0
-    v174 LoadLocal { off=-88, disp=12, kind=F32 }         -> d2 [f32]
+    v174 LoadLocal { off=-88, disp=12, kind=F32 }         -> d0 [f32]
     v175 Imm(2)                                           -> x0
     v176 Imm(1073741824)                                  -> x0 [f32]
     v177 Binop { op=fne, lhs=v174, rhs=v137 }             -> x0
@@ -375,15 +375,15 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v201 Imm(0)                                           -> x0
     v202 Imm(0)                                           -> x0
     v203 ImmData(56)                                      -> x0
-    v204 Load { addr=v203, disp=0, kind=F64 pc_rel }      -> d1
+    v204 Load { addr=v203, disp=0, kind=F64 pc_rel }      -> d0
     v205 Imm(0)                                           -> x0
     v206 Imm(0)                                           -> x0
     v207 ImmData(64)                                      -> x0
-    v208 Load { addr=v207, disp=0, kind=F64 pc_rel }      -> d2
+    v208 Load { addr=v207, disp=0, kind=F64 pc_rel }      -> d1
     v209 Imm(0)                                           -> x0
     v210 Imm(0)                                           -> x0
     v211 ImmData(72)                                      -> x0
-    v212 Load { addr=v211, disp=0, kind=F64 pc_rel }      -> d3
+    v212 Load { addr=v211, disp=0, kind=F64 pc_rel }      -> d2
     v213 Imm(0)                                           -> x0
     v214 Imm(0)                                           -> x0
     v215 LocalAddr(-3)                                    -> x0
@@ -396,7 +396,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=8
     v222 LifetimeEnd(0)                                   -> -
     v223 LocalAddr(-3)                                    -> x0
     v224 Imm(0)                                           -> x0
-    v225 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v225 LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
     v226 Imm(1)                                           -> x0
     v227 Imm(1065353216)                                  -> x0 [f32]
     v228 Binop { op=fne, lhs=v225, rhs=v96 }              -> x0

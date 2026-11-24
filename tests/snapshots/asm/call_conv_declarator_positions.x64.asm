@@ -378,8 +378,7 @@ Disassembly of section .text:
                	movl	$0x3, %r8d
                	movsd	<rip>, %xmm3
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x14, %eax
@@ -393,8 +392,7 @@ Disassembly of section .text:
                	movl	$0x3, %esi
                	movsd	<rip>, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x15, %eax

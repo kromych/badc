@@ -300,8 +300,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	movq	%rax, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x78, %eax
@@ -339,8 +338,7 @@ Disassembly of section .text:
                	fldt	0x40(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x79, %eax

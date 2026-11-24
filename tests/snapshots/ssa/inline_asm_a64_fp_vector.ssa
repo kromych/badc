@@ -34,7 +34,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v28  Binop { op=feq, lhs=v26, rhs=v27 }               -> x0
     v29  Imm(42)                                          -> x0
     v30  Imm(0)                                           -> x1
-    v31  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v31  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v32  Binop { op=feq, lhs=v31, rhs=v27 }               -> x2
     v33  Select { cond=v32, a=v29, b=v30, kind=I64 }      -> x0
     terminator Jmp(b1)

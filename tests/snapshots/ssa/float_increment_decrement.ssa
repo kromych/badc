@@ -158,21 +158,21 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v162 LocalAddr(-3)                                    -> x0
     v163 Imm(8)                                           -> x0
     v164 BinopI { op=add, lhs=v159, rhs_imm=8 }           -> x0
-    v165 Load { addr=v160, disp=8, kind=F64 pc_rel }      -> d0
-    v166 Imm(4607182418800017408)                         -> d1
+    v165 Load { addr=v160, disp=8, kind=F64 pc_rel }      -> d1
+    v166 Imm(4607182418800017408)                         -> d0
     v167 Binop { op=fadd, lhs=v165, rhs=v166 }            -> d0
     v168 StoreLocal { off=-3, disp=8, value=v167, kind=F64 } -> -
     v169 LocalAddr(-3)                                    -> x0
     v170 Imm(16)                                          -> x0
     v171 BinopI { op=add, lhs=v159, rhs_imm=16 }          -> x0
-    v172 LoadLocal { off=-3, disp=16, kind=F64 }          -> d2
+    v172 LoadLocal { off=-3, disp=16, kind=F64 }          -> d1
     v173 Imm(-4616189618054758400)                        -> x0
-    v174 Binop { op=fadd, lhs=v172, rhs=v124 }            -> d2
+    v174 Binop { op=fadd, lhs=v172, rhs=v124 }            -> d1
     v175 StoreLocal { off=-3, disp=16, value=v174, kind=F64 } -> -
     v176 LocalAddr(-3)                                    -> x0
     v177 BinopI { op=add, lhs=v159, rhs_imm=8 }           -> x0
-    v178 LoadLocal { off=-3, disp=8, kind=F64 }           -> d3
-    v179 Imm(4611686018427387904)                         -> d3
+    v178 LoadLocal { off=-3, disp=8, kind=F64 }           -> d2
+    v179 Imm(4611686018427387904)                         -> d2
     v180 Binop { op=fne, lhs=v167, rhs=v179 }             -> x0
     v181 Imm(0)                                           -> x1
     terminator Bnz { cond=v180, target=b9, fall=b8 }   (exit_acc=v180)

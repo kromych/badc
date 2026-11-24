@@ -9025,8 +9025,8 @@ double dot(const double *x, const double *y, int n) {\n\
 }
 
 /// A floating constant every reader of which takes a memory operand is read
-/// off its read-only literal by each and holds no register; one compared
-/// is loaded into a register.
+/// off its read-only literal by each and holds no register, a comparison
+/// reading it on the side `[u]comis` takes from memory included.
 #[test]
 fn x64_a_floating_constant_read_by_arithmetic_is_a_literal_operand() {
     const SRC: &str = "double lit(double a, double b) { return (a + 2.0) * (b - 2.0) + a * 0.5; }\n\
@@ -9038,7 +9038,9 @@ int cmp(double a, double b) { return a + 2.0 < b * 2.0 && a > 2.0; }\n";
     // movsd / movss off rip: a constant loaded into a register.
     let literal_load = |i: &X64Insn| i.op == 0x0F10 && rip(i);
     let arith = |i: &X64Insn| i.vex && matches!(i.op, 0x0F58 | 0x0F59 | 0x0F5C | 0x0F5E);
-    for (name, loads) in [("lit", 0), ("flit", 0), ("cmp", 1)] {
+    // `comisd` / `ucomisd` / `comiss` / `ucomiss`.
+    let compare = |i: &X64Insn| matches!(i.op, 0x0F2E | 0x0F2F);
+    for (name, loads) in [("lit", 0), ("flit", 0), ("cmp", 0)] {
         let insns = x64_insns(&function_bytes(&obj, name));
         assert_eq!(
             insns.iter().filter(|i| literal_load(i)).count(),
@@ -9054,6 +9056,11 @@ int cmp(double a, double b) { return a + 2.0 < b * 2.0 && a > 2.0; }\n";
             );
         }
     }
+    let insns = x64_insns(&function_bytes(&obj, "cmp"));
+    assert!(
+        insns.iter().any(|i| compare(i) && rip(i)),
+        "cmp: no literal compare: {insns:x?}"
+    );
 }
 
 /// A fused multiply-add writes its result over an operand dying at it, the

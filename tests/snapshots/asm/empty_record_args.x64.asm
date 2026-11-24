@@ -192,8 +192,7 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rax
                	movsd	<rip>, %xmm2
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

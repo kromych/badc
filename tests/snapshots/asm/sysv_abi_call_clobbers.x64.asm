@@ -210,10 +210,9 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	movl	$0x1, %ebx
                	xorl	%eax, %eax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	movq	%rax, %r10
                	cmovpq	%rbx, %r10
                	cmoveq	%r10, %rbx
@@ -229,10 +228,9 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x4, %rax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
                	leaq	-<rip>, %rdi # <addr>
@@ -248,10 +246,9 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	movsd	<rip>, %xmm2 # <addr>
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x10, %rax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
                	movsd	0x80(%rsp), %xmm0
@@ -273,10 +270,9 @@ Disassembly of section .text:
                	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
                	movsd	0x40(%rsp), %xmm14
                	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x20, %rax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
                	shlq	%r13

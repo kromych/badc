@@ -356,12 +356,10 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movss	0x60(%rsp), %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jnp	<addr>
                	movsd	0x78(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jnp	<addr>
                	movl	$0x9, %eax
                	addq	$0x88, %rsp

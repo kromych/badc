@@ -289,8 +289,7 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm4
                	movapd	%xmm1, %xmm5
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

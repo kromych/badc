@@ -32,8 +32,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     terminator Return(v15)   (exit_acc=v15)
   block 6  start_pc=0
     v16  Imm(1080033280)                                  -> d0 [f32]
-    v17  Imm(3227516928)                                  -> d1 [f32]
-    v18  Intrinsic { kind=Fabsf, args=[v17] }             -> d1 [f32]
+    v17  Imm(3227516928)                                  -> d0 [f32]
+    v18  Intrinsic { kind=Fabsf, args=[v17] }             -> d0 [f32]
     v19  Binop { op=fne, lhs=v18, rhs=v16 }               -> x0
     terminator Bz { cond=v19, target=b8, fall=b7 }   (exit_acc=v19)
   block 7  start_pc=0
@@ -41,8 +41,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     terminator Return(v20)   (exit_acc=v20)
   block 8  start_pc=0
     v21  Imm(4615063718147915776)                         -> d0
-    v22  Imm(-4608308318706860032)                        -> d1
-    v23  Intrinsic { kind=Fabs, args=[v22] }              -> d1
+    v22  Imm(-4608308318706860032)                        -> d0
+    v23  Intrinsic { kind=Fabs, args=[v22] }              -> d0
     v24  Binop { op=fne, lhs=v23, rhs=v21 }               -> x0
     terminator Bz { cond=v24, target=b10, fall=b9 }   (exit_acc=v24)
   block 9  start_pc=0

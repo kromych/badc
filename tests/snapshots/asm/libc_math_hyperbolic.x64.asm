@@ -128,8 +128,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	jbe	<addr>
                	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1

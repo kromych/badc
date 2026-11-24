@@ -38,8 +38,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x6, %eax
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -48,8 +47,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x7, %eax
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -58,8 +56,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x8, %eax
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -68,8 +65,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x9, %eax
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi

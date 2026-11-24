@@ -415,8 +415,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	leaq	0x10(%rsp), %rsi
                	callq	<addr>
-               	movss	<rip>, %xmm1 # <addr>
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
                	movq	0x10(%rsp), %rax
@@ -430,8 +429,7 @@ Disassembly of section .text:
                	fldt	(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x19, %eax
@@ -565,8 +563,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movsd	0x18(%rsp), %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax

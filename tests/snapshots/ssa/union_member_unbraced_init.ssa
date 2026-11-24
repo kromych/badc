@@ -209,8 +209,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v159 ImmData(128)                                     -> x0
     v160 Imm(24)                                          -> x0
     v161 BinopI { op=add, lhs=v142, rhs_imm=24 }          -> x0
-    v162 Load { addr=v142, disp=24, kind=F64 pc_rel }     -> d1
-    v163 Imm(4616189618054758400)                         -> d2
+    v162 Load { addr=v142, disp=24, kind=F64 pc_rel }     -> d0
+    v163 Imm(4616189618054758400)                         -> d1
     v164 Binop { op=fne, lhs=v162, rhs=v163 }             -> x0
     v165 Imm(0)                                           -> x1
     terminator Bnz { cond=v164, target=b24, fall=b23 }   (exit_acc=v164)
@@ -235,7 +235,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v179 ImmData(8)                                       -> x0
     v180 Imm(0)                                           -> x0
     v181 LocalAddr(-3)                                    -> x0
-    v182 Load { addr=v179, disp=0, kind=F64 pc_rel }      -> d1
+    v182 Load { addr=v179, disp=0, kind=F64 pc_rel }      -> d0
     v183 Imm(4613937818241073152)                         -> x0
     v184 Binop { op=fne, lhs=v182, rhs=v145 }             -> x0
     v185 Imm(0)                                           -> x1

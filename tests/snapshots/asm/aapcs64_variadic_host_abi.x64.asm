@@ -421,10 +421,9 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm3
                	movb	$0x4, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x4, %rax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
                	movl	$0xa, %edi
@@ -444,10 +443,9 @@ Disassembly of section .text:
                	movq	%r10, 0x8(%rsp)
                	movb	$0x8, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x8, %rax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
                	movl	$0x4, %edi
@@ -457,10 +455,9 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	movq	%rbx, %rax
                	orq	$0x10, %rax
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
                	movl	$0x5, %edi

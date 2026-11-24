@@ -30,10 +30,9 @@ Disassembly of section .text:
                	leaq	0x64(%rdi), %rax
                	subq	%rdi, %rax
                	movslq	%eax, %rax
-               	movsd	<rip>, %xmm1
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	seta	%al
                	movzbq	%al, %rax
                	cmpl	$0x1, %eax
@@ -41,8 +40,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%r11
                	retq
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	jbe	<addr>
                	movl	$0x2, %eax
                	popq	%r11

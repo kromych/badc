@@ -57,8 +57,7 @@ Disassembly of section .text:
                	movq	$0x8, 0x8(%rsp)
                	movq	$0x9, 0x10(%rsp)
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
@@ -76,8 +75,7 @@ Disassembly of section .text:
                	movq	$0x50, 0x8(%rsp)
                	movq	$0x5a, 0x10(%rsp)
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax

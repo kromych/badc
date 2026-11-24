@@ -32,8 +32,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vdivsd	%xmm15, %xmm14, %xmm0
                	movl	$0x1, %ecx
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	cmovbeq	%rax, %rcx
                	movq	%rcx, %rdx
                	orq	$0x2, %rdx
@@ -42,8 +42,8 @@ Disassembly of section .text:
                	cmovaq	%rdx, %rcx
                	movq	%rcx, %rdx
                	orq	$0x4, %rdx
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	cmovaeq	%rdx, %rcx
                	movq	%rcx, %rdx
                	orq	$0x8, %rdx

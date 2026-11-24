@@ -52,8 +52,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movsd	0x10(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	sete	%cl
                	movzbq	%cl, %rcx
                	setnp	%r10b
@@ -62,8 +61,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movsd	0x18(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	sete	%al
                	movzbq	%al, %rax
                	setnp	%r10b

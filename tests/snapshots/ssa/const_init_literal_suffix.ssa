@@ -117,9 +117,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v64)   (exit_acc=v64)
   block 24  start_pc=0
     v65  ImmData(104)                                     -> x0
-    v66  Load { addr=v65, disp=0, kind=F64 pc_rel }       -> d1
+    v66  Load { addr=v65, disp=0, kind=F64 pc_rel }       -> d0
     v67  Imm(0)                                           -> x0 [f32]
-    v68  Imm(4591870180174331904)                         -> d2
+    v68  Imm(4591870180174331904)                         -> d1
     v69  Binop { op=fne, lhs=v66, rhs=v68 }               -> x0
     terminator Bz { cond=v69, target=b26, fall=b25 }   (exit_acc=v69)
   block 25  start_pc=0
@@ -127,7 +127,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v70)   (exit_acc=v70)
   block 26  start_pc=0
     v71  ImmData(112)                                     -> x0
-    v72  Load { addr=v71, disp=0, kind=F64 pc_rel }       -> d1
+    v72  Load { addr=v71, disp=0, kind=F64 pc_rel }       -> d0
     v73  Imm(0)                                           -> x0
     v74  Binop { op=fne, lhs=v72, rhs=v7 }                -> x0
     terminator Bz { cond=v74, target=b28, fall=b27 }   (exit_acc=v74)

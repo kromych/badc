@@ -39,8 +39,7 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm0, %xmm0
                	movss	%xmm0, 0x18(%rsp)
                	movss	0x18(%rsp), %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
@@ -59,12 +58,10 @@ Disassembly of section .text:
                	vaddsd	<rip>, %xmm1, %xmm0
                	movsd	%xmm0, 0x18(%rsp)
                	movss	0x10(%rsp), %xmm1
-               	movss	<rip>, %xmm2
-               	ucomiss	%xmm2, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
@@ -74,8 +71,7 @@ Disassembly of section .text:
                	vaddsd	<rip>, %xmm0, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	%xmm0, <rip> # <addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
@@ -87,18 +83,16 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm1, %xmm0
                	movsd	%xmm0, 0x10(%rsp)
-               	movsd	0x18(%rsp), %xmm2
-               	vaddsd	<rip>, %xmm2, %xmm2
-               	movsd	%xmm2, 0x18(%rsp)
-               	movsd	<rip>, %xmm3
-               	ucomisd	%xmm3, %xmm0
+               	movsd	0x18(%rsp), %xmm1
+               	vaddsd	<rip>, %xmm1, %xmm1
+               	movsd	%xmm1, 0x18(%rsp)
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	ucomisd	%xmm1, %xmm2
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x8, %eax

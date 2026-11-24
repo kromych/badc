@@ -41,8 +41,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	comiss	%xmm2, %xmm1
+               	comiss	<rip>, %xmm1 # <addr>
                	jbe	<addr>
                	movl	$0x7fc00000, 0x8(%rsp)  # imm = 0x7FC00000
                	movl	0x8(%rsp), %eax

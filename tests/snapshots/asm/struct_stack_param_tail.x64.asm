@@ -152,10 +152,9 @@ Disassembly of section .text:
                	movzbq	0x13(%r10), %r11
                	movb	%r11b, 0x13(%rsp)
                	callq	<addr>
-               	movss	<rip>, %xmm1
                	movl	$0x1, %ebx
                	xorl	%eax, %eax
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	movq	%rax, %r10
                	cmovpq	%rbx, %r10
                	cmoveq	%r10, %rbx

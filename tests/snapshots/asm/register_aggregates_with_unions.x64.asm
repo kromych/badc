@@ -180,8 +180,7 @@ Disassembly of section .text:
                	movq	%rax, 0x70(%rsp)
                	movq	%rdx, 0x78(%rsp)
                	movq	%rax, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	cmpq	$0x7, %rdx
@@ -200,8 +199,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
                	movsd	0x30(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movq	0x38(%rsp), %rax
@@ -243,8 +241,7 @@ Disassembly of section .text:
                	leaq	0x38(%rsp), %rcx
                	movq	%rax, (%rcx)
                	movss	0x38(%rsp), %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movl	0x3c(%rsp), %eax
@@ -270,8 +267,7 @@ Disassembly of section .text:
                	cmpl	$0x62, %eax
                	jne	<addr>
                	movss	0x34(%rsp), %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movswq	0x38(%rsp), %rax
@@ -293,8 +289,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
                	movss	0x30(%rsp), %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movl	0x34(%rsp), %eax

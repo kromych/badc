@@ -32,8 +32,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
                	movsd	<rip>, %xmm1 # <addr>
-               	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
@@ -44,18 +43,17 @@ Disassembly of section .text:
                	je	<addr>
                	addq	$0x18, %rsp
                	retq
-               	movsd	(%rsp), %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	movsd	(%rsp), %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movsd	<rip>, %xmm0
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm0
+               	ucomisd	<rip>, %xmm0
                	movq	%rcx, %r10
                	cmovpq	%rax, %r10
                	cmoveq	%r10, %rax

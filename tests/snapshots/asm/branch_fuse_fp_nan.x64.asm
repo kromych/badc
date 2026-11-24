@@ -101,8 +101,7 @@ Disassembly of section .text:
                	jbe	<addr>
                	movl	$0x12, %eax
                	retq
-               	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	comiss	%xmm2, %xmm3

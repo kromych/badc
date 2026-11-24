@@ -294,15 +294,15 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
   block 10  start_pc=0
     v69  Imm(0)                                           -> x0
     v70  Imm(4612811918334230528)                         -> d0
-    v71  Copy { value=v18, fp=true }                      -> d1
-    v72  Binop { op=fmul, lhs=v71, rhs=v70 }              -> d2
+    v71  Copy { value=v18, fp=true }                      -> d0
+    v72  Binop { op=fmul, lhs=v71, rhs=v70 }              -> d1
     v73  Binop { op=fne, lhs=v72, rhs=v70 }               -> x0
     v74  Imm(0)                                           -> x1
     terminator Bnz { cond=v73, target=b12, fall=b11 }   (exit_acc=v73)
   block 11  start_pc=0
     v75  Imm(0)                                           -> x0
     v76  Imm(4612811918334230528)                         -> x0
-    v77  Imm(-4610560118520545280)                        -> d0
+    v77  Imm(-4610560118520545280)                        -> d1
     v78  Binop { op=fmul, lhs=v71, rhs=v77 }              -> d0
     v79  Imm(0)                                           -> x0
     v80  Imm(0)                                           -> x0
@@ -332,15 +332,15 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
   block 15  start_pc=0
     v97  Imm(0)                                           -> x0 [f32]
     v98  Imm(1075838976)                                  -> d0 [f32]
-    v99  Copy { value=v5, fp=true }                       -> d1 [f32]
-    v100 Binop { op=fmul, lhs=v99, rhs=v98 }              -> d2 [f32]
+    v99  Copy { value=v5, fp=true }                       -> d0 [f32]
+    v100 Binop { op=fmul, lhs=v99, rhs=v98 }              -> d1 [f32]
     v101 Binop { op=fne, lhs=v100, rhs=v98 }              -> x0
     v102 Imm(0)                                           -> x1
     terminator Bnz { cond=v101, target=b17, fall=b16 }   (exit_acc=v101)
   block 16  start_pc=0
     v103 Imm(0)                                           -> x0 [f32]
     v104 Imm(1048576000)                                  -> x0 [f32]
-    v105 Imm(3196059648)                                  -> d0 [f32]
+    v105 Imm(3196059648)                                  -> d1 [f32]
     v106 Binop { op=fmul, lhs=v99, rhs=v105 }             -> d0 [f32]
     v107 Imm(0)                                           -> x0
     v108 StoreLocal { off=-1, value=v106, kind=F32 }      -> -

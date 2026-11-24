@@ -447,13 +447,11 @@ Disassembly of section .text:
                	vextracti128	$0x1, %ymm1, %xmm0
                	movups	%xmm0, -0x70(%rbp)
                	vpermilpd	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0]
-               	movsd	<rip>, %xmm3
-               	ucomisd	%xmm3, %xmm2
+               	ucomisd	<rip>, %xmm2
                	jp	<addr>
                	jne	<addr>
                	vpermilpd	$0x1, %xmm0, %xmm0 # xmm0 = xmm0[1,0]
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
@@ -464,13 +462,11 @@ Disassembly of section .text:
                	vmovdqa	%xmm0, %xmm0
                	vmovups	%ymm0, -0x70(%rbp)
                	vpermilpd	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0]
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilpd	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0]
-               	movsd	<rip>, %xmm2
-               	ucomisd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vextracti128	$0x1, %ymm0, %xmm15

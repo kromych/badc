@@ -2489,8 +2489,8 @@ fn ent_pc=492 n_params=0 variadic=false locals=80
     v2245 Imm(4)                                           -> x0
     v2246 Imm(4)                                           -> x0
     v2247 Imm(0)                                           -> x0
-    v2248 VecExtract { vec=v2220, off=4, kind=F32, bytes=16 } -> d2 [f32]
-    v2249 Imm(1073741824)                                  -> d3 [f32]
+    v2248 VecExtract { vec=v2220, off=4, kind=F32, bytes=16 } -> d1 [f32]
+    v2249 Imm(1073741824)                                  -> d2 [f32]
     v2250 Binop { op=fne, lhs=v2248, rhs=v2249 }           -> x0
     v2251 BinopI { op=ne, lhs=v2250, rhs_imm=0 }           -> x1
     v2252 Imm(0)                                           -> x1

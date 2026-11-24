@@ -18,9 +18,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v10  Imm(16)                                          -> x0
     v11  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
     v12  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
-    v13  Load { addr=v1, disp=24, kind=F64 pc_rel }       -> d1
+    v13  Load { addr=v1, disp=24, kind=F64 pc_rel }       -> d0
     v14  Imm(4)                                           -> x0
-    v15  Imm(4616189618054758400)                         -> d2
+    v15  Imm(4616189618054758400)                         -> d1
     v16  Binop { op=fne, lhs=v13, rhs=v15 }               -> x0
     v17  BinopI { op=ne, lhs=v16, rhs_imm=0 }             -> x1
     v18  Imm(0)                                           -> x1
@@ -34,9 +34,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v24  Imm(32)                                          -> x0
     v25  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x0
     v26  Imm(0)                                           -> x0
-    v27  Load { addr=v1, disp=32, kind=F64 pc_rel }       -> d1
+    v27  Load { addr=v1, disp=32, kind=F64 pc_rel }       -> d0
     v28  Imm(5)                                           -> x0
-    v29  Imm(4617315517961601024)                         -> d2
+    v29  Imm(4617315517961601024)                         -> d1
     v30  Binop { op=fne, lhs=v27, rhs=v29 }               -> x0
     v31  BinopI { op=ne, lhs=v30, rhs_imm=0 }             -> x1
     v32  Imm(0)                                           -> x1
@@ -51,9 +51,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v39  Imm(16)                                          -> x0
     v40  BinopI { op=add, lhs=v1, rhs_imm=48 }            -> x0
     v41  BinopI { op=add, lhs=v1, rhs_imm=56 }            -> x0
-    v42  Load { addr=v1, disp=56, kind=F64 pc_rel }       -> d2
+    v42  Load { addr=v1, disp=56, kind=F64 pc_rel }       -> d1
     v43  Imm(8)                                           -> x0
-    v44  Imm(4620693217682128896)                         -> d1
+    v44  Imm(4620693217682128896)                         -> d0
     v45  Binop { op=fne, lhs=v42, rhs=v44 }               -> x0
     v46  Imm(0)                                           -> x1
     v47  Imm(0)                                           -> x1
@@ -65,7 +65,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 5  start_pc=0
     v50  ImmData(80)                                      -> x0
     v51  Imm(0)                                           -> x0
-    v52  Load { addr=v50, disp=0, kind=F64 pc_rel }       -> d2
+    v52  Load { addr=v50, disp=0, kind=F64 pc_rel }       -> d0
     v53  Imm(1)                                           -> x0
     v54  Imm(4607182418800017408)                         -> x0
     v55  Binop { op=fne, lhs=v52, rhs=v5 }                -> x0

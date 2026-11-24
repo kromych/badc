@@ -14,8 +14,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
     v6   ImmData(8)                                       -> x0
-    v7   Load { addr=v6, disp=0, kind=F64 pc_rel }        -> d2
-    v8   Imm(4895412794951729152)                         -> d1
+    v7   Load { addr=v6, disp=0, kind=F64 pc_rel }        -> d1
+    v8   Imm(4895412794951729152)                         -> d0
     v9   Binop { op=fne, lhs=v7, rhs=v8 }                 -> x0
     terminator Bz { cond=v9, target=b4, fall=b3 }   (exit_acc=v9)
   block 3  start_pc=0
@@ -23,8 +23,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v10)   (exit_acc=v10)
   block 4  start_pc=0
     v11  ImmData(16)                                      -> x0
-    v12  Load { addr=v11, disp=0, kind=F64 pc_rel }       -> d2
-    v13  Imm(4890909195324358656)                         -> d3
+    v12  Load { addr=v11, disp=0, kind=F64 pc_rel }       -> d0
+    v13  Imm(4890909195324358656)                         -> d1
     v14  Binop { op=fne, lhs=v12, rhs=v13 }               -> x0
     terminator Bz { cond=v14, target=b6, fall=b5 }   (exit_acc=v14)
   block 5  start_pc=0
@@ -32,7 +32,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v15)   (exit_acc=v15)
   block 6  start_pc=0
     v16  ImmData(24)                                      -> x0
-    v17  Load { addr=v16, disp=0, kind=F32 pc_rel }       -> d2 [f32]
+    v17  Load { addr=v16, disp=0, kind=F32 pc_rel }       -> d0 [f32]
     v18  Imm(1602224128)                                  -> x0 [f32]
     v19  Binop { op=fne, lhs=v17, rhs=v3 }                -> x0
     terminator Bz { cond=v19, target=b8, fall=b7 }   (exit_acc=v19)
@@ -68,7 +68,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v35)   (exit_acc=v35)
   block 14  start_pc=0
     v36  ImmData(56)                                      -> x0
-    v37  Load { addr=v36, disp=0, kind=F64 pc_rel }       -> d1
+    v37  Load { addr=v36, disp=0, kind=F64 pc_rel }       -> d0
     v38  Imm(4895412794951729151)                         -> x0
     v39  Binop { op=fne, lhs=v37, rhs=v33 }               -> x0
     terminator Bz { cond=v39, target=b16, fall=b15 }   (exit_acc=v39)

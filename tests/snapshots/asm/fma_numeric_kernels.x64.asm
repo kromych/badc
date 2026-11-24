@@ -63,8 +63,8 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	subsd	%xmm0, %xmm1
                	xorl	%edx, %edx
-               	movq	%rdx, %xmm15
-               	comisd	%xmm1, %xmm15
+               	movq	%rdx, %xmm14
+               	comisd	%xmm1, %xmm14
                	jbe	<addr>
                	vxorpd	<rip>, %xmm1, %xmm1
                	movsd	<rip>, %xmm0
@@ -174,8 +174,8 @@ Disassembly of section .text:
                	movsd	0x40(%rsp), %xmm2
                	vfmadd213sd	%xmm1, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm0) + xmm1
                	vsubsd	<rip>, %xmm0, %xmm0
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	jbe	<addr>
                	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1

@@ -278,8 +278,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	0x28(%rsp), %rdi
                	movss	0x28(%rsp), %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
@@ -288,8 +287,7 @@ Disassembly of section .text:
                	retq
                	callq	<addr>
                	movsd	0x28(%rsp), %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

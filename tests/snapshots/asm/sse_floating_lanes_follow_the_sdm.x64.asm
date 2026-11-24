@@ -3450,14 +3450,12 @@ Disassembly of section .text:
                	cvtss2sd	%xmm1, %xmm1
                	vfmsub213sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) - mem
                                                 # <addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	comisd	%xmm1, %xmm2
+               	comisd	<rip>, %xmm2 # <addr>
                	ja	<addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm2, %xmm1
                	ja	<addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0 # <addr>
                	ja	<addr>
                	movsd	<rip>, %xmm1 # <addr>
                	comisd	%xmm0, %xmm1

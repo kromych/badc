@@ -5427,7 +5427,7 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v1626 Imm(12)                                          -> x0
     v1627 Imm(12)                                          -> x0
     v1628 Imm(0)                                           -> x0
-    v1629 Copy { value=v1496, fp=true }                    -> d1 [f32]
+    v1629 Copy { value=v1496, fp=true }                    -> d0 [f32]
     v1630 Imm(1091567616)                                  -> x0 [f32]
     v1631 Binop { op=feq, lhs=v1629, rhs=v1617 }           -> x0
     v1632 BinopI { op=ne, lhs=v1631, rhs_imm=0 }           -> x1
@@ -6243,9 +6243,9 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2362 Imm(12)                                          -> x0
     v2363 Imm(12)                                          -> x0
     v2364 Imm(0)                                           -> x0
-    v2365 Copy { value=v2206, fp=true }                    -> d0 [f32]
+    v2365 Copy { value=v2206, fp=true }                    -> d1 [f32]
     v2366 Imm(1075838976)                                  -> x0 [f32]
-    v2367 Imm(3223322624)                                  -> d2 [f32]
+    v2367 Imm(3223322624)                                  -> d0 [f32]
     v2368 Binop { op=feq, lhs=v2365, rhs=v2367 }           -> x0
     v2369 BinopI { op=ne, lhs=v2368, rhs_imm=0 }           -> x2
     v2370 Imm(0)                                           -> x2
@@ -6275,25 +6275,25 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2285 Imm(0)                                           -> x0
     v2286 Imm(0)                                           -> x0
     v2287 LoadLocal { off=-25, disp=1, kind=F64 }          -> d1
-    v2288 VecExtract { vec=v2287, off=0, kind=F32, bytes=8 } -> d3 [f32]
+    v2288 VecExtract { vec=v2287, off=0, kind=F32, bytes=8 } -> d2 [f32]
     v2289 Imm(0)                                           -> x0
     v2290 Undef                                            -> x0
-    v2291 VecInsert { vec=v2290, value=v2288, off=0, kind=F32, bytes=16 } -> d4
+    v2291 VecInsert { vec=v2290, value=v2288, off=0, kind=F32, bytes=16 } -> d3
     v2292 Imm(0)                                           -> x0
     v2293 VecExtract { vec=v2287, off=4, kind=F32, bytes=8 } -> d1 [f32]
     v2294 Imm(0)                                           -> x0
     v2295 Imm(4)                                           -> x0
     v2296 Imm(0)                                           -> x0
-    v2297 VecInsert { vec=v2291, value=v2293, off=4, kind=F32, bytes=16 } -> d4
+    v2297 VecInsert { vec=v2291, value=v2293, off=4, kind=F32, bytes=16 } -> d3
     v2298 Imm(0)                                           -> x0
     v2299 Imm(0)                                           -> x0
     v2300 Imm(8)                                           -> x0
     v2301 Imm(0)                                           -> x0
-    v2302 VecExtract { vec=v2279, off=8, kind=F32, bytes=16 } -> d4 [f32]
+    v2302 VecExtract { vec=v2279, off=8, kind=F32, bytes=16 } -> d3 [f32]
     v2303 Imm(0)                                           -> x0
     v2304 Imm(8)                                           -> x0
     v2305 Imm(0)                                           -> x0
-    v2306 VecInsert { vec=v2297, value=v2302, off=8, kind=F32, bytes=16 } -> d5
+    v2306 VecInsert { vec=v2297, value=v2302, off=8, kind=F32, bytes=16 } -> d4
     v2307 Imm(0)                                           -> x0
     v2308 Imm(0)                                           -> x0
     v2309 Imm(12)                                          -> x0
@@ -6302,7 +6302,7 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2312 Imm(0)                                           -> x0
     v2313 Imm(12)                                          -> x0
     v2314 Imm(0)                                           -> x0
-    v2315 VecInsert { vec=v2306, value=v2311, off=12, kind=F32, bytes=16 } -> d5
+    v2315 VecInsert { vec=v2306, value=v2311, off=12, kind=F32, bytes=16 } -> d4
     v2316 Imm(0)                                           -> x0
     v2317 Imm(0)                                           -> x0
     v2318 LifetimeEnd(0)                                   -> -
@@ -6318,8 +6318,8 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2328 Imm(0)                                           -> x0
     v2329 Imm(0)                                           -> x0
     v2330 Imm(0)                                           -> x0
-    v2331 Copy { value=v2288, fp=true }                    -> d3 [f32]
-    v2332 Imm(1067450368)                                  -> d5 [f32]
+    v2331 Copy { value=v2288, fp=true }                    -> d2 [f32]
+    v2332 Imm(1067450368)                                  -> d4 [f32]
     v2333 Binop { op=feq, lhs=v2331, rhs=v2332 }           -> x0
     v2334 Imm(0)                                           -> x2
     terminator Bz { cond=v2333, target=b92, fall=b89 }   (exit_acc=v2333)
@@ -6382,7 +6382,7 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2382 BinopI { op=add, lhs=v2168, rhs_imm=1 }          -> x0
     v2383 Imm(0)                                           -> x0
     v2384 ImmData(80)                                      -> x0
-    v2385 Load { addr=v2384, disp=0, kind=V128, align=8 }  -> d1
+    v2385 Load { addr=v2384, disp=0, kind=V128, align=8 }  -> d0
     v2386 Imm(0)                                           -> x0
     v2387 Imm(0)                                           -> x0
     v2388 Imm(0)                                           -> x0
@@ -6391,21 +6391,21 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2391 Imm(0)                                           -> x0
     v2392 Imm(8)                                           -> x0
     v2393 Imm(0)                                           -> x0
-    v2394 VecExtract { vec=v2385, off=8, kind=F32, bytes=16 } -> d2 [f32]
+    v2394 VecExtract { vec=v2385, off=8, kind=F32, bytes=16 } -> d1 [f32]
     v2395 Undef                                            -> x0
     v2396 Undef                                            -> x0
     v2397 Imm(0)                                           -> x0
     v2398 Imm(12)                                          -> x0
     v2399 Imm(0)                                           -> x0
-    v2400 VecExtract { vec=v2385, off=12, kind=F32, bytes=16 } -> d2 [f32]
-    v2401 VecExtract { vec=v2385, off=8, kind=F64, bytes=16 } -> d1
+    v2400 VecExtract { vec=v2385, off=12, kind=F32, bytes=16 } -> d1 [f32]
+    v2401 VecExtract { vec=v2385, off=8, kind=F64, bytes=16 } -> d0
     v2402 StoreLocal { off=-25, disp=1, value=v2401, kind=F64 } -> -
     v2403 LifetimeEnd(0)                                   -> -
     v2404 LocalAddr(-25)                                   -> x0
     v2405 BinopI { op=add, lhs=v2168, rhs_imm=9 }          -> x0
     v2406 Imm(0)                                           -> x0
     v2407 ImmData(96)                                      -> x0
-    v2408 Load { addr=v2407, disp=0, kind=V128, align=8 }  -> d1
+    v2408 Load { addr=v2407, disp=0, kind=V128, align=8 }  -> d0
     v2409 Imm(0)                                           -> x0
     v2410 Imm(0)                                           -> x0
     v2411 Imm(0)                                           -> x0
@@ -6413,14 +6413,14 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2413 Imm(0)                                           -> x0
     v2414 Imm(0)                                           -> x0
     v2415 Imm(0)                                           -> x0
-    v2416 VecExtract { vec=v2408, off=0, kind=F32, bytes=16 } -> d2 [f32]
+    v2416 VecExtract { vec=v2408, off=0, kind=F32, bytes=16 } -> d1 [f32]
     v2417 Undef                                            -> x0
     v2418 Undef                                            -> x0
     v2419 Imm(0)                                           -> x0
     v2420 Imm(4)                                           -> x0
     v2421 Imm(0)                                           -> x0
-    v2422 VecExtract { vec=v2408, off=4, kind=F32, bytes=16 } -> d2 [f32]
-    v2423 VecExtract { vec=v2408, off=0, kind=F64, bytes=16 } -> d1
+    v2422 VecExtract { vec=v2408, off=4, kind=F32, bytes=16 } -> d1 [f32]
+    v2423 VecExtract { vec=v2408, off=0, kind=F64, bytes=16 } -> d0
     v2424 StoreLocal { off=-25, disp=9, value=v2423, kind=F64 } -> -
     v2425 LifetimeEnd(0)                                   -> -
     v2426 LocalAddr(-27)                                   -> x0
@@ -6429,8 +6429,8 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2429 Mcpy { dst=v2426, src=v2169, size=16, align=1 }  -> -
     v2430 LocalAddr(-27)                                   -> x0
     v2431 Imm(0)                                           -> x0
-    v2432 LoadLocal { off=-27, kind=F32 }                  -> d1 [f32]
-    v2433 Imm(1077936128)                                  -> d2 [f32]
+    v2432 LoadLocal { off=-27, kind=F32 }                  -> d0 [f32]
+    v2433 Imm(1077936128)                                  -> d1 [f32]
     v2434 Binop { op=feq, lhs=v2432, rhs=v2433 }           -> x0
     v2435 Imm(0)                                           -> x1
     terminator Bz { cond=v2434, target=b97, fall=b94 }   (exit_acc=v2434)
@@ -6438,7 +6438,7 @@ fn ent_pc=444 n_params=0 variadic=false locals=27
     v2488 LocalAddr(-27)                                   -> x0
     v2489 Imm(4)                                           -> x0
     v2490 BinopI { op=add, lhs=v2426, rhs_imm=4 }          -> x0
-    v2491 LoadLocal { off=-27, disp=4, kind=F32 }          -> d1 [f32]
+    v2491 LoadLocal { off=-27, disp=4, kind=F32 }          -> d0 [f32]
     v2492 Imm(1082130432)                                  -> x0 [f32]
     v2493 Binop { op=feq, lhs=v2491, rhs=v2468 }           -> x0
     v2494 BinopI { op=ne, lhs=v2493, rhs_imm=0 }           -> x1

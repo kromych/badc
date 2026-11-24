@@ -291,16 +291,16 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     v279 Imm(1)                                           -> x0
     v280 LocalAddr(-2)                                    -> x0
     v281 Imm(1)                                           -> x0
-    v282 LoadLocal { off=-19, kind=F64 }                  -> d1
+    v282 LoadLocal { off=-19, kind=F64 }                  -> d0
     v283 Imm(4616189618054758400)                         -> x0
     v284 Undef                                            -> x0
     v285 BinopI { op=add, lhs=v277, rhs_imm=8 }           -> x0
-    v286 LoadLocal { off=-19, disp=8, kind=F64 }          -> d2
+    v286 LoadLocal { off=-19, disp=8, kind=F64 }          -> d1
     v287 Imm(4611686018427387904)                         -> x0
-    v288 Binop { op=fmul.c, lhs=v286, rhs=v255 }          -> d2
-    v289 Fma { a=v282, b=v251, c=v288, neg_product=false, neg_addend=false } -> d1
+    v288 Binop { op=fmul.c, lhs=v286, rhs=v255 }          -> d1
+    v289 Fma { a=v282, b=v251, c=v288, neg_product=false, neg_addend=false } -> d0
     v290 Imm(4607182418800017408)                         -> x0
-    v291 Binop { op=fadd, lhs=v289, rhs=v258 }            -> d1
+    v291 Binop { op=fadd, lhs=v289, rhs=v258 }            -> d0
     v292 LifetimeEnd(-2)                                  -> -
     v293 Imm(4609434218613702656)                         -> x0
     v294 Imm(4616189618054758400)                         -> x0

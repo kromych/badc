@@ -221,8 +221,8 @@ Waits on header gaps the build reaches; see
 
 Microsoft's [SymCrypt](https://github.com/microsoft/SymCrypt) 103.13.0
 through its own CMake with badc as the C compiler, checked by its C++ unit
-test against the badc-built library; the aarch64 build assembles
-SymCrypt's own assembly. See [`symcrypt/README.md`](./symcrypt/README.md).
+test against the badc-built library, with SymCrypt's own assembly
+(GNU syntax on aarch64, Intel syntax on x86_64). See [`symcrypt/README.md`](./symcrypt/README.md).
 
 ## gui_hello/
 

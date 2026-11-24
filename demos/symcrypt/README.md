@@ -25,7 +25,7 @@ Every switch is one of SymCrypt's own options:
 
 | option | value | why |
 |---|---|---|
-| `SYMCRYPT_USE_ASM` | on for aarch64, off for x86_64 | badc assembles the aarch64 assembly SymCrypt generates in GNU syntax; the x86_64 form is Intel syntax, which badc's assembler does not take (#2141). Off selects the portable C code throughout. |
+| `SYMCRYPT_USE_ASM` | on | badc assembles the assembly SymCrypt generates, in GNU syntax for aarch64 and in Intel syntax for x86_64 |
 | `SYMCRYPT_FIPS_BUILD` | off | needs the jitterentropy submodule, which the archive does not carry |
 | `SYMCRYPT_BUILD_MODULES`, `SYMCRYPT_SYMCRUST` | off | the unit test links the static library and the C ML-KEM |
 
@@ -37,17 +37,17 @@ gcc 16 and clang 23 reject as badc does unless the diagnostic is off.
 
 ## Measured
 
-On the Linux boxes (`badc` 146 C units on x86_64, 145 on aarch64; the
-build includes the C++ unit test):
+On the Linux boxes (`badc` 146 C units and 11 assembly units on x86_64,
+145 and 3 on aarch64; the build includes the C++ unit test):
 
-| target | assembly | build | unit test, full | unit test, smoke |
-|---|---|---|---|---|
-| x86_64, 12 jobs | portable C | 60 s | 955 s | 207 s |
-| aarch64, 2 jobs | aarch64 | 51 s | 227 s | 227 s |
+| target | build | unit test |
+|---|---|---|
+| x86_64, 12 jobs | 112 s | 380 s |
+| aarch64, 2 jobs | 51 s | 227 s |
 
-On x86_64 the portable bignum code makes RSA, DH and DSA 860 s of the
-955 s, so the smoke leaves those three groups out there;
-`BADC_SYMCRYPT_TESTS=all` runs them too. The build takes one job per CPU,
+The portable C code the x86_64 build took before its assembly assembled
+ran the unit test in 955 s, 860 s of it RSA, DH and DSA, whose bignum
+arithmetic the assembly carries. The build takes one job per CPU,
 bounded by 2 GB of available memory per job for the C++ units
 (`BADC_SYMCRYPT_JOBS` overrides). On aarch64 the run uses the NEON,
 AES, PMULL and SHA-256 instruction paths the box reports.

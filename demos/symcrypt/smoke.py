@@ -5,17 +5,15 @@ Pipeline:
   - ``setup.py`` fetches and extracts the release under ``.cache``.
   - SymCrypt's CMake configures the build with badc as the C compiler and
     the host C++ compiler for the unit test, ``symcryptunittest``, a C++
-    program that links the badc-built static library. Every C unit of the
-    library is checked to have been compiled by badc.
+    program that links the badc-built static library. Every C and
+    assembly unit of the library is checked to have been built by badc.
   - ``symcryptunittest noperftests`` runs the functional tests: the known
     answers, error cases and cross-implementation checks of every
     algorithm. The run passes when it reports the suite done and exits 0.
 
 The configuration is SymCrypt's own options:
-  - ``SYMCRYPT_USE_ASM``: on for aarch64, whose generated GNU-syntax
-    assembly badc assembles; off for x86_64, whose generated form is Intel
-    syntax, which badc's assembler does not take (#2141). Off selects
-    ``SYMCRYPT_IGNORE_PLATFORM``, the portable C code throughout.
+  - ``SYMCRYPT_USE_ASM=ON``: badc assembles the assembly SymCrypt
+    generates, in GNU syntax for aarch64 and in Intel syntax for x86_64.
   - ``SYMCRYPT_FIPS_BUILD=OFF``: the FIPS build needs the jitterentropy
     submodule, which the release archive does not carry.
   - ``SYMCRYPT_BUILD_MODULES=OFF``, ``SYMCRYPT_SYMCRUST=OFF``: the unit test
@@ -26,10 +24,7 @@ The configuration is SymCrypt's own options:
     ``void (*)(void *)`` members with functions of a structure-pointer
     parameter, which gcc 16 and clang 23 reject as well.
 
-On x86_64 the portable bignum code makes RSA, DH and DSA 860 s of the
-955 s the full suite takes on the x86_64 box, so the smoke leaves them out
-there; ``BADC_SYMCRYPT_TESTS=all`` runs them too. On aarch64 the full suite
-takes 227 s. Linux only: SymCrypt's macOS configuration fixes the compiler
+Linux only: SymCrypt's macOS configuration fixes the compiler
 to clang, and its Windows one is MSVC's.
 """
 
@@ -52,8 +47,6 @@ CACHE = DEMO_DIR / ".cache"
 SUITE_TIMEOUT = 1800
 BUILD_TIMEOUT = 1800
 C_FLAGS = "-fgnuc-version=4.7.0 -Wno-incompatible-pointer-types"
-# Prefixes of the algorithm groups the x86_64 default leaves out.
-X86_64_SLOW = ("Rsa", "Dh", "Dsa")
 
 
 def setup_module():
@@ -131,11 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     env = dict(os.environ, SYMCRYPT_BRANCH=f"v{setup.VERSION}",
                SYMCRYPT_COMMIT_HASH=setup.UPSTREAM_SHA[:7],
                SYMCRYPT_COMMIT_TIMESTAMP=setup.COMMIT_TIMESTAMP)
-    asm = "ON" if arch == "aarch64" else "OFF"
     generator = ["-G", "Ninja"] if shutil.which("ninja") else []
     configure = ["cmake", "-S", str(src), "-B", str(build), *generator,
                  f"-DCMAKE_C_COMPILER={badc}", f"-DCMAKE_CXX_COMPILER={cxx}",
-                 "-DCMAKE_BUILD_TYPE=Release", f"-DSYMCRYPT_USE_ASM={asm}",
+                 "-DCMAKE_BUILD_TYPE=Release", "-DSYMCRYPT_USE_ASM=ON",
                  "-DSYMCRYPT_FIPS_BUILD=OFF",
                  "-DSYMCRYPT_BUILD_MODULES=OFF", "-DSYMCRYPT_SYMCRUST=OFF",
                  "-DSYMCRYPT_UNIT_TESTS=ON", f"-DCMAKE_C_FLAGS={C_FLAGS}"]
@@ -143,11 +135,13 @@ def main(argv: list[str] | None = None) -> int:
     if run_logged(configure, build / "configure.log", 600, env=env) != 0:
         print("\n".join(first_errors(build / "configure.log")), file=sys.stderr)
         sys.exit("smoke: cmake configure failed")
-    units = [e for e in json.loads((build / "compile_commands.json").read_text())
-             if e["file"].endswith(".c")]
-    foreign = [e["file"] for e in units if not e["command"].startswith(str(badc))]
-    if not units or foreign:
-        sys.exit(f"smoke: {len(foreign)} of {len(units)} C units are not compiled by badc")
+    db = json.loads((build / "compile_commands.json").read_text())
+    units = [e for e in db if e["file"].endswith(".c")]
+    asm_units = [e for e in db if e["file"].endswith((".asm", ".S", ".s"))]
+    foreign = [e["file"] for e in units + asm_units if not e["command"].startswith(str(badc))]
+    if not units or not asm_units or foreign:
+        sys.exit(f"smoke: {len(foreign)} of {len(units) + len(asm_units)} units "
+                 f"({len(asm_units)} assembly) are not built by badc")
     jobs = build_jobs()
     if run_logged(["cmake", "--build", str(build), "-j", str(jobs)], build / "build.log",
                   BUILD_TIMEOUT, env=env) != 0:
@@ -156,9 +150,6 @@ def main(argv: list[str] | None = None) -> int:
     built = time.monotonic() - t0
 
     test = [str(build / "exe" / "symcryptunittest"), "noperftests"]
-    full = os.environ.get("BADC_SYMCRYPT_TESTS") == "all"
-    if arch == "x86_64" and not full:
-        test += [f"-{group}" for group in X86_64_SLOW]
     t0 = time.monotonic()
     rc = run_logged(test, build / "unittest.log", SUITE_TIMEOUT, cwd=build)
     ran = time.monotonic() - t0
@@ -166,10 +157,8 @@ def main(argv: list[str] | None = None) -> int:
     if rc != 0 or "...SymCrypt unit test done" not in out:
         print("\n".join(out.splitlines()[-40:]), file=sys.stderr)
         sys.exit(f"smoke: symcryptunittest failed (rc {rc}); log {build / 'unittest.log'}")
-    scope = "all algorithms" if full or arch != "x86_64" else \
-        "all but " + ", ".join(X86_64_SLOW)
-    print(f"symcrypt {setup.VERSION} ({arch}, asm {asm.lower()}): {len(units)} C units by "
-          f"badc, built in {built:.0f}s with {jobs} jobs; unit test ({scope}) passed in "
+    print(f"symcrypt {setup.VERSION} ({arch}): {len(units)} C and {len(asm_units)} assembly "
+          f"units by badc, built in {built:.0f}s with {jobs} jobs; unit test passed in "
           f"{ran:.0f}s")
     print("symcrypt smoke OK")
     return 0

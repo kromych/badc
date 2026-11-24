@@ -17375,7 +17375,13 @@ fn invariant_addresses_past_the_register_file_take_no_frame_slots() {
             ..NativeOptions::new().with_optimize()
         };
         opts.frame_larger_than = Some(64);
-        let build = crate::c5::codegen::lower_for(&program, target, opts).expect("lower");
+        // The premise is the full register file, not the pressure knobs'.
+        let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || crate::c5::codegen::lower_for(&program, target, opts),
+        )
+        .expect("lower");
         assert!(
             build
                 .diagnostics

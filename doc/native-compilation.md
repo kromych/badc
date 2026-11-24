@@ -105,8 +105,9 @@ Feature macros:
   `aligned` attribute takes, is 32. `-m<ext>` takes the extensions whose
   intrinsics the headers carry -- SSE3 to SSE4.2, POPCNT, CRC32, AVX, AVX2,
   FMA, F16C, AES, PCLMUL, SHA, VAES, VPCLMULQDQ, RDRND, RDSEED, BMI, BMI2,
-  LZCNT, ADX, XSAVE, CLFLUSHOPT, CLWB, PRFCHW, SAHF, and AVX-512F, BW, DQ, VL,
-  CD, and VNNI -- and refuses any other. Under AVX-512F
+  LZCNT, ADX, XSAVE, CLFLUSHOPT, CLWB, PRFCHW, SAHF, CX16, and AVX-512F, BW,
+  DQ, VL, CD, and VNNI -- and refuses any other; `-march=native` selects the
+  host's. Under AVX-512F
   `__BIGGEST_ALIGNMENT__` is 64 and the 64-byte GNU vectors are values in
   the zmm registers. `-mno-sse` and `-mgeneral-regs-only` remove `__SSE__`,
   `__SSE2__`, `__SSE_MATH__`, and `__SSE2_MATH__` and leave the extension set
@@ -151,7 +152,11 @@ source. For every target the object is an ELF64 `ET_REL` file: machine code in
 relocations, and a `.note.badc` section of records badc's linker reads. The
 target is fixed at compile time. A Linux object also links with GNU ld or lld.
 The address of an external symbol, and a data load from one, go through the
-GOT, so the object links into a PIE the system toolchain builds.
+GOT, so the object links into a PIE the system toolchain builds. Under
+`-fno-plt` (`-fplt` restores the default), a call to a library binding or to
+a function the unit declares without defining loads the callee from its GOT
+entry and calls through it, in x86-64 objects and in aarch64 objects under
+`-fPIC`; a hidden callee keeps the direct call.
 
 The linker also reads ELF objects from other compilers, Mach-O `MH_OBJECT`
 files, PE/COFF objects and import libraries, ar archives, and shared libraries
@@ -270,8 +275,18 @@ linker scripts (`-T` / `--script`, with `.o` and `.a` inputs only) for an ELF
 target, link maps (`-Map`, `--print-map`) in GNU ld's layout for every target,
 with a Mach-O section named `segment,section`, and `--emit-relocs`, `-z`
 keywords, `--build-id`, `--whole-archive` spans, `--start-group` / `--end-group`, and
-export control (`--export-all`, `--export-data`). `--help` lists the image
-options. A link option badc does not implement is refused by name.
+export control (`--export-all`, `--export-data`). For a Mach-O target it
+takes ld64's `-headerpad <hex>`, the least free space after the load
+commands; `-headerpad_max_install_names`, room for `install_name_tool` to
+rewrite each dylib path in place; and `-search_paths_first`, the order badc
+searches by default. `-Wl,-v` prints the linker's version line. `--help`
+lists the image options. A link option badc does not implement is refused by
+name.
+
+A Mach-O image ends in the ad-hoc code signature ld64 writes (`adhoc,
+linker-signed`): a SHA-256 hash of each 4 KiB page, with the install name or
+`a.out` as the identifier. An arm64 macOS image therefore runs as written,
+whichever host built it.
 
 Invoked as `ld`, `ld.badc`, or `<prefix>-ld`, or as `badc --ld`, badc takes GNU
 ld's command line with its own flag table. That is how it serves as `LD=` in
@@ -599,7 +614,14 @@ functions, and lets locals whose lifetimes do not overlap share a stack slot.
 scalar replacement of aggregates, inlining, constant folding and propagation,
 branch simplification, loop rotation, unrolling of constant-trip loops,
 common-subexpression elimination, store-to-load forwarding, division by
-constants, tail-call and tail-recursion elimination, and block layout. It
+constants, rotates and byte reversals spelled with shifts and masks as one
+instruction, tail-call and tail-recursion elimination, and block layout. On
+x86-64 System V targets a function keeps no frame pointer unless it needs one
+(`-fomit-frame-pointer` in
+[command-line compatibility](std-conformance.md#command-line-compatibility)),
+and the jumps inside loops keep off 32-byte boundaries
+([`-mbranches-within-32B-boundaries`](#hardening-and-code-model-knobs)).
+`-fno-unroll-loops` keeps the constant-trip loops rolled. It
 predefines `__OPTIMIZE__=1` and leaves `NDEBUG`, which removes `assert`, to
 `-D`. `-O1`, `-O2`, `-O3`, `-Os`, `-Oz`, `-Ofast`, and `-Og` select the same
 single level; `-O0` turns it off.

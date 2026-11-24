@@ -54,7 +54,7 @@ features; `examples/emit_image.rs` writes an executable for any target.
 | `debuginfo` | the DWARF and PDB writers `NativeOptions::debug_info` runs; requires `native-emit`; without it a lowering that asks for them fails |
 | `linker` | objects, archives, the native object readers and the linker, and the runtime they compile on demand; requires `native-emit` and `headers` |
 | `full` | every feature above; the `badc` binary requires it |
-| `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`) |
+| `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`), and the SSA after the passes `BADC_DUMP_AFTER` names, for the functions `BADC_DUMP_FN` names |
 
 ## `no_std`
 

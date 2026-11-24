@@ -44,6 +44,12 @@ int (*fp)(void) = (int (*)(void))42;
 fp();   /* error: runtime: vm_ssa: CallIndirect: target raw=0x000000000000002a is not a code pointer */
 ```
 
+The program ends as a native one does: a return from `main` or `exit` gives
+its status, and `abort()` gives 134, what a shell reports for a process
+`SIGABRT` ends, or 3 on a Windows target. Reaching `__builtin_trap()`,
+`__builtin_unreachable()`, or a check under `-fsanitize-trap` stops it with an
+error saying the program trapped.
+
 ### Pointer tracking
 
 `--track-pointers` checks every heap access and every `free`:

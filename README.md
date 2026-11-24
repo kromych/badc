@@ -68,8 +68,10 @@ exercises.
     [the kernel page](./doc/linux-kernel.md).
 * _Cryptography and compression_: [TweetNaCl](./demos/tweetnacl/),
   [Monocypher](./demos/monocypher/), [BearSSL](./demos/bearssl/),
-  [miniz](./demos/miniz/), [bzip2](./demos/bzip2/), and
-  [OpenSSL](./demos/openssl/) with its `make test`.
+  [miniz](./demos/miniz/), [bzip2](./demos/bzip2/),
+  [OpenSSL](./demos/openssl/) with its `make test`, and
+  [SymCrypt](./demos/symcrypt/) with its unit test, which the host's C++
+  compiler builds against the badc-built library.
 * _Graphics and math_: [stb](./demos/README.md#stb),
   [raylib](./demos/raylib/) with a Lode Runner game,
   [Nuklear](./demos/nuklear/), [kissfft](./demos/kissfft/), and the
@@ -80,9 +82,12 @@ exercises.
 * _Windows system code_: the [WDM](./demos/README.md#wdm_driver) kernel
   driver; [SimpleVisor](./demos/simplevisor/), an Intel VT-x hypervisor built
   as a native-subsystem driver; [nt_hello](./demos/README.md#nt_hello), an
-  `IMAGE_SUBSYSTEM_NATIVE` program that runs on `ntdll` alone; and
+  `IMAGE_SUBSYSTEM_NATIVE` program that runs on `ntdll` alone;
   [nt_loader](./demos/README.md#nt_loader), which starts one through
-  `NtCreateUserProcess`.
+  `NtCreateUserProcess`; and [System Informer](./demos/systeminformer/), the
+  system monitor, its PE viewer, and its kernel driver, built from the
+  project's own CMake lists for both Windows targets and checked by phlib's
+  self-test.
 * _Coroutines_: [libmill](./demos/README.md#libmill-libdill-coroutines),
   [libdill](./demos/README.md#libmill-libdill-coroutines), and
   [coroutines](./demos/README.md#libmill-libdill-coroutines), whose context

@@ -4014,6 +4014,10 @@ f:
     movsx eax, bh
     mov ch, dl
     add dh, 3
+    and r8, NOT 15
+    mov eax, (3 SHL 4) or 1
+    mov ecx, 12 MOD 5
+    mov edx, 64 SHR 2 XOR 1
     cqo
     imul rax, qword ptr [rbx], 8
     shl dword ptr [rax], cl
@@ -4071,6 +4075,10 @@ f:
     movsbl %bh, %eax
     movb %dl, %ch
     addb $3, %dh
+    and $~15, %r8
+    mov $((3 << 4) | 1), %eax
+    mov $(12 % 5), %ecx
+    mov $(64 >> 2 ^ 1), %edx
     cqto
     imulq $8, (%rbx), %rax
     shll %cl, (%rax)

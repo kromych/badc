@@ -529,12 +529,48 @@ fn terms(s: &str) -> Vec<(bool, &str)> {
     out
 }
 
-/// An expression with MASM's `0FFh` hexadecimal spelled as `0xFF`.
+/// The C operator an Intel-syntax operator word stands for in an
+/// expression, as GNU as and clang read them: `NOT 15`, `3 SHL 4`.
+fn operator_word(w: &str) -> Option<&'static str> {
+    const WORDS: [(&str, &str); 7] = [
+        ("not", "~"),
+        ("shl", "<<"),
+        ("shr", ">>"),
+        ("and", "&"),
+        ("or", "|"),
+        ("xor", "^"),
+        ("mod", "%"),
+    ];
+    WORDS
+        .iter()
+        .find(|(word, _)| w.eq_ignore_ascii_case(word))
+        .map(|&(_, op)| op)
+}
+
+/// An expression with MASM's `0FFh` hexadecimal spelled as `0xFF` and the
+/// operator words as their C operators.
 fn expression(e: &str) -> String {
     let mut out = String::with_capacity(e.len() + 2);
     let mut chars = e.char_indices().peekable();
     let mut prev_ident = false;
     while let Some((i, c)) = chars.next() {
+        if (c.is_ascii_alphabetic() || c == '_') && !prev_ident {
+            let end = e[i..]
+                .find(|ch: char| {
+                    !(ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '$' | '@'))
+                })
+                .map_or(e.len(), |n| i + n);
+            let word = &e[i..end];
+            match operator_word(word) {
+                Some(op) => out.push_str(op),
+                None => out.push_str(word),
+            }
+            while chars.peek().is_some_and(|&(j, _)| j < end) {
+                chars.next();
+            }
+            prev_ident = operator_word(word).is_none();
+            continue;
+        }
         if c.is_ascii_digit() && !prev_ident {
             let end = e[i..]
                 .find(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
@@ -576,7 +612,8 @@ fn constant(e: &str, consts: &BTreeSet<&str>) -> bool {
         let end = rest[i..]
             .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$' | '@')))
             .map_or(rest.len(), |n| i + n);
-        if !in_number && !consts.contains(&rest[i..end]) {
+        let word = &rest[i..end];
+        if !in_number && !consts.contains(&word) && operator_word(word).is_none() {
             return false;
         }
         rest = &rest[end..];

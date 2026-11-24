@@ -652,6 +652,41 @@ fn each_extension_header_gives_its_intrinsics() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// The 512-bit AES rounds are the 128-bit round on each lane, the 32x8
+/// extract and insert move the same half as the 64x4 ones, and the 128- and
+/// 256-bit ternary logic computes the immediate's truth table on each bit.
+#[test]
+fn the_wide_aes_rounds_and_the_vl_ternary_logic_run() {
+    let src = "#include <immintrin.h>\n\
+        static int same(__m128i a, __m128i b) { return a[0] == b[0] && a[1] == b[1]; }\n\
+        int main(void) {\n\
+            __m512i s = _mm512_set_epi64(8, 7, 6, 5, 4, 3, 2, 1);\n\
+            __m512i k = _mm512_set_epi64(80, 70, 60, 50, 40, 30, 20, 10);\n\
+            __m512i e = _mm512_aesenc_epi128(s, k), l = _mm512_aesenclast_epi128(s, k);\n\
+            __m512i d = _mm512_aesdec_epi128(s, k), m = _mm512_aesdeclast_epi128(s, k);\n\
+            for (int i = 0; i < 4; i++) {\n\
+                __m128i x = {s[2 * i], s[2 * i + 1]}, y = {k[2 * i], k[2 * i + 1]};\n\
+                if (!same((__m128i){e[2 * i], e[2 * i + 1]}, _mm_aesenc_si128(x, y))) return 1;\n\
+                if (!same((__m128i){l[2 * i], l[2 * i + 1]}, _mm_aesenclast_si128(x, y))) return 2;\n\
+                if (!same((__m128i){d[2 * i], d[2 * i + 1]}, _mm_aesdec_si128(x, y))) return 3;\n\
+                if (!same((__m128i){m[2 * i], m[2 * i + 1]}, _mm_aesdeclast_si128(x, y))) return 4;\n\
+            }\n\
+            __m256i h = _mm512_extracti32x8_epi32(s, 1);\n\
+            if (h[0] != 5 || h[3] != 8) return 5;\n\
+            __m512i t = _mm512_inserti32x8(s, h, 0);\n\
+            if (t[0] != 5 || t[3] != 8 || t[4] != 5) return 6;\n\
+            __m128i a = {0x0f0f, 3}, b = {0x00ff, 5}, c = {0x3333, 6};\n\
+            __m128i x = _mm_ternarylogic_epi64(a, b, c, 0x96);\n\
+            if (x[0] != (0x0f0f ^ 0x00ff ^ 0x3333) || x[1] != (3 ^ 5 ^ 6)) return 7;\n\
+            __m256i p = {1, 2, 4, 8}, q = {3, 2, 6, 9}, r = {1, 6, 5, 8};\n\
+            __m256i j = _mm256_ternarylogic_epi64(p, q, r, 0xe8);\n\
+            if (j[0] != 1 || j[1] != 2 || j[2] != 4 || j[3] != 8) return 8;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
 /// The blends by the sign of each mask lane are rows the interpreter
 /// runs: a lane of the second operand where the mask lane's top bit is
 /// set, at every lane width and at 16 and 32 bytes, and the AVX blend by

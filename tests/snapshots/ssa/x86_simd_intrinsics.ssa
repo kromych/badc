@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1353 ---
+; --- SSA dump (ok=true) ent_pc=1357 ---
 ; name=same
-fn ent_pc=1353 n_params=2 variadic=false locals=0
+fn ent_pc=1357 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=V128)                  -> d0
@@ -289,9 +289,9 @@ fn ent_pc=1353 n_params=2 variadic=false locals=0
     v246 LifetimeEnd(0)                                   -> -
     v247 LifetimeEnd(0)                                   -> -
     terminator Return(v245)   (exit_acc=v245)
-; --- SSA dump (ok=true) ent_pc=1356 ---
+; --- SSA dump (ok=true) ent_pc=1360 ---
 ; name=aes128_known_answer
-fn ent_pc=1356 n_params=0 variadic=false locals=0
+fn ent_pc=1360 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1310,7 +1310,7 @@ fn ent_pc=1356 n_params=0 variadic=false locals=0
     v1007 LifetimeEnd(0)                                   -> -
     v1008 LocalAddr(-464)                                  -> x0
     v1009 ImmData(48)                                      -> x7
-    v1010 Call { target_pc=1353, args=[v994, v1009], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1010 Call { target_pc=1357, args=[v994, v1009], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1011 Extend { value=v1010, kind=I32 }                 -> x1
     v1012 BinopI { op=eq, lhs=v1010, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v1010, target=b5, fall=b4 }   (low word)   (exit_acc=v1012)
@@ -1390,15 +1390,15 @@ fn ent_pc=1356 n_params=0 variadic=false locals=0
     v1077 LifetimeEnd(0)                                   -> -
     v1078 LocalAddr(-464)                                  -> x0
     v1079 ImmData(32)                                      -> x7
-    v1080 Call { target_pc=1353, args=[v1065, v1079], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1080 Call { target_pc=1357, args=[v1065, v1079], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1081 Extend { value=v1080, kind=I32 }                 -> x1
     v1082 Extend { value=v1080, kind=I32 }                 -> x1
     v1083 LifetimeEnd(-464)                                -> -
     v1084 LifetimeEnd(-463)                                -> -
     terminator Return(v1080)   (exit_acc=v1080)
-; --- SSA dump (ok=true) ent_pc=1357 ---
+; --- SSA dump (ok=true) ent_pc=1361 ---
 ; name=main
-fn ent_pc=1357 n_params=0 variadic=false locals=12
+fn ent_pc=1361 n_params=0 variadic=false locals=12
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -3260,7 +3260,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=12
     v1990 Mcpy { dst=v1988, src=v1989, size=16, align=8 }  -> -
     v1991 LocalAddr(-12)                                   -> x0
     v1992 ImmData(96)                                      -> x7
-    v1993 Call { target_pc=1353, args=[v1988, v1992], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1993 Call { target_pc=1357, args=[v1988, v1992], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1994 Extend { value=v1993, kind=I32 }                 -> x1
     v1995 BinopI { op=eq, lhs=v1993, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v1993, target=b7, fall=b6 }   (low word)   (exit_acc=v1995)
@@ -3278,7 +3278,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=12
     v2034 Mcpy { dst=v2032, src=v2033, size=16, align=8 }  -> -
     v2035 LocalAddr(-585)                                  -> x0
     v2036 ImmData(112)                                     -> x7
-    v2037 Call { target_pc=1353, args=[v2032, v2036], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2037 Call { target_pc=1357, args=[v2032, v2036], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2038 Extend { value=v2037, kind=I32 }                 -> x1
     v2039 BinopI { op=eq, lhs=v2037, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v2037, target=b9, fall=b8 }   (low word)   (exit_acc=v2039)
@@ -3296,7 +3296,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=12
     v2048 Mcpy { dst=v2046, src=v2047, size=16, align=8 }  -> -
     v2049 LocalAddr(-586)                                  -> x0
     v2050 ImmData(128)                                     -> x7
-    v2051 Call { target_pc=1353, args=[v2046, v2050], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2051 Call { target_pc=1357, args=[v2046, v2050], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2052 Extend { value=v2051, kind=I32 }                 -> x1
     v2053 BinopI { op=eq, lhs=v2051, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v2051, target=b11, fall=b10 }   (low word)   (exit_acc=v2053)
@@ -3314,7 +3314,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=12
     v2062 Mcpy { dst=v2060, src=v2061, size=16, align=8 }  -> -
     v2063 LocalAddr(-587)                                  -> x0
     v2064 ImmData(144)                                     -> x7
-    v2065 Call { target_pc=1353, args=[v2060, v2064], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2065 Call { target_pc=1357, args=[v2060, v2064], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2066 Extend { value=v2065, kind=I32 }                 -> x1
     v2067 BinopI { op=eq, lhs=v2065, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v2065, target=b13, fall=b12 }   (low word)   (exit_acc=v2067)
@@ -7349,7 +7349,7 @@ fn ent_pc=1357 n_params=0 variadic=false locals=12
   block 58  start_pc=0
     v6232 LifetimeEnd(-3)                                  -> -
     v6233 LifetimeEnd(-5)                                  -> -
-    v6234 Call { target_pc=1356, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6234 Call { target_pc=1360, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v6235 Extend { value=v6234, kind=I32 }                 -> x1
     v6236 BinopI { op=eq, lhs=v6234, rhs_imm=0 }           -> x1
     terminator Bnz { cond=v6234, target=b60, fall=b59 }   (low word)   (exit_acc=v6236)

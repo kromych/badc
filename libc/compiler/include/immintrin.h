@@ -1888,6 +1888,9 @@ static inline __m128i _mm512_extracti32x4_epi32(__m512i __A, const int __N) {
     return (__m128i){__A[__h], __A[__h + 1]};
 }
 #define _mm512_extracti64x2_epi64 _mm512_extracti32x4_epi32
+/* AVX512DQ's 32x8 forms move the same 256 bits as the 64x4 ones. */
+#define _mm512_extracti32x8_epi32 _mm512_extracti64x4_epi64
+#define _mm512_inserti32x8 _mm512_inserti64x4
 static inline __m512i _mm512_inserti64x4(__m512i __A, __m256i __B, const int __N) {
     int __h = 4 * (__N & 1);
     for (int __i = 0; __i < 4; __i++)
@@ -2030,6 +2033,29 @@ __BADC_INTRIN __m512i _mm512_abs_epi32(__m512i __A) { return (__m512i)__builtin_
 #define _mm512_ternarylogic_epi64(A, B, C, I)                                     \
     ((__m512i)__builtin_ia32_pternlogq512((__m512i)(A), (__m512i)(B), (__m512i)(C), (int)(I)))
 #define _mm512_ternarylogic_epi32 _mm512_ternarylogic_epi64
+/* AVX512VL's forms: the 512-bit operation on the zero-extended operands, its
+** low part. */
+#define _mm256_ternarylogic_epi64(A, B, C, I)                                     \
+    _mm512_castsi512_si256(_mm512_ternarylogic_epi64(_mm512_zextsi256_si512(A),   \
+        _mm512_zextsi256_si512(B), _mm512_zextsi256_si512(C), (I)))
+#define _mm256_ternarylogic_epi32 _mm256_ternarylogic_epi64
+#define _mm_ternarylogic_epi64(A, B, C, I)                                        \
+    _mm512_castsi512_si128(_mm512_ternarylogic_epi64(_mm512_zextsi128_si512(A),   \
+        _mm512_zextsi128_si512(B), _mm512_zextsi128_si512(C), (I)))
+#define _mm_ternarylogic_epi32 _mm_ternarylogic_epi64
+/* VAES on 512 bits: the 256-bit rounds on each half. */
+#define __BADC_HALVES(name, op)                                                   \
+    __BADC_INTRIN __m512i name(__m512i __A, __m512i __B) {                         \
+        return _mm512_inserti64x4(                                                 \
+            _mm512_zextsi256_si512(op(_mm512_extracti64x4_epi64(__A, 0),           \
+                                      _mm512_extracti64x4_epi64(__B, 0))),         \
+            op(_mm512_extracti64x4_epi64(__A, 1), _mm512_extracti64x4_epi64(__B, 1)), 1); \
+    }
+__BADC_HALVES(_mm512_aesenc_epi128, _mm256_aesenc_epi128)
+__BADC_HALVES(_mm512_aesenclast_epi128, _mm256_aesenclast_epi128)
+__BADC_HALVES(_mm512_aesdec_epi128, _mm256_aesdec_epi128)
+__BADC_HALVES(_mm512_aesdeclast_epi128, _mm256_aesdeclast_epi128)
+#undef __BADC_HALVES
 __BADC_INTRIN __m512i _mm512_permutexvar_epi32(__m512i __I, __m512i __A) {
     return (__m512i)__builtin_ia32_permvarsi512(__A, __I);
 }

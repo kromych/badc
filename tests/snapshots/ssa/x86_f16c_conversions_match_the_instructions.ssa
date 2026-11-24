@@ -468,9 +468,9 @@ fn ent_pc=875 n_params=4 variadic=false locals=0
     v133 BinopI { op=and, lhs=v46, rhs_imm=4294967295 }   -> x6
     v134 Imm(0)                                           -> x6
     terminator Jmp(b17)   (exit_acc=v46)
-; --- SSA dump (ok=true) ent_pc=1334 ---
+; --- SSA dump (ok=true) ent_pc=1338 ---
 ; name=main
-fn ent_pc=1334 n_params=0 variadic=false locals=23
+fn ent_pc=1338 n_params=0 variadic=false locals=23
   spill_count=4 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1333 ---
+; --- SSA dump (ok=true) ent_pc=1337 ---
 ; name=next
-fn ent_pc=1333 n_params=0 variadic=false locals=0
+fn ent_pc=1337 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -23,9 +23,9 @@ fn ent_pc=1333 n_params=0 variadic=false locals=0
     v17  Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
     v18  BinopI { op=mul, lhs=v15, rhs_imm=2685821657736338717 } -> x0
     terminator Return(v18)   (exit_acc=v18)
-; --- SSA dump (ok=true) ent_pc=1335 ---
+; --- SSA dump (ok=true) ent_pc=1339 ---
 ; name=lane
-fn ent_pc=1335 n_params=4 variadic=false locals=0
+fn ent_pc=1339 n_params=4 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -119,9 +119,9 @@ fn ent_pc=1335 n_params=4 variadic=false locals=0
     terminator Jmp(b7)
   block 10  start_pc=0
     terminator Jmp(b7)
-; --- SSA dump (ok=true) ent_pc=1336 ---
+; --- SSA dump (ok=true) ent_pc=1340 ---
 ; name=set_lane
-fn ent_pc=1336 n_params=4 variadic=false locals=0
+fn ent_pc=1340 n_params=4 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -166,9 +166,9 @@ fn ent_pc=1336 n_params=4 variadic=false locals=0
     terminator Bz { cond=v15, target=b3, fall=b1 }   (exit_acc=v15)
   block 3  start_pc=0
     terminator Return
-; --- SSA dump (ok=true) ent_pc=1338 ---
+; --- SSA dump (ok=true) ent_pc=1342 ---
 ; name=same
-fn ent_pc=1338 n_params=2 variadic=false locals=4
+fn ent_pc=1342 n_params=2 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=V256)                  -> d0
@@ -190,9 +190,9 @@ fn ent_pc=1338 n_params=2 variadic=false locals=4
     v16  LifetimeEnd(-4)                                  -> -
     v17  LifetimeEnd(0)                                   -> -
     terminator Return(v14)   (exit_acc=v14)
-; --- SSA dump (ok=true) ent_pc=1340 ---
+; --- SSA dump (ok=true) ent_pc=1344 ---
 ; name=shift
-fn ent_pc=1340 n_params=4 variadic=false locals=0
+fn ent_pc=1344 n_params=4 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -277,9 +277,9 @@ fn ent_pc=1340 n_params=4 variadic=false locals=0
     v21  BinopI { op=sub, lhs=v20, rhs_imm=1 }            -> x0
     v22  Imm(0)                                           -> x6
     terminator Jmp(b2)   (exit_acc=v21)
-; --- SSA dump (ok=true) ent_pc=1341 ---
+; --- SSA dump (ok=true) ent_pc=1345 ---
 ; name=model_shift
-fn ent_pc=1341 n_params=6 variadic=false locals=0
+fn ent_pc=1345 n_params=6 variadic=false locals=0
   spill_count=2 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -469,9 +469,9 @@ fn ent_pc=1341 n_params=6 variadic=false locals=0
     terminator Bz { cond=v26, target=b27, fall=b1 }   (exit_acc=v26)
   block 27  start_pc=0
     terminator Return
-; --- SSA dump (ok=true) ent_pc=1343 ---
+; --- SSA dump (ok=true) ent_pc=1347 ---
 ; name=check_count_shifts
-fn ent_pc=1343 n_params=2 variadic=false locals=9
+fn ent_pc=1347 n_params=2 variadic=false locals=9
   spill_count=4 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -2175,7 +2175,7 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v1716 Binop { op=add, lhs=v1713, rhs=v1715 }           -> x8
     v1717 LoadIndexed { base=v1713, index=v23, scale=8, kind=I64 } -> x8
     v1718 LocalAddr(-8)                                    -> x9
-    v1719 Call { target_pc=1341, args=[v1, v1703, v1709, v1712, v1717, v1718], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1719 Call { target_pc=1345, args=[v1, v1703, v1709, v1712, v1717, v1718], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1720 Extend { value=v24, kind=I32 }                   -> x0
     v1721 LocalAddr(-808)                                  -> x0
     v1722 Imm(0)                                           -> x2
@@ -2221,7 +2221,7 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v1762 Binop { op=add, lhs=v1759, rhs=v1761 }           -> x7
     v1763 LoadIndexed { base=v1759, index=v23, scale=8, kind=I64 } -> x8
     v1764 LocalAddr(-8)                                    -> x9
-    v1765 Call { target_pc=1341, args=[v1, v1749, v1755, v1758, v1763, v1764], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1765 Call { target_pc=1345, args=[v1, v1749, v1755, v1758, v1763, v1764], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1766 Extend { value=v1740, kind=I32 }                 -> x0
     v1767 LocalAddr(-808)                                  -> x0
     v1768 Imm(1)                                           -> x1
@@ -2267,7 +2267,7 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v1808 Binop { op=add, lhs=v1805, rhs=v1807 }           -> x7
     v1809 LoadIndexed { base=v1805, index=v23, scale=8, kind=I64 } -> x8
     v1810 LocalAddr(-8)                                    -> x9
-    v1811 Call { target_pc=1341, args=[v1, v1795, v1801, v1804, v1809, v1810], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1811 Call { target_pc=1345, args=[v1, v1795, v1801, v1804, v1809, v1810], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1812 Extend { value=v1786, kind=I32 }                 -> x0
     v1813 LocalAddr(-808)                                  -> x0
     v1814 Imm(2)                                           -> x1
@@ -2313,7 +2313,7 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v1854 Binop { op=add, lhs=v1851, rhs=v1853 }           -> x7
     v1855 LoadIndexed { base=v1851, index=v23, scale=8, kind=I64 } -> x8
     v1856 LocalAddr(-8)                                    -> x9
-    v1857 Call { target_pc=1341, args=[v1, v1841, v1847, v1850, v1855, v1856], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1857 Call { target_pc=1345, args=[v1, v1841, v1847, v1850, v1855, v1856], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1858 Extend { value=v1832, kind=I32 }                 -> x0
     v1859 LocalAddr(-808)                                  -> x0
     v1860 Imm(3)                                           -> x1
@@ -2359,7 +2359,7 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v1900 Binop { op=add, lhs=v1897, rhs=v1899 }           -> x7
     v1901 LoadIndexed { base=v1897, index=v23, scale=8, kind=I64 } -> x8
     v1902 LocalAddr(-8)                                    -> x9
-    v1903 Call { target_pc=1341, args=[v1, v1887, v1893, v1896, v1901, v1902], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1903 Call { target_pc=1345, args=[v1, v1887, v1893, v1896, v1901, v1902], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1904 Extend { value=v1878, kind=I32 }                 -> x0
     v1905 LocalAddr(-808)                                  -> x0
     v1906 Imm(4)                                           -> x1
@@ -2405,7 +2405,7 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v1946 Binop { op=add, lhs=v1943, rhs=v1945 }           -> x7
     v1947 LoadIndexed { base=v1943, index=v23, scale=8, kind=I64 } -> x8
     v1948 LocalAddr(-8)                                    -> x9
-    v1949 Call { target_pc=1341, args=[v1, v1933, v1939, v1942, v1947, v1948], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1949 Call { target_pc=1345, args=[v1, v1933, v1939, v1942, v1947, v1948], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1950 Extend { value=v1924, kind=I32 }                 -> x0
     v1951 LocalAddr(-808)                                  -> x0
     v1952 Imm(5)                                           -> x1
@@ -2451,7 +2451,7 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v1992 Binop { op=add, lhs=v1989, rhs=v1991 }           -> x7
     v1993 LoadIndexed { base=v1989, index=v23, scale=8, kind=I64 } -> x8
     v1994 LocalAddr(-8)                                    -> x9
-    v1995 Call { target_pc=1341, args=[v1, v1979, v1985, v1988, v1993, v1994], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1995 Call { target_pc=1345, args=[v1, v1979, v1985, v1988, v1993, v1994], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1996 Extend { value=v1970, kind=I32 }                 -> x0
     v1997 LocalAddr(-808)                                  -> x0
     v1998 Imm(6)                                           -> x1
@@ -2497,7 +2497,7 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v2038 Binop { op=add, lhs=v2035, rhs=v2037 }           -> x7
     v2039 LoadIndexed { base=v2035, index=v23, scale=8, kind=I64 } -> x8
     v2040 LocalAddr(-8)                                    -> x9
-    v2041 Call { target_pc=1341, args=[v1, v2025, v2031, v2034, v2039, v2040], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2041 Call { target_pc=1345, args=[v1, v2025, v2031, v2034, v2039, v2040], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2042 Extend { value=v2016, kind=I32 }                 -> x0
     v2043 LocalAddr(-808)                                  -> x0
     v2044 Imm(7)                                           -> x1
@@ -2555,9 +2555,9 @@ fn ent_pc=1343 n_params=2 variadic=false locals=9
     v121 LifetimeEnd(0)                                   -> -
     v122 LifetimeEnd(-8)                                  -> -
     terminator Return(v113)   (exit_acc=v113)
-; --- SSA dump (ok=true) ent_pc=1345 ---
+; --- SSA dump (ok=true) ent_pc=1349 ---
 ; name=check_variable_shifts
-fn ent_pc=1345 n_params=1 variadic=false locals=12
+fn ent_pc=1349 n_params=1 variadic=false locals=12
   spill_count=18 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -2572,7 +2572,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v9   Imm(0)                                           -> x0
     v10  Imm(32)                                          -> x0
     v11  Imm(32)                                          -> x0
-    v12  Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v12  Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v13  BinopI { op=shru, lhs=v12, rhs_imm=61 }          -> x1
     v14  BinopI { op=eq, lhs=v13, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v13, target=b182, fall=b1 }   (low word)   (exit_acc=v14)
@@ -2620,7 +2620,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v22  Imm(1)                                           -> x0
     v23  Imm(32)                                          -> x0
     v24  Imm(32)                                          -> x0
-    v25  Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v25  Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v26  BinopI { op=shru, lhs=v25, rhs_imm=61 }          -> x1
     v27  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v26, target=b181, fall=b6 }   (low word)   (exit_acc=v27)
@@ -2668,7 +2668,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v35  Imm(2)                                           -> x0
     v36  Imm(32)                                          -> x0
     v37  Imm(32)                                          -> x0
-    v38  Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v38  Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v39  BinopI { op=shru, lhs=v38, rhs_imm=61 }          -> x1
     v40  BinopI { op=eq, lhs=v39, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v39, target=b180, fall=b11 }   (low word)   (exit_acc=v40)
@@ -2716,7 +2716,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v48  Imm(3)                                           -> x0
     v49  Imm(32)                                          -> x0
     v50  Imm(32)                                          -> x0
-    v51  Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v51  Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v52  BinopI { op=shru, lhs=v51, rhs_imm=61 }          -> x1
     v53  BinopI { op=eq, lhs=v52, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v52, target=b179, fall=b16 }   (low word)   (exit_acc=v53)
@@ -2764,7 +2764,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v61  Imm(4)                                           -> x0
     v62  Imm(32)                                          -> x0
     v63  Imm(32)                                          -> x0
-    v64  Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v64  Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v65  BinopI { op=shru, lhs=v64, rhs_imm=61 }          -> x1
     v66  BinopI { op=eq, lhs=v65, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v65, target=b178, fall=b21 }   (low word)   (exit_acc=v66)
@@ -2812,7 +2812,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v74  Imm(5)                                           -> x0
     v75  Imm(32)                                          -> x0
     v76  Imm(32)                                          -> x0
-    v77  Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v77  Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v78  BinopI { op=shru, lhs=v77, rhs_imm=61 }          -> x1
     v79  BinopI { op=eq, lhs=v78, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v78, target=b177, fall=b26 }   (low word)   (exit_acc=v79)
@@ -2860,7 +2860,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v87  Imm(6)                                           -> x0
     v88  Imm(32)                                          -> x0
     v89  Imm(32)                                          -> x0
-    v90  Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v90  Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v91  BinopI { op=shru, lhs=v90, rhs_imm=61 }          -> x1
     v92  BinopI { op=eq, lhs=v91, rhs_imm=0 }             -> x2
     terminator Bnz { cond=v91, target=b176, fall=b31 }   (low word)   (exit_acc=v92)
@@ -2908,7 +2908,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v100 Imm(7)                                           -> x0
     v101 Imm(32)                                          -> x0
     v102 Imm(32)                                          -> x0
-    v103 Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v103 Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v104 BinopI { op=shru, lhs=v103, rhs_imm=61 }         -> x1
     v105 BinopI { op=eq, lhs=v104, rhs_imm=0 }            -> x2
     terminator Bnz { cond=v104, target=b175, fall=b36 }   (low word)   (exit_acc=v105)
@@ -2960,7 +2960,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v117 Imm(0)                                           -> x0
     v118 Imm(64)                                          -> x0
     v119 Imm(64)                                          -> x0
-    v120 Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v120 Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v121 BinopI { op=shru, lhs=v120, rhs_imm=61 }         -> x1
     v122 BinopI { op=eq, lhs=v121, rhs_imm=0 }            -> x2
     terminator Bnz { cond=v121, target=b174, fall=b41 }   (low word)   (exit_acc=v122)
@@ -3007,7 +3007,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v130 Imm(1)                                           -> x0
     v131 Imm(64)                                          -> x0
     v132 Imm(64)                                          -> x0
-    v133 Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v133 Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v134 BinopI { op=shru, lhs=v133, rhs_imm=61 }         -> x1
     v135 BinopI { op=eq, lhs=v134, rhs_imm=0 }            -> x2
     terminator Bnz { cond=v134, target=b173, fall=b46 }   (low word)   (exit_acc=v135)
@@ -3054,7 +3054,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v143 Imm(2)                                           -> x0
     v144 Imm(64)                                          -> x0
     v145 Imm(64)                                          -> x0
-    v146 Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v146 Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v147 BinopI { op=shru, lhs=v146, rhs_imm=61 }         -> x1
     v148 BinopI { op=eq, lhs=v147, rhs_imm=0 }            -> x2
     terminator Bnz { cond=v147, target=b172, fall=b51 }   (low word)   (exit_acc=v148)
@@ -3101,7 +3101,7 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v156 Imm(3)                                           -> x0
     v157 Imm(64)                                          -> x0
     v158 Imm(64)                                          -> x0
-    v159 Call { target_pc=1333, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v159 Call { target_pc=1337, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v160 BinopI { op=shru, lhs=v159, rhs_imm=61 }         -> x1
     v161 BinopI { op=eq, lhs=v160, rhs_imm=0 }            -> x2
     terminator Bnz { cond=v160, target=b171, fall=b56 }   (low word)   (exit_acc=v161)
@@ -4460,20 +4460,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v457 Imm(2)                                           -> x2
     v458 Imm(0)                                           -> x0
     v459 Imm(0)                                           -> x1
-    v460 Call { target_pc=1335, args=[v1, v456, v457, v459], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v460 Call { target_pc=1339, args=[v1, v456, v457, v459], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v461 Imm(4)                                           -> x6
     v462 Imm(1)                                           -> x0
     v463 LocalAddr(-12)                                   -> x7
     v464 Imm(2)                                           -> x2
     v465 Imm(0)                                           -> x1
-    v466 Call { target_pc=1335, args=[v463, v461, v464, v465], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v466 Call { target_pc=1339, args=[v463, v461, v464, v465], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v467 Imm(4)                                           -> x6
     v468 Imm(1)                                           -> x2
-    v469 Call { target_pc=1340, args=[v460, v467, v468, v466], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v469 Call { target_pc=1344, args=[v460, v467, v468, v466], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v470 LocalAddr(-4)                                    -> x7
     v471 Imm(4)                                           -> x6
     v472 Imm(2)                                           -> x2
-    v473 Call { target_pc=1336, args=[v470, v471, v472, v469], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v473 Call { target_pc=1340, args=[v470, v471, v472, v469], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v474 Imm(2)                                           -> x0
     v475 Imm(3)                                           -> x0
     v476 Imm(3)                                           -> x0
@@ -4487,20 +4487,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v484 Imm(3)                                           -> x2
     v485 Imm(0)                                           -> x0
     v486 Imm(0)                                           -> x1
-    v487 Call { target_pc=1335, args=[v1, v483, v484, v486], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v487 Call { target_pc=1339, args=[v1, v483, v484, v486], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v488 Imm(4)                                           -> x6
     v489 Imm(1)                                           -> x0
     v490 LocalAddr(-12)                                   -> x7
     v491 Imm(3)                                           -> x2
     v492 Imm(0)                                           -> x1
-    v493 Call { target_pc=1335, args=[v490, v488, v491, v492], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v493 Call { target_pc=1339, args=[v490, v488, v491, v492], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v494 Imm(4)                                           -> x6
     v495 Imm(1)                                           -> x2
-    v496 Call { target_pc=1340, args=[v487, v494, v495, v493], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v496 Call { target_pc=1344, args=[v487, v494, v495, v493], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v497 LocalAddr(-4)                                    -> x7
     v498 Imm(4)                                           -> x6
     v499 Imm(3)                                           -> x2
-    v500 Call { target_pc=1336, args=[v497, v498, v499, v496], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v500 Call { target_pc=1340, args=[v497, v498, v499, v496], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v501 Imm(3)                                           -> x0
     v502 Imm(4)                                           -> x0
     v503 Imm(4)                                           -> x0
@@ -4514,19 +4514,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v511 Imm(4)                                           -> x0
     v512 Imm(0)                                           -> x0
     v513 Imm(0)                                           -> x1
-    v514 Call { target_pc=1335, args=[v1, v510, v510, v513], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v514 Call { target_pc=1339, args=[v1, v510, v510, v513], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v515 Imm(4)                                           -> x6
     v516 Imm(1)                                           -> x0
     v517 LocalAddr(-12)                                   -> x7
     v518 Imm(4)                                           -> x2
     v519 Imm(0)                                           -> x1
-    v520 Call { target_pc=1335, args=[v517, v515, v518, v519], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v520 Call { target_pc=1339, args=[v517, v515, v518, v519], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v521 Imm(4)                                           -> x6
     v522 Imm(1)                                           -> x2
-    v523 Call { target_pc=1340, args=[v514, v521, v522, v520], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v523 Call { target_pc=1344, args=[v514, v521, v522, v520], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v524 LocalAddr(-4)                                    -> x7
     v525 Imm(4)                                           -> x6
-    v526 Call { target_pc=1336, args=[v524, v525, v525, v523], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v526 Call { target_pc=1340, args=[v524, v525, v525, v523], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v527 Imm(4)                                           -> x0
     v528 Imm(5)                                           -> x0
     v529 Imm(5)                                           -> x0
@@ -4540,20 +4540,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v537 Imm(5)                                           -> x2
     v538 Imm(0)                                           -> x0
     v539 Imm(0)                                           -> x1
-    v540 Call { target_pc=1335, args=[v1, v536, v537, v539], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v540 Call { target_pc=1339, args=[v1, v536, v537, v539], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v541 Imm(4)                                           -> x6
     v542 Imm(1)                                           -> x0
     v543 LocalAddr(-12)                                   -> x7
     v544 Imm(5)                                           -> x2
     v545 Imm(0)                                           -> x1
-    v546 Call { target_pc=1335, args=[v543, v541, v544, v545], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v546 Call { target_pc=1339, args=[v543, v541, v544, v545], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v547 Imm(4)                                           -> x6
     v548 Imm(1)                                           -> x2
-    v549 Call { target_pc=1340, args=[v540, v547, v548, v546], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v549 Call { target_pc=1344, args=[v540, v547, v548, v546], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v550 LocalAddr(-4)                                    -> x7
     v551 Imm(4)                                           -> x6
     v552 Imm(5)                                           -> x2
-    v553 Call { target_pc=1336, args=[v550, v551, v552, v549], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v553 Call { target_pc=1340, args=[v550, v551, v552, v549], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v554 Imm(5)                                           -> x0
     v555 Imm(6)                                           -> x0
     v556 Imm(6)                                           -> x0
@@ -4567,20 +4567,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v564 Imm(6)                                           -> x2
     v565 Imm(0)                                           -> x0
     v566 Imm(0)                                           -> x1
-    v567 Call { target_pc=1335, args=[v1, v563, v564, v566], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v567 Call { target_pc=1339, args=[v1, v563, v564, v566], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v568 Imm(4)                                           -> x6
     v569 Imm(1)                                           -> x0
     v570 LocalAddr(-12)                                   -> x7
     v571 Imm(6)                                           -> x2
     v572 Imm(0)                                           -> x1
-    v573 Call { target_pc=1335, args=[v570, v568, v571, v572], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v573 Call { target_pc=1339, args=[v570, v568, v571, v572], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v574 Imm(4)                                           -> x6
     v575 Imm(1)                                           -> x2
-    v576 Call { target_pc=1340, args=[v567, v574, v575, v573], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v576 Call { target_pc=1344, args=[v567, v574, v575, v573], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v577 LocalAddr(-4)                                    -> x7
     v578 Imm(4)                                           -> x6
     v579 Imm(6)                                           -> x2
-    v580 Call { target_pc=1336, args=[v577, v578, v579, v576], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v580 Call { target_pc=1340, args=[v577, v578, v579, v576], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v581 Imm(6)                                           -> x0
     v582 Imm(7)                                           -> x0
     v583 Imm(7)                                           -> x0
@@ -4594,20 +4594,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v591 Imm(7)                                           -> x2
     v592 Imm(0)                                           -> x0
     v593 Imm(0)                                           -> x1
-    v594 Call { target_pc=1335, args=[v1, v590, v591, v593], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v594 Call { target_pc=1339, args=[v1, v590, v591, v593], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v595 Imm(4)                                           -> x6
     v596 Imm(1)                                           -> x0
     v597 LocalAddr(-12)                                   -> x7
     v598 Imm(7)                                           -> x2
     v599 Imm(0)                                           -> x1
-    v600 Call { target_pc=1335, args=[v597, v595, v598, v599], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v600 Call { target_pc=1339, args=[v597, v595, v598, v599], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v601 Imm(4)                                           -> x6
     v602 Imm(1)                                           -> x2
-    v603 Call { target_pc=1340, args=[v594, v601, v602, v600], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v603 Call { target_pc=1344, args=[v594, v601, v602, v600], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v604 LocalAddr(-4)                                    -> x7
     v605 Imm(4)                                           -> x6
     v606 Imm(7)                                           -> x2
-    v607 Call { target_pc=1336, args=[v604, v605, v606, v603], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v607 Call { target_pc=1340, args=[v604, v605, v606, v603], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v608 Imm(7)                                           -> x0
     v609 Imm(8)                                           -> x0
     v610 Imm(8)                                           -> x0
@@ -4652,20 +4652,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v649 Imm(0)                                           -> x2
     v650 Imm(0)                                           -> x0
     v651 Imm(1)                                           -> x1
-    v652 Call { target_pc=1335, args=[v1, v648, v649, v651], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v652 Call { target_pc=1339, args=[v1, v648, v649, v651], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v653 Imm(4)                                           -> x6
     v654 Imm(2)                                           -> x0
     v655 LocalAddr(-12)                                   -> x7
     v656 Imm(0)                                           -> x2
     v657 Imm(0)                                           -> x1
-    v658 Call { target_pc=1335, args=[v655, v653, v656, v657], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v658 Call { target_pc=1339, args=[v655, v653, v656, v657], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v659 Imm(4)                                           -> x6
     v660 Imm(2)                                           -> x2
-    v661 Call { target_pc=1340, args=[v652, v659, v660, v658], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v661 Call { target_pc=1344, args=[v652, v659, v660, v658], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v662 LocalAddr(-4)                                    -> x7
     v663 Imm(4)                                           -> x6
     v664 Imm(0)                                           -> x2
-    v665 Call { target_pc=1336, args=[v662, v663, v664, v661], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v665 Call { target_pc=1340, args=[v662, v663, v664, v661], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v666 Imm(0)                                           -> x0
     v667 Imm(1)                                           -> x0
     v668 Imm(1)                                           -> x0
@@ -4679,20 +4679,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v676 Imm(1)                                           -> x2
     v677 Imm(0)                                           -> x0
     v678 Imm(1)                                           -> x0
-    v679 Call { target_pc=1335, args=[v1, v675, v676, v676], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v679 Call { target_pc=1339, args=[v1, v675, v676, v676], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v680 Imm(4)                                           -> x6
     v681 Imm(2)                                           -> x0
     v682 LocalAddr(-12)                                   -> x7
     v683 Imm(1)                                           -> x2
     v684 Imm(0)                                           -> x1
-    v685 Call { target_pc=1335, args=[v682, v680, v683, v684], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v685 Call { target_pc=1339, args=[v682, v680, v683, v684], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v686 Imm(4)                                           -> x6
     v687 Imm(2)                                           -> x2
-    v688 Call { target_pc=1340, args=[v679, v686, v687, v685], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v688 Call { target_pc=1344, args=[v679, v686, v687, v685], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v689 LocalAddr(-4)                                    -> x7
     v690 Imm(4)                                           -> x6
     v691 Imm(1)                                           -> x2
-    v692 Call { target_pc=1336, args=[v689, v690, v691, v688], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v692 Call { target_pc=1340, args=[v689, v690, v691, v688], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v693 Imm(1)                                           -> x0
     v694 Imm(2)                                           -> x0
     v695 Imm(2)                                           -> x0
@@ -4706,20 +4706,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v703 Imm(2)                                           -> x2
     v704 Imm(0)                                           -> x0
     v705 Imm(1)                                           -> x1
-    v706 Call { target_pc=1335, args=[v1, v702, v703, v705], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v706 Call { target_pc=1339, args=[v1, v702, v703, v705], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v707 Imm(4)                                           -> x6
     v708 Imm(2)                                           -> x0
     v709 LocalAddr(-12)                                   -> x7
     v710 Imm(2)                                           -> x2
     v711 Imm(0)                                           -> x1
-    v712 Call { target_pc=1335, args=[v709, v707, v710, v711], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v712 Call { target_pc=1339, args=[v709, v707, v710, v711], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v713 Imm(4)                                           -> x6
     v714 Imm(2)                                           -> x2
-    v715 Call { target_pc=1340, args=[v706, v713, v714, v712], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v715 Call { target_pc=1344, args=[v706, v713, v714, v712], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v716 LocalAddr(-4)                                    -> x7
     v717 Imm(4)                                           -> x6
     v718 Imm(2)                                           -> x2
-    v719 Call { target_pc=1336, args=[v716, v717, v718, v715], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v719 Call { target_pc=1340, args=[v716, v717, v718, v715], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v720 Imm(2)                                           -> x0
     v721 Imm(3)                                           -> x0
     v722 Imm(3)                                           -> x0
@@ -4733,20 +4733,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v730 Imm(3)                                           -> x2
     v731 Imm(0)                                           -> x0
     v732 Imm(1)                                           -> x1
-    v733 Call { target_pc=1335, args=[v1, v729, v730, v732], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v733 Call { target_pc=1339, args=[v1, v729, v730, v732], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v734 Imm(4)                                           -> x6
     v735 Imm(2)                                           -> x0
     v736 LocalAddr(-12)                                   -> x7
     v737 Imm(3)                                           -> x2
     v738 Imm(0)                                           -> x1
-    v739 Call { target_pc=1335, args=[v736, v734, v737, v738], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v739 Call { target_pc=1339, args=[v736, v734, v737, v738], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v740 Imm(4)                                           -> x6
     v741 Imm(2)                                           -> x2
-    v742 Call { target_pc=1340, args=[v733, v740, v741, v739], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v742 Call { target_pc=1344, args=[v733, v740, v741, v739], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v743 LocalAddr(-4)                                    -> x7
     v744 Imm(4)                                           -> x6
     v745 Imm(3)                                           -> x2
-    v746 Call { target_pc=1336, args=[v743, v744, v745, v742], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v746 Call { target_pc=1340, args=[v743, v744, v745, v742], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v747 Imm(3)                                           -> x0
     v748 Imm(4)                                           -> x0
     v749 Imm(4)                                           -> x0
@@ -4760,19 +4760,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v757 Imm(4)                                           -> x0
     v758 Imm(0)                                           -> x0
     v759 Imm(1)                                           -> x1
-    v760 Call { target_pc=1335, args=[v1, v756, v756, v759], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v760 Call { target_pc=1339, args=[v1, v756, v756, v759], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v761 Imm(4)                                           -> x6
     v762 Imm(2)                                           -> x0
     v763 LocalAddr(-12)                                   -> x7
     v764 Imm(4)                                           -> x2
     v765 Imm(0)                                           -> x1
-    v766 Call { target_pc=1335, args=[v763, v761, v764, v765], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v766 Call { target_pc=1339, args=[v763, v761, v764, v765], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v767 Imm(4)                                           -> x6
     v768 Imm(2)                                           -> x2
-    v769 Call { target_pc=1340, args=[v760, v767, v768, v766], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v769 Call { target_pc=1344, args=[v760, v767, v768, v766], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v770 LocalAddr(-4)                                    -> x7
     v771 Imm(4)                                           -> x6
-    v772 Call { target_pc=1336, args=[v770, v771, v771, v769], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v772 Call { target_pc=1340, args=[v770, v771, v771, v769], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v773 Imm(4)                                           -> x0
     v774 Imm(5)                                           -> x0
     v775 Imm(5)                                           -> x0
@@ -4786,20 +4786,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v783 Imm(5)                                           -> x2
     v784 Imm(0)                                           -> x0
     v785 Imm(1)                                           -> x1
-    v786 Call { target_pc=1335, args=[v1, v782, v783, v785], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v786 Call { target_pc=1339, args=[v1, v782, v783, v785], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v787 Imm(4)                                           -> x6
     v788 Imm(2)                                           -> x0
     v789 LocalAddr(-12)                                   -> x7
     v790 Imm(5)                                           -> x2
     v791 Imm(0)                                           -> x1
-    v792 Call { target_pc=1335, args=[v789, v787, v790, v791], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v792 Call { target_pc=1339, args=[v789, v787, v790, v791], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v793 Imm(4)                                           -> x6
     v794 Imm(2)                                           -> x2
-    v795 Call { target_pc=1340, args=[v786, v793, v794, v792], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v795 Call { target_pc=1344, args=[v786, v793, v794, v792], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v796 LocalAddr(-4)                                    -> x7
     v797 Imm(4)                                           -> x6
     v798 Imm(5)                                           -> x2
-    v799 Call { target_pc=1336, args=[v796, v797, v798, v795], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v799 Call { target_pc=1340, args=[v796, v797, v798, v795], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v800 Imm(5)                                           -> x0
     v801 Imm(6)                                           -> x0
     v802 Imm(6)                                           -> x0
@@ -4813,20 +4813,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v810 Imm(6)                                           -> x2
     v811 Imm(0)                                           -> x0
     v812 Imm(1)                                           -> x1
-    v813 Call { target_pc=1335, args=[v1, v809, v810, v812], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v813 Call { target_pc=1339, args=[v1, v809, v810, v812], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v814 Imm(4)                                           -> x6
     v815 Imm(2)                                           -> x0
     v816 LocalAddr(-12)                                   -> x7
     v817 Imm(6)                                           -> x2
     v818 Imm(0)                                           -> x1
-    v819 Call { target_pc=1335, args=[v816, v814, v817, v818], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v819 Call { target_pc=1339, args=[v816, v814, v817, v818], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v820 Imm(4)                                           -> x6
     v821 Imm(2)                                           -> x2
-    v822 Call { target_pc=1340, args=[v813, v820, v821, v819], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v822 Call { target_pc=1344, args=[v813, v820, v821, v819], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v823 LocalAddr(-4)                                    -> x7
     v824 Imm(4)                                           -> x6
     v825 Imm(6)                                           -> x2
-    v826 Call { target_pc=1336, args=[v823, v824, v825, v822], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v826 Call { target_pc=1340, args=[v823, v824, v825, v822], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v827 Imm(6)                                           -> x0
     v828 Imm(7)                                           -> x0
     v829 Imm(7)                                           -> x0
@@ -4840,20 +4840,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v837 Imm(7)                                           -> x2
     v838 Imm(0)                                           -> x0
     v839 Imm(1)                                           -> x1
-    v840 Call { target_pc=1335, args=[v1, v836, v837, v839], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v840 Call { target_pc=1339, args=[v1, v836, v837, v839], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v841 Imm(4)                                           -> x6
     v842 Imm(2)                                           -> x0
     v843 LocalAddr(-12)                                   -> x7
     v844 Imm(7)                                           -> x2
     v845 Imm(0)                                           -> x1
-    v846 Call { target_pc=1335, args=[v843, v841, v844, v845], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v846 Call { target_pc=1339, args=[v843, v841, v844, v845], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v847 Imm(4)                                           -> x6
     v848 Imm(2)                                           -> x2
-    v849 Call { target_pc=1340, args=[v840, v847, v848, v846], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v849 Call { target_pc=1344, args=[v840, v847, v848, v846], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v850 LocalAddr(-4)                                    -> x7
     v851 Imm(4)                                           -> x6
     v852 Imm(7)                                           -> x2
-    v853 Call { target_pc=1336, args=[v850, v851, v852, v849], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v853 Call { target_pc=1340, args=[v850, v851, v852, v849], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v854 Imm(7)                                           -> x0
     v855 Imm(8)                                           -> x0
     v856 Imm(8)                                           -> x0
@@ -4898,19 +4898,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v895 Imm(0)                                           -> x2
     v896 Imm(0)                                           -> x0
     v897 Imm(0)                                           -> x0
-    v898 Call { target_pc=1335, args=[v1, v894, v895, v895], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v898 Call { target_pc=1339, args=[v1, v894, v895, v895], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v899 Imm(8)                                           -> x6
     v900 Imm(0)                                           -> x1
     v901 LocalAddr(-8)                                    -> x7
     v902 Imm(0)                                           -> x2
-    v903 Call { target_pc=1335, args=[v901, v899, v902, v900], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v903 Call { target_pc=1339, args=[v901, v899, v902, v900], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v904 Imm(8)                                           -> x6
     v905 Imm(0)                                           -> x2
-    v906 Call { target_pc=1340, args=[v898, v904, v905, v903], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v906 Call { target_pc=1344, args=[v898, v904, v905, v903], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v907 LocalAddr(-4)                                    -> x7
     v908 Imm(8)                                           -> x6
     v909 Imm(0)                                           -> x2
-    v910 Call { target_pc=1336, args=[v907, v908, v909, v906], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v910 Call { target_pc=1340, args=[v907, v908, v909, v906], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v911 Imm(0)                                           -> x0
     v912 Imm(1)                                           -> x0
     v913 Imm(1)                                           -> x0
@@ -4924,19 +4924,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v921 Imm(1)                                           -> x2
     v922 Imm(0)                                           -> x0
     v923 Imm(0)                                           -> x1
-    v924 Call { target_pc=1335, args=[v1, v920, v921, v923], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v924 Call { target_pc=1339, args=[v1, v920, v921, v923], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v925 Imm(8)                                           -> x6
     v926 Imm(0)                                           -> x1
     v927 LocalAddr(-8)                                    -> x7
     v928 Imm(1)                                           -> x2
-    v929 Call { target_pc=1335, args=[v927, v925, v928, v926], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v929 Call { target_pc=1339, args=[v927, v925, v928, v926], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v930 Imm(8)                                           -> x6
     v931 Imm(0)                                           -> x2
-    v932 Call { target_pc=1340, args=[v924, v930, v931, v929], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v932 Call { target_pc=1344, args=[v924, v930, v931, v929], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v933 LocalAddr(-4)                                    -> x7
     v934 Imm(8)                                           -> x6
     v935 Imm(1)                                           -> x2
-    v936 Call { target_pc=1336, args=[v933, v934, v935, v932], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v936 Call { target_pc=1340, args=[v933, v934, v935, v932], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v937 Imm(1)                                           -> x0
     v938 Imm(2)                                           -> x0
     v939 Imm(2)                                           -> x0
@@ -4950,19 +4950,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v947 Imm(2)                                           -> x2
     v948 Imm(0)                                           -> x0
     v949 Imm(0)                                           -> x1
-    v950 Call { target_pc=1335, args=[v1, v946, v947, v949], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v950 Call { target_pc=1339, args=[v1, v946, v947, v949], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v951 Imm(8)                                           -> x6
     v952 Imm(0)                                           -> x1
     v953 LocalAddr(-8)                                    -> x7
     v954 Imm(2)                                           -> x2
-    v955 Call { target_pc=1335, args=[v953, v951, v954, v952], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v955 Call { target_pc=1339, args=[v953, v951, v954, v952], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v956 Imm(8)                                           -> x6
     v957 Imm(0)                                           -> x2
-    v958 Call { target_pc=1340, args=[v950, v956, v957, v955], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v958 Call { target_pc=1344, args=[v950, v956, v957, v955], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v959 LocalAddr(-4)                                    -> x7
     v960 Imm(8)                                           -> x6
     v961 Imm(2)                                           -> x2
-    v962 Call { target_pc=1336, args=[v959, v960, v961, v958], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v962 Call { target_pc=1340, args=[v959, v960, v961, v958], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v963 Imm(2)                                           -> x0
     v964 Imm(3)                                           -> x0
     v965 Imm(3)                                           -> x0
@@ -4976,19 +4976,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v973 Imm(3)                                           -> x2
     v974 Imm(0)                                           -> x0
     v975 Imm(0)                                           -> x1
-    v976 Call { target_pc=1335, args=[v1, v972, v973, v975], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v976 Call { target_pc=1339, args=[v1, v972, v973, v975], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v977 Imm(8)                                           -> x6
     v978 Imm(0)                                           -> x1
     v979 LocalAddr(-8)                                    -> x7
     v980 Imm(3)                                           -> x2
-    v981 Call { target_pc=1335, args=[v979, v977, v980, v978], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v981 Call { target_pc=1339, args=[v979, v977, v980, v978], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v982 Imm(8)                                           -> x6
     v983 Imm(0)                                           -> x2
-    v984 Call { target_pc=1340, args=[v976, v982, v983, v981], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v984 Call { target_pc=1344, args=[v976, v982, v983, v981], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v985 LocalAddr(-4)                                    -> x7
     v986 Imm(8)                                           -> x6
     v987 Imm(3)                                           -> x2
-    v988 Call { target_pc=1336, args=[v985, v986, v987, v984], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v988 Call { target_pc=1340, args=[v985, v986, v987, v984], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v989 Imm(3)                                           -> x0
     v990 Imm(4)                                           -> x0
     v991 Imm(4)                                           -> x0
@@ -5033,20 +5033,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1030 Imm(0)                                           -> x2
     v1031 Imm(0)                                           -> x0
     v1032 Imm(0)                                           -> x0
-    v1033 Call { target_pc=1335, args=[v1, v1029, v1030, v1030], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1033 Call { target_pc=1339, args=[v1, v1029, v1030, v1030], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1034 Imm(8)                                           -> x6
     v1035 Imm(1)                                           -> x0
     v1036 LocalAddr(-8)                                    -> x7
     v1037 Imm(0)                                           -> x2
     v1038 Imm(0)                                           -> x1
-    v1039 Call { target_pc=1335, args=[v1036, v1034, v1037, v1038], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1039 Call { target_pc=1339, args=[v1036, v1034, v1037, v1038], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1040 Imm(8)                                           -> x6
     v1041 Imm(1)                                           -> x2
-    v1042 Call { target_pc=1340, args=[v1033, v1040, v1041, v1039], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1042 Call { target_pc=1344, args=[v1033, v1040, v1041, v1039], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1043 LocalAddr(-4)                                    -> x7
     v1044 Imm(8)                                           -> x6
     v1045 Imm(0)                                           -> x2
-    v1046 Call { target_pc=1336, args=[v1043, v1044, v1045, v1042], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1046 Call { target_pc=1340, args=[v1043, v1044, v1045, v1042], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1047 Imm(0)                                           -> x0
     v1048 Imm(1)                                           -> x0
     v1049 Imm(1)                                           -> x0
@@ -5060,20 +5060,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1057 Imm(1)                                           -> x2
     v1058 Imm(0)                                           -> x0
     v1059 Imm(0)                                           -> x1
-    v1060 Call { target_pc=1335, args=[v1, v1056, v1057, v1059], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1060 Call { target_pc=1339, args=[v1, v1056, v1057, v1059], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1061 Imm(8)                                           -> x6
     v1062 Imm(1)                                           -> x0
     v1063 LocalAddr(-8)                                    -> x7
     v1064 Imm(1)                                           -> x2
     v1065 Imm(0)                                           -> x1
-    v1066 Call { target_pc=1335, args=[v1063, v1061, v1064, v1065], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1066 Call { target_pc=1339, args=[v1063, v1061, v1064, v1065], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1067 Imm(8)                                           -> x6
     v1068 Imm(1)                                           -> x2
-    v1069 Call { target_pc=1340, args=[v1060, v1067, v1068, v1066], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1069 Call { target_pc=1344, args=[v1060, v1067, v1068, v1066], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1070 LocalAddr(-4)                                    -> x7
     v1071 Imm(8)                                           -> x6
     v1072 Imm(1)                                           -> x2
-    v1073 Call { target_pc=1336, args=[v1070, v1071, v1072, v1069], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1073 Call { target_pc=1340, args=[v1070, v1071, v1072, v1069], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1074 Imm(1)                                           -> x0
     v1075 Imm(2)                                           -> x0
     v1076 Imm(2)                                           -> x0
@@ -5087,20 +5087,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1084 Imm(2)                                           -> x2
     v1085 Imm(0)                                           -> x0
     v1086 Imm(0)                                           -> x1
-    v1087 Call { target_pc=1335, args=[v1, v1083, v1084, v1086], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1087 Call { target_pc=1339, args=[v1, v1083, v1084, v1086], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1088 Imm(8)                                           -> x6
     v1089 Imm(1)                                           -> x0
     v1090 LocalAddr(-8)                                    -> x7
     v1091 Imm(2)                                           -> x2
     v1092 Imm(0)                                           -> x1
-    v1093 Call { target_pc=1335, args=[v1090, v1088, v1091, v1092], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1093 Call { target_pc=1339, args=[v1090, v1088, v1091, v1092], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1094 Imm(8)                                           -> x6
     v1095 Imm(1)                                           -> x2
-    v1096 Call { target_pc=1340, args=[v1087, v1094, v1095, v1093], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1096 Call { target_pc=1344, args=[v1087, v1094, v1095, v1093], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1097 LocalAddr(-4)                                    -> x7
     v1098 Imm(8)                                           -> x6
     v1099 Imm(2)                                           -> x2
-    v1100 Call { target_pc=1336, args=[v1097, v1098, v1099, v1096], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1100 Call { target_pc=1340, args=[v1097, v1098, v1099, v1096], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1101 Imm(2)                                           -> x0
     v1102 Imm(3)                                           -> x0
     v1103 Imm(3)                                           -> x0
@@ -5114,20 +5114,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1111 Imm(3)                                           -> x2
     v1112 Imm(0)                                           -> x0
     v1113 Imm(0)                                           -> x1
-    v1114 Call { target_pc=1335, args=[v1, v1110, v1111, v1113], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1114 Call { target_pc=1339, args=[v1, v1110, v1111, v1113], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1115 Imm(8)                                           -> x6
     v1116 Imm(1)                                           -> x0
     v1117 LocalAddr(-8)                                    -> x7
     v1118 Imm(3)                                           -> x2
     v1119 Imm(0)                                           -> x1
-    v1120 Call { target_pc=1335, args=[v1117, v1115, v1118, v1119], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1120 Call { target_pc=1339, args=[v1117, v1115, v1118, v1119], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1121 Imm(8)                                           -> x6
     v1122 Imm(1)                                           -> x2
-    v1123 Call { target_pc=1340, args=[v1114, v1121, v1122, v1120], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1123 Call { target_pc=1344, args=[v1114, v1121, v1122, v1120], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1124 LocalAddr(-4)                                    -> x7
     v1125 Imm(8)                                           -> x6
     v1126 Imm(3)                                           -> x2
-    v1127 Call { target_pc=1336, args=[v1124, v1125, v1126, v1123], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1127 Call { target_pc=1340, args=[v1124, v1125, v1126, v1123], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1128 Imm(3)                                           -> x0
     v1129 Imm(4)                                           -> x0
     v1130 Imm(4)                                           -> x0
@@ -5171,19 +5171,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1168 Imm(0)                                           -> x2
     v1169 Imm(0)                                           -> x0
     v1170 Imm(0)                                           -> x0
-    v1171 Call { target_pc=1335, args=[v1, v1167, v1168, v1168], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1171 Call { target_pc=1339, args=[v1, v1167, v1168, v1168], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1172 Imm(4)                                           -> x6
     v1173 Imm(0)                                           -> x1
     v1174 LocalAddr(-12)                                   -> x7
     v1175 Imm(0)                                           -> x2
-    v1176 Call { target_pc=1335, args=[v1174, v1172, v1175, v1173], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1176 Call { target_pc=1339, args=[v1174, v1172, v1175, v1173], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1177 Imm(4)                                           -> x6
     v1178 Imm(0)                                           -> x2
-    v1179 Call { target_pc=1340, args=[v1171, v1177, v1178, v1176], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1179 Call { target_pc=1344, args=[v1171, v1177, v1178, v1176], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1180 LocalAddr(-4)                                    -> x7
     v1181 Imm(4)                                           -> x6
     v1182 Imm(0)                                           -> x2
-    v1183 Call { target_pc=1336, args=[v1180, v1181, v1182, v1179], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1183 Call { target_pc=1340, args=[v1180, v1181, v1182, v1179], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1184 Imm(0)                                           -> x0
     v1185 Imm(1)                                           -> x0
     v1186 Imm(1)                                           -> x0
@@ -5196,19 +5196,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1193 Imm(1)                                           -> x2
     v1194 Imm(0)                                           -> x0
     v1195 Imm(0)                                           -> x1
-    v1196 Call { target_pc=1335, args=[v1, v1192, v1193, v1195], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1196 Call { target_pc=1339, args=[v1, v1192, v1193, v1195], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1197 Imm(4)                                           -> x6
     v1198 Imm(0)                                           -> x1
     v1199 LocalAddr(-12)                                   -> x7
     v1200 Imm(1)                                           -> x2
-    v1201 Call { target_pc=1335, args=[v1199, v1197, v1200, v1198], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1201 Call { target_pc=1339, args=[v1199, v1197, v1200, v1198], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1202 Imm(4)                                           -> x6
     v1203 Imm(0)                                           -> x2
-    v1204 Call { target_pc=1340, args=[v1196, v1202, v1203, v1201], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1204 Call { target_pc=1344, args=[v1196, v1202, v1203, v1201], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1205 LocalAddr(-4)                                    -> x7
     v1206 Imm(4)                                           -> x6
     v1207 Imm(1)                                           -> x2
-    v1208 Call { target_pc=1336, args=[v1205, v1206, v1207, v1204], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1208 Call { target_pc=1340, args=[v1205, v1206, v1207, v1204], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1209 Imm(1)                                           -> x0
     v1210 Imm(2)                                           -> x0
     v1211 Imm(2)                                           -> x0
@@ -5221,19 +5221,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1218 Imm(2)                                           -> x2
     v1219 Imm(0)                                           -> x0
     v1220 Imm(0)                                           -> x1
-    v1221 Call { target_pc=1335, args=[v1, v1217, v1218, v1220], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1221 Call { target_pc=1339, args=[v1, v1217, v1218, v1220], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1222 Imm(4)                                           -> x6
     v1223 Imm(0)                                           -> x1
     v1224 LocalAddr(-12)                                   -> x7
     v1225 Imm(2)                                           -> x2
-    v1226 Call { target_pc=1335, args=[v1224, v1222, v1225, v1223], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1226 Call { target_pc=1339, args=[v1224, v1222, v1225, v1223], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1227 Imm(4)                                           -> x6
     v1228 Imm(0)                                           -> x2
-    v1229 Call { target_pc=1340, args=[v1221, v1227, v1228, v1226], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1229 Call { target_pc=1344, args=[v1221, v1227, v1228, v1226], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1230 LocalAddr(-4)                                    -> x7
     v1231 Imm(4)                                           -> x6
     v1232 Imm(2)                                           -> x2
-    v1233 Call { target_pc=1336, args=[v1230, v1231, v1232, v1229], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1233 Call { target_pc=1340, args=[v1230, v1231, v1232, v1229], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1234 Imm(2)                                           -> x0
     v1235 Imm(3)                                           -> x0
     v1236 Imm(3)                                           -> x0
@@ -5246,19 +5246,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1243 Imm(3)                                           -> x2
     v1244 Imm(0)                                           -> x0
     v1245 Imm(0)                                           -> x1
-    v1246 Call { target_pc=1335, args=[v1, v1242, v1243, v1245], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1246 Call { target_pc=1339, args=[v1, v1242, v1243, v1245], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1247 Imm(4)                                           -> x6
     v1248 Imm(0)                                           -> x1
     v1249 LocalAddr(-12)                                   -> x7
     v1250 Imm(3)                                           -> x2
-    v1251 Call { target_pc=1335, args=[v1249, v1247, v1250, v1248], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1251 Call { target_pc=1339, args=[v1249, v1247, v1250, v1248], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1252 Imm(4)                                           -> x6
     v1253 Imm(0)                                           -> x2
-    v1254 Call { target_pc=1340, args=[v1246, v1252, v1253, v1251], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1254 Call { target_pc=1344, args=[v1246, v1252, v1253, v1251], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1255 LocalAddr(-4)                                    -> x7
     v1256 Imm(4)                                           -> x6
     v1257 Imm(3)                                           -> x2
-    v1258 Call { target_pc=1336, args=[v1255, v1256, v1257, v1254], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1258 Call { target_pc=1340, args=[v1255, v1256, v1257, v1254], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1259 Imm(3)                                           -> x0
     v1260 Imm(4)                                           -> x0
     v1261 Imm(4)                                           -> x0
@@ -5301,20 +5301,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1298 Imm(0)                                           -> x2
     v1299 Imm(0)                                           -> x0
     v1300 Imm(0)                                           -> x0
-    v1301 Call { target_pc=1335, args=[v1, v1297, v1298, v1298], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1301 Call { target_pc=1339, args=[v1, v1297, v1298, v1298], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1302 Imm(4)                                           -> x6
     v1303 Imm(1)                                           -> x0
     v1304 LocalAddr(-12)                                   -> x7
     v1305 Imm(0)                                           -> x2
     v1306 Imm(0)                                           -> x1
-    v1307 Call { target_pc=1335, args=[v1304, v1302, v1305, v1306], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1307 Call { target_pc=1339, args=[v1304, v1302, v1305, v1306], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1308 Imm(4)                                           -> x6
     v1309 Imm(1)                                           -> x2
-    v1310 Call { target_pc=1340, args=[v1301, v1308, v1309, v1307], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1310 Call { target_pc=1344, args=[v1301, v1308, v1309, v1307], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1311 LocalAddr(-4)                                    -> x7
     v1312 Imm(4)                                           -> x6
     v1313 Imm(0)                                           -> x2
-    v1314 Call { target_pc=1336, args=[v1311, v1312, v1313, v1310], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1314 Call { target_pc=1340, args=[v1311, v1312, v1313, v1310], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1315 Imm(0)                                           -> x0
     v1316 Imm(1)                                           -> x0
     v1317 Imm(1)                                           -> x0
@@ -5327,20 +5327,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1324 Imm(1)                                           -> x2
     v1325 Imm(0)                                           -> x0
     v1326 Imm(0)                                           -> x1
-    v1327 Call { target_pc=1335, args=[v1, v1323, v1324, v1326], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1327 Call { target_pc=1339, args=[v1, v1323, v1324, v1326], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1328 Imm(4)                                           -> x6
     v1329 Imm(1)                                           -> x0
     v1330 LocalAddr(-12)                                   -> x7
     v1331 Imm(1)                                           -> x2
     v1332 Imm(0)                                           -> x1
-    v1333 Call { target_pc=1335, args=[v1330, v1328, v1331, v1332], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1333 Call { target_pc=1339, args=[v1330, v1328, v1331, v1332], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1334 Imm(4)                                           -> x6
     v1335 Imm(1)                                           -> x2
-    v1336 Call { target_pc=1340, args=[v1327, v1334, v1335, v1333], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1336 Call { target_pc=1344, args=[v1327, v1334, v1335, v1333], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1337 LocalAddr(-4)                                    -> x7
     v1338 Imm(4)                                           -> x6
     v1339 Imm(1)                                           -> x2
-    v1340 Call { target_pc=1336, args=[v1337, v1338, v1339, v1336], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1340 Call { target_pc=1340, args=[v1337, v1338, v1339, v1336], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1341 Imm(1)                                           -> x0
     v1342 Imm(2)                                           -> x0
     v1343 Imm(2)                                           -> x0
@@ -5353,20 +5353,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1350 Imm(2)                                           -> x2
     v1351 Imm(0)                                           -> x0
     v1352 Imm(0)                                           -> x1
-    v1353 Call { target_pc=1335, args=[v1, v1349, v1350, v1352], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1353 Call { target_pc=1339, args=[v1, v1349, v1350, v1352], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1354 Imm(4)                                           -> x6
     v1355 Imm(1)                                           -> x0
     v1356 LocalAddr(-12)                                   -> x7
     v1357 Imm(2)                                           -> x2
     v1358 Imm(0)                                           -> x1
-    v1359 Call { target_pc=1335, args=[v1356, v1354, v1357, v1358], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1359 Call { target_pc=1339, args=[v1356, v1354, v1357, v1358], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1360 Imm(4)                                           -> x6
     v1361 Imm(1)                                           -> x2
-    v1362 Call { target_pc=1340, args=[v1353, v1360, v1361, v1359], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1362 Call { target_pc=1344, args=[v1353, v1360, v1361, v1359], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1363 LocalAddr(-4)                                    -> x7
     v1364 Imm(4)                                           -> x6
     v1365 Imm(2)                                           -> x2
-    v1366 Call { target_pc=1336, args=[v1363, v1364, v1365, v1362], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1366 Call { target_pc=1340, args=[v1363, v1364, v1365, v1362], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1367 Imm(2)                                           -> x0
     v1368 Imm(3)                                           -> x0
     v1369 Imm(3)                                           -> x0
@@ -5379,20 +5379,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1376 Imm(3)                                           -> x2
     v1377 Imm(0)                                           -> x0
     v1378 Imm(0)                                           -> x1
-    v1379 Call { target_pc=1335, args=[v1, v1375, v1376, v1378], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1379 Call { target_pc=1339, args=[v1, v1375, v1376, v1378], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1380 Imm(4)                                           -> x6
     v1381 Imm(1)                                           -> x0
     v1382 LocalAddr(-12)                                   -> x7
     v1383 Imm(3)                                           -> x2
     v1384 Imm(0)                                           -> x1
-    v1385 Call { target_pc=1335, args=[v1382, v1380, v1383, v1384], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1385 Call { target_pc=1339, args=[v1382, v1380, v1383, v1384], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1386 Imm(4)                                           -> x6
     v1387 Imm(1)                                           -> x2
-    v1388 Call { target_pc=1340, args=[v1379, v1386, v1387, v1385], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1388 Call { target_pc=1344, args=[v1379, v1386, v1387, v1385], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1389 LocalAddr(-4)                                    -> x7
     v1390 Imm(4)                                           -> x6
     v1391 Imm(3)                                           -> x2
-    v1392 Call { target_pc=1336, args=[v1389, v1390, v1391, v1388], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1392 Call { target_pc=1340, args=[v1389, v1390, v1391, v1388], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1393 Imm(3)                                           -> x0
     v1394 Imm(4)                                           -> x0
     v1395 Imm(4)                                           -> x0
@@ -5435,20 +5435,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1432 Imm(0)                                           -> x2
     v1433 Imm(0)                                           -> x0
     v1434 Imm(1)                                           -> x1
-    v1435 Call { target_pc=1335, args=[v1, v1431, v1432, v1434], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1435 Call { target_pc=1339, args=[v1, v1431, v1432, v1434], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1436 Imm(4)                                           -> x6
     v1437 Imm(2)                                           -> x0
     v1438 LocalAddr(-12)                                   -> x7
     v1439 Imm(0)                                           -> x2
     v1440 Imm(0)                                           -> x1
-    v1441 Call { target_pc=1335, args=[v1438, v1436, v1439, v1440], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1441 Call { target_pc=1339, args=[v1438, v1436, v1439, v1440], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1442 Imm(4)                                           -> x6
     v1443 Imm(2)                                           -> x2
-    v1444 Call { target_pc=1340, args=[v1435, v1442, v1443, v1441], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1444 Call { target_pc=1344, args=[v1435, v1442, v1443, v1441], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1445 LocalAddr(-4)                                    -> x7
     v1446 Imm(4)                                           -> x6
     v1447 Imm(0)                                           -> x2
-    v1448 Call { target_pc=1336, args=[v1445, v1446, v1447, v1444], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1448 Call { target_pc=1340, args=[v1445, v1446, v1447, v1444], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1449 Imm(0)                                           -> x0
     v1450 Imm(1)                                           -> x0
     v1451 Imm(1)                                           -> x0
@@ -5461,20 +5461,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1458 Imm(1)                                           -> x2
     v1459 Imm(0)                                           -> x0
     v1460 Imm(1)                                           -> x0
-    v1461 Call { target_pc=1335, args=[v1, v1457, v1458, v1458], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1461 Call { target_pc=1339, args=[v1, v1457, v1458, v1458], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1462 Imm(4)                                           -> x6
     v1463 Imm(2)                                           -> x0
     v1464 LocalAddr(-12)                                   -> x7
     v1465 Imm(1)                                           -> x2
     v1466 Imm(0)                                           -> x1
-    v1467 Call { target_pc=1335, args=[v1464, v1462, v1465, v1466], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1467 Call { target_pc=1339, args=[v1464, v1462, v1465, v1466], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1468 Imm(4)                                           -> x6
     v1469 Imm(2)                                           -> x2
-    v1470 Call { target_pc=1340, args=[v1461, v1468, v1469, v1467], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1470 Call { target_pc=1344, args=[v1461, v1468, v1469, v1467], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1471 LocalAddr(-4)                                    -> x7
     v1472 Imm(4)                                           -> x6
     v1473 Imm(1)                                           -> x2
-    v1474 Call { target_pc=1336, args=[v1471, v1472, v1473, v1470], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1474 Call { target_pc=1340, args=[v1471, v1472, v1473, v1470], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1475 Imm(1)                                           -> x0
     v1476 Imm(2)                                           -> x0
     v1477 Imm(2)                                           -> x0
@@ -5487,20 +5487,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1484 Imm(2)                                           -> x2
     v1485 Imm(0)                                           -> x0
     v1486 Imm(1)                                           -> x1
-    v1487 Call { target_pc=1335, args=[v1, v1483, v1484, v1486], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1487 Call { target_pc=1339, args=[v1, v1483, v1484, v1486], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1488 Imm(4)                                           -> x6
     v1489 Imm(2)                                           -> x0
     v1490 LocalAddr(-12)                                   -> x7
     v1491 Imm(2)                                           -> x2
     v1492 Imm(0)                                           -> x1
-    v1493 Call { target_pc=1335, args=[v1490, v1488, v1491, v1492], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1493 Call { target_pc=1339, args=[v1490, v1488, v1491, v1492], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1494 Imm(4)                                           -> x6
     v1495 Imm(2)                                           -> x2
-    v1496 Call { target_pc=1340, args=[v1487, v1494, v1495, v1493], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1496 Call { target_pc=1344, args=[v1487, v1494, v1495, v1493], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1497 LocalAddr(-4)                                    -> x7
     v1498 Imm(4)                                           -> x6
     v1499 Imm(2)                                           -> x2
-    v1500 Call { target_pc=1336, args=[v1497, v1498, v1499, v1496], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1500 Call { target_pc=1340, args=[v1497, v1498, v1499, v1496], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1501 Imm(2)                                           -> x0
     v1502 Imm(3)                                           -> x0
     v1503 Imm(3)                                           -> x0
@@ -5513,20 +5513,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1510 Imm(3)                                           -> x2
     v1511 Imm(0)                                           -> x0
     v1512 Imm(1)                                           -> x1
-    v1513 Call { target_pc=1335, args=[v1, v1509, v1510, v1512], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1513 Call { target_pc=1339, args=[v1, v1509, v1510, v1512], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1514 Imm(4)                                           -> x6
     v1515 Imm(2)                                           -> x0
     v1516 LocalAddr(-12)                                   -> x7
     v1517 Imm(3)                                           -> x2
     v1518 Imm(0)                                           -> x1
-    v1519 Call { target_pc=1335, args=[v1516, v1514, v1517, v1518], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1519 Call { target_pc=1339, args=[v1516, v1514, v1517, v1518], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1520 Imm(4)                                           -> x6
     v1521 Imm(2)                                           -> x2
-    v1522 Call { target_pc=1340, args=[v1513, v1520, v1521, v1519], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1522 Call { target_pc=1344, args=[v1513, v1520, v1521, v1519], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1523 LocalAddr(-4)                                    -> x7
     v1524 Imm(4)                                           -> x6
     v1525 Imm(3)                                           -> x2
-    v1526 Call { target_pc=1336, args=[v1523, v1524, v1525, v1522], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1526 Call { target_pc=1340, args=[v1523, v1524, v1525, v1522], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1527 Imm(3)                                           -> x0
     v1528 Imm(4)                                           -> x0
     v1529 Imm(4)                                           -> x0
@@ -5570,19 +5570,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1567 Imm(0)                                           -> x2
     v1568 Imm(0)                                           -> x0
     v1569 Imm(0)                                           -> x0
-    v1570 Call { target_pc=1335, args=[v1, v1566, v1567, v1567], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1570 Call { target_pc=1339, args=[v1, v1566, v1567, v1567], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1571 Imm(8)                                           -> x6
     v1572 Imm(0)                                           -> x1
     v1573 LocalAddr(-8)                                    -> x7
     v1574 Imm(0)                                           -> x2
-    v1575 Call { target_pc=1335, args=[v1573, v1571, v1574, v1572], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1575 Call { target_pc=1339, args=[v1573, v1571, v1574, v1572], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1576 Imm(8)                                           -> x6
     v1577 Imm(0)                                           -> x2
-    v1578 Call { target_pc=1340, args=[v1570, v1576, v1577, v1575], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1578 Call { target_pc=1344, args=[v1570, v1576, v1577, v1575], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1579 LocalAddr(-4)                                    -> x7
     v1580 Imm(8)                                           -> x6
     v1581 Imm(0)                                           -> x2
-    v1582 Call { target_pc=1336, args=[v1579, v1580, v1581, v1578], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1582 Call { target_pc=1340, args=[v1579, v1580, v1581, v1578], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1583 Imm(0)                                           -> x0
     v1584 Imm(1)                                           -> x0
     v1585 Imm(1)                                           -> x0
@@ -5596,19 +5596,19 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1593 Imm(1)                                           -> x2
     v1594 Imm(0)                                           -> x0
     v1595 Imm(0)                                           -> x1
-    v1596 Call { target_pc=1335, args=[v1, v1592, v1593, v1595], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1596 Call { target_pc=1339, args=[v1, v1592, v1593, v1595], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1597 Imm(8)                                           -> x6
     v1598 Imm(0)                                           -> x1
     v1599 LocalAddr(-8)                                    -> x7
     v1600 Imm(1)                                           -> x2
-    v1601 Call { target_pc=1335, args=[v1599, v1597, v1600, v1598], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1601 Call { target_pc=1339, args=[v1599, v1597, v1600, v1598], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1602 Imm(8)                                           -> x6
     v1603 Imm(0)                                           -> x2
-    v1604 Call { target_pc=1340, args=[v1596, v1602, v1603, v1601], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1604 Call { target_pc=1344, args=[v1596, v1602, v1603, v1601], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1605 LocalAddr(-4)                                    -> x7
     v1606 Imm(8)                                           -> x6
     v1607 Imm(1)                                           -> x2
-    v1608 Call { target_pc=1336, args=[v1605, v1606, v1607, v1604], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1608 Call { target_pc=1340, args=[v1605, v1606, v1607, v1604], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1609 Imm(1)                                           -> x0
     v1610 Imm(2)                                           -> x0
     v1611 Imm(2)                                           -> x0
@@ -5653,20 +5653,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1650 Imm(0)                                           -> x2
     v1651 Imm(0)                                           -> x0
     v1652 Imm(0)                                           -> x0
-    v1653 Call { target_pc=1335, args=[v1, v1649, v1650, v1650], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v1653 Call { target_pc=1339, args=[v1, v1649, v1650, v1650], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x13
     v1654 Imm(8)                                           -> x6
     v1655 Imm(1)                                           -> x0
     v1656 LocalAddr(-8)                                    -> x7
     v1657 Imm(0)                                           -> x2
     v1658 Imm(0)                                           -> x1
-    v1659 Call { target_pc=1335, args=[v1656, v1654, v1657, v1658], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1659 Call { target_pc=1339, args=[v1656, v1654, v1657, v1658], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1660 Imm(8)                                           -> x6
     v1661 Imm(1)                                           -> x2
-    v1662 Call { target_pc=1340, args=[v1653, v1660, v1661, v1659], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1662 Call { target_pc=1344, args=[v1653, v1660, v1661, v1659], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1663 LocalAddr(-4)                                    -> x7
     v1664 Imm(8)                                           -> x6
     v1665 Imm(0)                                           -> x2
-    v1666 Call { target_pc=1336, args=[v1663, v1664, v1665, v1662], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1666 Call { target_pc=1340, args=[v1663, v1664, v1665, v1662], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1667 Imm(0)                                           -> x0
     v1668 Imm(1)                                           -> x0
     v1669 Imm(1)                                           -> x0
@@ -5680,20 +5680,20 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1677 Imm(1)                                           -> x2
     v1678 Imm(0)                                           -> x0
     v1679 Imm(0)                                           -> x1
-    v1680 Call { target_pc=1335, args=[v1, v1676, v1677, v1679], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v1680 Call { target_pc=1339, args=[v1, v1676, v1677, v1679], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x3
     v1681 Imm(8)                                           -> x6
     v1682 Imm(1)                                           -> x0
     v1683 LocalAddr(-8)                                    -> x7
     v1684 Imm(1)                                           -> x2
     v1685 Imm(0)                                           -> x1
-    v1686 Call { target_pc=1335, args=[v1683, v1681, v1684, v1685], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1686 Call { target_pc=1339, args=[v1683, v1681, v1684, v1685], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1687 Imm(8)                                           -> x6
     v1688 Imm(1)                                           -> x2
-    v1689 Call { target_pc=1340, args=[v1680, v1687, v1688, v1686], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1689 Call { target_pc=1344, args=[v1680, v1687, v1688, v1686], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1690 LocalAddr(-4)                                    -> x7
     v1691 Imm(8)                                           -> x6
     v1692 Imm(1)                                           -> x2
-    v1693 Call { target_pc=1336, args=[v1690, v1691, v1692, v1689], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1693 Call { target_pc=1340, args=[v1690, v1691, v1692, v1689], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1694 Imm(1)                                           -> x0
     v1695 Imm(2)                                           -> x0
     v1696 Imm(2)                                           -> x0
@@ -5812,9 +5812,9 @@ fn ent_pc=1345 n_params=1 variadic=false locals=12
     v1731 BinopI { op=mul, lhs=v1730, rhs_imm=70 }         -> x2
     v1732 Binop { op=sub, lhs=v1728, rhs=v1731 }           -> x0
     terminator Jmp(b2)   (exit_acc=v1732)
-; --- SSA dump (ok=true) ent_pc=1346 ---
+; --- SSA dump (ok=true) ent_pc=1350 ---
 ; name=check_shuffles
-fn ent_pc=1346 n_params=2 variadic=false locals=8
+fn ent_pc=1350 n_params=2 variadic=false locals=8
   spill_count=9 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -8277,8 +8277,8 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1086 Imm(0)                                           -> x0
     v1087 Extend { value=v1080, kind=I32 }                 -> x0
     v1088 Imm(0)                                           -> x1
-    v1089 Call { target_pc=1335, args=[v1, v1084, v1080, v1088], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
-    v1090 Call { target_pc=1336, args=[v1083, v1084, v1025, v1089], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1089 Call { target_pc=1339, args=[v1, v1084, v1080, v1088], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1090 Call { target_pc=1340, args=[v1083, v1084, v1025, v1089], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1091 Extend { value=v1025, kind=I32 }                 -> x0
     v1092 BinopI { op=add, lhs=v1025, rhs_imm=1 }          -> x13
     v1093 Extend { value=v1092, kind=I32, nsw }            -> x0
@@ -8358,8 +8358,8 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1355 Imm(0)                                           -> x0
     v1356 Extend { value=v1349, kind=I32 }                 -> x0
     v1357 Imm(0)                                           -> x1
-    v1358 Call { target_pc=1335, args=[v1, v1353, v1349, v1357], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
-    v1359 Call { target_pc=1336, args=[v1352, v1353, v1094, v1358], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1358 Call { target_pc=1339, args=[v1, v1353, v1349, v1357], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1359 Call { target_pc=1340, args=[v1352, v1353, v1094, v1358], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1360 Extend { value=v1094, kind=I32 }                 -> x0
     v1361 BinopI { op=add, lhs=v1094, rhs_imm=1 }          -> x13
     v1362 Extend { value=v1361, kind=I32, nsw }            -> x0
@@ -8403,7 +8403,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1108 SimdVal { op=__builtin_ia32_pshuflw256, imm=Some(228), args=[v7] } -> d0
     v1109 StoreLocal { off=-504, value=v1108, kind=V256 }  -> -
     v1110 LocalAddr(-8)                                    -> x7
-    v1111 Call { target_pc=1338, args=[v1106, v1110], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1111 Call { target_pc=1342, args=[v1106, v1110], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1112 Extend { value=v1111, kind=I32 }                 -> x1
     v1113 BinopI { op=eq, lhs=v1111, rhs_imm=0 }           -> x0
     v1114 Binop { op=or, lhs=v1058, rhs=v1113 }            -> x13
@@ -8429,11 +8429,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1134 Imm(3)                                           -> x0
     v1135 Imm(3)                                           -> x2
     v1136 Imm(0)                                           -> x1
-    v1137 Call { target_pc=1335, args=[v1, v1123, v1135, v1136], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1137 Call { target_pc=1339, args=[v1, v1123, v1135, v1136], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1138 LocalAddr(-8)                                    -> x7
     v1139 Imm(4)                                           -> x6
     v1140 Imm(0)                                           -> x2
-    v1141 Call { target_pc=1336, args=[v1138, v1139, v1140, v1137], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1141 Call { target_pc=1340, args=[v1138, v1139, v1140, v1137], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1142 Imm(0)                                           -> x0
     v1143 Imm(1)                                           -> x0
     v1144 Imm(1)                                           -> x0
@@ -8454,11 +8454,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1159 Imm(0)                                           -> x0
     v1160 Imm(0)                                           -> x2
     v1161 Imm(0)                                           -> x1
-    v1162 Call { target_pc=1335, args=[v1, v1148, v1160, v1161], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1162 Call { target_pc=1339, args=[v1, v1148, v1160, v1161], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1163 LocalAddr(-8)                                    -> x7
     v1164 Imm(4)                                           -> x6
     v1165 Imm(1)                                           -> x2
-    v1166 Call { target_pc=1336, args=[v1163, v1164, v1165, v1162], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1166 Call { target_pc=1340, args=[v1163, v1164, v1165, v1162], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1167 Imm(1)                                           -> x0
     v1168 Imm(2)                                           -> x0
     v1169 Imm(2)                                           -> x0
@@ -8479,11 +8479,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1184 Imm(1)                                           -> x0
     v1185 Imm(1)                                           -> x2
     v1186 Imm(0)                                           -> x1
-    v1187 Call { target_pc=1335, args=[v1, v1173, v1185, v1186], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1187 Call { target_pc=1339, args=[v1, v1173, v1185, v1186], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1188 LocalAddr(-8)                                    -> x7
     v1189 Imm(4)                                           -> x6
     v1190 Imm(2)                                           -> x2
-    v1191 Call { target_pc=1336, args=[v1188, v1189, v1190, v1187], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1191 Call { target_pc=1340, args=[v1188, v1189, v1190, v1187], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1192 Imm(2)                                           -> x0
     v1193 Imm(3)                                           -> x0
     v1194 Imm(3)                                           -> x0
@@ -8504,11 +8504,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1209 Imm(2)                                           -> x0
     v1210 Imm(2)                                           -> x2
     v1211 Imm(0)                                           -> x1
-    v1212 Call { target_pc=1335, args=[v1, v1198, v1210, v1211], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1212 Call { target_pc=1339, args=[v1, v1198, v1210, v1211], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1213 LocalAddr(-8)                                    -> x7
     v1214 Imm(4)                                           -> x6
     v1215 Imm(3)                                           -> x2
-    v1216 Call { target_pc=1336, args=[v1213, v1214, v1215, v1212], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1216 Call { target_pc=1340, args=[v1213, v1214, v1215, v1212], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1217 Imm(3)                                           -> x0
     v1218 Imm(4)                                           -> x0
     v1219 Imm(4)                                           -> x0
@@ -8529,10 +8529,10 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1234 Imm(7)                                           -> x0
     v1235 Imm(7)                                           -> x2
     v1236 Imm(0)                                           -> x1
-    v1237 Call { target_pc=1335, args=[v1, v1223, v1235, v1236], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1237 Call { target_pc=1339, args=[v1, v1223, v1235, v1236], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1238 LocalAddr(-8)                                    -> x7
     v1239 Imm(4)                                           -> x6
-    v1240 Call { target_pc=1336, args=[v1238, v1239, v1239, v1237], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1240 Call { target_pc=1340, args=[v1238, v1239, v1239, v1237], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1241 Imm(4)                                           -> x0
     v1242 Imm(5)                                           -> x0
     v1243 Imm(5)                                           -> x0
@@ -8553,11 +8553,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1258 Imm(4)                                           -> x0
     v1259 Imm(4)                                           -> x0
     v1260 Imm(0)                                           -> x1
-    v1261 Call { target_pc=1335, args=[v1, v1247, v1247, v1260], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1261 Call { target_pc=1339, args=[v1, v1247, v1247, v1260], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1262 LocalAddr(-8)                                    -> x7
     v1263 Imm(4)                                           -> x6
     v1264 Imm(5)                                           -> x2
-    v1265 Call { target_pc=1336, args=[v1262, v1263, v1264, v1261], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1265 Call { target_pc=1340, args=[v1262, v1263, v1264, v1261], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1266 Imm(5)                                           -> x0
     v1267 Imm(6)                                           -> x0
     v1268 Imm(6)                                           -> x0
@@ -8578,11 +8578,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1283 Imm(5)                                           -> x0
     v1284 Imm(5)                                           -> x2
     v1285 Imm(0)                                           -> x1
-    v1286 Call { target_pc=1335, args=[v1, v1272, v1284, v1285], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1286 Call { target_pc=1339, args=[v1, v1272, v1284, v1285], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1287 LocalAddr(-8)                                    -> x7
     v1288 Imm(4)                                           -> x6
     v1289 Imm(6)                                           -> x2
-    v1290 Call { target_pc=1336, args=[v1287, v1288, v1289, v1286], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1290 Call { target_pc=1340, args=[v1287, v1288, v1289, v1286], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1291 Imm(6)                                           -> x0
     v1292 Imm(7)                                           -> x0
     v1293 Imm(7)                                           -> x0
@@ -8603,11 +8603,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1308 Imm(6)                                           -> x0
     v1309 Imm(6)                                           -> x2
     v1310 Imm(0)                                           -> x1
-    v1311 Call { target_pc=1335, args=[v1, v1297, v1309, v1310], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1311 Call { target_pc=1339, args=[v1, v1297, v1309, v1310], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1312 LocalAddr(-8)                                    -> x7
     v1313 Imm(4)                                           -> x6
     v1314 Imm(7)                                           -> x2
-    v1315 Call { target_pc=1336, args=[v1312, v1313, v1314, v1311], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1315 Call { target_pc=1340, args=[v1312, v1313, v1314, v1311], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1316 Imm(7)                                           -> x0
     v1317 Imm(8)                                           -> x0
     v1318 Imm(8)                                           -> x0
@@ -8620,7 +8620,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1325 SimdVal { op=__builtin_ia32_pshufd256, imm=Some(147), args=[v7] } -> d0
     v1326 StoreLocal { off=-505, value=v1325, kind=V256 }  -> -
     v1327 LocalAddr(-8)                                    -> x7
-    v1328 Call { target_pc=1338, args=[v1323, v1327], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1328 Call { target_pc=1342, args=[v1323, v1327], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1329 Extend { value=v1328, kind=I32 }                 -> x1
     v1330 BinopI { op=eq, lhs=v1328, rhs_imm=0 }           -> x0
     v1331 Binop { op=or, lhs=v1114, rhs=v1330 }            -> [spill 8]
@@ -8639,8 +8639,8 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1411 Imm(0)                                           -> x0
     v1412 Extend { value=v1405, kind=I32 }                 -> x0
     v1413 Imm(0)                                           -> x1
-    v1414 Call { target_pc=1335, args=[v1, v1409, v1405, v1413], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
-    v1415 Call { target_pc=1336, args=[v1408, v1409, v1363, v1414], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1414 Call { target_pc=1339, args=[v1, v1409, v1405, v1413], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1415 Call { target_pc=1340, args=[v1408, v1409, v1363, v1414], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1416 Extend { value=v1363, kind=I32 }                 -> x0
     v1417 BinopI { op=add, lhs=v1363, rhs_imm=1 }          -> x13
     v1418 Extend { value=v1417, kind=I32, nsw }            -> x0
@@ -8688,7 +8688,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1377 SimdVal { op=__builtin_ia32_pshufhw256, imm=Some(147), args=[v7] } -> d0
     v1378 StoreLocal { off=-506, value=v1377, kind=V256 }  -> -
     v1379 LocalAddr(-8)                                    -> x7
-    v1380 Call { target_pc=1338, args=[v1375, v1379], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1380 Call { target_pc=1342, args=[v1375, v1379], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1381 Extend { value=v1380, kind=I32 }                 -> x1
     v1382 BinopI { op=eq, lhs=v1380, rhs_imm=0 }           -> x0
     v1383 Binop { op=or, lhs=v1331, rhs=v1382 }            -> [spill 8]
@@ -8707,8 +8707,8 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1680 Imm(0)                                           -> x0
     v1681 Extend { value=v1674, kind=I32 }                 -> x0
     v1682 Imm(0)                                           -> x1
-    v1683 Call { target_pc=1335, args=[v1, v1678, v1674, v1682], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
-    v1684 Call { target_pc=1336, args=[v1677, v1678, v1419, v1683], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1683 Call { target_pc=1339, args=[v1, v1678, v1674, v1682], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1684 Call { target_pc=1340, args=[v1677, v1678, v1419, v1683], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1685 Extend { value=v1419, kind=I32 }                 -> x0
     v1686 BinopI { op=add, lhs=v1419, rhs_imm=1 }          -> x13
     v1687 Extend { value=v1686, kind=I32, nsw }            -> x0
@@ -8752,7 +8752,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1433 SimdVal { op=__builtin_ia32_pshuflw256, imm=Some(147), args=[v7] } -> d0
     v1434 StoreLocal { off=-507, value=v1433, kind=V256 }  -> -
     v1435 LocalAddr(-8)                                    -> x7
-    v1436 Call { target_pc=1338, args=[v1431, v1435], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1436 Call { target_pc=1342, args=[v1431, v1435], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1437 Extend { value=v1436, kind=I32 }                 -> x1
     v1438 BinopI { op=eq, lhs=v1436, rhs_imm=0 }           -> x0
     v1439 Binop { op=or, lhs=v1383, rhs=v1438 }            -> x13
@@ -8778,11 +8778,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1459 Imm(2)                                           -> x0
     v1460 Imm(2)                                           -> x2
     v1461 Imm(0)                                           -> x1
-    v1462 Call { target_pc=1335, args=[v1, v1448, v1460, v1461], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1462 Call { target_pc=1339, args=[v1, v1448, v1460, v1461], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1463 LocalAddr(-8)                                    -> x7
     v1464 Imm(4)                                           -> x6
     v1465 Imm(0)                                           -> x2
-    v1466 Call { target_pc=1336, args=[v1463, v1464, v1465, v1462], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1466 Call { target_pc=1340, args=[v1463, v1464, v1465, v1462], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1467 Imm(0)                                           -> x0
     v1468 Imm(1)                                           -> x0
     v1469 Imm(1)                                           -> x0
@@ -8803,11 +8803,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1484 Imm(3)                                           -> x0
     v1485 Imm(3)                                           -> x2
     v1486 Imm(0)                                           -> x1
-    v1487 Call { target_pc=1335, args=[v1, v1473, v1485, v1486], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1487 Call { target_pc=1339, args=[v1, v1473, v1485, v1486], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1488 LocalAddr(-8)                                    -> x7
     v1489 Imm(4)                                           -> x6
     v1490 Imm(1)                                           -> x2
-    v1491 Call { target_pc=1336, args=[v1488, v1489, v1490, v1487], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1491 Call { target_pc=1340, args=[v1488, v1489, v1490, v1487], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1492 Imm(1)                                           -> x0
     v1493 Imm(2)                                           -> x0
     v1494 Imm(2)                                           -> x0
@@ -8828,11 +8828,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1509 Imm(0)                                           -> x0
     v1510 Imm(0)                                           -> x2
     v1511 Imm(0)                                           -> x1
-    v1512 Call { target_pc=1335, args=[v1, v1498, v1510, v1511], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1512 Call { target_pc=1339, args=[v1, v1498, v1510, v1511], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1513 LocalAddr(-8)                                    -> x7
     v1514 Imm(4)                                           -> x6
     v1515 Imm(2)                                           -> x2
-    v1516 Call { target_pc=1336, args=[v1513, v1514, v1515, v1512], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1516 Call { target_pc=1340, args=[v1513, v1514, v1515, v1512], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1517 Imm(2)                                           -> x0
     v1518 Imm(3)                                           -> x0
     v1519 Imm(3)                                           -> x0
@@ -8853,11 +8853,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1534 Imm(1)                                           -> x0
     v1535 Imm(1)                                           -> x2
     v1536 Imm(0)                                           -> x1
-    v1537 Call { target_pc=1335, args=[v1, v1523, v1535, v1536], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1537 Call { target_pc=1339, args=[v1, v1523, v1535, v1536], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1538 LocalAddr(-8)                                    -> x7
     v1539 Imm(4)                                           -> x6
     v1540 Imm(3)                                           -> x2
-    v1541 Call { target_pc=1336, args=[v1538, v1539, v1540, v1537], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1541 Call { target_pc=1340, args=[v1538, v1539, v1540, v1537], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1542 Imm(3)                                           -> x0
     v1543 Imm(4)                                           -> x0
     v1544 Imm(4)                                           -> x0
@@ -8878,10 +8878,10 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1559 Imm(6)                                           -> x0
     v1560 Imm(6)                                           -> x2
     v1561 Imm(0)                                           -> x1
-    v1562 Call { target_pc=1335, args=[v1, v1548, v1560, v1561], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1562 Call { target_pc=1339, args=[v1, v1548, v1560, v1561], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1563 LocalAddr(-8)                                    -> x7
     v1564 Imm(4)                                           -> x6
-    v1565 Call { target_pc=1336, args=[v1563, v1564, v1564, v1562], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1565 Call { target_pc=1340, args=[v1563, v1564, v1564, v1562], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1566 Imm(4)                                           -> x0
     v1567 Imm(5)                                           -> x0
     v1568 Imm(5)                                           -> x0
@@ -8902,11 +8902,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1583 Imm(7)                                           -> x0
     v1584 Imm(7)                                           -> x2
     v1585 Imm(0)                                           -> x1
-    v1586 Call { target_pc=1335, args=[v1, v1572, v1584, v1585], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1586 Call { target_pc=1339, args=[v1, v1572, v1584, v1585], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1587 LocalAddr(-8)                                    -> x7
     v1588 Imm(4)                                           -> x6
     v1589 Imm(5)                                           -> x2
-    v1590 Call { target_pc=1336, args=[v1587, v1588, v1589, v1586], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1590 Call { target_pc=1340, args=[v1587, v1588, v1589, v1586], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1591 Imm(5)                                           -> x0
     v1592 Imm(6)                                           -> x0
     v1593 Imm(6)                                           -> x0
@@ -8927,11 +8927,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1608 Imm(4)                                           -> x0
     v1609 Imm(4)                                           -> x0
     v1610 Imm(0)                                           -> x1
-    v1611 Call { target_pc=1335, args=[v1, v1597, v1597, v1610], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1611 Call { target_pc=1339, args=[v1, v1597, v1597, v1610], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1612 LocalAddr(-8)                                    -> x7
     v1613 Imm(4)                                           -> x6
     v1614 Imm(6)                                           -> x2
-    v1615 Call { target_pc=1336, args=[v1612, v1613, v1614, v1611], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1615 Call { target_pc=1340, args=[v1612, v1613, v1614, v1611], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1616 Imm(6)                                           -> x0
     v1617 Imm(7)                                           -> x0
     v1618 Imm(7)                                           -> x0
@@ -8952,11 +8952,11 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1633 Imm(5)                                           -> x0
     v1634 Imm(5)                                           -> x2
     v1635 Imm(0)                                           -> x1
-    v1636 Call { target_pc=1335, args=[v1, v1622, v1634, v1635], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1636 Call { target_pc=1339, args=[v1, v1622, v1634, v1635], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
     v1637 LocalAddr(-8)                                    -> x7
     v1638 Imm(4)                                           -> x6
     v1639 Imm(7)                                           -> x2
-    v1640 Call { target_pc=1336, args=[v1637, v1638, v1639, v1636], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1640 Call { target_pc=1340, args=[v1637, v1638, v1639, v1636], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1641 Imm(7)                                           -> x0
     v1642 Imm(8)                                           -> x0
     v1643 Imm(8)                                           -> x0
@@ -8969,7 +8969,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1650 SimdVal { op=__builtin_ia32_pshufd256, imm=Some(78), args=[v7] } -> d0
     v1651 StoreLocal { off=-508, value=v1650, kind=V256 }  -> -
     v1652 LocalAddr(-8)                                    -> x7
-    v1653 Call { target_pc=1338, args=[v1648, v1652], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1653 Call { target_pc=1342, args=[v1648, v1652], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1654 Extend { value=v1653, kind=I32 }                 -> x1
     v1655 BinopI { op=eq, lhs=v1653, rhs_imm=0 }           -> x0
     v1656 Binop { op=or, lhs=v1439, rhs=v1655 }            -> [spill 8]
@@ -8988,8 +8988,8 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1736 Imm(0)                                           -> x0
     v1737 Extend { value=v1730, kind=I32 }                 -> x0
     v1738 Imm(0)                                           -> x1
-    v1739 Call { target_pc=1335, args=[v1, v1734, v1730, v1738], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
-    v1740 Call { target_pc=1336, args=[v1733, v1734, v1688, v1739], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1739 Call { target_pc=1339, args=[v1, v1734, v1730, v1738], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1740 Call { target_pc=1340, args=[v1733, v1734, v1688, v1739], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1741 Extend { value=v1688, kind=I32 }                 -> x0
     v1742 BinopI { op=add, lhs=v1688, rhs_imm=1 }          -> x13
     v1743 Extend { value=v1742, kind=I32, nsw }            -> x0
@@ -9037,7 +9037,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1702 SimdVal { op=__builtin_ia32_pshufhw256, imm=Some(78), args=[v7] } -> d0
     v1703 StoreLocal { off=-509, value=v1702, kind=V256 }  -> -
     v1704 LocalAddr(-8)                                    -> x7
-    v1705 Call { target_pc=1338, args=[v1700, v1704], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1705 Call { target_pc=1342, args=[v1700, v1704], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1706 Extend { value=v1705, kind=I32 }                 -> x1
     v1707 BinopI { op=eq, lhs=v1705, rhs_imm=0 }           -> x0
     v1708 Binop { op=or, lhs=v1656, rhs=v1707 }            -> [spill 8]
@@ -9056,8 +9056,8 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1789 Imm(0)                                           -> x0
     v1790 Extend { value=v1783, kind=I32 }                 -> x0
     v1791 Imm(0)                                           -> x1
-    v1792 Call { target_pc=1335, args=[v1, v1787, v1783, v1791], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
-    v1793 Call { target_pc=1336, args=[v1786, v1787, v1744, v1792], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1792 Call { target_pc=1339, args=[v1, v1787, v1783, v1791], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x1
+    v1793 Call { target_pc=1340, args=[v1786, v1787, v1744, v1792], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1794 Extend { value=v1744, kind=I32 }                 -> x0
     v1795 BinopI { op=add, lhs=v1744, rhs_imm=1 }          -> x13
     v1796 Extend { value=v1795, kind=I32, nsw }            -> x0
@@ -9101,7 +9101,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1758 SimdVal { op=__builtin_ia32_pshuflw256, imm=Some(78), args=[v7] } -> d0
     v1759 StoreLocal { off=-510, value=v1758, kind=V256 }  -> -
     v1760 LocalAddr(-8)                                    -> x7
-    v1761 Call { target_pc=1338, args=[v1756, v1760], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1761 Call { target_pc=1342, args=[v1756, v1760], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1762 Extend { value=v1761, kind=I32 }                 -> x1
     v1763 BinopI { op=eq, lhs=v1761, rhs_imm=0 }           -> x0
     v1764 Binop { op=or, lhs=v1708, rhs=v1763 }            -> x13
@@ -9169,7 +9169,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1812 SimdVal { op=__builtin_ia32_palignr256, imm=Some(0), args=[v7, v17] } -> d0
     v1813 StoreLocal { off=-511, value=v1812, kind=V256 }  -> -
     v1814 LocalAddr(-8)                                    -> x7
-    v1815 Call { target_pc=1338, args=[v1809, v1814], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1815 Call { target_pc=1342, args=[v1809, v1814], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1816 Extend { value=v1815, kind=I32 }                 -> x1
     v1817 BinopI { op=eq, lhs=v1815, rhs_imm=0 }           -> x0
     v1818 Binop { op=or, lhs=v1764, rhs=v1817 }            -> x13
@@ -9259,7 +9259,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1885 SimdVal { op=__builtin_ia32_palignr256, imm=Some(1), args=[v7, v17] } -> d0
     v1886 StoreLocal { off=-512, value=v1885, kind=V256 }  -> -
     v1887 LocalAddr(-8)                                    -> x7
-    v1888 Call { target_pc=1338, args=[v1882, v1887], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1888 Call { target_pc=1342, args=[v1882, v1887], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1889 Extend { value=v1888, kind=I32 }                 -> x1
     v1890 BinopI { op=eq, lhs=v1888, rhs_imm=0 }           -> x0
     v1891 Binop { op=or, lhs=v1818, rhs=v1890 }            -> x13
@@ -9349,7 +9349,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v1959 SimdVal { op=__builtin_ia32_palignr256, imm=Some(7), args=[v7, v17] } -> d0
     v1960 StoreLocal { off=-513, value=v1959, kind=V256 }  -> -
     v1961 LocalAddr(-8)                                    -> x7
-    v1962 Call { target_pc=1338, args=[v1956, v1961], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1962 Call { target_pc=1342, args=[v1956, v1961], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1963 Extend { value=v1962, kind=I32 }                 -> x1
     v1964 BinopI { op=eq, lhs=v1962, rhs_imm=0 }           -> x0
     v1965 Binop { op=or, lhs=v1891, rhs=v1964 }            -> x13
@@ -9439,7 +9439,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2033 SimdVal { op=__builtin_ia32_palignr256, imm=Some(15), args=[v7, v17] } -> d0
     v2034 StoreLocal { off=-514, value=v2033, kind=V256 }  -> -
     v2035 LocalAddr(-8)                                    -> x7
-    v2036 Call { target_pc=1338, args=[v2030, v2035], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2036 Call { target_pc=1342, args=[v2030, v2035], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2037 Extend { value=v2036, kind=I32 }                 -> x1
     v2038 BinopI { op=eq, lhs=v2036, rhs_imm=0 }           -> x0
     v2039 Binop { op=or, lhs=v1965, rhs=v2038 }            -> x12
@@ -9515,7 +9515,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2107 SimdVal { op=__builtin_ia32_palignr256, imm=Some(16), args=[v7, v17] } -> d0
     v2108 StoreLocal { off=-515, value=v2107, kind=V256 }  -> -
     v2109 LocalAddr(-8)                                    -> x7
-    v2110 Call { target_pc=1338, args=[v2104, v2109], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2110 Call { target_pc=1342, args=[v2104, v2109], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2111 Extend { value=v2110, kind=I32 }                 -> x1
     v2112 BinopI { op=eq, lhs=v2110, rhs_imm=0 }           -> x0
     v2113 Binop { op=or, lhs=v2039, rhs=v2112 }            -> x12
@@ -9599,7 +9599,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2181 SimdVal { op=__builtin_ia32_palignr256, imm=Some(17), args=[v7, v17] } -> d0
     v2182 StoreLocal { off=-516, value=v2181, kind=V256 }  -> -
     v2183 LocalAddr(-8)                                    -> x7
-    v2184 Call { target_pc=1338, args=[v2178, v2183], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2184 Call { target_pc=1342, args=[v2178, v2183], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2185 Extend { value=v2184, kind=I32 }                 -> x1
     v2186 BinopI { op=eq, lhs=v2184, rhs_imm=0 }           -> x0
     v2187 Binop { op=or, lhs=v2113, rhs=v2186 }            -> x12
@@ -9683,7 +9683,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2255 SimdVal { op=__builtin_ia32_palignr256, imm=Some(31), args=[v7, v17] } -> d0
     v2256 StoreLocal { off=-517, value=v2255, kind=V256 }  -> -
     v2257 LocalAddr(-8)                                    -> x7
-    v2258 Call { target_pc=1338, args=[v2252, v2257], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2258 Call { target_pc=1342, args=[v2252, v2257], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2259 Extend { value=v2258, kind=I32 }                 -> x1
     v2260 BinopI { op=eq, lhs=v2258, rhs_imm=0 }           -> x0
     v2261 Binop { op=or, lhs=v2187, rhs=v2260 }            -> x12
@@ -9751,7 +9751,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2329 SimdVal { op=__builtin_ia32_palignr256, imm=Some(32), args=[v7, v17] } -> d0
     v2330 StoreLocal { off=-518, value=v2329, kind=V256 }  -> -
     v2331 LocalAddr(-8)                                    -> x7
-    v2332 Call { target_pc=1338, args=[v2326, v2331], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2332 Call { target_pc=1342, args=[v2326, v2331], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2333 Extend { value=v2332, kind=I32 }                 -> x1
     v2334 BinopI { op=eq, lhs=v2332, rhs_imm=0 }           -> x0
     v2335 Binop { op=or, lhs=v2261, rhs=v2334 }            -> x12
@@ -9814,7 +9814,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2401 SimdVal { op=__builtin_ia32_pslldqi256, imm=Some(0), args=[v7] } -> d0
     v2402 StoreLocal { off=-519, value=v2401, kind=V256 }  -> -
     v2403 LocalAddr(-8)                                    -> x7
-    v2404 Call { target_pc=1338, args=[v2399, v2403], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2404 Call { target_pc=1342, args=[v2399, v2403], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2405 Extend { value=v2404, kind=I32 }                 -> x1
     v2406 BinopI { op=eq, lhs=v2404, rhs_imm=0 }           -> x0
     v2407 Binop { op=or, lhs=v2335, rhs=v2406 }            -> x12
@@ -9877,7 +9877,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2453 SimdVal { op=__builtin_ia32_psrldqi256, imm=Some(0), args=[v7] } -> d0
     v2454 StoreLocal { off=-520, value=v2453, kind=V256 }  -> -
     v2455 LocalAddr(-8)                                    -> x7
-    v2456 Call { target_pc=1338, args=[v2451, v2455], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2456 Call { target_pc=1342, args=[v2451, v2455], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2457 Extend { value=v2456, kind=I32 }                 -> x1
     v2458 BinopI { op=eq, lhs=v2456, rhs_imm=0 }           -> x0
     v2459 Binop { op=or, lhs=v2407, rhs=v2458 }            -> x12
@@ -9949,7 +9949,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2507 SimdVal { op=__builtin_ia32_pslldqi256, imm=Some(3), args=[v7] } -> d0
     v2508 StoreLocal { off=-521, value=v2507, kind=V256 }  -> -
     v2509 LocalAddr(-8)                                    -> x7
-    v2510 Call { target_pc=1338, args=[v2505, v2509], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2510 Call { target_pc=1342, args=[v2505, v2509], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2511 Extend { value=v2510, kind=I32 }                 -> x1
     v2512 BinopI { op=eq, lhs=v2510, rhs_imm=0 }           -> x0
     v2513 Binop { op=or, lhs=v2459, rhs=v2512 }            -> x12
@@ -10022,7 +10022,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2560 SimdVal { op=__builtin_ia32_psrldqi256, imm=Some(3), args=[v7] } -> d0
     v2561 StoreLocal { off=-522, value=v2560, kind=V256 }  -> -
     v2562 LocalAddr(-8)                                    -> x7
-    v2563 Call { target_pc=1338, args=[v2558, v2562], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2563 Call { target_pc=1342, args=[v2558, v2562], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2564 Extend { value=v2563, kind=I32 }                 -> x1
     v2565 BinopI { op=eq, lhs=v2563, rhs_imm=0 }           -> x0
     v2566 Binop { op=or, lhs=v2513, rhs=v2565 }            -> x12
@@ -10094,7 +10094,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2616 SimdVal { op=__builtin_ia32_pslldqi256, imm=Some(15), args=[v7] } -> d0
     v2617 StoreLocal { off=-523, value=v2616, kind=V256 }  -> -
     v2618 LocalAddr(-8)                                    -> x7
-    v2619 Call { target_pc=1338, args=[v2614, v2618], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2619 Call { target_pc=1342, args=[v2614, v2618], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2620 Extend { value=v2619, kind=I32 }                 -> x1
     v2621 BinopI { op=eq, lhs=v2619, rhs_imm=0 }           -> x0
     v2622 Binop { op=or, lhs=v2566, rhs=v2621 }            -> x12
@@ -10167,7 +10167,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2669 SimdVal { op=__builtin_ia32_psrldqi256, imm=Some(15), args=[v7] } -> d0
     v2670 StoreLocal { off=-524, value=v2669, kind=V256 }  -> -
     v2671 LocalAddr(-8)                                    -> x7
-    v2672 Call { target_pc=1338, args=[v2667, v2671], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2672 Call { target_pc=1342, args=[v2667, v2671], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2673 Extend { value=v2672, kind=I32 }                 -> x1
     v2674 BinopI { op=eq, lhs=v2672, rhs_imm=0 }           -> x0
     v2675 Binop { op=or, lhs=v2622, rhs=v2674 }            -> x3
@@ -10223,7 +10223,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2725 SimdVal { op=__builtin_ia32_pslldqi256, imm=Some(16), args=[v7] } -> d0
     v2726 StoreLocal { off=-525, value=v2725, kind=V256 }  -> -
     v2727 LocalAddr(-8)                                    -> x7
-    v2728 Call { target_pc=1338, args=[v2723, v2727], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2728 Call { target_pc=1342, args=[v2723, v2727], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2729 Extend { value=v2728, kind=I32 }                 -> x1
     v2730 BinopI { op=eq, lhs=v2728, rhs_imm=0 }           -> x0
     v2731 Binop { op=or, lhs=v2675, rhs=v2730 }            -> x3
@@ -10280,7 +10280,7 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2778 SimdVal { op=__builtin_ia32_psrldqi256, imm=Some(16), args=[v7] } -> d0
     v2779 StoreLocal { off=-526, value=v2778, kind=V256 }  -> -
     v2780 LocalAddr(-8)                                    -> x7
-    v2781 Call { target_pc=1338, args=[v2776, v2780], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2781 Call { target_pc=1342, args=[v2776, v2780], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2782 Extend { value=v2781, kind=I32 }                 -> x1
     v2783 BinopI { op=eq, lhs=v2781, rhs_imm=0 }           -> x0
     v2784 Binop { op=or, lhs=v2731, rhs=v2783 }            -> x0
@@ -10300,9 +10300,9 @@ fn ent_pc=1346 n_params=2 variadic=false locals=8
     v2831 LifetimeEnd(0)                                   -> -
     v2832 LifetimeEnd(-8)                                  -> -
     terminator Return(v2791)   (exit_acc=v2791)
-; --- SSA dump (ok=true) ent_pc=1347 ---
+; --- SSA dump (ok=true) ent_pc=1351 ---
 ; name=check_blends
-fn ent_pc=1347 n_params=3 variadic=false locals=8
+fn ent_pc=1351 n_params=3 variadic=false locals=8
   spill_count=12 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -13423,9 +13423,9 @@ fn ent_pc=1347 n_params=3 variadic=false locals=8
     v2457 LifetimeEnd(0)                                   -> -
     v2458 LifetimeEnd(-8)                                  -> -
     terminator Return(v2429)   (exit_acc=v2429)
-; --- SSA dump (ok=true) ent_pc=1348 ---
+; --- SSA dump (ok=true) ent_pc=1352 ---
 ; name=check_extensions
-fn ent_pc=1348 n_params=1 variadic=false locals=8
+fn ent_pc=1352 n_params=1 variadic=false locals=8
   spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -14675,9 +14675,9 @@ fn ent_pc=1348 n_params=1 variadic=false locals=8
     v1146 LifetimeEnd(-551)                                -> -
     v1147 LifetimeEnd(0)                                   -> -
     terminator Return(v1144)   (exit_acc=v1144)
-; --- SSA dump (ok=true) ent_pc=1349 ---
+; --- SSA dump (ok=true) ent_pc=1353 ---
 ; name=check_mpsadbw
-fn ent_pc=1349 n_params=2 variadic=false locals=8
+fn ent_pc=1353 n_params=2 variadic=false locals=8
   spill_count=10 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -16907,9 +16907,9 @@ fn ent_pc=1349 n_params=2 variadic=false locals=8
     v2004 LifetimeEnd(0)                                   -> -
     v2005 LifetimeEnd(-8)                                  -> -
     terminator Return(v1928)   (exit_acc=v1928)
-; --- SSA dump (ok=true) ent_pc=1350 ---
+; --- SSA dump (ok=true) ent_pc=1354 ---
 ; name=check_broadcasts
-fn ent_pc=1350 n_params=1 variadic=false locals=8
+fn ent_pc=1354 n_params=1 variadic=false locals=8
   spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -18385,9 +18385,9 @@ fn ent_pc=1350 n_params=1 variadic=false locals=8
     terminator Jmp(b97)
   block 100  start_pc=0
     terminator Jmp(b71)
-; --- SSA dump (ok=true) ent_pc=1351 ---
+; --- SSA dump (ok=true) ent_pc=1355 ---
 ; name=main
-fn ent_pc=1351 n_params=0 variadic=false locals=20
+fn ent_pc=1355 n_params=0 variadic=false locals=20
   spill_count=4 gpr_used=[3, 5, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -18579,7 +18579,7 @@ fn ent_pc=1351 n_params=0 variadic=false locals=20
     v156 Imm(0)                                           -> x1
     v157 Extend { value=v153, kind=I32 }                  -> x0
     v158 LocalAddr(-8)                                    -> x9
-    v159 Call { target_pc=1341, args=[v21, v154, v155, v156, v153, v158], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v159 Call { target_pc=1345, args=[v21, v154, v155, v156, v153, v158], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v160 Extend { value=v146, kind=I32 }                  -> x0
     v161 Extend { value=v153, kind=I32 }                  -> x0
     v162 Imm(0)                                           -> x0
@@ -18608,7 +18608,7 @@ fn ent_pc=1351 n_params=0 variadic=false locals=20
     v185 Imm(1)                                           -> x1
     v186 Extend { value=v153, kind=I32 }                  -> x0
     v187 LocalAddr(-8)                                    -> x9
-    v188 Call { target_pc=1341, args=[v21, v183, v184, v185, v153, v187], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v188 Call { target_pc=1345, args=[v21, v183, v184, v185, v153, v187], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v189 Extend { value=v182, kind=I32 }                  -> x0
     v190 Extend { value=v153, kind=I32 }                  -> x0
     v191 Imm(0)                                           -> x0
@@ -18636,7 +18636,7 @@ fn ent_pc=1351 n_params=0 variadic=false locals=20
     v213 Imm(2)                                           -> x2
     v214 Extend { value=v153, kind=I32 }                  -> x0
     v215 LocalAddr(-8)                                    -> x9
-    v216 Call { target_pc=1341, args=[v21, v212, v213, v213, v153, v215], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v216 Call { target_pc=1345, args=[v21, v212, v213, v213, v153, v215], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v217 Extend { value=v211, kind=I32 }                  -> x0
     v218 Extend { value=v153, kind=I32 }                  -> x0
     v219 Imm(0)                                           -> x0
@@ -18665,7 +18665,7 @@ fn ent_pc=1351 n_params=0 variadic=false locals=20
     v242 Imm(2)                                           -> x1
     v243 Extend { value=v153, kind=I32 }                  -> x0
     v244 LocalAddr(-8)                                    -> x9
-    v245 Call { target_pc=1341, args=[v21, v240, v241, v242, v153, v244], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v245 Call { target_pc=1345, args=[v21, v240, v241, v242, v153, v244], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v246 Extend { value=v239, kind=I32 }                  -> x0
     v247 Extend { value=v153, kind=I32 }                  -> x0
     v248 Imm(0)                                           -> x0
@@ -18720,20 +18720,20 @@ fn ent_pc=1351 n_params=0 variadic=false locals=20
     v289 Extend { value=v287, kind=I32 }                  -> x0
     v290 LocalAddr(-20)                                   -> x7
     v291 LocalAddr(-16)                                   -> x6
-    v292 Call { target_pc=1343, args=[v290, v291], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v292 Call { target_pc=1347, args=[v290, v291], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v293 Extend { value=v292, kind=I32 }                  -> x1
     v294 Binop { op=or, lhs=v287, rhs=v292 }              -> x5
     v295 Imm(0)                                           -> x0
     v296 Extend { value=v294, kind=I32 }                  -> x0
     v297 LocalAddr(-20)                                   -> x7
-    v298 Call { target_pc=1345, args=[v297], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v298 Call { target_pc=1349, args=[v297], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v299 Extend { value=v298, kind=I32 }                  -> x1
     v300 Binop { op=or, lhs=v294, rhs=v298 }              -> x5
     v301 Imm(0)                                           -> x0
     v302 Extend { value=v300, kind=I32 }                  -> x0
     v303 LocalAddr(-20)                                   -> x7
     v304 LocalAddr(-16)                                   -> x6
-    v305 Call { target_pc=1346, args=[v303, v304], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v305 Call { target_pc=1350, args=[v303, v304], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v306 Extend { value=v305, kind=I32 }                  -> x1
     v307 Binop { op=or, lhs=v300, rhs=v305 }              -> x5
     v308 Imm(0)                                           -> x0
@@ -18741,26 +18741,26 @@ fn ent_pc=1351 n_params=0 variadic=false locals=20
     v310 LocalAddr(-20)                                   -> x7
     v311 LocalAddr(-16)                                   -> x6
     v312 LocalAddr(-12)                                   -> x2
-    v313 Call { target_pc=1347, args=[v310, v311, v312], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v313 Call { target_pc=1351, args=[v310, v311, v312], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v314 Extend { value=v313, kind=I32 }                  -> x1
     v315 Binop { op=or, lhs=v307, rhs=v313 }              -> x5
     v316 Imm(0)                                           -> x0
     v317 Extend { value=v315, kind=I32 }                  -> x0
     v318 LocalAddr(-20)                                   -> x7
-    v319 Call { target_pc=1348, args=[v318], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v319 Call { target_pc=1352, args=[v318], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v320 Extend { value=v319, kind=I32 }                  -> x1
     v321 Binop { op=or, lhs=v315, rhs=v319 }              -> x5
     v322 Imm(0)                                           -> x0
     v323 Extend { value=v321, kind=I32 }                  -> x0
     v324 LocalAddr(-20)                                   -> x7
     v325 LocalAddr(-16)                                   -> x6
-    v326 Call { target_pc=1349, args=[v324, v325], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v326 Call { target_pc=1353, args=[v324, v325], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v327 Extend { value=v326, kind=I32 }                  -> x1
     v328 Binop { op=or, lhs=v321, rhs=v326 }              -> x5
     v329 Imm(0)                                           -> x0
     v330 Extend { value=v328, kind=I32 }                  -> x0
     v331 LocalAddr(-20)                                   -> x7
-    v332 Call { target_pc=1350, args=[v331], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v332 Call { target_pc=1354, args=[v331], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v333 Extend { value=v332, kind=I32 }                  -> x1
     v334 Binop { op=or, lhs=v328, rhs=v332 }              -> x5
     v335 Imm(0)                                           -> x0

@@ -524,6 +524,47 @@ fn a_frame_with_no_pointer_gives_rbp_out() {
     }
 }
 
+/// Of six register parameters only the one whose address the body takes
+/// is read from memory: it alone keeps a cell, and the others' debug
+/// locations name no home.
+#[test]
+fn only_a_parameter_read_from_memory_keeps_a_cell() {
+    use crate::{CompileOptions, Compiler, OutputKind};
+    const SRC: &str = "void sink(long *);\n\
+        long six(long a, long b, long c, long d, long e, long g) {\n\
+        sink(&a); return a + b + c + d + e + g; }\n";
+    let target = Target::LinuxX64;
+    let program = Compiler::with_options(
+        SRC.to_string(),
+        target,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        frame_larger_than: Some(0),
+        ..NativeOptions::new().with_optimize()
+    };
+    let build = crate::c5::codegen::lower_for(&program, target, opts).expect("lower");
+    let report = (build.diagnostics.iter())
+        .find(|d| d.text.contains("function `six`"))
+        .expect("a frame report");
+    assert!(
+        report.text.contains("16 in parameter cells"),
+        "{}",
+        report.text
+    );
+    let homes: Vec<bool> = (build.param_frame_offsets.values().next())
+        .expect("homes")
+        .iter()
+        .map(Option::is_some)
+        .collect();
+    assert_eq!(homes, [true, false, false, false, false, false]);
+}
+
 /// Kept out of its own recursive calls, which would add levels to its frame.
 const FIB: &str = "__attribute__((noinline)) long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
 

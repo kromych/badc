@@ -100,7 +100,7 @@ Disassembly of section .text:
                	retq
 
 <s16i>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	movq	(%rsp), %rax
                	movl	%esi, (%rax)
@@ -119,11 +119,11 @@ Disassembly of section .text:
                	movl	%esi, 0x34(%rax)
                	movl	%esi, 0x38(%rax)
                	movl	%esi, 0x3c(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <s8l>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	movq	(%rsp), %rax
                	movq	%rsi, (%rax)
@@ -134,7 +134,7 @@ Disassembly of section .text:
                	movq	%rsi, 0x28(%rax)
                	movq	%rsi, 0x30(%rax)
                	movq	%rsi, 0x38(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <k_byte>:

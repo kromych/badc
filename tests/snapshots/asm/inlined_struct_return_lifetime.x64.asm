@@ -31,7 +31,7 @@ Disassembly of section .text:
                	retq
 
 <one_of_two>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	movw	$0xa, <rip> # <addr>
                	movswq	<rip>, %rax # <addr>
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	movq	$0x1, (%rax)
                	movq	$0x2, 0x8(%rax)
                	movq	$0x3, 0x10(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
                	testl	%esi, %esi
                	je	<addr>
@@ -49,13 +49,13 @@ Disassembly of section .text:
                	movq	$0x4, (%rax)
                	movq	$0x5, 0x8(%rax)
                	movq	$0x6, 0x10(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
                	movq	(%rsp), %rax
                	movq	$0x1, (%rax)
                	movq	$0x2, 0x8(%rax)
                	movq	$0x3, 0x10(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <check_one>:

@@ -273,7 +273,7 @@ pub(crate) fn emit_function(
         cx.param_frame_offsets.insert(
             func.ent_pc,
             (0..func.n_params)
-                .map(|i| local_slot_off(i as i64 + 2, func, frame))
+                .map(|i| Some(local_slot_off(i as i64 + 2, func, frame)))
                 .collect(),
         );
     }

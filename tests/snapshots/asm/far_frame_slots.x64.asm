@@ -42,17 +42,17 @@ Disassembly of section .text:
                	retq
 
 <make>:
-               	subq	$0x68, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	addq	%rsi, %rdx
                	addq	%r8, %rcx
-               	movq	0x70(%rsp), %rax
+               	movq	0x20(%rsp), %rax
                	leaq	(%r9,%rax), %rsi
-               	movq	0x78(%rsp), %rax
-               	movq	0x80(%rsp), %rdi
+               	movq	0x28(%rsp), %rax
+               	movq	0x30(%rsp), %rdi
                	addq	%rax, %rdi
-               	movq	0x88(%rsp), %rax
-               	movq	0x90(%rsp), %r8
+               	movq	0x38(%rsp), %rax
+               	movq	0x40(%rsp), %r8
                	addq	%rax, %r8
                	movq	(%rsp), %rax
                	movq	%rdx, (%rax)
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	movq	%rsi, 0x10(%rax)
                	movq	%rdi, 0x18(%rax)
                	movq	%r8, 0x20(%rax)
-               	addq	$0x68, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <pair>:

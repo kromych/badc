@@ -65,7 +65,7 @@ pub(crate) struct EmitCtx<'a> {
     /// Frame-base-relative offset of each parameter's memory home, by
     /// `ent_pc`; the debug-info emitter places the formal parameters with it.
     pub(crate) param_frame_offsets:
-        &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+        &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<Option<i64>>>,
     /// Where each over-aligned region member's storage is, by `ent_pc`
     /// (`Build::region_frame_offsets`).
     pub(crate) region_frame_offsets:
@@ -2379,7 +2379,8 @@ pub(crate) struct LowerState {
     pub(crate) frame_stack: alloc::collections::BTreeMap<usize, FrameStack>,
     pub(crate) asm_warnings:
         alloc::vec::Vec<(super::super::ir::ValueId, Code, alloc::string::String)>,
-    pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    pub(crate) param_frame_offsets:
+        alloc::collections::BTreeMap<usize, alloc::vec::Vec<Option<i64>>>,
     pub(crate) region_frame_offsets:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     /// Entry PC to code offset, `usize::MAX` for a PC with no instruction.

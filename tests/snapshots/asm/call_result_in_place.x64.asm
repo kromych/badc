@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <make>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	leaq	0x1(%rsi), %rcx
                	leaq	0x2(%rsi), %rdx
@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movq	%rcx, 0x8(%rax)
                	movq	%rdx, 0x10(%rax)
                	movq	%rdi, 0x18(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <makep>:
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	retq
 
 <rotate_arg>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	movq	0x18(%rsi), %rcx
                	movq	(%rsi), %rdx
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	movq	%rdi, 0x10(%rax)
                	movq	%rsi, 0x18(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <clobber_global>:

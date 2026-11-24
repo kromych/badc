@@ -1010,7 +1010,10 @@ fn emit_incoming(
     };
     let name = inst.variant_name();
     let from_home = home.is_some_and(|i| param_from_home.get(i).copied().unwrap_or(false));
-    let home_off = home.map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
+    // Only a read from the home names it; a parameter read in its register
+    // may keep none.
+    let home_off =
+        (home.filter(|_| from_home)).map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
     let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
         .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
     if kind == LoadKind::V256 {

@@ -437,27 +437,27 @@ Disassembly of section .text:
                	retq
 
 <update>:
-               	subq	$0x88, %rsp
+               	subq	$0x78, %rsp
                	movq	%rdi, 0x60(%rsp)
-               	movq	0x90(%rsp), %r10
+               	movq	0x80(%rsp), %r10
                	movq	%r10, (%rsp)
-               	movq	0x98(%rsp), %r10
+               	movq	0x88(%rsp), %r10
                	movq	%r10, 0x8(%rsp)
-               	movq	0xa0(%rsp), %r10
+               	movq	0x90(%rsp), %r10
                	movq	%r10, 0x10(%rsp)
-               	movq	0xa8(%rsp), %r10
+               	movq	0x98(%rsp), %r10
                	movq	%r10, 0x18(%rsp)
-               	movq	0xb0(%rsp), %r10
+               	movq	0xa0(%rsp), %r10
                	movq	%r10, 0x20(%rsp)
-               	movq	0xb8(%rsp), %r10
+               	movq	0xa8(%rsp), %r10
                	movq	%r10, 0x28(%rsp)
-               	movq	0xc0(%rsp), %r10
+               	movq	0xb0(%rsp), %r10
                	movq	%r10, 0x30(%rsp)
-               	movq	0xc8(%rsp), %r10
+               	movq	0xb8(%rsp), %r10
                	movq	%r10, 0x38(%rsp)
-               	movq	0xd0(%rsp), %r10
+               	movq	0xc0(%rsp), %r10
                	movq	%r10, 0x40(%rsp)
-               	movq	0xd8(%rsp), %r10
+               	movq	0xc8(%rsp), %r10
                	movq	%r10, 0x48(%rsp)
                	movups	%xmm0, 0x50(%rsp)
                	leaq	(%rsp), %rax
@@ -515,7 +515,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x30(%rax)
                	movups	0x40(%rcx), %xmm14
                	movups	%xmm14, 0x40(%rax)
-               	addq	$0x88, %rsp
+               	addq	$0x78, %rsp
                	retq
 
 <update_scalar>:

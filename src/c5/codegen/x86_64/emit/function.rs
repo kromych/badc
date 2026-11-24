@@ -276,7 +276,7 @@ pub(crate) fn emit_function(
         cx.param_frame_offsets.insert(
             func.ent_pc,
             (0..func.n_params)
-                .map(|i| param_home_off(i, func, frame, abi))
+                .map(|i| param_home(i, func, frame, abi))
                 .collect(),
         );
     }
@@ -1972,12 +1972,17 @@ fn emit_param_homes(
         if dead.get(i).copied().unwrap_or(false) {
             continue;
         }
-        let (base, home) = frame.fp_addr(param_home_off(i, func, frame, abi) as i32);
+        // A register-passed aggregate is scattered into its body local.
+        let home = || frame.fp_addr(param_home_off(i, func, frame, abi) as i32);
         match *placement {
             super::ArgPlacement::IntReg(r) => {
+                let (base, home) = home();
                 emit_mov_mem_r(code, base, home, Reg(r));
             }
-            super::ArgPlacement::FpReg(x) => emit_movsd_mem_xmm(code, base, home, Reg(x)),
+            super::ArgPlacement::FpReg(x) => {
+                let (base, home) = home();
+                emit_movsd_mem_xmm(code, base, home, Reg(x));
+            }
             _ => {}
         }
     }

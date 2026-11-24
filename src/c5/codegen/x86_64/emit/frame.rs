@@ -16,6 +16,9 @@ pub(crate) struct Frame {
     /// a System V callee that reads a register parameter from memory, 0
     /// otherwise (`param_home_off`).
     pub param_cells_bytes: u32,
+    /// The register-carried parameters, by their order among them, that
+    /// keep a cell ([`param_cells`]), each 16 bytes, packed in that order.
+    pub param_cells: u64,
     /// rbp-relative offset of the lowest parameter cell; 0 when the region
     /// is empty.
     pub param_cells_off: i32,
@@ -280,7 +283,8 @@ pub(crate) fn compute_frame_with_tail_calls(
     let locals_bytes = saves_top + declared_locals_bytes + canary_bytes;
     // The parameter cells sit below the locals, whose offsets they leave
     // alone; every region below them shifts by their size.
-    let param_cells_bytes = param_cells_bytes(func, alloc, abi);
+    let param_cells = param_cells(func, alloc, abi);
+    let param_cells_bytes = 16 * param_cells.count_ones();
     let upper_bytes = locals_bytes + param_cells_bytes;
     // A System V variadic callee's register save area (ABI 3.5.7) takes the
     // lowest bytes of the frame; the rbp-relative regions above it keep
@@ -364,6 +368,7 @@ pub(crate) fn compute_frame_with_tail_calls(
             outgoing: 0,
         },
         param_cells_bytes,
+        param_cells,
         param_cells_off: if param_cells_bytes > 0 {
             -(upper_bytes as i32)
         } else {
@@ -1192,13 +1197,26 @@ fn int_arg_position(r: u8, abi: super::Abi) -> i64 {
 /// A stack-passed parameter is read where the caller left it, at
 /// `[rbp + 16 + off]`, on every ABI.
 pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> i64 {
+    match param_home(i, func, frame, abi) {
+        Some(off) => off,
+        None => unreachable!("ICE: parameter {i} has no home"),
+    }
+}
+
+/// [`param_home_off`], `None` for a register parameter that keeps no cell.
+pub(super) fn param_home(
+    i: usize,
+    func: &FunctionSsa,
+    frame: Frame,
+    abi: super::Abi,
+) -> Option<i64> {
     use super::ArgPlacement as P;
     let placements = param_home_placements(func, abi);
     let Some(&p) = placements.get(i) else {
         unreachable!("ICE: parameter {i} has no placement");
     };
     let before = |pred: fn(&P) -> bool| placements[..i].iter().filter(|q| pred(q)).count() as i64;
-    match p {
+    Some(match p {
         P::Stack(off) | P::StructStack { off, .. } => 16 + off as i64,
         P::IntReg(r) if sysv_variadic_callee(func, abi) => {
             frame.va_reg_save_off as i64 + int_arg_position(r, abi) * 8
@@ -1211,30 +1229,42 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame, abi: su
         P::StructRegs { regs, .. } if home_area_callee(abi) => {
             16 + 8 * int_arg_position(regs[0].reg, abi)
         }
-        _ => frame.param_cells_off as i64 + 16 * before(register_carried),
-    }
+        _ => {
+            let k = before(register_carried);
+            if frame.param_cells >> k & 1 == 0 {
+                return None;
+            }
+            let cells_before = (frame.param_cells & ((1u64 << k) - 1)).count_ones();
+            frame.param_cells_off as i64 + 16 * i64::from(cells_before)
+        }
+    })
 }
 
-/// Bytes of the parameter cell region: a cell per register-carried
-/// parameter once a System V callee reads any register parameter from
-/// memory. A Win64 callee homes its register parameters in the caller's
-/// home area and a variadic callee in its register save area.
-fn param_cells_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
+/// The register-carried parameters, by their order among them, that keep a
+/// cell in a System V callee: the scalars whose home the body reads
+/// ([`param_elidable_mask`] clear). A Win64 callee homes its register
+/// parameters in the caller's home area, a variadic callee in its register
+/// save area, and a register-passed aggregate lives in its body local.
+fn param_cells(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u64 {
     if func.is_variadic || home_area_callee(abi) {
         return 0;
     }
-    let placements = param_placements(func, abi);
     let elidable = param_elidable_mask(func, alloc, abi);
-    let any_needed = placements.iter().enumerate().any(|(i, p)| {
-        matches!(
+    let placements = param_placements(func, abi);
+    let carried = placements
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| register_carried(p));
+    carried.enumerate().fold(0, |mask, (k, (i, p))| {
+        let scalar = matches!(
             p,
             super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
-        ) && !elidable.get(i).copied().unwrap_or(false)
-    });
-    if !any_needed {
-        return 0;
-    }
-    16 * placements.iter().filter(|p| register_carried(p)).count() as u32
+        );
+        match scalar && !elidable.get(i).copied().unwrap_or(false) {
+            true => mask | 1 << k,
+            false => mask,
+        }
+    })
 }
 
 /// Whether any parameter is read from memory: a register scalar whose home

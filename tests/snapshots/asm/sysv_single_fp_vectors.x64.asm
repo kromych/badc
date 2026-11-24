@@ -66,22 +66,22 @@ Disassembly of section .text:
                	retq
 
 <make_f1>:
-               	subq	$0x38, %rsp
+               	subq	$0x28, %rsp
                	movq	%rdi, (%rsp)
-               	leaq	0x28(%rsp), %rcx
-               	movss	%xmm0, 0x28(%rsp)
+               	leaq	0x18(%rsp), %rcx
+               	movss	%xmm0, 0x18(%rsp)
                	movq	(%rsp), %rax
                	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
-               	addq	$0x38, %rsp
+               	addq	$0x28, %rsp
                	retq
 
 <make_d1>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	movq	(%rsp), %rax
                	movsd	%xmm0, (%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <peek_f1>:

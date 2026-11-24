@@ -184,10 +184,10 @@ Disassembly of section .text:
 <put_i16>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	subq	$0x40, %rsp
                	andq	$-0x40, %rsp
-               	movq	%rdi, -0x20(%rbp)
+               	movq	%rdi, -0x10(%rbp)
                	movq	0x10(%rbp), %r10
                	movq	%r10, (%rsp)
                	movq	0x18(%rbp), %r10
@@ -205,7 +205,7 @@ Disassembly of section .text:
                	movq	0x48(%rbp), %r10
                	movq	%r10, 0x38(%rsp)
                	movl	%esi, 0x34(%rsp)
-               	movq	-0x20(%rbp), %rax
+               	movq	-0x10(%rbp), %rax
                	vmovups	(%rsp), %ymm0
                	vpaddd	%ymm0, %ymm0, %ymm1
                	vmovups	0x20(%rsp), %ymm0
@@ -277,34 +277,34 @@ Disassembly of section .text:
                	retq
 
 <three>:
-               	subq	$0x68, %rsp
+               	subq	$0x38, %rsp
                	movq	%rdi, (%rsp)
-               	leaq	0x48(%rsp), %rcx
+               	leaq	0x18(%rsp), %rcx
                	vmovd	%xmm0, %r11d
                	vmovd	%r11d, %xmm0
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
-               	movsd	%xmm0, 0x48(%rsp)
+               	movsd	%xmm0, 0x18(%rsp)
                	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vmovd	%r11d, %xmm0
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
-               	movsd	%xmm0, 0x50(%rsp)
+               	movsd	%xmm0, 0x20(%rsp)
                	vmovd	%xmm2, %r11d
                	vmovd	%r11d, %xmm0
                	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
-               	movsd	%xmm0, 0x58(%rsp)
+               	movsd	%xmm0, 0x28(%rsp)
                	movq	(%rsp), %rax
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	addq	$0x68, %rsp
+               	addq	$0x38, %rsp
                	retq
 
 <main>:

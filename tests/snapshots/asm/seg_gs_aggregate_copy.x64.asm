@@ -94,7 +94,7 @@ Disassembly of section .text:
                	retq
 
 <ret_ptr>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	movq	(%rsp), %rax
                	movq	%gs:(%rsi), %rcx
@@ -108,7 +108,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	movq	%rdi, 0x10(%rax)
                	movq	%rsi, 0x18(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <wr_ptr>:
@@ -153,7 +153,7 @@ Disassembly of section .text:
                	retq
 
 <init_ptr>:
-               	subq	$0x48, %rsp
+               	subq	$0x38, %rsp
                	movq	%rdi, (%rsp)
                	movq	%gs:(%rsi), %rax
                	leaq	0x8(%rsi), %rcx
@@ -162,17 +162,17 @@ Disassembly of section .text:
                	movq	%gs:(%rdx), %rdx
                	addq	$0x18, %rsi
                	movq	%gs:(%rsi), %rsi
-               	leaq	0x20(%rsp), %rdi
-               	movq	%rax, 0x20(%rsp)
-               	movq	%rcx, 0x28(%rsp)
-               	movq	%rdx, 0x30(%rsp)
-               	movq	%rsi, 0x38(%rsp)
+               	leaq	0x10(%rsp), %rdi
+               	movq	%rax, 0x10(%rsp)
+               	movq	%rcx, 0x18(%rsp)
+               	movq	%rdx, 0x20(%rsp)
+               	movq	%rsi, 0x28(%rsp)
                	movq	(%rsp), %rax
                	movups	(%rdi), %xmm14
                	movups	%xmm14, (%rax)
                	movups	0x10(%rdi), %xmm14
                	movups	%xmm14, 0x10(%rax)
-               	addq	$0x48, %rsp
+               	addq	$0x38, %rsp
                	retq
 
 <sum_pt>:
@@ -211,7 +211,7 @@ Disassembly of section .text:
                	retq
 
 <ret_nested>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	movq	(%rsp), %rax
                	leaq	0x20(%rsi), %rcx
@@ -226,7 +226,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	movq	%rdi, 0x10(%rax)
                	movq	%rsi, 0x18(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <main>:

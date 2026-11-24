@@ -2653,10 +2653,11 @@ pub(crate) struct Build {
     /// subtracts it from the slot's frame offset. Absent where it is 0.
     pub local_shift_bytes: alloc::collections::BTreeMap<usize, u32>,
     /// Frame-base-relative byte offset of each parameter's memory home,
-    /// by `ent_pc`, indexed by parameter number; the debug-info emitter
-    /// places `DW_TAG_formal_parameter` locations with it. Absent for a
-    /// function with no parameters and on the multi-TU link path.
-    pub param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// by `ent_pc`, indexed by parameter number, `None` for one the frame
+    /// keeps no home for; the debug-info emitter places
+    /// `DW_TAG_formal_parameter` locations with it. Absent for a function
+    /// with no parameters and on the multi-TU link path.
+    pub param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<Option<i64>>>,
     /// Where each over-aligned region member's storage is, by `ent_pc` and
     /// member slot: its frame-base-relative byte offset in a static region,
     /// or `None` past a realignment, which leaves it no frame-base offset.

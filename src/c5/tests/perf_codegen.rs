@@ -2575,7 +2575,9 @@ return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
     let saves = (insns.iter())
         .filter(|i| x64_is_save(i) || pointerless && i.op == 0x55 && i.rex == 0)
         .count();
-    m.expect(saves == 3, || format!("x86-64: {saves} saves, not three: {insns:x?}"));
+    m.expect(saves == 3, || {
+        format!("x86-64: {saves} saves, not three: {insns:x?}")
+    });
     m.finish();
 }
 

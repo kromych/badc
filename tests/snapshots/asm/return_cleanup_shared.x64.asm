@@ -122,35 +122,35 @@ Disassembly of section .text:
                	retq
 
 <pairs>:
-               	subq	$0x48, %rsp
+               	subq	$0x38, %rsp
                	movq	%rdi, (%rsp)
                	testl	%esi, %esi
                	jne	<addr>
-               	movq	$0x1, 0x20(%rsp)
-               	movq	$0x2, 0x28(%rsp)
-               	movq	$0x3, 0x30(%rsp)
+               	movq	$0x1, 0x10(%rsp)
+               	movq	$0x2, 0x18(%rsp)
+               	movq	$0x3, 0x20(%rsp)
                	leaq	<rip>, %rdx # <addr>
                	movslq	<rip>, %rax # <addr>
                	leaq	0x1(%rax), %rsi
                	movl	%esi, <rip> # <addr>
                	movb	$0x61, (%rdx,%rax)
                	movq	(%rsp), %rax
-               	leaq	0x20(%rsp), %rcx
+               	leaq	0x10(%rsp), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	addq	$0x48, %rsp
+               	addq	$0x38, %rsp
                	retq
                	cmpl	$0x1, %esi
                	jne	<addr>
-               	movq	$0x4, 0x20(%rsp)
-               	movq	$0x2, 0x28(%rsp)
-               	movq	$0x3, 0x30(%rsp)
+               	movq	$0x4, 0x10(%rsp)
+               	movq	$0x2, 0x18(%rsp)
+               	movq	$0x3, 0x20(%rsp)
                	jmp	<addr>
-               	movq	$0x4, 0x20(%rsp)
-               	movq	$0x8, 0x28(%rsp)
-               	movq	$0x3, 0x30(%rsp)
+               	movq	$0x4, 0x10(%rsp)
+               	movq	$0x8, 0x18(%rsp)
+               	movq	$0x3, 0x20(%rsp)
                	jmp	<addr>
 
 <looped>:

@@ -74,31 +74,31 @@ Disassembly of section .text:
                	retq
 
 <make_p1>:
-               	subq	$0x48, %rsp
+               	subq	$0x28, %rsp
                	movq	%rdi, (%rsp)
-               	leaq	0x38(%rsp), %rdx
-               	movb	$0x6, 0x38(%rsp)
-               	movl	$0x4d, 0x39(%rsp)
+               	leaq	0x18(%rsp), %rdx
+               	movb	$0x6, 0x18(%rsp)
+               	movl	$0x4d, 0x19(%rsp)
                	movq	(%rsp), %rax
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rax)
                	movzbq	0x4(%rdx), %r10
                	movb	%r10b, 0x4(%rax)
-               	addq	$0x48, %rsp
+               	addq	$0x28, %rsp
                	retq
 
 <make_p2>:
-               	subq	$0x48, %rsp
+               	subq	$0x28, %rsp
                	movq	%rdi, (%rsp)
-               	leaq	0x38(%rsp), %rdx
-               	movw	$0x4, 0x38(%rsp)
-               	movl	$0xb, 0x3a(%rsp)
+               	leaq	0x18(%rsp), %rdx
+               	movw	$0x4, 0x18(%rsp)
+               	movl	$0xb, 0x1a(%rsp)
                	movq	(%rsp), %rax
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rax)
                	movzwq	0x4(%rdx), %r10
                	movw	%r10w, 0x4(%rax)
-               	addq	$0x48, %rsp
+               	addq	$0x28, %rsp
                	retq
 
 <make_p3>:

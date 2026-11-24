@@ -35,20 +35,20 @@ Disassembly of section .text:
                	retq
 
 <make_wide>:
-               	subq	$0x58, %rsp
+               	subq	$0x48, %rsp
                	movq	%rdi, (%rsp)
-               	leaq	0x20(%rsp), %rcx
-               	movq	%rsi, 0x20(%rsp)
+               	leaq	0x10(%rsp), %rcx
+               	movq	%rsi, 0x10(%rsp)
                	leaq	0x1(%rsi), %rax
-               	movq	%rax, 0x28(%rsp)
+               	movq	%rax, 0x18(%rsp)
                	leaq	0x2(%rsi), %rax
-               	movq	%rax, 0x30(%rsp)
+               	movq	%rax, 0x20(%rsp)
                	leaq	0x3(%rsi), %rax
-               	movq	%rax, 0x38(%rsp)
+               	movq	%rax, 0x28(%rsp)
                	leaq	0x4(%rsi), %rax
-               	movq	%rax, 0x40(%rsp)
+               	movq	%rax, 0x30(%rsp)
                	leaq	0x5(%rsi), %rax
-               	movq	%rax, 0x48(%rsp)
+               	movq	%rax, 0x38(%rsp)
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rax)
                	movups	0x20(%rcx), %xmm14
                	movups	%xmm14, 0x20(%rax)
-               	addq	$0x58, %rsp
+               	addq	$0x48, %rsp
                	retq
 
 <main>:

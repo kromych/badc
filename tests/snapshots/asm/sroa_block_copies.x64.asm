@@ -184,14 +184,14 @@ Disassembly of section .text:
                	retq
 
 <make_large>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	movq	%rdi, (%rsp)
                	leaq	0x2(%rsi), %rdx
                	movq	(%rsp), %rax
                	movq	%rsi, (%rax)
                	movq	$0x1, 0x8(%rax)
                	movq	%rdx, 0x10(%rax)
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <large_return_inlined>:

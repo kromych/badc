@@ -189,7 +189,7 @@ Disassembly of section .text:
                	retq
 
 <indirect>:
-               	subq	$0x78, %rsp
+               	subq	$0x28, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -218,7 +218,7 @@ Disassembly of section .text:
                	leaq	(%rbp,%r12), %rcx
                	movq	0x38(%rsp), %r8
                	xorq	%rbx, %r8
-               	movq	0xb0(%rsp), %r9
+               	movq	0x60(%rsp), %r9
                	shlq	%r9
                	callq	*%rax
                	movq	%r13, %rcx
@@ -235,7 +235,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	addq	$0x78, %rsp
+               	addq	$0x28, %rsp
                	retq
 
 <atomics>:

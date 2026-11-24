@@ -518,11 +518,9 @@ pub(super) fn frame_offset(build: &Build, ent_pc: usize, fp_slot: i64) -> Option
         // A parameter sits where the backend homed it; the 16-byte cell
         // above the frame record is the layout of a function with no record.
         let homes = build.param_frame_offsets.get(&ent_pc);
-        return Some(
-            homes
-                .and_then(|h| h.get((eff - 2) as usize).copied())
-                .unwrap_or((eff - 1) * 16),
-        );
+        return homes
+            .and_then(|h| h.get((eff - 2) as usize).copied())
+            .unwrap_or(Some((eff - 1) * 16));
     }
     // A protected frame reserves its canary region at the top of the
     // locals, so every local slot sits that much lower.

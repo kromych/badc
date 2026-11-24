@@ -108,11 +108,11 @@ Disassembly of section .text:
                	retq
 
 <swap_m1>:
-               	subq	$0x48, %rsp
+               	subq	$0x38, %rsp
                	movq	%rdi, 0x20(%rsp)
-               	movq	0x50(%rsp), %r10
+               	movq	0x40(%rsp), %r10
                	movq	%r10, (%rsp)
-               	movq	0x58(%rsp), %r10
+               	movq	0x48(%rsp), %r10
                	movq	%r10, 0x8(%rsp)
                	leaq	0x10(%rsp), %rcx
                	fldt	(%rsp)
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	movq	0x20(%rsp), %rax
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	addq	$0x48, %rsp
+               	addq	$0x38, %rsp
                	retq
 
 <after_u2>:

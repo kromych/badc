@@ -33,7 +33,10 @@ int main(void) {
     if (v.f_bsize == 0 || v.f_frsize == 0 || v.f_blocks == 0 || v.f_namemax == 0) {
         return 4;
     }
-    if (v.f_bfree > v.f_blocks || v.f_bavail > v.f_blocks || v.f_ffree > v.f_files) {
+    // A 32-bit fsfilcnt_t holds the low bits of wider counts, which keep no
+    // order: Darwin's statvfs truncates the volume's 64-bit inode counts.
+    if (v.f_bfree > v.f_blocks || v.f_bavail > v.f_blocks ||
+        (sizeof(fsfilcnt_t) >= 8 && v.f_ffree > v.f_files)) {
         return 5;
     }
     int fd = open(".", O_RDONLY);

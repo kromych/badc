@@ -40,6 +40,8 @@ mod diag_cases;
 mod divmod;
 #[cfg(feature = "linker")]
 mod dwarf;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod fault_delivery;
 #[cfg(feature = "linker")]
 mod fixed_regs;
 mod fixture_tables;

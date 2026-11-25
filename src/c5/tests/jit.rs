@@ -221,6 +221,9 @@ const CHILD_SRC: &str = "BADC_JIT_CHILD_SRC";
 const CHILD_ARGS: &str = "BADC_JIT_CHILD_ARGS";
 const CHILD_OPTIMIZE: &str = "BADC_JIT_CHILD_OPTIMIZE";
 const CHILD_BARE: &str = "BADC_JIT_CHILD_BARE";
+/// The child blocks every signal before it runs the program; Windows has no
+/// signal mask and ignores it.
+const CHILD_BLOCKED: &str = "BADC_JIT_CHILD_BLOCKED";
 const CHILD_RAN: &str = "jit child ran";
 
 /// The exit status of `src` run by the JIT in a child test process.
@@ -236,6 +239,26 @@ pub(super) fn jit_exit_bare_in_child(src: &str, optimize: bool) -> i32 {
 }
 
 fn child_exit(src: &str, args: &[&str], optimize: bool, bare: bool) -> i32 {
+    let (mut cmd, dir) = child_command(src, args, optimize, bare);
+    let out = cmd.output().expect("spawn the child");
+    let _ = std::fs::remove_dir_all(&dir);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(CHILD_RAN),
+        "the child ran no program: {stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    out.status.code().expect("the child exited")
+}
+
+/// The test binary run as the child that runs `src`, and the directory
+/// holding the source, which the caller removes.
+fn child_command(
+    src: &str,
+    args: &[&str],
+    optimize: bool,
+    bare: bool,
+) -> (std::process::Command, std::path::PathBuf) {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     (src, optimize, bare).hash(&mut h);
@@ -258,15 +281,7 @@ fn child_exit(src: &str, args: &[&str], optimize: bool, bare: bool) -> i32 {
     if bare {
         cmd.env(CHILD_BARE, "1");
     }
-    let out = cmd.output().expect("spawn the child");
-    let _ = std::fs::remove_dir_all(&dir);
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains(CHILD_RAN),
-        "the child ran no program: {stdout}{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    out.status.code().expect("the child exited")
+    (cmd, dir)
 }
 
 /// The child half of [`jit_exit_in_child`].
@@ -284,6 +299,10 @@ fn jit_exit_child() {
     } else {
         super::with_prelude(&src)
     };
+    #[cfg(unix)]
+    if std::env::var_os(CHILD_BLOCKED).is_some() {
+        super::signals::set_thread_mask(&super::signals::Set::full());
+    }
     let program = Compiler::new(src).compile().expect("compile failed");
     let code = if std::env::var_os(CHILD_OPTIMIZE).is_some() {
         let opts = NativeOptions::new().with_optimize();
@@ -294,6 +313,61 @@ fn jit_exit_child() {
     .expect("jit_run failed");
     println!("{CHILD_RAN}");
     std::process::exit(code);
+}
+
+/// A fault in a thread a program starts ends the process by the fault, with
+/// every signal blocked too, the state the C library's save and restore of
+/// the mask can leave when programs run beside each other (see
+/// `fault_delivery`). The program runs in a child test process.
+#[test]
+fn a_fault_in_a_programs_thread_ends_the_process_with_every_signal_blocked() {
+    let src = "#ifdef _WIN32\n\
+        #include <windows.h>\n\
+        static int *volatile target;\n\
+        static DWORD WINAPI fault(void *arg) { *target = 1; return 0; }\n\
+        int main(void) {\n\
+            HANDLE t = CreateThread(0, 0, fault, 0, 0, 0);\n\
+            if (!t) return 1;\n\
+            WaitForSingleObject(t, INFINITE);\n\
+            return 2;\n\
+        }\n\
+        #else\n\
+        #include <pthread.h>\n\
+        static int *volatile target;\n\
+        static void *fault(void *arg) { *target = 1; return arg; }\n\
+        int main(void) {\n\
+            pthread_t t;\n\
+            if (pthread_create(&t, 0, fault, 0)) return 1;\n\
+            pthread_join(t, 0);\n\
+            return 2;\n\
+        }\n\
+        #endif\n";
+    let (mut cmd, dir) = child_command(src, &[], false, false);
+    cmd.env(CHILD_BLOCKED, "1")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let mut child = cmd.spawn().expect("spawn the child");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("wait for the child") {
+            break Some(status);
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let _ = std::fs::remove_dir_all(&dir);
+    let status = status.expect("the faulting store restarted instead of ending the process");
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(status.signal(), Some(11), "{status:?}");
+    }
+    #[cfg(windows)]
+    assert_eq!(status.code(), Some(0xC000_0005_u32 as i32), "{status:?}");
 }
 
 /// [`jit_exit`] for a program the caller runs under its own hold on

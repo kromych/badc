@@ -311,6 +311,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
     ("sroa_block_copies.c", 0),
+    ("sroa_copies_between_objects.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("recursion_factorial.c", 120),
     ("tail_recursion_constant_accumulator.c", 0),
@@ -1927,6 +1928,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
     ("sroa_block_copies.c", 0),
+    ("sroa_copies_between_objects.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("recursion_factorial.c", 120),
     ("tail_recursion_constant_accumulator.c", 0),
@@ -3267,6 +3269,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
     ("sroa_block_copies.c", 0),
+    ("sroa_copies_between_objects.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("recursion_factorial.c", 120),
     ("tail_recursion_constant_accumulator.c", 0),
@@ -4159,6 +4162,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("sroa_copies_between_objects.c", 0),
     ("crt_initializer_tables_run.c", 0),
     ("frame_without_pointer_borrows.c", 0),
     ("frame_slots_without_a_red_zone.c", 0),
@@ -5370,6 +5374,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
     ("sroa_block_copies.c", 0),
+    ("sroa_copies_between_objects.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("goto.c", 5),
     ("recursion_factorial.c", 120),
@@ -6284,6 +6289,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("sroa_aggregate_return_temp_stays.c", 0),
     ("sroa_one_cell_aggregate_promotes.c", 0),
     ("sroa_block_copies.c", 0),
+    ("sroa_copies_between_objects.c", 0),
     ("range_unproved_comparisons_stay.c", 0),
     ("recursion_factorial.c", 120),
     ("tail_recursion_constant_accumulator.c", 0),

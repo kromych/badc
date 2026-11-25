@@ -363,8 +363,8 @@ pub(crate) fn run(func: &mut FunctionSsa, budget: Budget, footprints: &Footprint
     // the source becomes splittable on the next round. An object already
     // split is out of the next round's view -- its fields have their
     // slots -- so each round splits an object no earlier one did and the
-    // finite object count ends the iteration. Rounds a copy or the budget
-    // chains need no promotion between them and share one mem2reg re-run.
+    // finite object count ends the iteration. Rounds a copy chains need no
+    // promotion between them and share one mem2reg re-run.
     //
     // A batch whose fields mem2reg leaves in fresh slots take no fewer cells
     // than their object had is redone with those fields kept in the object.
@@ -626,7 +626,7 @@ fn stranded(func: &FunctionSsa, split: &[Split]) -> BTreeMap<i64, BTreeSet<(i64,
 }
 
 /// The objects one round split, and whether an object it left unsplit waits
-/// only on a copy this round decomposed or on the round's register budget.
+/// only on a copy this round decomposed.
 #[derive(Default)]
 struct Round {
     splits: Vec<Split>,
@@ -709,13 +709,10 @@ struct FieldUse {
 /// Rewrite every splittable object's accesses to per-field slots,
 /// decompose its block initializer, and neutralize the dead
 /// base-address instructions. Returns one [`Split`] per object actually
-/// split. `budget` is the target's usable GPR file: a round admits
-/// objects greedily under it, largest register demand first, so the
-/// object paying for the most memory traffic is never displaced by a
-/// smaller one. An object that does not fit stays memory-resident this
-/// round -- the mem2reg re-run would spill the loop-carried phis back to
-/// the frame at a net loss -- and is reconsidered next round, once this
-/// round's promotions have collapsed into their consumers.
+/// split. `budget` is the target's usable GPR file: an object whose
+/// fields alone take more registers stays memory-resident -- the mem2reg
+/// re-run would spill its loop-carried phis back to the frame at a net
+/// loss -- and is reconsidered after the next promotion.
 fn split_objects(
     func: &mut FunctionSsa,
     regs: Budget,
@@ -1239,27 +1236,14 @@ fn split_objects(
     // Only a field some load reads occupies a register: one that is
     // written and never read becomes a dead def the store elimination
     // removes, so counting it would decline the split for a demand the
-    // split does not create. Rank the surviving objects by that demand,
-    // largest first (ties by base for determinism), and admit each that
-    // still fits the remaining budget.
-    let mut ranked: Vec<(usize, i64)> = fields_of
-        .iter()
-        .filter(|(b, _)| !declined.contains(b))
-        .map(|(&b, fields)| (fields.values().filter(|u| u.loads > 0).count(), b))
+    // split does not create.
+    let mut order: Vec<i64> = (fields_of.iter())
+        .filter(|(b, fields)| {
+            !declined.contains(b) && fields.values().filter(|u| u.loads > 0).count() <= budget
+        })
+        .map(|(&b, _)| b)
         .collect();
-    ranked.sort_by_key(|&(demand, base)| (core::cmp::Reverse(demand), base));
-    let mut remaining = budget;
-    let mut order: Vec<i64> = Vec::new();
-    let mut more = false;
-    for (demand, base) in ranked {
-        if demand <= remaining {
-            remaining -= demand;
-            order.push(base);
-        } else {
-            more |= demand <= budget;
-        }
-    }
-    more |= waits.iter().any(|(_, to)| order.contains(to));
+    let more = (waits.iter()).any(|(_, to)| order.binary_search(to).is_ok());
     // An object no access, copy or call reads gives up its storage, with its
     // address expressions and the block writes to it.
     for &base in cells_of.keys() {
@@ -2312,11 +2296,10 @@ mod tests {
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 
-    /// Two objects whose joint demand exceeds the budget: the one with
-    /// the larger demand splits, the other stays memory-resident, so a
-    /// small newcomer never turns a fitting split into no split at all.
+    /// Two objects whose joint demand exceeds the budget while each fits it
+    /// split in one round: the budget bounds what one object's fields take.
     #[test]
-    fn budget_admits_largest_demand_first() {
+    fn budget_bounds_each_object_not_the_round() {
         let mut insts = two_elem_array().insts;
         let k = insts.len() as ValueId;
         // One-cell object at -3: store then load one 8-byte field.
@@ -2341,12 +2324,8 @@ mod tests {
                 .iter()
                 .map(|s| (s.base, s.slots.clone()))
                 .collect::<Vec<_>>(),
-            alloc::vec![(-2, alloc::vec![-2, -1])],
-            "only the two-field array fits the budget"
-        );
-        assert!(
-            matches!(f.insts[14], Inst::LocalAddr(-3)),
-            "the skipped object keeps its address expressions"
+            alloc::vec![(-3, alloc::vec![-3]), (-2, alloc::vec![-2, -1])],
+            "each object fits the budget on its own"
         );
     }
 
@@ -3482,8 +3461,8 @@ mod tests {
     }
 
     /// A round asks for another before promotion when an object it left waits
-    /// on a copy the round decomposed, or did not fit the register budget, and
-    /// not when nothing it declined can split without promotion.
+    /// on a copy the round decomposed, and not when nothing it declined can
+    /// split without promotion.
     #[test]
     fn round_reports_work_left_for_the_next_round() {
         let more = |f: &mut FunctionSsa, budget: usize| {
@@ -3528,7 +3507,10 @@ mod tests {
             Terminator::Return(k + 2),
             alloc::vec![(-2, 2), (-3, 1)],
         );
-        assert!(more(&mut f, 2), "the second object waits on the budget");
+        assert!(
+            !more(&mut f, 2),
+            "an object within the budget splits at once"
+        );
         assert!(!more(&mut two_elem_array(), 64), "nothing is left");
     }
 

@@ -449,8 +449,8 @@ fn block_of(func: &FunctionSsa) -> Vec<BlockId> {
 
 /// A load placed before the loops that re-read it, with its sites.
 struct LoadHoist {
-    /// Tape index the copy goes ahead of; inside the destination block.
-    at: ValueId,
+    /// Where the copy goes in the destination block.
+    at: At,
     inst: Inst,
     /// The data offset of an address defined inside the loop, which a
     /// copy of its own `ImmData` gives the moved load.
@@ -465,7 +465,9 @@ struct LoadHoist {
 /// `LoadLocal`, or a `Load` of an address an unbound `ImmData` gives
 /// within `data_len`, the unit's data image. The destination precedes
 /// the outermost loop of the site's nest whose body writes no memory and
-/// defines no part of the address.
+/// defines no part of the address, and the copy reads where the loop's
+/// reads would: past the destination's last write, with no write on a
+/// way from there into the loop that does not run the copy again.
 fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
     if func.has_returns_twice_call || func.blocks.len() < 2 {
         return Vec::new();
@@ -494,6 +496,33 @@ fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
     let bound = sym_of(&func.extern_imm_data_refs);
     let weights = super::reg_alloc::block_weights(func);
     let uses = super::reg_alloc::compute_use_counts(func);
+    let succ = super::mem2reg::SuccGraph::new(func);
+    let block_writes = |b: BlockId| {
+        (func.blocks[b as usize].inst_range.clone())
+            .any(|v| func.insts[v as usize].may_write_memory())
+    };
+    // Per loop, where a copy before it goes, or `None` when a write reaches
+    // the loop past every place in its destination.
+    let entries: Vec<Option<At>> = (loops.iter())
+        .map(|l| {
+            let dest = idom[l.header as usize];
+            if dest == NO_BLOCK || dest == l.header {
+                return None;
+            }
+            let at = insert_point(func, dest)?;
+            let range = func.blocks[dest as usize].inst_range.clone();
+            let at = match (at..range.end)
+                .rev()
+                .find(|&v| func.insts[v as usize].may_write_memory())
+            {
+                Some(w) if w + 1 == range.end => At::After(w),
+                Some(w) => At::Before(w + 1),
+                None => At::Before(at),
+            };
+            let between = blocks_between(func, &succ, &preds, dest, l.header);
+            (!between.into_iter().any(block_writes)).then_some(at)
+        })
+        .collect();
     let mut out: Vec<LoadHoist> = Vec::new();
     for (b, block) in func.blocks.iter().enumerate() {
         let b = b as BlockId;
@@ -535,18 +564,19 @@ fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
             let Some(&l) = nest.iter().find(|&&l| !writes[l]) else {
                 continue;
             };
+            let Some(at) = entries[l] else {
+                continue;
+            };
             let dest = idom[loops[l].header as usize];
-            if dest == NO_BLOCK || dest == loops[l].header {
-                continue;
-            }
-            let Some(at) = insert_point(func, dest) else {
-                continue;
+            let pos = match at {
+                At::Before(p) => p,
+                _ => func.blocks[dest as usize].inst_range.end,
             };
             // The address is reused where it precedes the copy outside the
             // loop, and rematerialized beside the copy otherwise.
             let remat = data.and_then(|(a, k)| {
                 let b = block_of[a as usize];
-                (loops[l].contains(b) || (b == dest && a >= at)).then_some(k)
+                (loops[l].contains(b) || (b == dest && a >= pos)).then_some(k)
             });
             let inst = func.insts[v as usize].clone();
             let key = (load_key(&inst), remat);
@@ -567,8 +597,37 @@ fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
             }
         }
     }
-    out.sort_by_key(|h| h.at);
+    out.sort_by_key(|h| h.at.order(&func.blocks));
     out
+}
+
+/// The blocks on a way from the end of `dest` into `header` that does not
+/// pass `dest` again: reached from its successors and reaching `header`,
+/// neither walk entering `dest`.
+fn blocks_between(
+    func: &FunctionSsa,
+    succ: &super::mem2reg::SuccGraph,
+    preds: &[Vec<BlockId>],
+    dest: BlockId,
+    header: BlockId,
+) -> Vec<BlockId> {
+    let n = func.blocks.len();
+    let walk = |start: &[BlockId], next: &dyn Fn(BlockId) -> Vec<BlockId>| {
+        let mut seen = vec![false; n];
+        let mut work: Vec<BlockId> = start.iter().copied().filter(|&b| b != dest).collect();
+        while let Some(b) = work.pop() {
+            if core::mem::replace(&mut seen[b as usize], true) {
+                continue;
+            }
+            work.extend(next(b).into_iter().filter(|&s| s != dest));
+        }
+        seen
+    };
+    let ahead = walk(succ.of(dest), &|b| succ.of(b).to_vec());
+    let behind = walk(&[header], &|b| preds[b as usize].clone());
+    (0..n as BlockId)
+        .filter(|&b| ahead[b as usize] && behind[b as usize])
+        .collect()
 }
 
 /// Identity of a load: two with the same key read the same bytes the
@@ -922,7 +981,7 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
         let mut inst = h.inst.clone();
         if let (Some(k), Inst::Load { addr, .. }) = (h.remat, &mut inst) {
             ins.push(Insertion {
-                at: At::Before(h.at),
+                at: h.at,
                 inst: Inst::ImmData(k),
                 is_f32: false,
                 copy_of: None,
@@ -931,7 +990,7 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
         }
         copy_at.push(ins.len());
         ins.push(Insertion {
-            at: At::Before(h.at),
+            at: h.at,
             inst,
             is_f32: h.is_f32,
             copy_of: None,
@@ -1816,6 +1875,135 @@ mod tests {
             pc_rel: false,
         };
         assert!(plan_loads(&sum_loop(load_at(8), vec![store]), 0x48).is_empty());
+    }
+
+    fn store_at(disp: i32) -> Inst {
+        Inst::Store {
+            addr: 0,
+            disp,
+            value: 1,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        }
+    }
+
+    /// `pre (ImmData, Imm 0, pre_tail) -> header -> body -> header`,
+    /// `header -> exit`, the body summing a load at `[v0 + 8]`.
+    fn loop_after(pre_tail: Vec<Inst>) -> FunctionSsa {
+        let mut insts = vec![Inst::ImmData(0x38), Inst::Imm(0)];
+        insts.extend(pre_tail);
+        let h = insts.len() as u32;
+        insts.push(Inst::Phi {
+            incoming: vec![(0, 1), (2, h + 3)],
+            kind: LoadKind::I64,
+        });
+        insts.push(Inst::BinopI {
+            op: BinOp::Lt,
+            lhs: h,
+            rhs_imm: 7,
+        });
+        insts.push(load_at(8));
+        insts.push(Inst::Binop {
+            op: BinOp::Add,
+            lhs: h,
+            rhs: h + 2,
+        });
+        func_with(
+            insts,
+            vec![
+                block(0..h, Terminator::Jmp(1)),
+                block(
+                    h..h + 2,
+                    Terminator::Bz {
+                        cond: h + 1,
+                        target: 3,
+                        fall_through: 2,
+                    },
+                ),
+                block(h + 2..h + 4, Terminator::Jmp(1)),
+                block(h + 4..h + 4, Terminator::Return(h)),
+            ],
+        )
+    }
+
+    /// A store at the end of the destination block -- `p = &x; for (;;)
+    /// ... *p` -- writes what the loop reads, so the copy goes after it.
+    #[test]
+    fn a_copy_follows_the_writes_of_its_destination() {
+        let mut f = loop_after(vec![store_at(8)]);
+        let loads = plan_loads(&f, 0x48);
+        assert_eq!(loads.len(), 1);
+        assert_eq!(loads[0].at, At::After(2));
+        apply_loads(&mut f, &loads);
+        assert!(
+            matches!(
+                f.insts[3],
+                Inst::Load {
+                    addr: 0,
+                    disp: 8,
+                    ..
+                }
+            ),
+            "{:?}",
+            f.insts
+        );
+        assert_eq!(f.blocks[0].inst_range, 0..4);
+    }
+
+    /// `pre -> (arm ->) header`: an arm between the destination and the
+    /// loop stores what the loop reads, so no copy runs ahead of it; an arm
+    /// writing nothing lets the load move.
+    #[test]
+    fn a_write_on_the_way_into_the_loop_keeps_the_load() {
+        let build = |arm: Vec<Inst>| {
+            let mut insts = vec![Inst::ImmData(0x38), Inst::Imm(0), Inst::Imm(1)];
+            let a = insts.len() as u32;
+            insts.extend(arm);
+            let h = insts.len() as u32;
+            insts.push(Inst::Phi {
+                incoming: vec![(0, 1), (1, 1), (3, h + 3)],
+                kind: LoadKind::I64,
+            });
+            insts.push(Inst::BinopI {
+                op: BinOp::Lt,
+                lhs: h,
+                rhs_imm: 7,
+            });
+            insts.push(load_at(8));
+            insts.push(Inst::Binop {
+                op: BinOp::Add,
+                lhs: h,
+                rhs: h + 2,
+            });
+            func_with(
+                insts,
+                vec![
+                    block(
+                        0..a,
+                        Terminator::Bz {
+                            cond: 2,
+                            target: 2,
+                            fall_through: 1,
+                        },
+                    ),
+                    block(a..h, Terminator::Jmp(2)),
+                    block(
+                        h..h + 2,
+                        Terminator::Bz {
+                            cond: h + 1,
+                            target: 4,
+                            fall_through: 3,
+                        },
+                    ),
+                    block(h + 2..h + 4, Terminator::Jmp(2)),
+                    block(h + 4..h + 4, Terminator::Return(h)),
+                ],
+            )
+        };
+        assert!(plan_loads(&build(vec![store_at(8)]), 0x48).is_empty());
+        assert_eq!(plan_loads(&build(vec![]), 0x48).len(), 1);
     }
 
     fn mul(lhs: ValueId, rhs: ValueId) -> Inst {

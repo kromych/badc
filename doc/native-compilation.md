@@ -180,7 +180,16 @@ guard fields, which `__guard_fids_table`, `__guard_fids_count` and
 `__guard_flags` fill; an image no library gives a directory takes the
 runtime's. Such an image loads in a process that requires the guard, as one
 created under strict Control Flow Guard does, and the system's checks of calls
-into it hold. Its own indirect calls are not checked.
+into it hold; the system enforces the guard in any process whose program image
+claims it. Under `-mguard=cf` the image checks its own indirect calls as
+MSVC's `/guard:cf` makes them: on x86-64 a call moves its target to rax and
+calls through `__guard_dispatch_icall_fptr`, which checks the target and jumps
+to it; on AArch64 the target moves to x15, `__guard_check_icall_fptr` checks
+it, and `blr x15` calls it. A call under the System V convention to a variadic
+callee, which passes a count in al, keeps the plain call. The system's table
+covers code in 16-byte blocks, and a listed function off a block's start opens
+the whole block, so a `-mguard=` or `--guard-cf` compile starts every function
+on one.
 A PE DLL link writes the DLL's import library under `--out-implib=<file>`,
 as link.exe writes one beside a DLL: an archive of short import members, a
 data export's naming only its `__imp_` slot.

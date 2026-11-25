@@ -43,6 +43,14 @@ impl<'a> Link<'a> {
                 }
             }
         }
+        // The pointers the loader replaces with the system's check are not
+        // calls a check sees, and the routines they start at are reached
+        // only through them.
+        let check_pointers: Vec<_> = (["__guard_check_icall_fptr", "__guard_dispatch_icall_fptr"])
+            .iter()
+            .filter_map(|name| self.defined.get(*name))
+            .map(|d| d.value..d.value + d.size.max(8))
+            .collect();
         let (mut targets, mut imports) = (BTreeSet::new(), BTreeSet::new());
         let mut add = |named: Named| match named {
             Named::Function(at) => {
@@ -62,11 +70,21 @@ impl<'a> Link<'a> {
                 }
                 continue;
             }
-            let relocs = (o.text_relocs.iter().map(|r| (r, true)))
-                .chain(o.relro_relocs.iter().map(|r| (r, false)))
-                .chain(o.data_relocs.iter().map(|r| (r, false)));
-            for (r, in_text) in relocs {
-                if self.takes_no_address(i, r.rtype, r.offset, in_text) {
+            let relocs = (o.text_relocs.iter().map(|r| (r, None)))
+                .chain(
+                    o.relro_relocs
+                        .iter()
+                        .map(|r| (r, Some(self.relro_map[i].at(r.offset)))),
+                )
+                .chain(
+                    o.data_relocs
+                        .iter()
+                        .map(|r| (r, Some(self.rw_map[i].at(r.offset)))),
+                );
+            for (r, data_site) in relocs {
+                if self.takes_no_address(i, r.rtype, r.offset, data_site.is_none())
+                    || data_site.is_some_and(|at| check_pointers.iter().any(|p| p.contains(&at)))
+                {
                     continue;
                 }
                 let Some(sym) = o.symbols.get(r.sym_idx) else {

@@ -1012,6 +1012,7 @@ fn emit_call_inst(
             *ret_slot_local,
             func,
             asm_extern_call_sites,
+            &mut *cx.user_extern_data_refs,
             ends_path,
         ),
         _ => unreachable!(),

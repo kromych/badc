@@ -2068,6 +2068,19 @@ impl Parser {
         }
         let code = &mut self.codegen;
         match arg {
+            // clang's MinGW `-mguard=`: `cf` checks the image's indirect calls
+            // and links the guard tables, `cf-nochecks` only links them.
+            "-mguard=cf" | "-mguard=cf-nochecks" | "-mguard=none" => {
+                code.hardening.guard_cf = arg == "-mguard=cf";
+                self.link.pe.guard_cf = arg != "-mguard=none";
+            }
+            s if s.starts_with("-mguard=") => {
+                return Err(ParseError::diag(format!(
+                    "badc: error: unsupported argument `{}` to `-mguard=` \
+                     (supported: cf, cf-nochecks, none)",
+                    &s["-mguard=".len()..]
+                )));
+            }
             // Speculative-execution mitigations. An argument that is not
             // implemented is rejected rather than ignored: a hardening
             // flag that compiles but does nothing leaves the caller
@@ -2470,10 +2483,6 @@ impl Parser {
             // its valid indirect-call targets for Control Flow Guard.
             "--guard-cf" => link.pe.guard_cf = true,
             "--no-guard-cf" => link.pe.guard_cf = false,
-            // clang's MinGW `-mguard=`: `cf-nochecks` writes the tables without
-            // checking the image's own indirect calls.
-            "-mguard=cf-nochecks" => link.pe.guard_cf = true,
-            "-mguard=none" => link.pe.guard_cf = false,
             // lld's MinGW `--delayload`, link.exe's `/DELAYLOAD`.
             "--delayload" | "-delayload" => link.delay_load.push(operand(
                 iter,
@@ -2729,6 +2738,11 @@ impl Parser {
             ));
         }
         self.check_profiling_and_protection(mode, target)?;
+        // Control Flow Guard's bitmap covers code in 16-byte blocks, and a
+        // listed target off a block's start opens the whole block.
+        if self.link.pe.guard_cf && target.is_windows() {
+            self.codegen.min_function_alignment = self.codegen.min_function_alignment.max(16);
+        }
         self.resolve_stack_guard(target)?;
         self.apply_aarch64_isa(target)?;
         self.apply_x86_isa(target)?;
@@ -2935,6 +2949,27 @@ impl Parser {
                 "badc: error: `{flag}` is an x86-64 mitigation; {} does not implement it",
                 target.id_str()
             )));
+        }
+        if h.guard_cf && !target.is_windows() {
+            return Err(ParseError::diag(format!(
+                "badc: error: `-mguard=cf` checks indirect calls through the Windows \
+                 loader's Control Flow Guard; {} has none",
+                target.id_str()
+            )));
+        }
+        if h.guard_cf && h.indirect_branch != badc::IndirectBranch::Keep {
+            return Err(ParseError::diag(
+                "badc: error: `-mguard=cf` and `-mindirect-branch=` both decide how an \
+                 indirect call transfers"
+                    .to_string(),
+            ));
+        }
+        if h.guard_cf && matches!(mode, Mode::Jit | Mode::Interp) {
+            return Err(ParseError::diag(
+                "badc: error: `-mguard=cf` checks calls against the table of an image \
+                 badc links; `--jit` and `--interp` link none"
+                    .to_string(),
+            ));
         }
         if let Some(flag) = self.mcount_modifiers.first()
             && target.is_aarch64()

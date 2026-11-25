@@ -903,6 +903,7 @@ pub(super) fn emit_call_indirect(
     ret_slot_local: i64,
     func: &super::super::ir::FunctionSsa,
     extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
     ends_path: bool,
 ) -> Emit {
     let target_place = place_of(alloc, target);
@@ -937,6 +938,10 @@ pub(super) fn emit_call_indirect(
     if sysv_variadic_call {
         blocked.push(Reg::RAX);
     }
+    // There `-mguard=cf`'s dispatch, which takes the target in rax, gives
+    // way to the plain call.
+    let mut guarded = abi;
+    guarded.hardening.guard_cf &= !sysv_variadic_call;
     // A target in a register the marshal does not write (scratch 1 copies
     // its memory arguments) is called where it is.
     let s1 = scratch_reg(code, S1);
@@ -1020,7 +1025,7 @@ pub(super) fn emit_call_indirect(
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
         clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
-        emit_hardened_call_r(code, call_r, abi, extern_sites);
+        emit_indirect_call(code, call_r, guarded, extern_sites, extern_data_refs);
         if ends_path {
             return Ok(());
         }
@@ -1056,7 +1061,7 @@ pub(super) fn emit_call_indirect(
                 super::encode::emit_mov_al_imm8(code, xmm_used);
             }
             clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
-            emit_hardened_call_r(code, t, abi, extern_sites);
+            emit_indirect_call(code, t, guarded, extern_sites, extern_data_refs);
             if ends_path {
                 return Ok(());
             }
@@ -1089,7 +1094,7 @@ pub(super) fn emit_call_indirect(
                 super::encode::emit_mov_al_imm8(code, xmm_used);
             }
             clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
-            emit_hardened_call_r(code, t, abi, extern_sites);
+            emit_indirect_call(code, t, guarded, extern_sites, extern_data_refs);
             if ends_path {
                 return Ok(());
             }

@@ -4336,6 +4336,12 @@ pub struct Hardening {
     /// which is the only instruction CET permits an indirect transfer to
     /// land on (Intel SDM Vol. 1, 18.3.1).
     pub cf_protection_branch: bool,
+    /// `-mguard=cf`: a PE image's indirect call reaches its target through
+    /// Control Flow Guard's check, as MSVC's `/guard:cf` makes it -- on
+    /// x86-64 the call goes to `__guard_dispatch_icall_fptr` with the target
+    /// in rax, on AArch64 `__guard_check_icall_fptr` takes it in x15 ahead
+    /// of the `blr`.
+    pub guard_cf: bool,
 }
 
 impl Hardening {
@@ -4350,6 +4356,7 @@ impl Hardening {
         pac_ret_leaf: false,
         pac_b_key: false,
         cf_protection_branch: false,
+        guard_cf: false,
     };
 }
 

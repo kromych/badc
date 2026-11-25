@@ -1048,6 +1048,7 @@ pub(super) fn emit_call_indirect(
     callee_variadic: bool,
     fixed_args: usize,
     fp_return: bool,
+    extern_data_refs: &mut Vec<UserExternDataRef>,
 ) -> Emit {
     let FnCtx {
         func,
@@ -1153,7 +1154,12 @@ pub(super) fn emit_call_indirect(
         }
         None => target_reg,
     };
-    emit(code, enc_blr(call_reg));
+    if abi.hardening.guard_cf {
+        emit_guard_check(code, call_reg, extern_data_refs);
+        emit(code, enc_blr(Reg(15)));
+    } else {
+        emit(code, enc_blr(call_reg));
+    }
     if ops.ends_path {
         return Ok(());
     }
@@ -1171,6 +1177,29 @@ pub(super) fn emit_call_indirect(
         abi.strict_align,
     );
     Ok(())
+}
+
+/// The pointer `-mguard=cf` checks an indirect call's target through.
+const GUARD_CHECK: &str = "__guard_check_icall_fptr";
+
+/// `-mguard=cf`: check `target` through `__guard_check_icall_fptr`, which
+/// takes it in x15 and keeps x0-x15 and the vector registers -- so the
+/// argument registers, the indirect-result register and the target survive
+/// it -- while x16 carries the pointer. The call then goes through x15.
+fn emit_guard_check(code: &mut CodeBuf, target: Reg, refs: &mut Vec<UserExternDataRef>) {
+    if target.0 != 15 {
+        emit_mov_reg(code, Reg(15), target);
+    }
+    refs.push(UserExternDataRef {
+        instr_offset: code.len(),
+        symbol_name: GUARD_CHECK.into(),
+        direct_pcrel: None,
+        import_slot: false,
+    });
+    emit(code, super::encode::enc_adrp(Reg(16), 0));
+    emit(code, super::encode::enc_add_imm(Reg(16), Reg(16), 0));
+    emit(code, super::encode::enc_ldr_imm(Reg(16), Reg(16), 0));
+    emit(code, enc_blr(Reg(16)));
 }
 
 /// The argument values of one call, for the marshalling passes.

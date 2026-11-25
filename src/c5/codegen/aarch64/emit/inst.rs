@@ -420,6 +420,7 @@ pub(super) fn emit_inst(
             *callee_variadic,
             *fixed_args,
             *fp_return,
+            &mut *cx.user_extern_data_refs,
         ),
         Inst::Mcpy {
             dst: d,

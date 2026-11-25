@@ -12927,6 +12927,8 @@ fn a_guard_cf_image_lists_the_functions_an_indirect_call_may_enter() {
             .map(|k| base + u64::from(u32le(start + 4 * k)))
             .collect();
         assert!(entries.windows(2).all(|w| w[0] < w[1]), "{target}: sorted");
+        // The system's bitmap covers code in 16-byte blocks.
+        assert!(entries.iter().all(|e| e % 16 == 0), "{target}: 16-aligned");
         let entry = base + u64::from(u32le(opt + 16));
         for (name, want) in [
             ("taken_in_data", true),
@@ -13076,6 +13078,122 @@ fn a_guard_cf_image_runs_under_strict_control_flow_guard() {
             String::from_utf8_lossy(&launcher.stdout),
             want,
             "{exe} {arg}"
+        );
+    }
+}
+
+/// `-mguard=cf` checks the image's own indirect calls: each one -- register
+/// and stack arguments, mixed floating-point ones, an aggregate returned in
+/// memory, a variadic callee, one that leaves by `longjmp` -- reaches its
+/// target through the check, and a pointer four bytes into a function stops
+/// the process with a fast fail. Windows enforces the guard in a process
+/// whose image claims it, so the image runs as it is.
+#[cfg(windows)]
+#[test]
+fn an_mguard_cf_image_checks_its_own_indirect_calls() {
+    let dir = tempdir("an_mguard_cf_image_checks_its_own_indirect_calls");
+    write_source(
+        &dir,
+        "calls.c",
+        "#include <setjmp.h>\n\
+         #include <stdarg.h>\n\
+         #include <stdio.h>\n\
+         typedef struct { long long a, b, c, d; } big;\n\
+         static int add2(int a, int b) { return a + b; }\n\
+         static double fmix(double a, int b, float c, double d, double e) { return a + b + c + d + e; }\n\
+         static int many(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j) {\n\
+             return a + b + c + d + e + f + g + h + i + j;\n\
+         }\n\
+         static big mkbig(long long x) { big r = {x, x + 1, x + 2, x + 3}; return r; }\n\
+         static int sumv(int n, ...) {\n\
+             va_list ap;\n\
+             va_start(ap, n);\n\
+             int s = 0;\n\
+             while (n--) s += va_arg(ap, int);\n\
+             va_end(ap);\n\
+             return s;\n\
+         }\n\
+         static jmp_buf jb;\n\
+         static void jump(int v) { longjmp(jb, v); }\n\
+         int main(int argc, char **argv) {\n\
+             (void)argv;\n\
+             int (*volatile p2)(int, int) = add2;\n\
+             double (*volatile pf)(double, int, float, double, double) = fmix;\n\
+             int (*volatile pm)(int, int, int, int, int, int, int, int, int, int) = many;\n\
+             big (*volatile pb)(long long) = mkbig;\n\
+             int (*volatile pv)(int, ...) = sumv;\n\
+             void (*volatile pj)(int) = jump;\n\
+             if (argc > 1) p2 = (int (*)(int, int))((char *)add2 + 4);\n\
+             int r = p2(1, 2);\n\
+             double d = pf(1.5, 2, 3.0f, 4.0, 5.0);\n\
+             int m = pm(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);\n\
+             big b = pb(10);\n\
+             int v = pv(3, 1, 2, 3);\n\
+             int j = setjmp(jb);\n\
+             if (!j) pj(5);\n\
+             printf(\"%d %g %d %lld %d %d\\n\", r, d, m, b.d, v, j);\n\
+             return !(r == 3 && d == 15.5 && m == 55 && b.d == 13 && v == 6 && j == 5);\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        run(
+            Command::new(badc())
+                .args([opt, "-mguard=cf", "calls.c", "-o", "calls.exe"])
+                .current_dir(&dir),
+            "link",
+        );
+        let out = Command::new(dir.join("calls.exe")).output().expect("run");
+        assert!(out.status.success(), "{opt}: {:?}", out.status);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(stdout.trim_end(), "3 15.5 55 13 6 5", "{opt}");
+        let out = Command::new(dir.join("calls.exe"))
+            .arg("x")
+            .output()
+            .expect("run");
+        // STATUS_STACK_BUFFER_OVERRUN, the code `__fastfail` ends a process with.
+        assert_eq!(
+            out.status.code().map(|c| c as u32),
+            Some(0xC000_0409),
+            "{opt}"
+        );
+    }
+}
+
+/// `-mguard=cf` checks through the Windows loader's guard, takes the place
+/// of `-mindirect-branch=` at an indirect call, and needs an image badc
+/// links.
+#[test]
+fn mguard_cf_is_refused_where_it_cannot_check() {
+    let dir = tempdir("mguard_cf_is_refused_where_it_cannot_check");
+    write_source(&dir, "a.c", "int main(void) { return 0; }\n");
+    for (args, want) in [
+        (
+            &["--target=linux-x64", "-mguard=cf"][..],
+            "linux-x64 has none",
+        ),
+        (
+            &[
+                "--target=windows-x64",
+                "-mguard=cf",
+                "-mindirect-branch=thunk-extern",
+            ][..],
+            "both decide how an indirect call transfers",
+        ),
+        (
+            &["--target=windows-x64", "-mguard=xfg"][..],
+            "unsupported argument `xfg`",
+        ),
+    ] {
+        let out = Command::new(badc())
+            .args(args)
+            .args(["-c", "a.c", "-o", "a.o"])
+            .current_dir(&dir)
+            .output()
+            .expect("badc");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && stderr.contains(want),
+            "{args:?}: {stderr}"
         );
     }
 }

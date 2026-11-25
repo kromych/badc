@@ -68,9 +68,11 @@ VS_DEFAULT_LIBS = ["kernel32", "user32", "gdi32", "winspool", "comdlg32", "advap
                    "shell32", "ole32", "oleaut32", "uuid", "odbc32", "odbccp32"]
 # The static VC runtime with the UCRT DLL, which a `/MT` build's cl objects name.
 VC_RUNTIME = ["libvcruntime", "libcmt", "ucrt"]
-# SI's release images link with `/GUARD:CF` (cmake/toolchain/msvc.cmake), so
+# SI's release build compiles with `/guard:cf` and links with `/GUARD:CF`
+# (cmake/toolchain/msvc.cmake): the images check their indirect calls, and
 # the program loads where a process requires Control Flow Guard, as it does
 # once it restarts itself under strict CFG with its driver loaded.
+GUARD_COMPILE = ["-mguard=cf"]
 GUARD_LINK = ["--guard-cf"]
 # SI's functions with nothing to build here: the plugin SDK's headers
 # (`si_sdkbuild`) and the driver signing (`si_kphsign`).
@@ -851,6 +853,7 @@ class Build:
             sources = spec["sources"]
         jobs = []
         base = [tools.badc, f"--target={self.target}", "-c", "--msvc", "-nostdlibinc", tools.opt]
+        base += GUARD_COMPILE
         for d in tools.include:
             base += ["-isystem", str(d)]
         for src in sources:

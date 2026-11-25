@@ -15129,6 +15129,90 @@ fn x64_indirect_branch_thunk_covers_call_switch_and_computed_goto() {
     );
 }
 
+/// `(offset, type, symbol name, addend)` for every `.rela.text` entry.
+fn elf_text_relocs(obj: &[u8]) -> alloc::vec::Vec<(usize, u32, alloc::string::String, i64)> {
+    let sections = elf_section_bodies(obj);
+    let body = |n: &str| {
+        (sections.iter().find(|(name, _)| name == n))
+            .map(|(_, b)| b.clone())
+            .unwrap_or_default()
+    };
+    let (rela, symtab, strtab) = (body(".rela.text"), body(".symtab"), body(".strtab"));
+    let name = |sym: usize| {
+        let at = u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
+        let end = strtab[at..].iter().position(|&b| b == 0).unwrap() + at;
+        alloc::string::String::from_utf8_lossy(&strtab[at..end]).into_owned()
+    };
+    (rela.as_chunks::<24>().0.iter())
+        .map(|e| {
+            let info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            (
+                u64::from_le_bytes(e[0..8].try_into().unwrap()) as usize,
+                info as u32,
+                name((info >> 32) as usize),
+                i64::from_le_bytes(e[16..24].try_into().unwrap()),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn guard_cf_checks_an_indirect_call_through_the_guard_pointer() {
+    // `-mguard=cf`: x86-64 moves the call's target to rax and calls
+    // `[rip + __guard_dispatch_icall_fptr]`; AArch64 moves it to x15, calls
+    // `__guard_check_icall_fptr` through x16, then `blr x15`. The switch
+    // dispatch and the computed goto are jumps, which the guard leaves.
+    let guard = crate::Hardening {
+        guard_cf: true,
+        ..crate::Hardening::NONE
+    };
+    let obj = emit_hardened(HARDENING_SRC, crate::Target::WindowsX64, guard);
+    let text = elf_text(&obj);
+    let calls = |t: &[u8]| {
+        t.windows(2)
+            .filter(|w| w[0] == 0xFF && w[1] & 0xF8 == 0xD0)
+            .count()
+    };
+    let relocs = elf_text_relocs(&obj);
+    let dispatch: alloc::vec::Vec<_> = (relocs.iter())
+        .filter(|r| r.2 == "__guard_dispatch_icall_fptr")
+        .collect();
+    assert_eq!(dispatch.len(), 1, "{relocs:?}");
+    let &(at, rtype, _, addend) = dispatch[0];
+    // R_X86_64_PC32 on the disp32 of `rex.w call [rip + disp32]`.
+    assert_eq!((rtype, addend), (2, -4));
+    assert_eq!(&text[at - 3..at + 4], [0x48, 0xFF, 0x15, 0, 0, 0, 0]);
+    assert_eq!(calls(&text), 0, "no register-indirect call survives");
+    let plain = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::WindowsX64,
+        crate::Hardening::NONE,
+    );
+    assert_eq!(calls(&elf_text(&plain)), 1);
+    assert_eq!(
+        x64_register_indirect_forms(&text),
+        x64_register_indirect_forms(&elf_text(&plain)) - 1,
+        "the jumps keep their form"
+    );
+
+    let obj = emit_hardened(HARDENING_SRC, crate::Target::WindowsAarch64, guard);
+    let text = elf_text(&obj);
+    let word = |at: usize| u32::from_le_bytes(text[at..at + 4].try_into().unwrap());
+    let relocs = elf_text_relocs(&obj);
+    let check: alloc::vec::Vec<_> = (relocs.iter())
+        .filter(|r| r.2 == "__guard_check_icall_fptr")
+        .collect();
+    // R_AARCH64_ADR_PREL_PG_HI21 and R_AARCH64_ADD_ABS_LO12_NC.
+    let types: alloc::vec::Vec<_> = check.iter().map(|r| r.1).collect();
+    assert_eq!(types, [275, 277], "{relocs:?}");
+    let at = check[0].0;
+    // mov x15, xN; adrp x16; add x16; ldr x16, [x16]; blr x16; blr x15.
+    assert_eq!(word(at - 4) & 0xFFE0_FFFF, 0xAA00_03EF, "mov x15, xN");
+    assert_eq!(word(at + 8), 0xF940_0210, "ldr x16, [x16]");
+    assert_eq!(word(at + 12), 0xD63F_0200, "blr x16");
+    assert_eq!(word(at + 16), 0xD63F_01E0, "blr x15");
+}
+
 #[test]
 fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
     // `-mindirect-branch=thunk-inline` (the vDSO's form: no external

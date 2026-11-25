@@ -2942,6 +2942,36 @@ pub(super) fn emit_hardened_call_r(
     }
 }
 
+/// The pointer `-mguard=cf` reaches an indirect call's target through.
+const GUARD_DISPATCH: &str = "__guard_dispatch_icall_fptr";
+
+/// An indirect call through `target`. Under `-mguard=cf` the target moves
+/// to rax and the call goes to `__guard_dispatch_icall_fptr`, which checks it
+/// against the image's table and jumps there; Win64 passes nothing in rax.
+pub(super) fn emit_indirect_call(
+    code: &mut CodeBuf,
+    target: Reg,
+    abi: super::Abi,
+    extern_sites: &mut Vec<super::UserExternCallSite>,
+    extern_data_refs: &mut Vec<super::UserExternDataRef>,
+) {
+    if !abi.hardening.guard_cf {
+        return emit_hardened_call_r(code, target, abi, extern_sites);
+    }
+    if target.0 != Reg::RAX.0 {
+        emit_mov_rr(code, Reg::RAX, target);
+    }
+    // `rex.w call [rip + disp32]`: the REX byte keeps the displacement at
+    // `instr_offset + 3`, where a direct reference's field lies.
+    extern_data_refs.push(super::UserExternDataRef {
+        instr_offset: code.len(),
+        symbol_name: GUARD_DISPATCH.into(),
+        direct_pcrel: Some(-4),
+        import_slot: false,
+    });
+    code.extend_from_slice(&[0x48, 0xFF, 0x15, 0, 0, 0, 0]);
+}
+
 /// Indirect jump through `target`, through the register's thunk or the
 /// embedded retpoline under `-mindirect-branch=`;
 /// `-mharden-sls=indirect-jmp` traps after the transfer in every form.

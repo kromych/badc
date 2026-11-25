@@ -70,6 +70,11 @@ name = "cli_dwarf_types"
 path = "tests/cli_dwarf_types.rs"
 required-features = ["full"]
 
+[[test]]
+name = "cli_listing"
+path = "tests/cli_listing.rs"
+required-features = ["full"]
+
 [features]
 # The default library is the host-arch JIT only (lexer / parser /
 # preprocessor / codegen passes / `jit_run`). On-disk native output
@@ -112,7 +117,12 @@ full = [
     "target-x86_64",
     "inline-asm",
     "assembler",
+    "listing",
 ]
+# The assembly listing of a relocatable object (`-S`): each emitter records
+# an instruction's text where it forms the bytes. Without it a lowering
+# that asks for one is refused.
+listing = ["native-emit"]
 # Embeds the bundled C library and compiler headers (`<stdio.h>`,
 # `<arm_neon.h>`, ...) and the index of the names each declares, which the
 # include search, the auto-include retry and the B2022 hint read. Without

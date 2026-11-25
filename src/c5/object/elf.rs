@@ -600,13 +600,15 @@ fn start_stub_len(machine: Machine, libc_exit: bool) -> u64 {
 fn emit_start_stub(
     machine: Machine,
     abi: Abi,
-    code: &mut Vec<u8>,
+    out: &mut Vec<u8>,
     entry_off: u64,
     libc_exit: bool,
 ) -> Option<usize> {
     let stub_len = start_stub_len(machine, libc_exit);
     let fixup = match machine {
         Machine::X86_64 => {
+            let mut buf = crate::c5::codegen::ssa::code_buf::CodeBuf::from(core::mem::take(out));
+            let code = &mut buf;
             let (argc, argv) = (
                 x86_64::Reg(abi.int_arg_regs[0]),
                 x86_64::Reg(abi.int_arg_regs[1]),
@@ -623,7 +625,7 @@ fn emit_start_stub(
                 (stub_len as i64 + entry_off as i64 - after_call) as i32,
             );
             x86_64::emit_mov_rr(code, argc, x86_64::Reg::RAX);
-            if libc_exit {
+            let exit = if libc_exit {
                 let at = code.len();
                 x86_64::emit_call_qword_rip32(code, 0);
                 Some(at)
@@ -631,10 +633,13 @@ fn emit_start_stub(
                 // mov eax, 231 (sys_exit_group); syscall.
                 code.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00, 0x0f, 0x05]);
                 None
-            }
+            };
+            *out = buf.into_bytes();
+            exit
         }
         Machine::Aarch64 => {
             use aarch64::Reg;
+            let code = &mut *out;
             let (argc, argv) = (Reg(abi.int_arg_regs[0]), Reg(abi.int_arg_regs[1]));
             aarch64::emit(code, aarch64::enc_ldr_imm(argc, Reg::SP, 0));
             aarch64::emit(code, aarch64::enc_add_imm(argv, Reg::SP, 8));
@@ -655,7 +660,7 @@ fn emit_start_stub(
             }
         }
     };
-    debug_assert_eq!(code.len() as u64, stub_len);
+    debug_assert_eq!(out.len() as u64, stub_len);
     fixup
 }
 

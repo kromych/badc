@@ -44,6 +44,7 @@ pub(crate) mod aarch64;
 pub(crate) mod abi_classify;
 pub(crate) mod asm_fold;
 mod jit;
+pub(crate) mod listing;
 pub(crate) mod magic;
 pub(crate) mod map_syms;
 pub(crate) mod passes;
@@ -2630,6 +2631,9 @@ pub(crate) struct Build {
     /// straight to stderr: a build discarded by the compaction retry
     /// must not leave its dump behind next to the final one.
     pub ssa_dump: alloc::string::String,
+    /// Each instruction's text, under [`NativeOptions::listing`].
+    #[cfg(feature = "listing")]
+    pub listing: Option<listing::Listing>,
     /// Post-prologue native byte offset of each function, keyed by
     /// `ent_pc`. The SSA emit records `code.len()` right after the
     /// prologue; the DWARF CFI pass turns the value into the FDE's
@@ -4781,9 +4785,12 @@ pub struct NativeOptions {
     /// function (`-fasynchronous-unwind-tables`); on by default.
     pub unwind_tables: bool,
     /// Print each SSA function's IR + allocator output to stderr
-    /// before lowering. Same as `--dump-asm` for native code: a
-    /// diagnostic emitted alongside the build. Off by default.
+    /// before lowering. Off by default.
     pub dump_ssa: bool,
+    /// Record each instruction's text for the assembly listing (`-S`) of a
+    /// relocatable object. A build without the `listing` feature refuses
+    /// the lowering.
+    pub listing: bool,
     /// Check the SSA rules after each pass and stop at the first pass
     /// that breaks them. A debug build of badc always checks.
     pub verify_ssa: bool,
@@ -5056,9 +5063,16 @@ impl FunctionEntry {
 /// `lead`, so the fill is whole instructions: the gap is unreachable (the
 /// preceding function returns) but decodes, which unwind-metadata
 /// generators reading `.text` as an instruction stream require.
-pub(crate) fn pad_to_alignment(code: &mut Vec<u8>, align: usize, lead: usize, nop: &[u8]) {
+pub(crate) fn pad_to_alignment(
+    code: &mut ssa::code_buf::CodeBuf,
+    align: usize,
+    lead: usize,
+    nop: &[u8],
+) {
     while !(code.len() + lead).is_multiple_of(align) {
+        let at = code.len();
         code.extend_from_slice(nop);
+        code.describe(at, || String::from("nop"));
     }
 }
 
@@ -5403,6 +5417,7 @@ impl NativeOptions {
             debug_info: false,
             unwind_tables: true,
             dump_ssa: false,
+            listing: false,
             verify_ssa: false,
             inline_cap: 64,
             frame_larger_than: None,
@@ -5449,8 +5464,7 @@ impl NativeOptions {
         self
     }
 
-    /// Print the SSA IR + allocation for every function. Same
-    /// observability shape as `--dump-asm`.
+    /// Print the SSA IR + allocation for every function.
     pub const fn with_dump_ssa(mut self) -> Self {
         self.dump_ssa = true;
         self
@@ -5541,6 +5555,19 @@ pub(crate) fn lower_arch(
         return Err(C5Error::hard(
             Code::UNSUPPORTED,
             "this build of badc writes no debug information (the `debuginfo` feature)",
+        ));
+    }
+    if options.listing && !cfg!(feature = "listing") {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            "this build of badc writes no assembly listing (the `listing` feature)",
+        ));
+    }
+    // TODO(#2): the aarch64 emitters describe their instructions.
+    if options.listing && !target.is_x86_64() {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            "`-S` writes the assembly listing of an x86-64 object only",
         ));
     }
     match target {

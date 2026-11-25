@@ -42,6 +42,7 @@ use super::super::error::C5Error;
 use super::super::ir::IndexExt;
 use super::super::program::Program;
 use super::{AddrPart, Build, GotFixup, NativeOptions, Target};
+use crate::c5::codegen::ssa::code_buf::CodeBuf;
 
 /// AArch64 register name. Wraps the 5-bit register field that nearly
 /// every instruction needs in some position; using a newtype prevents
@@ -2563,7 +2564,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         super::pad_to_alignment(&mut st.code, fn_align, lead, &NOP.to_le_bytes());
     }
 
-    fn entry_nops(&mut self, code: &mut Vec<u8>, n: u32) {
+    fn entry_nops(&mut self, code: &mut CodeBuf, n: u32) {
         for _ in 0..n {
             code.extend_from_slice(&NOP.to_le_bytes());
         }
@@ -2658,7 +2659,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     }
 
     fn emit_plt_trampolines(
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         got_fixups: &mut Vec<GotFixup>,
         n_imports: usize,
     ) -> Vec<usize> {

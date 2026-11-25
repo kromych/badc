@@ -19375,10 +19375,10 @@ fn sysv_va_arg_takes_each_eightbyte_from_its_area() {
         long double va_x87(int n, ...) { va_list ap; va_start(ap, n);\n\
             struct x87 s = va_arg(ap, struct x87); va_end(ap); return s.v + n; }\n";
     let (r10, r11) = (Reg(10), Reg(11));
-    let bytes = |f: &dyn Fn(&mut alloc::vec::Vec<u8>)| {
-        let mut v = alloc::vec::Vec::new();
+    let bytes = |f: &dyn Fn(&mut crate::c5::codegen::ssa::code_buf::CodeBuf)| {
+        let mut v = crate::c5::codegen::ssa::code_buf::CodeBuf::default();
         f(&mut v);
-        v
+        v.into_bytes()
     };
     // Load an offset field, check it, advance it.
     let load_gp = bytes(&|v| emit_mov_r32_mem(v, r10, r11, 0));

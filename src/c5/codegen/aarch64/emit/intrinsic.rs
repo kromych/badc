@@ -888,7 +888,7 @@ fn atomic_regs(
 /// result in a saved register leaves through the encoder scratch, which
 /// the consumed operands no longer need.
 fn finish_atomic(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     regs: &SiteRegs,
     dst: Place,
     r: Reg,

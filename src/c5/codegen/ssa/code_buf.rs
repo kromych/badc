@@ -11,6 +11,8 @@
 
 use alloc::vec::Vec;
 
+use super::super::listing::{Operand, Text};
+
 /// The register class and width of a spill store, which a reload must match.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SpillWidth {
@@ -84,6 +86,9 @@ pub(crate) struct CodeBuf {
     /// The x86-64 function being emitted keeps its control transfers off
     /// 32-byte boundaries.
     pub(crate) windows: BranchWindows,
+    /// Each instruction's text, when a listing is asked for.
+    #[cfg(feature = "listing")]
+    listing: Option<alloc::boxed::Box<super::super::listing::Listing>>,
 }
 
 /// x86-64 `-mbranches-within-32B-boundaries`, and under `-O` in the blocks
@@ -126,6 +131,104 @@ pub(crate) struct BranchWindows {
 impl CodeBuf {
     pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.bytes
+    }
+
+    /// A buffer that records each instruction's text when `listing` is set.
+    pub(crate) fn listed(listing: bool) -> Self {
+        #[allow(unused_mut)]
+        let mut code = Self::default();
+        #[cfg(feature = "listing")]
+        if listing {
+            code.listing = Some(alloc::boxed::Box::default());
+        }
+        let _ = listing;
+        code
+    }
+
+    /// An empty buffer to try an encoding in, recording text when this one
+    /// does; [`Self::append`] keeps what it took.
+    pub(crate) fn probe(&self) -> Self {
+        Self::listed(self.listing())
+    }
+
+    /// Append `other`'s bytes and their text.
+    pub(crate) fn append(&mut self, other: CodeBuf) {
+        #[cfg(feature = "listing")]
+        if let (Some(l), Some(o)) = (self.listing.as_deref_mut(), other.listing) {
+            l.append(*o, self.bytes.len());
+        }
+        self.bytes.extend_from_slice(&other.bytes);
+    }
+
+    /// The text recorded so far, which the buffer stops recording.
+    #[cfg(feature = "listing")]
+    pub(crate) fn take_listing(&mut self) -> Option<super::super::listing::Listing> {
+        self.listing.take().map(|l| *l)
+    }
+
+    /// Whether each instruction's text is recorded.
+    #[inline(always)]
+    pub(crate) fn listing(&self) -> bool {
+        #[cfg(feature = "listing")]
+        return self.listing.is_some();
+        #[cfg(not(feature = "listing"))]
+        false
+    }
+
+    /// The instruction whose bytes run from `at` to the end reads `text`.
+    #[inline(always)]
+    pub(crate) fn describe<T: Into<Text>>(&mut self, at: usize, text: impl FnOnce() -> T) {
+        #[cfg(feature = "listing")]
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.push(at, self.bytes.len(), text().into());
+        }
+        #[cfg(not(feature = "listing"))]
+        let _ = (at, text);
+    }
+
+    /// The operand slot of the instruction last described names `operand`.
+    #[inline(always)]
+    pub(crate) fn name_last(&mut self, operand: impl FnOnce() -> Operand) {
+        #[cfg(feature = "listing")]
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.name_last(operand());
+        }
+        #[cfg(not(feature = "listing"))]
+        let _ = operand;
+    }
+
+    /// The bytes from `at` on are a prefix of the next instruction described,
+    /// whose text `amend` rewrites with `arg`.
+    #[inline(always)]
+    pub(crate) fn prefix_next(&mut self, at: usize, amend: super::super::listing::Amend, arg: u8) {
+        #[cfg(feature = "listing")]
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.prefix_next(at, amend, arg);
+        }
+        #[cfg(not(feature = "listing"))]
+        let _ = (at, amend, arg);
+    }
+
+    /// The operand slot of the instruction at `at` names `operand`.
+    #[inline(always)]
+    pub(crate) fn name_at(&mut self, at: usize, operand: impl FnOnce() -> Operand) {
+        #[cfg(feature = "listing")]
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.name_at(at, operand());
+        }
+        #[cfg(not(feature = "listing"))]
+        let _ = (at, operand);
+    }
+
+    /// Block `block` begins here.
+    #[inline(always)]
+    pub(crate) fn label_block(&mut self, block: u32) {
+        #[cfg(feature = "listing")]
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.label(self.bytes.len(), block);
+        }
+        #[cfg(not(feature = "listing"))]
+        let _ = block;
     }
 
     /// An instruction's lowering begins: branches before it land nowhere in it.
@@ -280,23 +383,42 @@ impl CodeBuf {
 
     /// Emit padding that executes as no-ops, which leaves a register's
     /// content as it was.
-    pub(crate) fn pad(&mut self, emit: impl FnOnce(&mut Vec<u8>)) {
+    pub(crate) fn pad(&mut self, emit: impl FnOnce(&mut CodeBuf)) {
         let from = self.bytes.len();
-        emit(&mut self.bytes);
+        emit(self);
         let to = self.bytes.len();
         if let Some(s) = self.stored.as_mut().filter(|s| s.at == from) {
             s.at = to;
         }
     }
 
+    /// Drop the bytes from `len` on, and the text of each instruction in them.
     pub(crate) fn truncate(&mut self, len: usize) {
         self.stored = None;
         self.bytes.truncate(len);
+        #[cfg(feature = "listing")]
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.truncate(len);
+        }
     }
 
+    /// The bytes from `at` on, which leave the buffer with their text.
     pub(crate) fn split_off(&mut self, at: usize) -> Vec<u8> {
         self.stored = None;
+        #[cfg(feature = "listing")]
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.truncate(at);
+        }
         self.bytes.split_off(at)
+    }
+}
+
+impl From<Vec<u8>> for CodeBuf {
+    fn from(bytes: Vec<u8>) -> Self {
+        CodeBuf {
+            bytes,
+            ..Self::default()
+        }
     }
 }
 

@@ -109,6 +109,13 @@ Multi-TU knobs:
                            object (machine code + symbol table +
                            relocs) linkable by `ld` / `lld`.
                            Target pins at compile time.
+  -S                       As -c, writing the object's assembly
+                           listing in its place: `<stem>.s`, or
+                           -o's path (`-o -` standard output).
+                           Each function's instructions with
+                           their offsets, bytes and text, block
+                           labels and the symbols operands name.
+                           x86-64 targets.
   --ar -o <lib>.a <inputs> Compile the sources and archive them with
                            the objects, with a symbol index.
   --ar <key> <lib>.a [file...]

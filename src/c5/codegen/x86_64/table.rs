@@ -17,6 +17,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 pub(crate) use super::isa_x86_table::Mnem;
+use crate::c5::codegen::ssa::code_buf::CodeBuf;
 
 /// Encoding mode, selected by `.code16` / `.code32` / `.code64`. It fixes the
 /// default operand and address sizes the `66` and `67` prefixes select away
@@ -794,6 +795,12 @@ fn form_matches(
 }
 
 impl Mnem {
+    /// The catalog's name of the mnemonic.
+    pub(crate) fn name(self) -> &'static str {
+        let forms = super::isa_x86_table::FORMS;
+        forms[forms.partition_point(|f| f.mnem < self)].mnemonic
+    }
+
     /// The mnemonic for a token, or `None`. Used only by the inline-asm parser
     /// (the one place a mnemonic arrives as text); the catalog is sorted by
     /// name, so this binary-searches.
@@ -878,35 +885,43 @@ pub(crate) fn encode_in(
 /// emitter's migrated families use this: the operands are always a form the
 /// catalog covers, so a failure is a codegen invariant violation and panics.
 pub(crate) fn encode_into(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     mnem: Mnem,
     width_override: Option<u8>,
     ops: &[Opnd],
 ) {
     let mode = Mode::Bits64;
+    let at = code.len();
     match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
         Some((b, _)) => code.extend_from_slice(b.as_slice()),
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
     }
+    code.describe(at, || super::text::catalog(mnem, width_override, ops, None));
 }
 
 /// [`encode_into`] for a form whose memory operand ends in a 32-bit
 /// displacement; returns the offset of that field in `code`. Only the
 /// immediate, if any, follows it.
 pub(crate) fn encode_into_disp32(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     mnem: Mnem,
     width_override: Option<u8>,
     ops: &[Opnd],
 ) -> usize {
     let mode = Mode::Bits64;
-    match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
+    let at = code.len();
+    let field = match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
         Some((b, imm)) => {
             code.extend_from_slice(b.as_slice());
             code.len() - imm as usize - 4
         }
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
-    }
+    };
+    let rel = (field - at) as u8;
+    code.describe(at, || {
+        super::text::catalog(mnem, width_override, ops, Some(rel))
+    });
+    field
 }
 
 /// The shortest encoding of `mnem` for `ops` with its immediate's byte count,

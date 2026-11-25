@@ -2574,7 +2574,7 @@ pub(super) fn emit_frame_exit(
 /// x17, the floating-point ones through the FP scratch, and a constant's bit
 /// pattern crossing banks between the two.
 fn emit_parts_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     parts: &[super::super::ir::ValueId],
     fp_mask: &super::super::ir::FpMask,
     alloc: &Allocation,

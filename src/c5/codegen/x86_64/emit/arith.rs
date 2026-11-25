@@ -194,7 +194,7 @@ pub(super) fn emit_select(
 }
 
 /// `t = x` when `cc` holds, or when PF is set under `parity`.
-fn cmov_pick(code: &mut Vec<u8>, cc: Cc, parity: bool, t: Reg, x: Reg) {
+fn cmov_pick(code: &mut CodeBuf, cc: Cc, parity: bool, t: Reg, x: Reg) {
     use super::encode::emit_cmovcc_rr;
     emit_cmovcc_rr(code, cc, t, x);
     if parity {
@@ -206,7 +206,7 @@ fn cmov_pick(code: &mut Vec<u8>, cc: Cc, parity: bool, t: Reg, x: Reg) {
 /// the flags directly and the boolean materialization is elided, else
 /// `setcc` + `movzx` the result into `rd`.
 fn finish_int_cmp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     cc: Cc,
     rd: Reg,
@@ -250,7 +250,7 @@ pub(super) fn emit_extend(
 
 /// `rd <- rn`, sign-extended from the width of an `I8` / `I16` / `I32`
 /// `kind` (`MOVSX` / `MOVSXD`); any other kind takes the whole register.
-pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadKind) {
+pub(super) fn emit_sign_extend(code: &mut CodeBuf, rd: Reg, rn: Reg, kind: LoadKind) {
     match kind {
         LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, rn),
         LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
@@ -1009,7 +1009,7 @@ fn shift_size(op: BinOp) -> u8 {
 }
 
 /// Stage the lhs into the destination of a two-operand op.
-fn stage_lhs(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
+fn stage_lhs(code: &mut CodeBuf, rd: Reg, rn: Reg) {
     if rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
@@ -2087,7 +2087,7 @@ pub(super) fn flag_steps(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<F
 /// The step or comparison [`flag_steps`] marked; `None` for any other
 /// instruction.
 pub(super) fn emit_flag_step(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     steps: &[Option<FlagStep>],
     fcx: &FnCtx,
@@ -2321,7 +2321,7 @@ pub(super) fn memory_destinations(
 
 /// The instruction [`memory_destinations`] marked; `None` for any other.
 pub(super) fn emit_memory_destination(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     marks: &[Option<MemDest>],
     fcx: &FnCtx,

@@ -318,6 +318,8 @@ fn synth_program_and_build(
         data_liveness: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
+        #[cfg(feature = "listing")]
+        listing: None,
         asm_sections: Vec::new(),
         asm_section_text_refs: Vec::new(),
         asm_text_abs_refs: Vec::new(),

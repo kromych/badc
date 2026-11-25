@@ -27,24 +27,47 @@ pub(super) fn emit_tls_addr(
             //   lea rax, [rip + disp32]; call qword ptr [rax];
             //   add rax, qword ptr fs:[0]
             let start = code.len();
-            code.extend_from_slice(&[0x48, 0x8D, 0x05, 0, 0, 0, 0, 0xFF, 0x10]);
+            let name = extern_tls_names.get(&v).map(|r| r.name.clone());
+            let block = || {
+                name.clone()
+                    .unwrap_or_else(|| alloc::string::String::from("_TLS_MODULE_BASE_"))
+            };
+            code.extend_from_slice(&[0x48, 0x8D, 0x05, 0, 0, 0, 0]);
+            code.describe(start, || {
+                alloc::format!("leaq {}@tlsdesc(%rip), %rax", block())
+            });
+            let at = code.len();
+            code.extend_from_slice(&[0xFF, 0x10]);
+            code.describe(at, || alloc::format!("callq *{}@tlscall(%rax)", block()));
+            let at = code.len();
             code.extend_from_slice(&[0x64, 0x48, 0x03, 0x04, 0x25, 0, 0, 0, 0]);
-            let target = match extern_tls_names.get(&v) {
-                Some(r) => {
+            code.describe(at, || alloc::string::String::from("addq %fs:0x0, %rax"));
+            let target = match name {
+                Some(name) => {
                     // mov rd, rax
                     if rd.0 != 0 {
+                        let at = code.len();
                         code.extend_from_slice(&[0x48 | (rd.0 >> 3), 0x89, 0xC0 | (rd.0 & 7)]);
+                        code.describe(at, || alloc::format!("movq %rax, {}", t::gpr(rd.0, 8)));
                     }
-                    super::ElfTpoffTarget::Descriptor(r.name.clone())
+                    super::ElfTpoffTarget::Descriptor(name)
                 }
                 None => {
                     // lea rd, [rax + disp32]
+                    let at = code.len();
                     code.extend_from_slice(&[
                         0x48 | ((rd.0 >> 3) << 2),
                         0x8D,
                         0x80 | ((rd.0 & 7) << 3),
                     ]);
                     code.extend_from_slice(&0i32.to_le_bytes());
+                    code.describe(at, || {
+                        t::Text::with(
+                            "leaq ",
+                            t::Operand::Field { field: 3, width: 4 },
+                            &alloc::format!("(%rax), {}", t::gpr(rd.0, 8)),
+                        )
+                    });
                     super::ElfTpoffTarget::ModuleDescriptor(offset as u64)
                 }
             };
@@ -62,12 +85,14 @@ pub(super) fn emit_tls_addr(
             //   SIB scale=00 index=100 (none) base=101 (disp32);
             //   disp32 = 0.
             let rex = 0x48 | (((rd.0 >> 3) & 1) << 2);
+            let at = code.len();
             code.push(0x64);
             code.push(rex);
             code.push(0x8B);
             code.push(0x04 | ((rd.0 & 7) << 3));
             code.push(0x25);
             code.extend_from_slice(&0u32.to_le_bytes());
+            code.describe(at, || alloc::format!("movq %fs:0x0, {}", t::gpr(rd.0, 8)));
             // A cross-unit `extern _Thread_local` (`extern_tls_names`) may live
             // in a shared library, whose block the loader places, so its offset
             // comes from the GOT (the initial-exec TLS model): add rd, qword
@@ -75,11 +100,15 @@ pub(super) fn emit_tls_addr(
             // ModR/M mod=00 reg=rd.lo rm=101.
             let by_name = extern_tls_names.get(&v);
             if let Some(r) = by_name.filter(|r| !r.defined_here) {
+                let at = code.len();
                 code.push(rex);
                 code.push(0x03);
                 code.push(0x05 | ((rd.0 & 7) << 3));
                 let imm_offset = code.len();
                 code.extend_from_slice(&0i32.to_le_bytes());
+                code.describe(at, || {
+                    alloc::format!("addq {}@gottpoff(%rip), {}", r.name, t::gpr(rd.0, 8))
+                });
                 elf_tpoff_fixups.push(super::ElfTpoffFixup {
                     imm_offset,
                     target: super::ElfTpoffTarget::InitialExec(r.name.clone()),
@@ -105,11 +134,16 @@ pub(super) fn emit_tls_addr(
             //   ModR/M mod=11 reg=0 rm=rd.lo;
             //   imm32 = tpoff (patched by the linker per the fixup).
             let rex_add = 0x48 | ((rd.0 >> 3) & 1);
+            let at = code.len();
             code.push(rex_add);
             code.push(0x81);
             code.push(0xC0 | (rd.0 & 7));
             let imm_offset = code.len();
             code.extend_from_slice(&(tpoff as i32).to_le_bytes());
+            code.describe(at, || match by_name {
+                Some(r) => alloc::format!("addq ${}@tpoff, {}", r.name, t::gpr(rd.0, 8)),
+                None => alloc::format!("addq {}, {}", t::imm(tpoff), t::gpr(rd.0, 8)),
+            });
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset,
                 target: match by_name {
@@ -135,6 +169,7 @@ pub(super) fn emit_tls_addr(
             // mov rd_w, [rip+disp32]       ; _tls_index slot (zero-extends to rd)
             // mov t, [t + rd*8]            ; tls_array[idx]
             // lea rd, [t + offset]
+            let at = code.len();
             code.extend_from_slice(&[
                 0x65,
                 0x48 | ((t.0 >> 3) << 2),
@@ -146,11 +181,15 @@ pub(super) fn emit_tls_addr(
                 0,
                 0,
             ]);
+            code.describe(at, || {
+                alloc::format!("movq %gs:0x58, {}", super::text::gpr(t.0, 8))
+            });
             // mov rd.lo_dword, [rip+disp32]:
             //   REX.R = (rd >= 8); opcode 8B;
             //   ModR/M mod=00 reg=rd.lo rm=101 (rip-relative);
             //   disp32 = 0 (patched).
             let rex_idx = if rd.0 >= 8 { 0x44 } else { 0x00 };
+            let at = code.len();
             if rex_idx != 0 {
                 code.push(rex_idx);
             }
@@ -160,6 +199,9 @@ pub(super) fn emit_tls_addr(
             code.push(0x8B);
             code.push(0x05 | ((rd.0 & 7) << 3));
             code.extend_from_slice(&0i32.to_le_bytes());
+            code.describe(at, || {
+                alloc::format!("movl _tls_index(%rip), {}", super::text::gpr(rd.0, 4))
+            });
             tls_index_fixups.push(super::TlsIndexFixup {
                 instr_offset: mov_idx_offset,
             });
@@ -173,6 +215,7 @@ pub(super) fn emit_tls_addr(
             //   ModR/M mod=10 (disp32), reg=rd.lo, rm=t.lo (a SIB for rm=100).
             let extern_sym = extern_tls_names.get(&v).map(|r| r.name.clone());
             let disp: i64 = if extern_sym.is_some() { 0 } else { offset };
+            let at = code.len();
             code.push(0x48 | ((rd.0 >> 3) << 2) | (t.0 >> 3));
             code.push(0x8D);
             code.push(0x80 | ((rd.0 & 7) << 3) | (t.0 & 7));
@@ -181,6 +224,16 @@ pub(super) fn emit_tls_addr(
             }
             let imm_offset = code.len();
             code.extend_from_slice(&(disp as i32).to_le_bytes());
+            code.describe(at, || {
+                let t_reg = t.0;
+                let (rd, t) = (super::text::gpr(rd.0, 8), super::text::gpr(t.0, 8));
+                match &extern_sym {
+                    Some(name) => alloc::format!("leaq {name}@secrel32({t}), {rd}"),
+                    None => {
+                        alloc::format!("leaq {}, {rd}", super::text::mem_at(t_reg, disp as i32))
+                    }
+                }
+            });
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset,
                 target: match extern_sym {
@@ -208,6 +261,13 @@ pub(super) fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: su
 
 /// Segment-override prefix byte for an x86 named address space:
 /// `%gs:` is 0x65, `%fs:` is 0x64. `None` carries no override.
+/// Segment override `p` ahead of the next instruction's opcode.
+pub(super) fn emit_seg(code: &mut CodeBuf, p: u8) {
+    let at = code.len();
+    code.push(p);
+    code.prefix_next(at, t::segment, p);
+}
+
 pub(super) fn seg_prefix(seg: AsmSeg) -> Option<u8> {
     match seg {
         AsmSeg::Gs => Some(0x65),
@@ -220,7 +280,7 @@ pub(super) fn seg_prefix(seg: AsmSeg) -> Option<u8> {
 /// (MOV / MOVSXD / MOVSX / MOVZX per C99 6.3.1.3); an `I32` takes `movsxd`
 /// only when `hi`, a reader of its upper half, else the plain 32-bit `mov`.
 pub(super) fn emit_load_kind_mem(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     kind: LoadKind,
     rd: Reg,
     base: Reg,
@@ -230,7 +290,7 @@ pub(super) fn emit_load_kind_mem(
 ) {
     // A segment override is a legacy prefix preceding the opcode (and REX).
     if let Some(p) = seg {
-        code.push(p);
+        emit_seg(code, p);
     }
     match kind {
         LoadKind::I64 => emit_mov_r_mem(code, rd, base, disp),
@@ -257,7 +317,7 @@ pub(super) fn emit_load_kind_mem(
 
 /// Width-dispatched integer store `*(kind*)[base + disp] = src`.
 fn emit_store_kind_mem(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     kind: StoreKind,
     base: Reg,
     disp: i32,
@@ -265,7 +325,7 @@ fn emit_store_kind_mem(
     seg: Option<u8>,
 ) {
     if let Some(p) = seg {
-        code.push(p);
+        emit_seg(code, p);
     }
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, base, disp, src),
@@ -318,7 +378,7 @@ fn emit_load_fp_mem(
     if matches!(kind, LoadKind::V256 | LoadKind::V512) {
         let w = VecWidth::of_load(kind);
         if let Some(p) = seg {
-            code.push(p);
+            emit_seg(code, p);
         }
         emit_wide_load(code, w, dd, base, disp);
         mirror_wide_dst(code, w, dst, dd, frame);
@@ -326,7 +386,7 @@ fn emit_load_fp_mem(
     }
     if matches!(kind, LoadKind::V128) {
         if let Some(p) = seg {
-            code.push(p);
+            emit_seg(code, p);
         }
         emit_movups_xmm_mem(code, dd, base, disp);
         mirror_v128_dst(code, dst, dd, frame);
@@ -341,7 +401,7 @@ fn emit_load_fp_mem(
         // intervenes; x87 accesses carry no alignment requirement, so
         // the strict-align compose path does not apply).
         if let Some(p) = seg {
-            code.push(p);
+            emit_seg(code, p);
         }
         super::encode::emit_fld_m80(code, base, disp);
         let round_trip = x87_round_trip(code, frame);
@@ -367,7 +427,7 @@ fn emit_load_fp_mem(
     }
     // Segment override precedes the mandatory SSE prefix and the opcode.
     if let Some(p) = seg {
-        code.push(p);
+        emit_seg(code, p);
     }
     if matches!(kind, LoadKind::F32) {
         emit_movss_xmm_mem(code, dd, base, disp);
@@ -410,7 +470,7 @@ fn emit_store_fp_mem(
             return fail(alloc::format!("{site}: value not fp reg / spill / int reg"));
         };
         if let Some(p) = seg {
-            code.push(p);
+            emit_seg(code, p);
         }
         emit_wide_store(code, w, base, disp, dn);
         mirror_wide_dst(code, w, dst, dn, frame);
@@ -421,7 +481,7 @@ fn emit_store_fp_mem(
             return fail(alloc::format!("{site}: value not fp reg / spill / int reg"));
         };
         if let Some(p) = seg {
-            code.push(p);
+            emit_seg(code, p);
         }
         emit_movups_mem_xmm(code, base, disp, dn);
         mirror_v128_dst(code, dst, dn, frame);
@@ -442,7 +502,7 @@ fn emit_store_fp_mem(
         super::encode::emit_fld_m64(code, Reg::RSP, round_trip);
         x87_round_trip_end(code, frame);
         if let Some(p) = seg {
-            code.push(p);
+            emit_seg(code, p);
         }
         super::encode::emit_fstp_m80(code, base, disp);
         mirror_fp_dst(code, dst, dn, frame);
@@ -450,9 +510,9 @@ fn emit_store_fp_mem(
     }
     // Emit the segment override immediately before the store opcode, past any
     // value materialization / narrowing the branches do first.
-    let push_seg = |code: &mut Vec<u8>| {
+    let push_seg = |code: &mut CodeBuf| {
         if let Some(p) = seg {
-            code.push(p);
+            emit_seg(code, p);
         }
     };
     let narrowed = |code: &mut CodeBuf, src: Reg, width: u32, a: u32| {
@@ -1081,7 +1141,9 @@ pub(super) fn emit_store_of_imm(
             let Some(base) = materialize_int(code, place_of(alloc, *addr), S0, frame) else {
                 return fail("SegStore: addr Place not int reg / spill");
             };
-            code.extend(seg_prefix(*seg));
+            if let Some(p) = seg_prefix(*seg) {
+                emit_seg(code, p);
+            }
             super::encode::emit_mi(code, Mnem::Mov, width, base, 0, imm);
         }
         Inst::StoreLocal { off, disp, .. } => {
@@ -1247,7 +1309,7 @@ pub(super) fn emit_pc_rel(
     else {
         return fail("pc_rel access: address not a data address");
     };
-    let mut record = |code: &Vec<u8>, field: usize| {
+    let mut record = |code: &mut CodeBuf, field: usize| {
         let trailing = (code.len() - field - 4) as i64;
         data_fixups.push(DataFixup {
             instr_offset: field,
@@ -1255,6 +1317,7 @@ pub(super) fn emit_pc_rel(
             addend: i64::from(*disp) - trailing,
             part: AddrPart::Disp32,
         });
+        code.name_last(|| t::Operand::Data(*off + i64::from(*disp)));
     };
     let marked = |set: &[bool]| set.get(v as usize).copied().unwrap_or(false);
     if marked(&alloc.branch_fused) {
@@ -1443,6 +1506,7 @@ pub(super) fn emit_imm_data(
     // `lea rd, [rip + 0]` placeholder; the writer patches the
     // disp32 once the data segment's runtime address is known.
     super::encode::emit_lea_r_rip32(code, rd, 0);
+    code.name_last(|| t::Operand::Data(offset));
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
 }
@@ -1460,6 +1524,7 @@ pub(super) fn emit_imm_code(
     let instr_offset = code.len();
     pending_func_fixups.push((instr_offset, target_ent_pc));
     super::encode::emit_lea_r_rip32(code, rd, 0);
+    code.name_last(|| t::Operand::Func(target_ent_pc));
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
 }
@@ -1489,6 +1554,7 @@ pub(super) fn emit_imm_ext_code(
         is_addr: true,
     });
     super::encode::emit_lea_r_rip32(code, rd, 0);
+    code.name_last(|| t::Operand::Import(import_index));
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
 }
@@ -1496,7 +1562,7 @@ pub(super) fn emit_imm_ext_code(
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
 /// `[src + disp]` to `[dst + disp]` through `temp`.
 pub(super) fn emit_copy_unit(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     width: u32,
     temp: Reg,
     src: Reg,
@@ -1520,7 +1586,7 @@ fn x87_round_trip(code: &mut CodeBuf, frame: Frame) -> i32 {
 }
 
 /// Release what [`x87_round_trip`] reserved.
-fn x87_round_trip_end(code: &mut Vec<u8>, frame: Frame) {
+fn x87_round_trip_end(code: &mut CodeBuf, frame: Frame) {
     if !frame.red_zone && !frame.omit_fp {
         emit_lea_r_mem(code, Reg::RSP, Reg::RSP, 8);
     }
@@ -1626,7 +1692,7 @@ impl SiteRegs {
 
 /// Store the low `width` bytes (8, 4, 2 or 1) of `src` to
 /// `[base + disp]`.
-pub(super) fn emit_store_unit(code: &mut Vec<u8>, width: u32, base: Reg, disp: i32, src: Reg) {
+pub(super) fn emit_store_unit(code: &mut CodeBuf, width: u32, base: Reg, disp: i32, src: Reg) {
     match width {
         8 => emit_mov_mem_r(code, base, disp, src),
         4 => super::encode::emit_mov_mem32_r(code, base, disp, src),
@@ -1637,7 +1703,7 @@ pub(super) fn emit_store_unit(code: &mut Vec<u8>, width: u32, base: Reg, disp: i
 
 /// Zero-extending load of `width` bytes (8, 4, 2 or 1) from
 /// `[base + disp]` into `dst`.
-pub(super) fn emit_load_unit(code: &mut Vec<u8>, width: u32, dst: Reg, base: Reg, disp: i32) {
+pub(super) fn emit_load_unit(code: &mut CodeBuf, width: u32, dst: Reg, base: Reg, disp: i32) {
     match width {
         8 => emit_mov_r_mem(code, dst, base, disp),
         4 => super::encode::emit_mov_r32_mem(code, dst, base, disp),
@@ -1653,7 +1719,7 @@ pub(super) fn emit_load_unit(code: &mut Vec<u8>, width: u32, dst: Reg, base: Reg
 /// `base`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_int(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Reg,
     base: Reg,
     disp: i32,
@@ -1751,7 +1817,7 @@ pub(super) fn emit_agg_load_slot_sse(
 /// The partner of [`emit_agg_load_slot_sse`]: store the slot back to
 /// `[base + disp]`.
 pub(super) fn emit_agg_store_slot_sse(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     class: super::abi_classify::RegClass,
     base: Reg,
     disp: i32,
@@ -1900,7 +1966,7 @@ fn emit_narrow_store(
 /// [`emit_narrow_store`] of a constant, sign-extended from `imm`: each
 /// piece stores its own bytes as an immediate, so no temp is borrowed.
 fn emit_narrow_store_imm(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     imm: i32,
     base: Reg,
     disp: i32,

@@ -205,8 +205,8 @@ also writes the program database beside it (`hello.exe` gets `hello.pdb`),
 which the image's debug directory names by its absolute path. The PDB holds
 the CodeView types, the procedures with their locals relative to the frame or
 stack pointer, the line tables, and the global and public symbols of every
-unit the image carries DWARF for. `--strip-debug` (`-Wl,-S`) drops both; badc
-writes no assembly, so the driver's own `-S` is refused.
+unit the image carries DWARF for. `--strip-debug` (`-Wl,-S`) drops both. The
+driver's own `-S` writes the assembly listing of the object `-c` would write.
 
 Under `-O`, x86-64 code keeps no frame pointer: debuggers unwind through the
 call-frame information, on Windows through the unwind codes, and a profiler

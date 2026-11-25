@@ -28,7 +28,7 @@ fn disp32_field_precedes_the_immediate() {
         (Mnem::Cmp, Some(1), [at(1, 1), Opnd::Imm(0)], 1),
     ];
     for (mnem, width, ops, imm) in cases {
-        let mut code = alloc::vec![0xcc];
+        let mut code = crate::c5::codegen::ssa::code_buf::CodeBuf::from(alloc::vec![0xcc]);
         let field = encode_into_disp32(&mut code, mnem, width, &ops);
         assert_eq!(
             code[field..field + 4],

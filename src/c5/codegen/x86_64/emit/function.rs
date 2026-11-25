@@ -84,7 +84,7 @@ fn edge_plan(
 /// The shared parallel-copy scheduler over the x86-64 leaves; `hold` and
 /// `stage` hold no value the moves read or write.
 fn schedule_place_moves(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut Vec<PlaceMove>,
     frame: Frame,
     hold: Reg,
@@ -103,7 +103,7 @@ fn schedule_place_moves(
 /// Sequentialize a parallel copy over xmm registers: leaves first, then a
 /// residual cycle through `scratch`, which lies outside the allocator's
 /// xmm pool.
-pub(super) fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
+pub(super) fn schedule_xmm_reg_moves(code: &mut CodeBuf, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
     super::ssa::emit_common::schedule_reg_moves_via_scratch(
         code,
         moves,
@@ -116,64 +116,64 @@ pub(super) fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8
 impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backend {
     const ARCH: &'static str = "x86_64";
     type Frame = Frame;
-    fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+    fn fp_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8) {
         emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));
     }
-    fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+    fn fp_spill_store(&self, code: &mut CodeBuf, frame: Frame, slot: u32, src: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_movsd_mem_xmm(code, sb, off, Reg(src));
     }
-    fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+    fn fp_spill_load(&self, code: &mut CodeBuf, frame: Frame, slot: u32, dst: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_movsd_xmm_mem(code, Reg(dst), sb, off);
     }
-    fn wide_reg_mov(&self, code: &mut Vec<u8>, w: VecWidth, dst: u8, src: u8) {
+    fn wide_reg_mov(&self, code: &mut CodeBuf, w: VecWidth, dst: u8, src: u8) {
         emit_wide_mov(code, w, Reg(dst), Reg(src));
     }
-    fn wide_spill_store(&self, code: &mut Vec<u8>, frame: Frame, w: VecWidth, slot: u32, src: u8) {
+    fn wide_spill_store(&self, code: &mut CodeBuf, frame: Frame, w: VecWidth, slot: u32, src: u8) {
         let (sb, off) = wide_spill_addr(frame, w, slot);
         emit_wide_store(code, w, sb, off, Reg(src));
     }
-    fn wide_spill_load(&self, code: &mut Vec<u8>, frame: Frame, w: VecWidth, slot: u32, dst: u8) {
+    fn wide_spill_load(&self, code: &mut CodeBuf, frame: Frame, w: VecWidth, slot: u32, dst: u8) {
         let (sb, off) = wide_spill_addr(frame, w, slot);
         emit_wide_load(code, w, Reg(dst), sb, off);
     }
-    fn wide_load_const(&self, code: &mut Vec<u8>, dst: u8, scratch: u8, bits: i64) {
+    fn wide_load_const(&self, code: &mut CodeBuf, dst: u8, scratch: u8, bits: i64) {
         self.int_reg_load_imm(code, scratch, bits);
         emit_vmovq_xmm_r(code, Reg(dst), Reg(scratch));
     }
-    fn v128_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+    fn v128_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8) {
         emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));
     }
-    fn v128_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+    fn v128_spill_store(&self, code: &mut CodeBuf, frame: Frame, slot: u32, src: u8) {
         let (sb, off) = v128_spill_addr(frame, slot);
         emit_movups_mem_xmm(code, sb, off, Reg(src));
     }
-    fn v128_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+    fn v128_spill_load(&self, code: &mut CodeBuf, frame: Frame, slot: u32, dst: u8) {
         let (sb, off) = v128_spill_addr(frame, slot);
         emit_movups_xmm_mem(code, Reg(dst), sb, off);
     }
-    fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+    fn int_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8) {
         emit_mov_rr(code, Reg(dst), Reg(src));
     }
-    fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+    fn int_reg_ext(&self, code: &mut CodeBuf, dst: u8, src: u8, kind: LoadKind) {
         emit_sign_extend(code, Reg(dst), Reg(src), kind);
     }
-    fn int_reg_xchg(&self, code: &mut Vec<u8>, a: u8, b: u8) -> bool {
+    fn int_reg_xchg(&self, code: &mut CodeBuf, a: u8, b: u8) -> bool {
         emit_xchg_rr(code, Reg(a), Reg(b));
         true
     }
-    fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, _base: u8) {
+    fn int_spill_store(&self, code: &mut CodeBuf, frame: Frame, slot: u32, src: u8, _base: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_mem_r(code, sb, off, Reg(src));
     }
-    fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+    fn int_spill_load(&self, code: &mut CodeBuf, frame: Frame, slot: u32, dst: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_r_mem(code, Reg(dst), sb, off);
     }
     fn int_spill_store_staged(
         &self,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         frame: Frame,
         slot: u32,
         stage: u8,
@@ -182,15 +182,15 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_mem_r(code, sb, off, Reg(stage));
     }
-    fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+    fn int_spill_store_auto(&self, code: &mut CodeBuf, frame: Frame, slot: u32, src: u8) {
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_mov_mem_r(code, sb, off, Reg(src));
     }
-    fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
+    fn int_reg_load_imm(&self, code: &mut CodeBuf, dst: u8, bits: i64) {
         emit_mov_r_imm64(code, Reg(dst), bits);
     }
     /// +0.0 by a zeroing xor; the rest through `stage`.
-    fn fp_reg_load_const(&self, code: &mut Vec<u8>, dst: u8, stage: u8, bits: i64, is_f64: bool) {
+    fn fp_reg_load_const(&self, code: &mut CodeBuf, dst: u8, stage: u8, bits: i64, is_f64: bool) {
         if bits == 0 {
             emit_xorps(code, Reg(dst), Reg(dst));
         } else {
@@ -198,7 +198,7 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
             self.fp_reg_from_int_reg(code, dst, stage, is_f64);
         }
     }
-    fn fp_reg_from_int_reg(&self, code: &mut Vec<u8>, dst: u8, src: u8, _is_f64: bool) {
+    fn fp_reg_from_int_reg(&self, code: &mut CodeBuf, dst: u8, src: u8, _is_f64: bool) {
         // `movq xmm, r` copies all 64 bits; for an f32 the constant occupies
         // the low 32 (the immediate load zero-extends), which a scalar-single
         // op reads, so one form serves both widths.
@@ -208,7 +208,7 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
 
 /// Sequentialize register-to-register copies `(src, tgt)`: leaves first,
 /// then a residual cycle broken with `xchg`, so no scratch is needed.
-pub(super) fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>) {
+pub(super) fn schedule_int_reg_moves(code: &mut CodeBuf, moves: &mut Vec<(u8, u8)>) {
     moves.retain(|(s, t)| s != t);
     while !moves.is_empty() {
         let mut progress = false;
@@ -713,8 +713,9 @@ impl FnEmit<'_, '_> {
         // A naked body describes no frame: the unwinder keeps the entry
         // rule, as for a leaf.
         if func.is_naked {
-            let padded = code.len() + self.entry.nops_after as usize;
-            code.resize(padded, 0x90);
+            for _ in 0..self.entry.nops_after {
+                super::encode::emit_nop(code);
+            }
             return super::FnUnwind {
                 leaf: true,
                 ..super::FnUnwind::default()
@@ -723,8 +724,9 @@ impl FnEmit<'_, '_> {
         if abi.hardening.cf_protection_branch {
             super::encode::emit_endbr64(code);
         }
-        let padded = code.len() + self.entry.nops_after as usize;
-        code.resize(padded, 0x90);
+        for _ in 0..self.entry.nops_after {
+            super::encode::emit_nop(code);
+        }
         if let Some(call) = self.entry.profile
             && !call.after_prologue
         {
@@ -980,7 +982,7 @@ impl FnEmit<'_, '_> {
         if let Some(&(prev, _)) = self.seh_placed.last()
             && func.seh_scope_of(prev) != scope
         {
-            self.out.cx.code.push(0x90);
+            super::encode::emit_nop(self.out.cx.code);
         }
         let at = self.out.cx.code.len();
         self.seh_placed
@@ -1021,6 +1023,7 @@ impl FnEmit<'_, '_> {
         let block = &func.blocks[block_idx];
         self.block_offsets[block_idx] = self.out.cx.code.len();
         self.out.cx.code.begin_block();
+        self.out.cx.code.label_block(block_idx as u32);
         let w = &mut self.out.cx.code.windows;
         w.open = None;
         w.here = w.pad.get(block_idx).copied().unwrap_or(true);
@@ -1411,7 +1414,7 @@ impl FnEmit<'_, '_> {
             // mis-marked returning call faults instead of running on.
             Terminator::Unreachable => {
                 if !super::ssa::emit_common::block_ends_in_trap(func, block) {
-                    self.out.cx.code.extend_from_slice(&[0x0F, 0x0B]);
+                    super::encode::emit_ud2(self.out.cx.code);
                 }
                 Ok(())
             }
@@ -1716,11 +1719,11 @@ impl FnEmit<'_, '_> {
 
 /// Fill `n` bytes with the multi-byte NOPs of `X86_NOPS`, the longest form
 /// first.
-fn push_x86_nops(code: &mut Vec<u8>, mut n: usize) {
+fn push_x86_nops(code: &mut CodeBuf, mut n: usize) {
     use crate::c5::asm::X86_NOPS;
     while n > 0 {
         let k = n.min(X86_NOPS.len());
-        code.extend_from_slice(X86_NOPS[k - 1]);
+        super::encode::emit_long_nop(code, k);
         n -= k;
     }
 }
@@ -1793,7 +1796,7 @@ pub(super) fn relax_branches(
 /// on the page the allocation just entered. Immediate source and
 /// `mov`'s flag transparency keep the probe usable at any point in the
 /// lowering: it needs no register and preserves the flags.
-pub(super) fn emit_stack_probe(code: &mut Vec<u8>) {
+pub(super) fn emit_stack_probe(code: &mut CodeBuf) {
     super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, 0, 0);
 }
 
@@ -1874,7 +1877,7 @@ fn saved_xmm_off(alloc: &Allocation) -> i32 {
 /// Each save goes to `uw` with its slot below rbp, which sits `alloc_bytes`
 /// above rsp at the first push; `func_start` is the function's offset.
 fn save_callee_saved(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     alloc: &Allocation,
     alloc_bytes: u32,
     uw: &mut super::FnUnwind,
@@ -1910,7 +1913,7 @@ fn save_callee_saved(
 /// so their offsets hold against rsp at any later rsp, and the pushes after
 /// it pop at the rsp it recovers (Microsoft, "x64 exception handling").
 fn emit_win64_saves(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     alloc: &Allocation,
     frame: Frame,
     uw: &mut super::FnUnwind,
@@ -1949,7 +1952,7 @@ fn reestablishes_sp(frame: Frame, alloc: &Allocation) -> bool {
 /// Re-establish rsp ahead of the epilogue's rsp-relative restores where
 /// [`reestablishes_sp`] holds. Every return path and the tail-call jump
 /// call this ahead of [`restore_callee_saved`].
-pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame, alloc: &Allocation) {
+pub(super) fn restore_dynamic_sp(code: &mut CodeBuf, frame: Frame, alloc: &Allocation) {
     if reestablishes_sp(frame, alloc) {
         emit_lea_r_mem(code, Reg::RSP, Reg::RBP, -(frame.frame_bytes as i32));
     }
@@ -1962,7 +1965,7 @@ pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame, alloc: &Alloc
 /// return path routes through this so the saved-region offsets cannot
 /// drift. Each pop and xmm reload goes to `ex` at the offset past it.
 pub(super) fn restore_callee_saved(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     alloc: &Allocation,
     ex: &mut Vec<(usize, super::X64ExitStep)>,
@@ -2259,7 +2262,7 @@ fn emit_probes_below_rsp(code: &mut CodeBuf, bytes: u32) {
 /// and r11 alone. A variadic callee's register save area covers its
 /// named parameters.
 fn emit_param_homes(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -2293,7 +2296,7 @@ fn emit_param_homes(
 /// prologue runs it ahead of any allocated value, through r10, which is no
 /// argument register.
 fn emit_struct_stack_param_copy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     frame: Frame,
     abi: super::Abi,
@@ -2367,7 +2370,7 @@ fn reg_slot_classes(
 /// (System V AMD64 3.2.3), still intact at this point, into its
 /// parser-reserved body local.
 fn emit_struct_param_scatter(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     frame: Frame,
     abi: super::Abi,
@@ -2589,7 +2592,7 @@ fn wide_result(func: &FunctionSsa, abi: super::Abi) -> bool {
 /// `(hold, stage)`, the SSE parts through the FP scratch, and a constant's
 /// bit pattern crossing banks between the two.
 fn emit_parts_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     parts: &[super::super::ir::ValueId],
     fp_mask: &super::super::ir::FpMask,
     alloc: &Allocation,
@@ -2656,7 +2659,7 @@ fn emit_epilogue_ret(
 /// caller pushed it. Every return path and the tail-call jump route through
 /// here; each pop and the `leave` go to `ex` at the offset past them.
 pub(super) fn emit_frame_teardown(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     frame: Frame,
     alloc: &Allocation,
@@ -2728,7 +2731,7 @@ const CANARY_SCRATCH: Reg = Reg::R11;
 /// named object's PC-relative address when a guard symbol is given. The
 /// `global` form reads the object the target's C library exports.
 fn emit_load_stack_guard(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     rd: Reg,
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
@@ -2750,6 +2753,7 @@ fn emit_load_stack_guard(
             import_slot: false,
         });
         super::encode::emit_lea_r_rip32(code, rd, 0);
+        code.name_last(|| t::Operand::Name(name.into()));
         emit_mov_r_mem(code, rd, rd, 0);
         return;
     };
@@ -2757,15 +2761,20 @@ fn emit_load_stack_guard(
         super::GuardSeg::Fs => 0x64,
         super::GuardSeg::Gs => 0x65,
     };
+    let at = code.len();
     code.push(prefix);
     code.push(if rd.high() { 0x4C } else { 0x48 });
     code.push(0x8B);
+    let seg = if prefix == 0x64 { "%fs" } else { "%gs" };
     if symbol.is_empty() {
         // `mov rd, seg:offset`: mod=00 r/m=100 (SIB) with base=101,
         // index=100 -- the disp32-only addressing form.
         code.push(0x04 | (rd.lo() << 3));
         code.push(0x25);
         code.extend_from_slice(&offset.to_le_bytes());
+        code.describe(at, || {
+            alloc::format!("movq {seg}:{}, {}", t::hex(offset.into()), t::gpr(rd.0, 8))
+        });
         return;
     }
     // `mov rd, seg:sym(%rip)`: mod=00 r/m=101. The named object supplies
@@ -2775,6 +2784,9 @@ fn emit_load_stack_guard(
     let instr_offset = code.len() - 2;
     code.push(0x05 | (rd.lo() << 3));
     code.extend_from_slice(&0i32.to_le_bytes());
+    code.describe(at, || {
+        alloc::format!("movq {seg}:{symbol}(%rip), {}", t::gpr(rd.0, 8))
+    });
     extern_data_refs.push(super::UserExternDataRef {
         instr_offset,
         symbol_name: symbol.into(),
@@ -2787,7 +2799,7 @@ fn emit_load_stack_guard(
 /// slot at `[rbp - 8]`, above every local and below the saved rbp, then
 /// clear the scratch so the guard value does not outlive the store.
 fn emit_canary_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
@@ -2858,7 +2870,7 @@ pub(super) fn pad_epilogue(
 
 /// The bytes of `emit_frame_teardown`, which precede an epilogue's transfer.
 fn teardown_len(func: &FunctionSsa, frame: Frame, alloc: &Allocation, abi: super::Abi) -> usize {
-    let mut probe = Vec::new();
+    let mut probe = CodeBuf::default();
     emit_frame_teardown(&mut probe, func, frame, alloc, abi, &mut Vec::new());
     probe.len()
 }
@@ -2893,6 +2905,7 @@ fn emit_extern_branch(
     } else {
         super::encode::emit_jmp_rel32(code, 0);
     }
+    code.name_last(|| t::Operand::Name(symbol.into()));
     at
 }
 
@@ -2907,7 +2920,7 @@ fn emit_profile_call(
 ) {
     if call.nop {
         mcount_sites.push(code.len());
-        code.extend_from_slice(&[0x0F, 0x1F, 0x44, 0x00, 0x00]);
+        super::encode::emit_long_nop(code, 5);
     } else {
         let at = emit_extern_branch(code, extern_sites, call.symbol(), true);
         mcount_sites.push(at);
@@ -2941,23 +2954,32 @@ pub(super) fn emit_hardened_ret(
 /// `mov %reg, (%rsp)`: overwrite the return address the retpoline's
 /// `call` pushed with the real branch target, so its `ret` transfers
 /// there with the return predictor pinned to the capture loop.
-fn emit_mov_r_to_rsp_slot(code: &mut Vec<u8>, target: Reg) {
+fn emit_mov_r_to_rsp_slot(code: &mut CodeBuf, target: Reg) {
+    let at = code.len();
     code.push(if target.0 >= 8 { 0x4C } else { 0x48 });
     code.push(0x89);
     code.push(0x04 | ((target.0 & 7) << 3));
     code.push(0x24);
+    code.describe(at, || {
+        alloc::format!("movq {}, (%rsp)", t::gpr(target.0, 8))
+    });
 }
 
 /// The retpoline capture: `pause; lfence; jmp .-7`, then the slot
 /// overwrite and `ret`. Entered by a `call` whose displacement lands
 /// on the `mov`; the pushed return address keeps speculation in the
 /// loop. The `-mindirect-branch=thunk-inline` body.
-fn emit_retpoline_capture(code: &mut Vec<u8>, target: Reg) {
-    code.extend_from_slice(&[0xF3, 0x90]); // pause
-    code.extend_from_slice(&[0x0F, 0xAE, 0xE8]); // lfence
-    code.extend_from_slice(&[0xEB, 0xF9]); // jmp back over both
+fn emit_retpoline_capture(code: &mut CodeBuf, target: Reg) {
+    super::encode::emit_pause(code);
+    super::encode::emit_lfence(code);
+    // Back over both, a branch inside the capture that no site lowering sees.
+    let at = code.len();
+    code.extend_from_slice(&[0xEB, 0xF9]);
+    code.describe(at, || {
+        t::Text::with("jmp ", t::Operand::PcRel { field: 1, width: 1 }, "")
+    });
     emit_mov_r_to_rsp_slot(code, target);
-    code.push(0xC3); // ret
+    super::encode::emit_ret(code);
 }
 
 /// Indirect call through `target`: a direct call to the register's thunk
@@ -2977,13 +2999,13 @@ pub(super) fn emit_hardened_call_r(
             emit_extern_branch(code, extern_sites, symbol, true);
         }
         IndirectBranch::ThunkInline => {
-            code.note_branch();
-            code.extend_from_slice(&[0xEB, 0x11]); // jmp over the thunk body
-            code.extend_from_slice(&[0xE8, 0x07, 0x00, 0x00, 0x00]); // call the capture
+            // Over the thunk body, then the call of the capture.
+            super::encode::emit_jmp_rel8(code, 0x11);
+            super::encode::emit_call_rel32(code, 7);
             emit_retpoline_capture(code, target);
             // call back into the thunk head; the pushed address is the
             // continuation after this site.
-            code.extend_from_slice(&[0xE8, 0xEA, 0xFF, 0xFF, 0xFF]);
+            super::encode::emit_call_rel32(code, -0x16);
         }
         IndirectBranch::Keep => {
             pad_group(code, 0, 2 + usize::from(target.high()));
@@ -3020,7 +3042,9 @@ pub(super) fn emit_indirect_call(
         direct_pcrel: Some(-4),
         import_slot: false,
     });
+    let at = code.len();
     code.extend_from_slice(&[0x48, 0xFF, 0x15, 0, 0, 0, 0]);
+    code.describe(at, || alloc::format!("callq *{GUARD_DISPATCH}(%rip)"));
 }
 
 /// Indirect jump through `target`, through the register's thunk or the
@@ -3039,7 +3063,8 @@ fn emit_hardened_jmp_r(
             emit_extern_branch(code, extern_sites, symbol, false);
         }
         IndirectBranch::ThunkInline => {
-            code.extend_from_slice(&[0xE8, 0x07, 0x00, 0x00, 0x00]); // call the capture
+            // The call of the capture.
+            super::encode::emit_call_rel32(code, 7);
             emit_retpoline_capture(code, target);
         }
         IndirectBranch::Keep => {

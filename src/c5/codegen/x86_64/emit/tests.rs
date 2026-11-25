@@ -689,10 +689,10 @@ mod fma_tests {
         let (base, b_off) = spill_slot_addr(frame, 0);
         let (_, c_off) = spill_slot_addr(frame, 1);
         let cheapest = [(c_off, 0xB9, b_off), (b_off, 0xA9, c_off)].map(|(load, op, mem)| {
-            let mut want = Vec::new();
+            let mut want = CodeBuf::default();
             emit_movsd_xmm_mem(&mut want, Reg(0), base, load);
             emit_vex_fma_mem(&mut want, op, true, Reg(0), Reg(1), Mem::at(base, mem));
-            want
+            want.into_bytes()
         });
         assert!(cheapest.contains(&code), "{code:02x?}");
     }
@@ -706,11 +706,11 @@ mod fma_tests {
             [false, false, true],
         );
         let s0 = Reg(frame.fp_scratch[0]);
-        let mut want = Vec::new();
+        let mut want = CodeBuf::default();
         emit_movq_xmm_r(&mut want, s0, Reg(1));
         let (base, a_off) = spill_slot_addr(frame, 0);
         emit_vex_fma_mem(&mut want, 0xB9, true, Reg(0), s0, Mem::at(base, a_off));
-        assert_eq!(*code, want, "movq b, then vfmadd231sd [a]");
+        assert_eq!(*code, *want, "movq b, then vfmadd231sd [a]");
     }
 
     /// An operand in the destination's register is the overwritten one.
@@ -722,11 +722,11 @@ mod fma_tests {
             [true, false, false],
         );
         let s0 = Reg(frame.fp_scratch[0]);
-        let mut want = Vec::new();
+        let mut want = CodeBuf::default();
         emit_movq_xmm_r(&mut want, s0, Reg(1));
         let (base, c_off) = spill_slot_addr(frame, 1);
         emit_vex_fma_mem(&mut want, 0xA9, true, Reg(0), s0, Mem::at(base, c_off));
-        assert_eq!(*code, want, "movq b, then vfmadd213sd [c]");
+        assert_eq!(*code, *want, "movq b, then vfmadd213sd [c]");
     }
 }
 

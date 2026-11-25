@@ -182,6 +182,9 @@ pub struct NativeEmit {
     /// The `--dump-ssa` text, for the caller to print once it knows the
     /// object is the one its link keeps.
     pub ssa_dump: alloc::string::String,
+    /// The assembly listing of a relocatable object under
+    /// [`NativeOptions::listing`], empty otherwise.
+    pub listing: alloc::string::String,
 }
 
 /// A linked image and the program database its debug directory names.
@@ -550,7 +553,33 @@ pub fn emit_native_reporting(
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }
     let diagnostics = core::mem::take(&mut build.diagnostics);
-    let image = write_for(program, &build, target)?;
+    #[cfg(feature = "listing")]
+    let (image, listing) = match build.listing.take() {
+        Some(mut l) if output_kind == OutputKind::Relocatable => {
+            let machine = match target {
+                Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
+                _ => Machine::Aarch64,
+            };
+            let image = elf_reloc::write_relocatable_listed(
+                program,
+                &build,
+                machine,
+                target,
+                Some(&mut l),
+            )?;
+            let text = crate::c5::codegen::listing::render(&l, program, &build);
+            (image, text)
+        }
+        _ => (
+            write_for(program, &build, target)?,
+            alloc::string::String::new(),
+        ),
+    };
+    #[cfg(not(feature = "listing"))]
+    let (image, listing) = (
+        write_for(program, &build, target)?,
+        alloc::string::String::new(),
+    );
     if freed_by_exit {
         core::mem::forget(build);
         core::mem::forget(compacted);
@@ -559,6 +588,7 @@ pub fn emit_native_reporting(
         image,
         diagnostics,
         ssa_dump,
+        listing,
     })
 }
 
@@ -940,6 +970,8 @@ pub(crate) mod test_support {
             data_liveness: None,
             stopped_at_data_liveness: false,
             ssa_dump: String::new(),
+            #[cfg(feature = "listing")]
+            listing: None,
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),

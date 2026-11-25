@@ -493,7 +493,7 @@ impl Marshal<'_> {
 /// result temp at `[base + disp]`: INTEGER eightbytes from rax:rdx, SSE from
 /// xmm0:xmm1 (System V AMD64 3.2.3); Win64 returns one INTEGER eightbyte.
 fn store_agg_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     desc: &super::super::ir::AggDesc,
     (base, disp): (Reg, i64),
     abi: super::Abi,
@@ -538,7 +538,7 @@ fn store_agg_return(
 /// aggregate and the scalar result routing must be skipped.
 #[allow(clippy::too_many_arguments)]
 fn store_ret_agg(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     ret_agg: Option<u32>,
     agg_descs: &[super::super::ir::AggDesc],
     ret_slot_local: i64,
@@ -621,7 +621,7 @@ fn xmm_arg_count(plan: &super::CallPlan) -> u8 {
 /// 512-bit values ([`Frame::wide_regs`]), unless an argument or the result
 /// is a vector that wide in its register (`wide_live`), whose upper bits it
 /// would clear.
-pub(super) fn clear_upper(code: &mut Vec<u8>, frame: Frame, wide_live: bool) {
+pub(super) fn clear_upper(code: &mut CodeBuf, frame: Frame, wide_live: bool) {
     if frame.wide_regs && !wide_live {
         super::encode::emit_vzeroupper(code);
     }
@@ -657,6 +657,7 @@ fn emit_call_to(code: &mut CodeBuf, fixups: &mut Vec<Fixup>, target_pc: usize) {
         kind: super::encode::BranchKind::Call,
     });
     super::encode::emit_call_rel32(code, 0);
+    code.name_last(|| t::Operand::Func(target_pc));
 }
 
 /// The plan a call marshals by: `plan`, whose window rsp descends by and
@@ -857,6 +858,7 @@ pub(super) fn emit_call_ext(
         is_addr: false,
     });
     super::encode::emit_call_rel32(code, 0);
+    code.name_last(|| t::Operand::Import(import_index));
     if ends_path {
         return Ok(());
     }
@@ -1508,6 +1510,10 @@ pub(super) fn emit_tail_call(
         }),
     }
     super::encode::emit_jmp_rel32(code, 0);
+    code.name_last(|| match tail.target {
+        TailTarget::Local(target_pc) => t::Operand::Func(target_pc),
+        TailTarget::Import(import_index) => t::Operand::Import(import_index),
+    });
     code.windows.here = here;
     Ok(())
 }
@@ -1521,15 +1527,15 @@ mod tests {
         let mut forms: Vec<(Vec<u8>, (u8, u8))> = Vec::new();
         for a in 0..16u8 {
             for b in 0..16u8 {
-                let mut c = Vec::new();
+                let mut c = CodeBuf::default();
                 emit_movapd_xmm_xmm(&mut c, Reg(a), Reg(b));
-                forms.push((c, (a, b)));
-                let mut c = Vec::new();
+                forms.push((c.into_bytes(), (a, b)));
+                let mut c = CodeBuf::default();
                 emit_movq_xmm_r(&mut c, Reg(a), Reg(b));
-                forms.push((c, (a, 16 + b)));
-                let mut c = Vec::new();
+                forms.push((c.into_bytes(), (a, 16 + b)));
+                let mut c = CodeBuf::default();
                 super::super::encode::emit_movq_r_xmm(&mut c, Reg(a), Reg(b));
-                forms.push((c, (16 + a, b)));
+                forms.push((c.into_bytes(), (16 + a, b)));
             }
         }
         let mut out = Vec::new();

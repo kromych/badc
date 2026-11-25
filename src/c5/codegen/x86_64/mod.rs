@@ -9,6 +9,7 @@ pub(crate) mod evex;
 pub(crate) mod intel;
 mod isa_x86_table;
 pub(crate) mod table;
+pub(crate) mod text;
 pub(crate) mod x87;
 
 // Resolve the codegen-level paths the two large modules reference relative to

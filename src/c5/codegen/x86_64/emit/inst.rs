@@ -278,6 +278,7 @@ pub(super) fn name_extern_data_ref(
             direct_pcrel: None,
             import_slot: false,
         });
+        (cx.code).name_at(popped.instr_offset, || t::Operand::Name(name.clone()));
     }
 }
 

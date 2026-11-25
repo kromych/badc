@@ -38,6 +38,9 @@ library.
 > * `--dump-records` prints the size, alignment and member offsets of each
 >   tagged structure and union, and of each typedef naming one, as laid out
 >   for `--target`.
+> * `-S` writes the listing of the object `-c` would write: each function's
+>   instructions with their offsets, bytes and text, the block labels, and the
+>   symbols the operands name (x86-64 targets).
 
 ## Contents
 

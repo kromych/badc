@@ -42,23 +42,23 @@ pub(super) fn emit_x86_simd(
     };
     // The x86 assembler's own tables encode every form; a name it does
     // not special-case resolves in the generated catalog.
-    let insn = |code: &mut Vec<u8>, mnem: &'static str, ops: &[Concrete]| -> Emit {
+    let insn = |code: &mut CodeBuf, mnem: &'static str, ops: &[Concrete]| -> Emit {
         let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
-        if let Err(e) = super::asm::encode(code, 8, m, None, ops) {
+        if let Err(e) = encode_named(code, mnem, false, m, ops) {
             return fail(alloc::format!("x86 simd: {e}"));
         }
         Ok(())
     };
     // Vector transfers between an address in `addr` and xmm `n`: 128 bits,
     // or the low 64 of an MMX form, the upper half zeroed on a load.
-    let load128 = |code: &mut Vec<u8>, n: u8, addr: Reg| -> Emit {
+    let load128 = |code: &mut CodeBuf, n: u8, addr: Reg| -> Emit {
         if row.bytes == 8 {
             emit_movsd_xmm_mem(code, Reg(n), addr, 0);
             return Ok(());
         }
         insn(code, "movdqu", &[at(addr, AsmRegSize::Quad), xmm(n)])
     };
-    let store128 = |code: &mut Vec<u8>, addr: Reg, n: u8| -> Emit {
+    let store128 = |code: &mut CodeBuf, addr: Reg, n: u8| -> Emit {
         if row.bytes == 8 {
             emit_movsd_mem_xmm(code, addr, 0, Reg(n));
             return Ok(());
@@ -115,12 +115,12 @@ pub(super) fn emit_x86_simd(
             // predicates past 7 only AVX encodes, takes the VEX form, which
             // writes over its first source.
             let avx_predicate = matches!(row.sem, simd::Sem::FloatCmp(..)) && imm.unwrap_or(0) > 7;
-            let mut probe = CodeBuf::default();
+            let mut probe = code.probe();
             if !avx_predicate && insn(&mut probe, row.mnem, &ops).is_ok() {
-                code.extend_from_slice(&probe);
+                code.append(probe);
             } else if let Some(m) = super::asm::vex_mnemonic(row.mnem) {
                 ops.push(xmm(dst_x));
-                if let Err(e) = super::asm::encode(code, 8, m, None, &ops) {
+                if let Err(e) = encode_named(code, row.mnem, true, m, &ops) {
                     return fail(alloc::format!("x86 simd: {e}"));
                 }
             } else {
@@ -309,13 +309,13 @@ pub(super) fn sse_binary(
         reg: XMM_BASE + n,
         size: AsmRegSize::Quad,
     };
-    let run = |code: &mut Vec<u8>, x: u8, w: u8| -> Emit {
+    let run = |code: &mut CodeBuf, x: u8, w: u8| -> Emit {
         let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
         let ops: &[Concrete] = match imm {
             Some(i) => &[Concrete::Imm(i64::from(i)), xmm(x), xmm(w)],
             None => &[xmm(x), xmm(w)],
         };
-        if let Err(e) = super::asm::encode(code, 8, m, None, ops) {
+        if let Err(e) = encode_named(code, mnem, false, m, ops) {
             return fail(alloc::format!("x86 simd: {e}"));
         }
         Ok(())
@@ -408,7 +408,7 @@ pub(super) fn emit_vec_binop(
     if w >= VecWidth::V256 {
         return wide_binary(code, vmnem, None, w, dst, (place(lhs), place(rhs)), frame);
     }
-    let encode = |code: &mut Vec<u8>, ops: &[super::asm::Concrete]| encode_wide(code, vmnem, ops);
+    let encode = |code: &mut CodeBuf, ops: &[super::asm::Concrete]| encode_wide(code, vmnem, ops);
     vex_binary(
         code,
         &encode,
@@ -427,7 +427,7 @@ pub(super) fn emit_vec_binop(
 /// FP scratch, and a spilled result is formed in one and stored.
 pub(super) fn vex_binary(
     code: &mut CodeBuf,
-    encode: &dyn Fn(&mut Vec<u8>, &[super::asm::Concrete]) -> Emit,
+    encode: &dyn Fn(&mut CodeBuf, &[super::asm::Concrete]) -> Emit,
     imm: Option<u8>,
     wide: bool,
     dst: Place,
@@ -532,9 +532,9 @@ pub(super) fn emit_x86_simd_val(
         size: AsmRegSize::Quad,
     };
     let gpr = |r: Reg, size: AsmRegSize| Concrete::Reg { reg: r.0, size };
-    let insn = |code: &mut Vec<u8>, mnem: &'static str, ops: &[Concrete]| -> Emit {
+    let insn = |code: &mut CodeBuf, mnem: &'static str, ops: &[Concrete]| -> Emit {
         let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
-        if let Err(e) = super::asm::encode(code, 8, m, None, ops) {
+        if let Err(e) = encode_named(code, mnem, false, m, ops) {
             return fail(alloc::format!("x86 simd: {e}"));
         }
         Ok(())
@@ -579,7 +579,7 @@ pub(super) fn emit_x86_simd_val(
         _ => AsmRegSize::Long,
     };
     // An integer result: formed in its register, or in scratch 1 and spilled.
-    let int_result = |code: &mut CodeBuf, form: &dyn Fn(&mut Vec<u8>, Reg) -> Emit| match dst {
+    let int_result = |code: &mut CodeBuf, form: &dyn Fn(&mut CodeBuf, Reg) -> Emit| match dst {
         Place::IntReg(r) => form(code, Reg(r)),
         Place::Spill(slot) => {
             let t = scratch(code, S1);
@@ -609,14 +609,14 @@ pub(super) fn emit_x86_simd_val(
             // The VEX three-operand form where the instruction has one, which
             // copies no source into the destination.
             if let Some(m) = super::asm::vex_mnemonic(row.mnem) {
-                let encode = |code: &mut Vec<u8>, ops: &[Concrete]| {
-                    super::asm::encode(code, 8, m, None, ops)
+                let encode = |code: &mut CodeBuf, ops: &[Concrete]| {
+                    encode_named(code, row.mnem, true, m, ops)
                         .or_else(|e| fail(alloc::format!("x86 simd: {e}")))
                 };
-                let mut probe = CodeBuf::default();
+                let mut probe = code.probe();
                 let pair = (place(0), place(1));
                 if vex_binary(&mut probe, &encode, imm, row.bytes == 16, dst, pair, frame).is_ok() {
-                    code.extend_from_slice(&probe);
+                    code.append(probe);
                     return Ok(());
                 }
             }
@@ -680,7 +680,7 @@ pub(super) fn emit_x86_simd_val(
                 Form::Extract => int_size(row.int_width.max(4)),
                 _ => AsmRegSize::Long,
             };
-            return int_result(code, &|code: &mut Vec<u8>, r: Reg| match row.form {
+            return int_result(code, &|code: &mut CodeBuf, r: Reg| match row.form {
                 Form::Extract => insn(code, row.mnem, &[imm8, xmm(a), gpr(r, size)]),
                 _ => insn(code, row.mnem, &[xmm(a), gpr(r, size)]),
             });
@@ -760,18 +760,18 @@ pub(super) fn emit_intrinsic(
         I::Fma | I::Fmaf => fail("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic"),
         // `ud2`: #UD, execution does not continue past it.
         I::Trap => {
-            code.extend_from_slice(&[0x0F, 0x0B]);
+            super::encode::emit_ud2(code);
             Ok(())
         }
         // `pause`, the spin-loop hint.
         I::CpuRelax => {
-            code.extend_from_slice(&[0xF3, 0x90]);
+            super::encode::emit_pause(code);
             Ok(())
         }
         // `mfence`, a full barrier: the seq_cst thread fence (C11
         // 7.17.4.1).
         I::AtomicThreadFence => {
-            code.extend_from_slice(&[0x0F, 0xAE, 0xF0]);
+            super::encode::emit_mfence(code);
             Ok(())
         }
         // Every load is an acquire and every store a release (Intel SDM
@@ -1302,20 +1302,21 @@ fn emit_mem_operand_insn(
     if addr.0 != s0.0 {
         super::encode::emit_mov_rr(code, s0, addr);
     }
-    let (opc, reg_field): (&[u8], u8) = match intrinsic {
-        I::X87StoreControlWord => (&[0xD9], 7),
-        I::X87LoadControlWord => (&[0xD9], 5),
-        I::X86FxSave => (&[0x0F, 0xAE], 0),
-        I::X86FxRestore => (&[0x0F, 0xAE], 1),
-        I::X86Sgdt => (&[0x0F, 0x01], 0),
-        I::X86Sidt => (&[0x0F, 0x01], 1),
-        I::X86Lgdt => (&[0x0F, 0x01], 2),
-        I::X86Lidt => (&[0x0F, 0x01], 3),
-        I::X86Sldt => (&[0x0F, 0x00], 0),
-        I::X86Str => (&[0x0F, 0x00], 1),
-        I::X86Lldt => (&[0x0F, 0x00], 2),
-        _ => (&[0x0F, 0xAE], 7), // clflush
+    let (opc, reg_field, name): (&[u8], u8, &str) = match intrinsic {
+        I::X87StoreControlWord => (&[0xD9], 7, "fnstcw"),
+        I::X87LoadControlWord => (&[0xD9], 5, "fldcw"),
+        I::X86FxSave => (&[0x0F, 0xAE], 0, "fxsave"),
+        I::X86FxRestore => (&[0x0F, 0xAE], 1, "fxrstor"),
+        I::X86Sgdt => (&[0x0F, 0x01], 0, "sgdt"),
+        I::X86Sidt => (&[0x0F, 0x01], 1, "sidt"),
+        I::X86Lgdt => (&[0x0F, 0x01], 2, "lgdt"),
+        I::X86Lidt => (&[0x0F, 0x01], 3, "lidt"),
+        I::X86Sldt => (&[0x0F, 0x00], 0, "sldtw"),
+        I::X86Str => (&[0x0F, 0x00], 1, "strw"),
+        I::X86Lldt => (&[0x0F, 0x00], 2, "lldtw"),
+        _ => (&[0x0F, 0xAE], 7, "clflush"),
     };
+    let at = code.len();
     if s0.0 >= 8 {
         code.push(0x41);
     }
@@ -1327,6 +1328,7 @@ fn emit_mem_operand_insn(
         5 => code.extend_from_slice(&[0x40 | (reg_field << 3) | 0x05, 0]),
         lo => code.push((reg_field << 3) | lo),
     }
+    code.describe(at, || alloc::format!("{name} {}", t::mem_at(s0.0, 0)));
     Ok(())
 }
 
@@ -1376,7 +1378,9 @@ fn emit_divq128(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Fra
     }
     super::encode::emit_mov_rr(code, RDX, s1);
     // div s0 (REX.W, REX.B for r8-r15; F7 /6).
+    let at = code.len();
     code.extend_from_slice(&[0x48 | (s0.0 >> 3), 0xF7, 0xF0 | (s0.0 & 7)]);
+    code.describe(at, || alloc::format!("divq {}", t::gpr(s0.0, 8)));
     super::encode::emit_pop_r(code, s1);
     super::encode::emit_mov_mem_r(code, s1, 0, RDX);
     super::encode::emit_pop_r(code, s1);
@@ -1617,7 +1621,7 @@ pub(super) fn emit_mcpy(
         }
         w
     };
-    let access = |code: &mut Vec<u8>, w: u32, temp: Option<Reg>, s: Reg, d: Reg, off: i32| match (
+    let access = |code: &mut CodeBuf, w: u32, temp: Option<Reg>, s: Reg, d: Reg, off: i32| match (
         w, xmm, temp,
     ) {
         (32, Some(x), _) => {
@@ -1730,7 +1734,7 @@ pub(super) fn emit_mcpy(
 /// Write the result `src` of an atomic op into the inst's `dst`
 /// `Place`. Runs after the borrowed registers are restored so the
 /// spill slot's rsp offset is the unshifted one.
-fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+fn write_atomic_result(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) {
     super::ssa::emit_common::write_atomic_result(
         &super::ssa::emit_common::X64Backend,
         code,
@@ -1744,7 +1748,7 @@ fn write_atomic_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
 /// width-sized access is required so the atomic object's footprint is
 /// not over-read past its end (a 1/2/4-byte `_Atomic` may sit at a page
 /// boundary) and so the prior value carries no high-byte residue.
-fn emit_mov_r_mem_width(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
+fn emit_mov_r_mem_width(code: &mut CodeBuf, dst: Reg, base: Reg, width: u8) {
     match width {
         1 => super::encode::emit_movzx_r_mem8(code, dst, base, 0),
         2 => super::encode::emit_movzx_r_mem16(code, dst, base, 0),
@@ -1755,7 +1759,7 @@ fn emit_mov_r_mem_width(code: &mut Vec<u8>, dst: Reg, base: Reg, width: u8) {
 
 /// Store the low `width` bytes of `src` to `[base]`; the companion to
 /// [`emit_atomic_load`] for the compare-exchange expected-operand writeback.
-fn emit_mov_mem_r_width(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
+fn emit_mov_mem_r_width(code: &mut CodeBuf, base: Reg, src: Reg, width: u8) {
     match width {
         1 => super::encode::emit_mov_mem_r8(code, base, 0, src),
         2 => super::encode::emit_mov_mem_r16(code, base, 0, src),
@@ -1841,7 +1845,7 @@ pub(super) fn emit_atomic_store(
 
 /// An operand in rax, which a `CMPXCHG` takes as its accumulator, moved
 /// to `scratch`; any other register stays.
-fn off_rax(code: &mut Vec<u8>, r: Reg, scratch: Reg) -> Reg {
+fn off_rax(code: &mut CodeBuf, r: Reg, scratch: Reg) -> Reg {
     if r == Reg::RAX {
         emit_mov_rr(code, scratch, r);
         scratch
@@ -2129,7 +2133,7 @@ fn k1() -> super::asm::Concrete {
 }
 
 /// `kmovq` between k1 and general register `r`, into k1 when `into_k`.
-fn kmov(code: &mut Vec<u8>, r: Reg, into_k: bool) -> Emit {
+fn kmov(code: &mut CodeBuf, r: Reg, into_k: bool) -> Emit {
     let gpr = super::asm::Concrete::Reg {
         reg: r.0,
         size: crate::c5::ir::AsmRegSize::Quad,
@@ -2141,7 +2145,7 @@ fn kmov(code: &mut Vec<u8>, r: Reg, into_k: bool) -> Emit {
 /// [`encode_wide`] under write mask k1, zeroing the unselected lanes when
 /// `zeroing`.
 fn encode_masked(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     mnem: &'static str,
     ops: &[super::asm::Concrete],
     zeroing: bool,
@@ -2151,8 +2155,14 @@ fn encode_masked(
         return fail(alloc::format!("x86 simd: `{mnem}` has no EVEX form"));
     };
     (f.mask, f.zeroing) = (1, zeroing);
+    let at = code.len();
     super::asm::encode(code, 8, super::asm::Mnemonic::Evex(f), None, ops)
-        .or_else(|e| fail(alloc::format!("x86 simd: {e}")))
+        .or_else(|e| fail(alloc::format!("x86 simd: {e}")))?;
+    code.describe(at, || {
+        let z = if zeroing { " {z}" } else { "" };
+        alloc::format!("{} {{%k1}}{z}", t::att(mnem, ops))
+    });
+    Ok(())
 }
 
 fn mem_at(base: Reg) -> super::asm::Concrete {
@@ -2213,7 +2223,7 @@ fn wide_operands(
 /// Encode a wide form; one naming a zmm register takes its EVEX row, as the
 /// assembler settles it for the same operands.
 pub(super) fn encode_wide(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     mnem: &'static str,
     ops: &[super::asm::Concrete],
 ) -> Emit {
@@ -2230,7 +2240,29 @@ pub(super) fn encode_wide(
     } else {
         super::asm::mnemonic_by_name(mnem).unwrap_or(Mnemonic::Table(mnem))
     };
-    super::asm::encode(code, 8, m, None, ops).or_else(|e| fail(alloc::format!("x86 simd: {e}")))
+    encode_named(code, mnem, false, m, ops).or_else(|e| fail(alloc::format!("x86 simd: {e}")))
+}
+
+/// Encode `mnem`, the VEX form of it under `vex`, with AT&T-order `ops`
+/// through the assembler's tables as `m`.
+pub(super) fn encode_named(
+    code: &mut CodeBuf,
+    mnem: &str,
+    vex: bool,
+    m: super::asm::Mnemonic,
+    ops: &[super::asm::Concrete],
+) -> Result<(), alloc::string::String> {
+    let at = code.len();
+    super::asm::encode(code, 8, m, None, ops)?;
+    code.describe(at, || {
+        let name = if vex {
+            alloc::format!("v{mnem}")
+        } else {
+            alloc::string::String::from(mnem)
+        };
+        t::asm_text(&name, m, None, ops, None)
+    });
+    Ok(())
 }
 
 /// A shift of wide register `a` into `d` by an immediate, or by the count
@@ -2294,7 +2326,7 @@ fn wide_shift(
 /// The sign bits of the bytes of wide register `a` into general register
 /// `r`: `vpmovmskb` of a ymm register, or `vpmovb2m` into k1 and `kmovq`
 /// of a zmm one, which has no `vpmovmskb`.
-fn wide_movemask(code: &mut Vec<u8>, row: &crate::c5::x86_simd::SimdOp, a: u8, r: Reg) -> Emit {
+fn wide_movemask(code: &mut CodeBuf, row: &crate::c5::x86_simd::SimdOp, a: u8, r: Reg) -> Emit {
     use super::asm::Concrete;
     use crate::c5::ir::AsmRegSize;
     let gpr = |size| Concrete::Reg { reg: r.0, size };
@@ -2484,7 +2516,7 @@ fn emit_x86_simd_wide(
 /// Part `imm` of wide register `src` into xmm `dst`: the row's instruction,
 /// or a `vmovdqa` of the low part, which needs no lane crossing.
 fn narrow(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     row: &crate::c5::x86_simd::SimdOp,
     imm: Option<u8>,
     src: u8,
@@ -2712,7 +2744,7 @@ fn emit_x86_simd_val_wide(
 /// The 128-bit part of wide register `v` holding byte `off`, extracted into
 /// xmm `scratch` (`vextracti128` / `vextracti32x4`), or `v` itself for a
 /// vector of 16 bytes or fewer; with the lane's offset within it.
-fn lane_part(code: &mut Vec<u8>, bytes: u8, v: u8, off: u8, scratch: u8) -> Emit<(u8, u8)> {
+fn lane_part(code: &mut CodeBuf, bytes: u8, v: u8, off: u8, scratch: u8) -> Emit<(u8, u8)> {
     if bytes <= 16 {
         return Ok((v, off));
     }

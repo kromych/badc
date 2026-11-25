@@ -2053,7 +2053,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
 }
 
 /// Load an `x` operand of `width` bytes into `xmm`: a scalar into the low lane.
-fn emit_xmm_load(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32, width: u8) {
+fn emit_xmm_load(code: &mut CodeBuf, xmm: Reg, base: Reg, disp: i32, width: u8) {
     match width {
         4 => super::encode::emit_movss_xmm_mem(code, xmm, base, disp),
         8 => super::encode::emit_movsd_xmm_mem(code, xmm, base, disp),
@@ -2062,7 +2062,7 @@ fn emit_xmm_load(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32, width: u8) 
 }
 
 /// Store the `width` bytes of an `x` operand held in `xmm`.
-fn emit_xmm_store(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg, width: u8) {
+fn emit_xmm_store(code: &mut CodeBuf, base: Reg, disp: i32, xmm: Reg, width: u8) {
     match width {
         4 => super::encode::emit_movss_mem_xmm(code, base, disp, xmm),
         8 => super::encode::emit_movsd_mem_xmm(code, base, disp, xmm),
@@ -2299,7 +2299,7 @@ impl AsmScratch {
             })
     }
 
-    fn emit_saves(&self, code: &mut Vec<u8>) {
+    fn emit_saves(&self, code: &mut CodeBuf) {
         for (k, &r) in self.fp_save_list.iter().enumerate() {
             super::encode::emit_movups_mem_xmm(
                 code,
@@ -2565,7 +2565,7 @@ impl AsmScratch {
 
     /// Store output register `r` to spill slot `slot` after the template:
     /// an `x` output of `xmm` bytes, a vector's in the 16-byte area.
-    fn store_spilled(&self, code: &mut Vec<u8>, stmt: &AsmStmt, r: u8, slot: u32, xmm: Option<u8>) {
+    fn store_spilled(&self, code: &mut CodeBuf, stmt: &AsmStmt, r: u8, slot: u32, xmm: Option<u8>) {
         let (base, disp) = if xmm == Some(16) {
             v128_spill_addr(stmt.frame, slot)
         } else {
@@ -2578,7 +2578,7 @@ impl AsmScratch {
         }
     }
 
-    fn emit_restore(&self, code: &mut Vec<u8>) {
+    fn emit_restore(&self, code: &mut CodeBuf) {
         for (k, &r) in self.save_list.iter().enumerate() {
             super::encode::emit_mov_r_mem(code, Reg(r), self.anchor, self.gp_off(k));
         }
@@ -2750,7 +2750,7 @@ impl AsmPass<'_> {
     fn emit_directive(
         &self,
         insn: &super::asm::AsmInsn,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         text_align: &mut usize,
         layout: &mut AsmLayout,
     ) -> Option<Emit> {
@@ -2792,12 +2792,15 @@ impl AsmPass<'_> {
             {
                 return Some(fail(e));
             }
+            code.describe(at, || alloc::format!(".balign {n}"));
             return Some(Ok(()));
         }
         // A raw-byte piece (a hex-byte run or a `.byte` family directive) is
         // data as far as alignment is concerned.
         if insn.mnemonic == Mnemonic::RawBytes {
+            let at = code.len();
             code.extend_from_slice(&insn.bytes);
+            code.describe(at, || t::data(1, &insn.bytes));
             layout.after_insn = false;
             return Some(Ok(()));
         }
@@ -2818,9 +2821,19 @@ impl AsmPass<'_> {
             } else {
                 &insn.bytes
             };
+            let at = code.len();
             for _ in 0..count {
                 code.extend_from_slice(unit);
             }
+            code.describe(at, || {
+                alloc::format!(".fill {count}, {}, {:#x}", unit.len(), {
+                    let mut v = 0u64;
+                    for (i, b) in unit.iter().enumerate() {
+                        v |= u64::from(*b) << (8 * i);
+                    }
+                    v
+                })
+            });
             layout.after_insn = false;
             return Some(Ok(()));
         }
@@ -2855,7 +2868,9 @@ impl AsmPass<'_> {
                     }
                     _ => return Some(fail("inline asm: unsupported data-directive value")),
                 };
+                let at = code.len();
                 code.extend_from_slice(&(v as u64).to_le_bytes()[..w as usize]);
+                code.describe(at, || t::data(w, &(v as u64).to_le_bytes()[..w as usize]));
             }
             layout.after_insn = false;
             return Some(Ok(()));
@@ -2936,8 +2951,7 @@ impl AsmPass<'_> {
                         ));
                     }
                 }
-                out.cx.code.push(if is_call { 0xE8 } else { 0xE9 });
-                out.cx.code.extend_from_slice(&[0u8; 4]);
+                push_rel32(out.cx.code, is_call);
             }
             _ => {
                 return Some(fail(
@@ -2980,8 +2994,7 @@ impl AsmPass<'_> {
             // A `call` to a local label is the rel32 near call, which has no
             // shorter form.
             if matches!(insn.mnemonic, Mnemonic::Table("call" | "callq")) {
-                code.push(0xE8);
-                code.extend_from_slice(&[0u8; 4]);
+                push_rel32(code, true);
                 match self.weak_target_name(num) {
                     Some(n) => out.cx.asm_sym_fixups.push(super::AsmSymFixup {
                         instr_offset: code.len() - 4,
@@ -3113,8 +3126,7 @@ impl AsmPass<'_> {
                         is_tail: !is_call,
                     }),
             }
-            code.push(if is_call { 0xE8 } else { 0xE9 });
-            code.extend_from_slice(&[0u8; 4]);
+            push_rel32(code, is_call);
             layout.after_insn = true;
             return Some(Ok(()));
         }
@@ -3724,6 +3736,27 @@ impl AsmPass<'_> {
                 }
             }
         }
+        let seg = insn.seg.or(resolved.operand_seg);
+        let end = out.cx.code.len();
+        out.cx.code.describe(insn_at, || {
+            // A catalog instruction reads as the lowering's own do; another
+            // as the template spells it.
+            let field = riprel_field(&body, concrete, addr, insn)
+                .map(|(f, _)| (end - (body.len() - f) - insn_at) as u8);
+            let mut text = t::asm_text(&insn.name, insn.mnemonic, insn.suffix, concrete, field);
+            if let Some(p) = seg {
+                t::segment(&mut text, p);
+            }
+            // A segment override reads on the memory operand, another
+            // prefix ahead of the mnemonic.
+            for &b in pending.iter().rev() {
+                match b {
+                    0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 => t::segment(&mut text, b),
+                    _ => text.insert(0, &alloc::format!("{} ", t::prefix_name(b))),
+                }
+            }
+            text
+        });
         layout.after_insn = true;
         Ok(())
     }
@@ -3985,7 +4018,7 @@ impl AsmPass<'_> {
     /// so each `=@cc<cond>` materializes with `set<cond>` into its
     /// register's low byte, zero-extended. Runs before the store-backs,
     /// whose `mov`s would otherwise follow the template first.
-    fn emit_flag_outputs(&self, code: &mut Vec<u8>) -> Emit {
+    fn emit_flag_outputs(&self, code: &mut CodeBuf) -> Emit {
         use super::super::ir::AsmConstraint;
         for (i, op) in self.stmt.asm.operands.iter().enumerate() {
             let AsmConstraint::Flags(nibble) = op.constraint else {
@@ -4122,6 +4155,18 @@ struct GotoExits {
 }
 
 /// A `jmp` / `jcc` in the rel32 form with a zero displacement.
+/// A template's `call` (E8) or `jmp` (E9) with a zero rel32 a fixup or a
+/// relocation fills; the template's own branches are not the lowering's.
+fn push_rel32(code: &mut CodeBuf, is_call: bool) {
+    let at = code.len();
+    code.push(if is_call { 0xE8 } else { 0xE9 });
+    code.extend_from_slice(&[0u8; 4]);
+    code.describe(at, || {
+        let name = if is_call { "callq " } else { "jmp " };
+        t::Text::with(name, t::Operand::PcRel { field: 1, width: 4 }, "")
+    });
+}
+
 fn emit_rel32_branch(code: &mut CodeBuf, cc: Option<Cc>) {
     match cc {
         Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
@@ -4289,7 +4334,7 @@ pub(crate) fn jcc_cond(name: &str) -> Option<super::encode::Cc> {
 }
 
 /// Load the low `width` bytes at `[base]` into `dst` (zero-extended).
-fn emit_asm_load_width(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32, width: u8) {
+fn emit_asm_load_width(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i32, width: u8) {
     match width {
         1 => super::encode::emit_movzx_r_mem8(code, dst, base, disp),
         2 => super::encode::emit_movzx_r_mem16(code, dst, base, disp),
@@ -4299,7 +4344,7 @@ fn emit_asm_load_width(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32, width
 }
 
 /// Store the low `width` bytes of `src` to `[base + disp]`.
-fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg, width: u8) {
+fn emit_asm_store_width(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg, width: u8) {
     match width {
         1 => super::encode::emit_mov_mem_r8(code, base, disp, src),
         2 => super::encode::emit_mov_mem_r16(code, base, disp, src),

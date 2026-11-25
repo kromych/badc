@@ -27,9 +27,11 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let stdin_src = stdin.for_sources(sources);
     // Relocatable `-c` builds do not require `main`; the linker
     // picks the entry once it merges every TU.
-    let reloc_opts =
+    let mut reloc_opts =
         cli.codegen
             .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
+    reloc_opts.listing = cli.assembly;
+    let extension = if cli.assembly { "s" } else { "o" };
     let mut cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
     // `--export-all` widens an image's dynamic symbol table; a
     // relocatable object exports what its source declares.
@@ -50,6 +52,15 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             Ok(b) => b,
             Err(()) => std::process::exit(1),
         };
+        // `-S -o -` writes the listing to standard output.
+        if cli.assembly && out == std::path::Path::new("-") {
+            use std::io::Write;
+            if let Err(e) = std::io::stdout().write_all(&bytes) {
+                eprint_diagnostic(format!("badc: error: failed to write the listing: {e}"));
+                std::process::exit(1);
+            }
+            return;
+        }
         write_output(out, &bytes, cli.target, cli.quiet, false);
     } else {
         // Each worker writes its own `<stem>.o`, so write I/O runs in
@@ -66,10 +77,10 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             // the current directory, as the other C compilers do; a
             // makefile links `foo.o` from wherever it ran the compile.
             let out = std::path::Path::new(src)
-                .with_extension("o")
+                .with_extension(extension)
                 .file_name()
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::path::Path::new(src).with_extension("o"));
+                .unwrap_or_else(|| std::path::Path::new(src).with_extension(extension));
             match badc::write_output_file(&out, &bytes, false) {
                 Ok(()) => {
                     if !cfg.quiet {

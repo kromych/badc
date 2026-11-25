@@ -598,6 +598,9 @@ pub(crate) enum AsmMemBase {
 #[derive(Debug, Clone)]
 pub(crate) struct AsmInsn {
     pub mnemonic: Mnemonic,
+    /// The mnemonic as the template spells it; empty for a label, a
+    /// directive or a raw-byte piece.
+    pub name: String,
     pub suffix: Option<AsmRegSize>,
     /// Segment-override prefix byte (0x64 `%%fs:`, 0x65 `%%gs:`) written on
     /// the instruction's memory operand; emitted before the opcode.
@@ -3052,6 +3055,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
                 NAMED_LABEL_BASE + names.iter().position(|&n| n == name).unwrap() as u32
             };
             insns.push(AsmInsn {
+                name: String::new(),
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
@@ -3100,6 +3104,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
                 });
             }
             insns.push(AsmInsn {
+                name: String::new(),
                 mnemonic: Mnemonic::Data(w as u8),
                 suffix: None,
                 seg: None,
@@ -3116,6 +3121,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // bytes verbatim with no operands.
         if let Some(bytes) = parse_raw_bytes(piece) {
             insns.push(AsmInsn {
+                name: String::new(),
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
@@ -3139,6 +3145,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         {
             let (count_expr, unit, value) = crate::c5::asm::parse_fill_operands(dir, rest.trim())?;
             insns.push(AsmInsn {
+                name: String::new(),
                 mnemonic: Mnemonic::Skip,
                 suffix: None,
                 seg: None,
@@ -3159,6 +3166,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         };
         if crate::c5::asm::align_directive(dir_tok).is_some() {
             insns.push(AsmInsn {
+                name: String::new(),
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
@@ -3201,6 +3209,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
                 rex = Some(rex.unwrap_or(0x40u8) | b);
             } else {
                 insns.push(AsmInsn {
+                    name: String::from(mnem_tok),
                     mnemonic: Mnemonic::Prefix(b),
                     suffix: None,
                     seg: None,
@@ -3247,6 +3256,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
             && is_symbol_target
         {
             insns.push(AsmInsn {
+                name: String::from(mnem_tok),
                 mnemonic,
                 suffix,
                 seg: None,
@@ -3376,6 +3386,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
             }
         }
         insns.push(AsmInsn {
+            name: String::from(mnem_tok),
             mnemonic,
             suffix,
             seg,
@@ -3878,7 +3889,7 @@ pub(crate) fn table_name(mnemonic: Mnemonic) -> Option<&'static str> {
 /// destination, and an omitted count becomes the implicit `1`. Instructions
 /// naming a control / debug / segment / MMX register (marked `reg >= 16`) stay
 /// on the bespoke path.
-fn to_table(
+pub(crate) fn to_table(
     mnemonic: Mnemonic,
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],

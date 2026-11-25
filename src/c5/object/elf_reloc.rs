@@ -1179,7 +1179,15 @@ struct RelocWriter<'a> {
     syms: Symtab<'a>,
     relocs: RelocTables,
     out: Output,
+    #[cfg(feature = "listing")]
+    listing: Option<&'a mut Listing>,
 }
+
+#[cfg(feature = "listing")]
+use crate::c5::codegen::listing::Listing;
+/// Without the `listing` feature no listing reaches the writer.
+#[cfg(not(feature = "listing"))]
+pub(super) enum Listing {}
 
 /// The `.eh_frame` of the unit's functions under [`Build::unwind_tables`]
 /// on Linux: an FDE for each, from the frame its emitter recorded.
@@ -1223,9 +1231,27 @@ pub(super) fn write_relocatable(
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
+    write_relocatable_listed(program, build, machine, target, None)
+}
+
+/// [`write_relocatable`], handing `listing` the text the object holds and
+/// re-describing the instructions the writer rewrites.
+pub(super) fn write_relocatable_listed(
+    program: &Program,
+    build: &Build,
+    machine: Machine,
+    target: super::Target,
+    listing: Option<&mut Listing>,
+) -> Result<Vec<u8>, C5Error> {
     let own = own_eh_frame(build, target)?;
     let asm_sections: Vec<_> = build.asm_sections.iter().chain(&own).collect();
     let mut w = RelocWriter::new(program, build, &asm_sections, machine, target);
+    #[cfg(feature = "listing")]
+    {
+        w.listing = listing;
+    }
+    #[cfg(not(feature = "listing"))]
+    let _ = listing;
     w.plan_text_carve()?;
     let named_objs = w.plan_named_data()?;
     w.plan_data(&named_objs)?;
@@ -1311,6 +1337,8 @@ impl<'a> RelocWriter<'a> {
             syms: Symtab::default(),
             relocs: RelocTables::default(),
             out: Output::default(),
+            #[cfg(feature = "listing")]
+            listing: None,
         }
     }
 
@@ -4548,6 +4576,111 @@ impl<'a> RelocWriter<'a> {
         out.shstrtab_offs = offs;
     }
 
+    /// Hand the listing the text the object holds: the rewritten address
+    /// loads read as the loads they became, and the carved ranges name
+    /// their sections.
+    #[cfg(feature = "listing")]
+    fn list_text(&mut self, text: &[u8], got_sites: &[usize], abs_sites: &[usize]) {
+        use crate::c5::codegen::x86_64::text::gpr;
+        let Some(listing) = self.listing.as_deref_mut() else {
+            return;
+        };
+        if self.machine == Machine::X86_64 {
+            // REX, opcode, then ModRM: the register is ModRM.reg of the
+            // `mov` from the GOT slot and ModRM.rm of the `mov` of the
+            // immediate.
+            for &at in got_sites {
+                if let Some(&[rex, _, modrm]) = text.get(at..at + 3) {
+                    let reg = gpr((((rex >> 2) & 1) << 3) | ((modrm >> 3) & 7), 8);
+                    listing.retext(at, format!("movq @GOTPCREL(%rip), {reg}"), Some(5));
+                }
+            }
+            for &at in abs_sites {
+                if let Some(&[rex, _, modrm]) = text.get(at..at + 3) {
+                    let reg = gpr(((rex & 1) << 3) | (modrm & 7), 8);
+                    listing.retext(at, format!("movq $, {reg}"), Some(6));
+                }
+            }
+        }
+        let carve = &self.layout.carve;
+        let sections = (carve.text_ranges.iter())
+            .map(|r| {
+                let name = carve.table.entries[r.entry].name.clone();
+                (
+                    r.old_lo as usize,
+                    r.old_hi as usize,
+                    name,
+                    r.new_base as usize,
+                )
+            })
+            .collect();
+        // Each relocated field of the text, at its offset ahead of the carve.
+        // The symbols carry their final section numbers by now.
+        let (syms, strtab, shndx) = (&self.syms.symbols, &self.names.strtab, self.out.shndx);
+        let fixed = [
+            (SHIDX_TEXT, ".text"),
+            (SHIDX_DATA, ".data"),
+            (SHIDX_BSS, ".bss"),
+            (SHIDX_TDATA, ".tdata"),
+            (SHIDX_TBSS, ".tbss"),
+        ]
+        .map(|(n, name)| (shndx.map(n), name));
+        let name_of = |idx: u64| -> String {
+            let Some(s) = syms.get(idx as usize) else {
+                return String::new();
+            };
+            if s.st_name != 0 {
+                let tail = strtab.get(s.st_name as usize..).unwrap_or_default();
+                let len = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
+                return String::from_utf8_lossy(&tail[..len]).into_owned();
+            }
+            let n = s.st_shndx;
+            if let Some((_, name)) = fixed.iter().find(|(m, _)| *m == n) {
+                return String::from(*name);
+            }
+            match carve.shndx.iter().position(|&s| s == n) {
+                Some(k) => carve.table.entries[k].name.clone(),
+                None => format!("<section {n}>"),
+            }
+        };
+        let pcrel = |rtype: u32| {
+            self.machine == Machine::X86_64
+                && matches!(
+                    rtype,
+                    R_X86_64_PC32
+                        | R_X86_64_PLT32
+                        | R_X86_64_GOTPCREL
+                        | R_X86_64_GOTPCRELX
+                        | R_X86_64_REX_GOTPCRELX
+                        | R_X86_64_GOTTPOFF
+                        | R_X86_64_GOTPC32_TLSDESC
+                        | R_X86_64_TLSGD
+                        | R_X86_64_TLSLD
+                )
+        };
+        let mut relocs = Vec::new();
+        for rec in self.relocs.text.as_chunks::<ELF64_RELA_SIZE>().0 {
+            let word = |at: usize| u64::from_le_bytes(rec[at..at + 8].try_into().unwrap());
+            let (off, info) = (word(0), word(8));
+            relocs.push((
+                off as usize,
+                name_of(info >> 32),
+                word(16) as i64,
+                pcrel(info as u32),
+            ));
+        }
+        for r in &carve.text_ranges {
+            let len = r.old_hi - r.old_lo;
+            for x in &carve.table.entries[r.entry].relas {
+                if (r.new_base..r.new_base + len).contains(&x.offset) {
+                    let off = (x.offset - r.new_base + r.old_lo) as usize;
+                    relocs.push((off, name_of(x.sym), x.addend, pcrel(x.rtype)));
+                }
+            }
+        }
+        listing.set_final(text.to_vec(), sections, relocs);
+    }
+
     /// `.text`, with the extern materializations rewritten to match the
     /// relocations emitted for them (GOT loads, or `mov reg, $sym` under
     /// the x86-64 kernel model; a `direct_pcrel` reference is already a
@@ -4577,6 +4710,8 @@ impl<'a> RelocWriter<'a> {
         let mut text_body =
             rewrite_extern_addr_loads_to_got(self.machine, &build.text, &got_sites)?;
         rewrite_extern_addr_loads_to_abs32(&mut text_body, &abs_sites);
+        #[cfg(feature = "listing")]
+        self.list_text(&text_body, &got_sites, &abs_sites);
         let carve = &mut self.layout.carve;
         if !carve.text_ranges.is_empty() {
             for r in &carve.text_ranges {

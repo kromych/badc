@@ -417,6 +417,10 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
         Ok(emit) => {
             log_codegen_diagnostics(&emit, cfg, &mut log);
             eprint!("{}", emit.ssa_dump);
+            // `-S` writes the object's listing in its place.
+            if cfg.reloc_opts.listing {
+                return (log, Ok(emit.listing.into_bytes()));
+            }
             (log, Ok(emit.image))
         }
         Err(e) => {

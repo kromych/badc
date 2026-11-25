@@ -68,6 +68,7 @@ use super::ssa::emit_common::{
 };
 use super::ssa::reg_alloc::{Allocation, ArgSet, Place, VecWidth};
 use super::table::Mnem;
+use super::text as t;
 use super::{AddrPart, DataFixup};
 
 // The submodules reach the parent-level items as `super::<item>`, the
@@ -432,9 +433,9 @@ fn wide_spill_addr(frame: Frame, w: VecWidth, slot: u32) -> (Reg, i32) {
 
 /// A zmm transfer through the assembler's EVEX tables, which scale an
 /// 8-bit displacement by the operand size as EVEX does.
-fn emit_zmm(code: &mut Vec<u8>, mnem: &'static str, ops: &[super::asm::Concrete]) {
+fn emit_zmm(code: &mut CodeBuf, mnem: &'static str, ops: &[super::asm::Concrete]) {
     let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
-    super::asm::encode(code, 8, m, None, ops).expect("EVEX zmm transfer");
+    intrinsic::encode_named(code, mnem, false, m, ops).expect("EVEX zmm transfer");
 }
 
 fn zmm(n: Reg) -> super::asm::Concrete {
@@ -455,7 +456,7 @@ fn zmm_mem(base: Reg, disp: i32) -> super::asm::Concrete {
 }
 
 /// `vmovups` / `vmovdqu64` of a 128-, 256- or 512-bit register from `[base + disp]`.
-fn emit_wide_load(code: &mut Vec<u8>, w: VecWidth, dst: Reg, base: Reg, disp: i32) {
+fn emit_wide_load(code: &mut CodeBuf, w: VecWidth, dst: Reg, base: Reg, disp: i32) {
     match w {
         VecWidth::V512 => emit_zmm(code, "vmovdqu64", &[zmm_mem(base, disp), zmm(dst)]),
         VecWidth::V256 => emit_vmovups_ymm_mem(code, dst, base, disp),
@@ -465,7 +466,7 @@ fn emit_wide_load(code: &mut Vec<u8>, w: VecWidth, dst: Reg, base: Reg, disp: i3
 
 /// `vmovups` / `vmovdqu64` of a 128-, 256- or 512-bit register to
 /// `[base + disp]`, writing that many bytes.
-fn emit_wide_store(code: &mut Vec<u8>, w: VecWidth, base: Reg, disp: i32, src: Reg) {
+fn emit_wide_store(code: &mut CodeBuf, w: VecWidth, base: Reg, disp: i32, src: Reg) {
     match w {
         VecWidth::V512 => emit_zmm(code, "vmovdqu64", &[zmm(src), zmm_mem(base, disp)]),
         VecWidth::V256 => emit_vmovups_mem_ymm(code, base, disp, src),
@@ -474,7 +475,7 @@ fn emit_wide_store(code: &mut Vec<u8>, w: VecWidth, base: Reg, disp: i32, src: R
 }
 
 /// `vmovaps` / `vmovdqa64` between 128-, 256- or 512-bit registers.
-fn emit_wide_mov(code: &mut Vec<u8>, w: VecWidth, dst: Reg, src: Reg) {
+fn emit_wide_mov(code: &mut CodeBuf, w: VecWidth, dst: Reg, src: Reg) {
     match w {
         VecWidth::V512 => emit_zmm(code, "vmovdqa64", &[zmm(src), zmm(dst)]),
         VecWidth::V256 => emit_vmovaps_ymm_ymm(code, dst, src),

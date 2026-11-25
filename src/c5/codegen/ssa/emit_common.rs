@@ -5,6 +5,7 @@
 //! (`x86_64/emit.rs`, `aarch64/emit.rs`) don't carry parallel
 //! copies. The assembler this file used to hold is `c5::asm`.
 
+use super::code_buf::CodeBuf;
 use super::sve_alloc::PredPlace;
 use crate::c5::diag::{Code, Diagnostic, Sink};
 
@@ -609,22 +610,16 @@ pub(crate) trait EmitBackend {
     const ARCH: &'static str;
 
     /// Copy one FP/vector register to another (`dst <- src`).
-    fn fp_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    fn fp_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8);
     /// Store FP register `src` to spill slot `slot`.
-    fn fp_spill_store(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        src: u8,
-    );
+    fn fp_spill_store(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, src: u8);
     /// Load FP register `dst` from spill slot `slot`.
-    fn fp_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Self::Frame, slot: u32, dst: u8);
+    fn fp_spill_load(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, dst: u8);
     /// The FP transfers and constant load above, of a 256- or 512-bit
     /// value; only x86-64 under AVX and AVX-512 has values that wide.
     fn wide_reg_mov(
         &self,
-        _code: &mut alloc::vec::Vec<u8>,
+        _code: &mut CodeBuf,
         _w: super::reg_alloc::VecWidth,
         _dst: u8,
         _src: u8,
@@ -633,7 +628,7 @@ pub(crate) trait EmitBackend {
     }
     fn wide_spill_store(
         &self,
-        _code: &mut alloc::vec::Vec<u8>,
+        _code: &mut CodeBuf,
         _frame: Self::Frame,
         _w: super::reg_alloc::VecWidth,
         _slot: u32,
@@ -643,7 +638,7 @@ pub(crate) trait EmitBackend {
     }
     fn wide_spill_load(
         &self,
-        _code: &mut alloc::vec::Vec<u8>,
+        _code: &mut CodeBuf,
         _frame: Self::Frame,
         _w: super::reg_alloc::VecWidth,
         _slot: u32,
@@ -651,14 +646,14 @@ pub(crate) trait EmitBackend {
     ) {
         unreachable!("{}: no 256-bit values", Self::ARCH)
     }
-    fn wide_load_const(&self, _code: &mut alloc::vec::Vec<u8>, _dst: u8, _scratch: u8, _bits: i64) {
+    fn wide_load_const(&self, _code: &mut CodeBuf, _dst: u8, _scratch: u8, _bits: i64) {
         unreachable!("{}: no 256-bit values", Self::ARCH)
     }
     /// Sequentialize the parallel SVE predicate moves of a phi edge; only
     /// AArch64 has the predicate file.
     fn pred_place_moves(
         &self,
-        _code: &mut alloc::vec::Vec<u8>,
+        _code: &mut CodeBuf,
         _frame: Self::Frame,
         moves: &mut alloc::vec::Vec<(PredPlace, PredPlace)>,
     ) -> Emit {
@@ -670,57 +665,26 @@ pub(crate) trait EmitBackend {
         Err(Unsupported::new(reason))
     }
     /// The three FP transfers above, of all 128 bits of a SIMD register.
-    fn v128_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
-    fn v128_spill_store(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        src: u8,
-    );
-    fn v128_spill_load(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        dst: u8,
-    );
+    fn v128_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8);
+    fn v128_spill_store(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, src: u8);
+    fn v128_spill_load(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, dst: u8);
     /// Copy one integer register to another (`dst <- src`).
-    fn int_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    fn int_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8);
     /// `dst <- src` sign-extended from the width of `kind` (`I8` / `I16` / `I32`).
-    fn int_reg_ext(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        dst: u8,
-        src: u8,
-        kind: super::super::ir::LoadKind,
-    );
+    fn int_reg_ext(&self, code: &mut CodeBuf, dst: u8, src: u8, kind: super::super::ir::LoadKind);
     /// Exchange two integer registers. `false`, with nothing emitted, where
     /// the target has no such instruction.
-    fn int_reg_xchg(&self, code: &mut alloc::vec::Vec<u8>, a: u8, b: u8) -> bool;
+    fn int_reg_xchg(&self, code: &mut CodeBuf, a: u8, b: u8) -> bool;
     /// Store integer register `src` to spill slot `slot`; `base` is a free
     /// scratch a backend may use to form an out-of-reach slot address.
-    fn int_spill_store(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        src: u8,
-        base: u8,
-    );
+    fn int_spill_store(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, src: u8, base: u8);
     /// Load integer register `dst` from spill slot `slot`.
-    fn int_spill_load(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        dst: u8,
-    );
+    fn int_spill_load(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, dst: u8);
     /// Store `stage` to spill slot `slot`; an out-of-reach slot address
     /// borrows `hold`, which may carry a cycle source, around the store.
     fn int_spill_store_staged(
         &self,
-        code: &mut alloc::vec::Vec<u8>,
+        code: &mut CodeBuf,
         frame: Self::Frame,
         slot: u32,
         stage: u8,
@@ -730,29 +694,16 @@ pub(crate) trait EmitBackend {
     /// out-of-reach slot address from a backend-internal scratch register
     /// (unlike [`int_spill_store`], the caller supplies no base). Used to write
     /// a computed result back to its spill home.
-    fn int_spill_store_auto(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        src: u8,
-    );
+    fn int_spill_store_auto(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, src: u8);
     /// Load a raw integer immediate into integer register `dst`.
-    fn int_reg_load_imm(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, bits: i64);
+    fn int_reg_load_imm(&self, code: &mut CodeBuf, dst: u8, bits: i64);
     /// Reinterpret integer register `src`'s bits as a floating-point value in
     /// FP register `dst` (no numeric conversion): `fmov` / `movq`. `is_f64`
     /// selects the 8-byte vs 4-byte form.
-    fn fp_reg_from_int_reg(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8, is_f64: bool);
+    fn fp_reg_from_int_reg(&self, code: &mut CodeBuf, dst: u8, src: u8, is_f64: bool);
     /// Write the pattern `bits` to FP register `dst`, `is_f64` as for
     /// [`Self::fp_reg_from_int_reg`]; integer register `stage` is free.
-    fn fp_reg_load_const(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        dst: u8,
-        stage: u8,
-        bits: i64,
-        is_f64: bool,
-    ) {
+    fn fp_reg_load_const(&self, code: &mut CodeBuf, dst: u8, stage: u8, bits: i64, is_f64: bool) {
         self.int_reg_load_imm(code, stage, bits);
         self.fp_reg_from_int_reg(code, dst, stage, is_f64);
     }
@@ -773,7 +724,7 @@ pub(crate) struct Aarch64Backend {
 /// transfers at the value's width. `stage` carries a spill-to-spill value.
 pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     src: super::reg_alloc::Place,
     dst: super::reg_alloc::Place,
     frame: B::Frame,
@@ -855,14 +806,14 @@ impl PlaceMove {
 /// value into a spill slot; `hold` backs an out-of-reach slot address.
 pub(crate) fn emit_place_move<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     m: PlaceMove,
     frame: B::Frame,
     stage: u8,
     hold: u8,
 ) {
     use super::reg_alloc::Place;
-    let reg_move = |code: &mut alloc::vec::Vec<u8>, t: u8, s: u8| match m.ext {
+    let reg_move = |code: &mut CodeBuf, t: u8, s: u8| match m.ext {
         Some(kind) => b.int_reg_ext(code, t, s, kind),
         None => b.int_reg_mov(code, t, s),
     };
@@ -898,7 +849,7 @@ pub(crate) fn emit_place_move<B: EmitBackend>(
 /// [`emit_fp_place_move`] at its flag's width; `stage` backs a spill-to-spill move.
 pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut alloc::vec::Vec<(
         super::reg_alloc::Place,
         super::reg_alloc::Place,
@@ -950,7 +901,7 @@ pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
 /// copies out of its register. `hold` / `stage` lie outside the allocator's bank.
 pub(crate) fn schedule_place_moves<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut alloc::vec::Vec<PlaceMove>,
     frame: B::Frame,
     hold: u8,
@@ -1000,7 +951,7 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
 /// the cycle applies its own conversion on the way.
 fn break_place_cycle<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut alloc::vec::Vec<PlaceMove>,
     frame: B::Frame,
     hold: u8,
@@ -1045,7 +996,7 @@ fn break_place_cycle<B: EmitBackend>(
 /// `dst`: a register copy (self-moves elide) or a spill-slot store.
 pub(crate) fn write_atomic_result<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     dst: super::reg_alloc::Place,
     src: u8,
     frame: B::Frame,
@@ -1066,7 +1017,7 @@ pub(crate) fn write_atomic_result<B: EmitBackend>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     self_block: super::super::ir::BlockId,
     func: &super::super::ir::FunctionSsa,
     alloc: &super::reg_alloc::Allocation,
@@ -1331,10 +1282,10 @@ pub(crate) fn edge_moves(
 /// copy. Used by every move scheduler whose backend breaks cycles with a
 /// scratch register; the x86_64 integer scheduler uses `xchg` instead.
 pub(crate) fn schedule_reg_moves_via_scratch(
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut alloc::vec::Vec<(u8, u8)>,
     scratch: u8,
-    mut emit_mov: impl FnMut(&mut alloc::vec::Vec<u8>, u8, u8),
+    mut emit_mov: impl FnMut(&mut CodeBuf, u8, u8),
 ) {
     moves.retain(|(s, t)| s != t);
     while !moves.is_empty() {
@@ -2401,9 +2352,9 @@ pub(crate) struct LowerState {
 }
 
 impl LowerState {
-    fn new() -> Self {
+    fn new(listing: bool) -> Self {
         Self {
-            code: super::code_buf::CodeBuf::default(),
+            code: super::code_buf::CodeBuf::listed(listing),
             func_ent_pcs: alloc::vec::Vec::new(),
             func_ends: alloc::vec::Vec::new(),
             patchable_entries: alloc::vec::Vec::new(),
@@ -2564,7 +2515,7 @@ pub(crate) trait LowerTarget {
     fn align_entry(&mut self, st: &mut LowerState, fn_align: usize, lead: usize);
 
     /// Emit `n` no-ops ahead of the function symbol.
-    fn entry_nops(&mut self, code: &mut alloc::vec::Vec<u8>, n: u32);
+    fn entry_nops(&mut self, code: &mut CodeBuf, n: u32);
 
     /// Lower one function's body.
     #[allow(clippy::too_many_arguments)]
@@ -2606,7 +2557,7 @@ pub(crate) trait LowerTarget {
 
     /// Append one PLT trampoline per import; returns their code offsets.
     fn emit_plt_trampolines(
-        code: &mut alloc::vec::Vec<u8>,
+        code: &mut CodeBuf,
         got_fixups: &mut alloc::vec::Vec<super::GotFixup>,
         n_imports: usize,
     ) -> alloc::vec::Vec<usize>;
@@ -2744,7 +2695,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Asm label numbering restarts per lowering; see
     // `crate::c5::asm::reset_asm_instance`.
     crate::c5::asm::reset_asm_instance();
-    let mut st = LowerState::new();
+    let mut st = LowerState::new(native.listing && mode == super::LowerMode::Full);
     if !cfg!(feature = "assembler") && !program.file_asm.is_empty() {
         return Err(C5Error::hard(
             Code::UNSUPPORTED,
@@ -3931,6 +3882,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     for r in &mut st.seh_rows {
         r.handler = r.handler.map(|pc| st.pc_to_native[pc as usize] as u32);
     }
+    #[cfg(feature = "listing")]
+    let listing = st.code.take_listing();
     let mut build = super::Build {
         diagnostics: reported(&mut sink)?,
         emitted_relocs: alloc::vec::Vec::new(),
@@ -4065,6 +4018,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         data_liveness: None,
         stopped_at_data_liveness: false,
         ssa_dump,
+        #[cfg(feature = "listing")]
+        listing,
     };
     b.install(&mut build);
     Ok(build)
@@ -4150,7 +4105,9 @@ mod tests {
         let f = func(2);
         assert_eq!(super::entry_read_run(&f, &compute_use_counts(&f)), [1]);
     }
-    use super::{EmitBackend, PlaceMove, Unsupported, schedule_place_moves, unsupported_error};
+    use super::{
+        CodeBuf, EmitBackend, PlaceMove, Unsupported, schedule_place_moves, unsupported_error,
+    };
     use alloc::vec::Vec;
 
     const MOV: u8 = 1;
@@ -4181,46 +4138,46 @@ mod tests {
     impl EmitBackend for Rec {
         type Frame = ();
         const ARCH: &'static str = "test";
-        fn fp_reg_mov(&self, _: &mut Vec<u8>, _: u8, _: u8) {
+        fn fp_reg_mov(&self, _: &mut CodeBuf, _: u8, _: u8) {
             unreachable!()
         }
-        fn fp_spill_store(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn fp_spill_store(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn fp_spill_load(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn fp_spill_load(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn v128_reg_mov(&self, _: &mut Vec<u8>, _: u8, _: u8) {
+        fn v128_reg_mov(&self, _: &mut CodeBuf, _: u8, _: u8) {
             unreachable!()
         }
-        fn v128_spill_store(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn v128_spill_store(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn v128_spill_load(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn v128_spill_load(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        fn int_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8) {
             code.extend([MOV, dst, src, 0]);
         }
-        fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+        fn int_reg_ext(&self, code: &mut CodeBuf, dst: u8, src: u8, kind: LoadKind) {
             code.extend([EXT, dst, src, width(kind)]);
         }
-        fn int_reg_xchg(&self, code: &mut Vec<u8>, a: u8, b: u8) -> bool {
+        fn int_reg_xchg(&self, code: &mut CodeBuf, a: u8, b: u8) -> bool {
             if self.xchg {
                 code.extend([XCHG, a, b, 0]);
             }
             self.xchg
         }
-        fn int_spill_store(&self, code: &mut Vec<u8>, _: (), slot: u32, src: u8, base: u8) {
+        fn int_spill_store(&self, code: &mut CodeBuf, _: (), slot: u32, src: u8, base: u8) {
             assert_eq!(base, STAGE);
             code.extend([STORE, slot as u8, src, 0]);
         }
-        fn int_spill_load(&self, code: &mut Vec<u8>, _: (), slot: u32, dst: u8) {
+        fn int_spill_load(&self, code: &mut CodeBuf, _: (), slot: u32, dst: u8) {
             code.extend([LOAD, dst, slot as u8, 0]);
         }
         fn int_spill_store_staged(
             &self,
-            code: &mut Vec<u8>,
+            code: &mut CodeBuf,
             _: (),
             slot: u32,
             stage: u8,
@@ -4229,13 +4186,13 @@ mod tests {
             assert_eq!((stage, hold), (STAGE, HOLD));
             code.extend([STORE, slot as u8, stage, 0]);
         }
-        fn int_spill_store_auto(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn int_spill_store_auto(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn int_reg_load_imm(&self, _: &mut Vec<u8>, _: u8, _: i64) {
+        fn int_reg_load_imm(&self, _: &mut CodeBuf, _: u8, _: i64) {
             unreachable!()
         }
-        fn fp_reg_from_int_reg(&self, _: &mut Vec<u8>, _: u8, _: u8, _: bool) {
+        fn fp_reg_from_int_reg(&self, _: &mut CodeBuf, _: u8, _: u8, _: bool) {
             unreachable!()
         }
     }
@@ -4272,8 +4229,9 @@ mod tests {
     /// other place but the scratch keeps its value), and return the code.
     fn check(rec: &Rec, moves: &[PlaceMove]) -> Vec<u8> {
         let mut pending = moves.to_vec();
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         schedule_place_moves(rec, &mut code, &mut pending, (), HOLD, STAGE).unwrap();
+        let code = code.into_bytes();
         // Bytes 0, 1 and 3 have their sign bits set and byte 7 does not, so
         // each extension width gives a different value; `i` tells places apart.
         let init: Vec<u64> = (0..REGS as u64 + 8)

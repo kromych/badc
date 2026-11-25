@@ -22,12 +22,17 @@ Linux on ARM64 and x86-64, and Windows on ARM64 and x86-64. It has its own
 preprocessor, assembler, linker, archiver, and debug-info writers (DWARF and
 PDB), as well as an in-process JIT and an SSA interpreter. CI runs more than
 80 jobs and more than 5,000 tests on every pull request and every push to
-`master`, and fuzzing jobs run daily.
+`master`. The tests run a second time with the register allocator held to two
+registers per bank; programs must give the same result in the interpreter and
+natively; the SSA and the x86-64 and ARM64 assembly of every test fixture are
+kept as snapshots, so each change shows its code as a diff; and daily csmith
+jobs compare `badc -O` against `-O0` and the reference compilers.
 
 `badc` ships as a single binary. The project can also be used as a Rust
 library.
 
-> * `badc` was bad when the project started, and the name stuck.
+> * `badc` was bad when the project started, and the name stuck. The letters
+>   can also read *Batteries-included, All-in-one, Dependency-free C*.
 > * `--dump-ssa` prints each function's SSA IR and the register allocator's
 >   placement of each value to stderr before lowering.
 > * `--dump-records` prints the size, alignment and member offsets of each

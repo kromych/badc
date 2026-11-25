@@ -61,9 +61,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	stur	xzr, [x29, #-0x38]
+               	sub	x0, x29, #0x30
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x30
                	mov	x2, #0x1                // =1
                	sub	x3, x29, #0x38
                	bl	<addr>
@@ -74,14 +74,14 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1e               // =30
                	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
@@ -164,10 +164,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	stur	xzr, [x29, #-0x38]
                	sub	x0, x29, #0x30
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	sub	x3, x29, #0x38
                	bl	<addr>
@@ -307,9 +307,9 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	b	<addr>
+               	sub	x0, x29, #0x30
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x30
                	mov	x2, #0x1                // =1
                	sub	x3, x29, #0x38
                	bl	<addr>
@@ -320,9 +320,9 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
+               	sub	x0, x29, #0x28
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x28
                	mov	x2, #0x1                // =1
                	sub	x3, x29, #0x38
                	bl	<addr>

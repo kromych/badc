@@ -34,11 +34,11 @@ Disassembly of section .text:
                	movl	$0x1e, %edx
                	testl	%edx, %edx
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movl	<rip>, %ecx # <addr>
                	movq	%rdx, 0x8(%rsp)
                	movq	%rdx, %rsi
                	movq	%rax, %rdx
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movq	0x8(%rsp), %rdx
@@ -47,8 +47,8 @@ Disassembly of section .text:
                	retq
                	cmpl	$0x1, %eax
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movq	%rax, %rsi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

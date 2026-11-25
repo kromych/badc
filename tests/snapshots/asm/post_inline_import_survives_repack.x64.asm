@@ -27,28 +27,28 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%r11
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%r11
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	movq	%rax, %rsi
-               	leaq	<rip>, %rdx # <addr>
                	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax

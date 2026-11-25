@@ -769,14 +769,14 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, x20
                	mov	x6, x25
                	mov	x5, x24
                	mov	x4, x23
                	mov	x3, x22
                	mov	x2, x21
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	cmn	x0, #0x13
                	b.eq	<addr>
@@ -787,12 +787,12 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, x20
                	mov	x4, x23
                	mov	x3, x22
                	mov	x2, x21
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	cmp	x0, #0x994
                	b.eq	<addr>
@@ -803,13 +803,13 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
+               	mov	x3, x20
+               	mov	x5, x22
+               	mov	x4, x21
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x3, x20
-               	mov	x5, x22
-               	mov	x4, x21
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	cmp	x0, #0x13b
@@ -829,10 +829,10 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, x20
                	mov	x2, x21
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	cmp	x0, #0x3c
                	b.eq	<addr>

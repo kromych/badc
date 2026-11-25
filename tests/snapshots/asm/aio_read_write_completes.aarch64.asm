@@ -181,9 +181,9 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x8
                	b.ne	<addr>
+               	sub	x0, x29, #0x2f0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x2f0
                	mov	x2, #0x8                // =8
                	bl	<addr>
                	sxtw	x0, w0
@@ -271,9 +271,9 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x4
                	b.ne	<addr>
+               	sub	x0, x29, #0x2e8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x2e8
                	mov	x2, #0x4                // =4
                	bl	<addr>
                	sxtw	x0, w0

@@ -78,25 +78,24 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x30, %rsp
-               	pushq	%r13
+               	subq	$0x28, %rsp
                	pushq	%r12
                	pushq	%rbx
                	subq	$0x30, %rsp
-               	movl	$0x3f800000, 0x68(%rsp) # imm = 0x3F800000
-               	movss	0x68(%rsp), %xmm0
-               	leaq	0x58(%rsp), %rax
-               	movss	%xmm0, 0x58(%rsp)
-               	movss	0x68(%rsp), %xmm0
+               	movl	$0x3f800000, 0x58(%rsp) # imm = 0x3F800000
+               	movss	0x58(%rsp), %xmm0
+               	leaq	0x48(%rsp), %rax
+               	movss	%xmm0, 0x48(%rsp)
+               	movss	0x58(%rsp), %xmm0
                	vmulss	<rip>, %xmm0, %xmm0
-               	movss	%xmm0, 0x5c(%rsp)
-               	movss	0x68(%rsp), %xmm0
+               	movss	%xmm0, 0x4c(%rsp)
+               	movss	0x58(%rsp), %xmm0
                	vmulss	<rip>, %xmm0, %xmm0
-               	movss	%xmm0, 0x60(%rsp)
-               	movss	0x68(%rsp), %xmm0
+               	movss	%xmm0, 0x50(%rsp)
+               	movss	0x58(%rsp), %xmm0
                	vmulss	<rip>, %xmm0, %xmm0
-               	movss	%xmm0, 0x64(%rsp)
-               	movss	0x68(%rsp), %xmm0
+               	movss	%xmm0, 0x54(%rsp)
+               	movss	0x58(%rsp), %xmm0
                	cvttss2si	%xmm0, %rdi
                	movq	%rdi, %rsi
                	shlq	%rsi
@@ -108,10 +107,10 @@ Disassembly of section .text:
                	imulq	$0x7, %rdi, %rbx
                	movq	%rdi, %r12
                	shlq	$0x3, %r12
-               	leaq	<rip>, %r13 # <addr>
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
+               	leaq	<rip>, %r10 # <addr>
+               	movq	%r10, 0x10(%rsp)
                	movq	$-0x7, 0x18(%rsp)
                	movq	$0x9, 0x20(%rsp)
                	movq	$-0xb, 0x28(%rsp)
@@ -122,6 +121,5 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
-               	addq	$0x30, %rsp
+               	addq	$0x28, %rsp
                	retq

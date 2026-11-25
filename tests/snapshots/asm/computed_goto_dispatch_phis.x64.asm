@@ -678,8 +678,8 @@ Disassembly of section .text:
                	leaq	0x10(%rsp), %rsi
                	callq	<addr>
                	movq	%rax, %rcx
-               	leaq	<rip>, %rdi # <addr>
                	movq	%rcx, 0x8(%rsp)
+               	leaq	<rip>, %rdi # <addr>
                	leaq	0x10(%rsp), %rsi
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
@@ -736,8 +736,8 @@ Disassembly of section .text:
                	movl	$0xb, %esi
                	callq	<addr>
                	movq	%rax, %rcx
-               	leaq	<rip>, %rdi # <addr>
                	movq	%rcx, 0x8(%rsp)
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0xb, %esi
                	callq	<addr>
                	movq	0x8(%rsp), %rcx

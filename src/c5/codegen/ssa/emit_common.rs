@@ -18,6 +18,39 @@ use crate::c5::diag::{Code, Diagnostic, Sink};
 /// `fn_unwind`, aarch64 `macho_tlv_*` -- stays a separate argument, so this
 /// type is non-generic. Holds `&mut` field references so a per-function caller
 /// constructs it from its own output vectors; grows as more helpers adopt it.
+impl EmitCtx<'_> {
+    /// The relocations of the addresses a lowering set from their encoding
+    /// ([`super::code_buf::CodeBuf::note_address`]): a data address against
+    /// the unit's data, or by name when it is another unit's object, as an
+    /// `Inst::ImmData` is; a code address against its function.
+    pub(crate) fn record_addresses(
+        &mut self,
+        names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    ) {
+        use super::reg_alloc::ArgSet;
+        for (instr_offset, v, address) in self.code.take_addresses() {
+            match address {
+                ArgSet::Data(_) if let Some(name) = names.get(&v) => {
+                    self.user_extern_data_refs.push(super::UserExternDataRef {
+                        instr_offset,
+                        symbol_name: name.clone(),
+                        direct_pcrel: None,
+                        import_slot: false,
+                    })
+                }
+                ArgSet::Data(off) => self.data_fixups.push(super::DataFixup {
+                    instr_offset,
+                    data_offset: off as u64,
+                    addend: 0,
+                    part: super::AddrPart::Whole,
+                }),
+                ArgSet::Code(pc) => self.pending_func_fixups.push((instr_offset, pc)),
+                ArgSet::Imm(_) | ArgSet::Local(_) => {}
+            }
+        }
+    }
+}
+
 pub(crate) struct EmitCtx<'a> {
     pub(crate) code: &'a mut super::code_buf::CodeBuf,
     pub(crate) plt_call_fixups: &'a mut alloc::vec::Vec<super::PltCallFixup>,

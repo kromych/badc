@@ -44,8 +44,8 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0xc0, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	movl	$0x10, %edx
                	callq	<addr>
                	cmpq	$0x10, %rax

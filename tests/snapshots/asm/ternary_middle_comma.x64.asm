@@ -68,8 +68,8 @@ Disassembly of section .text:
                	cmpl	$0x80, %eax
                	jae	<addr>
                	andq	$0xff, %rax
-               	leaq	<rip>, %rdi
                	movq	%rax, %rdx
+               	leaq	<rip>, %rdi
                	movl	$0x1, %esi
                	movb	$0x0, %al
                	callq	<addr>

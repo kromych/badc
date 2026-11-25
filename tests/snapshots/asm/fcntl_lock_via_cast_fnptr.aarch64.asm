@@ -20,10 +20,10 @@ Disassembly of section .text:
                	add	x29, sp, #0x90
                	bl	<addr>
                	mov	x3, x0
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	sub	x0, x29, #0x40
                	mov	x1, #0x40               // =64
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	bl	<addr>
                	sub	x0, x29, #0x40
                	mov	x1, #0x42               // =66

@@ -157,8 +157,8 @@ Disassembly of section .text:
                	retq
                	movq	0x8(%rsp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rsi
                	movq	0x8(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	leaq	0x28(%rsp), %rdx
                	movb	$0x0, %al
                	callq	<addr>
@@ -172,8 +172,8 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	addq	$0x48, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	movq	0x8(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	leaq	0x30(%rsp), %rdx
                	movb	$0x0, %al
                	callq	<addr>

@@ -40,12 +40,12 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rcx # <addr>
                	movl	<rip>, %r8d # <addr>
                	movl	<rip>, %r9d # <addr>
                	movq	%rax, %rsi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

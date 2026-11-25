@@ -315,14 +315,14 @@ Disassembly of section .text:
                	str	wzr, [sp, #0x38]
                	str	xzr, [sp, #0x40]
                	str	wzr, [sp, #0x48]
+               	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0xa0
                	sub	x2, x29, #0x130
                	bl	<addr>
+               	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0xa0
                	sub	x2, x29, #0x120
                	bl	<addr>
                	sxtw	x0, w0
@@ -369,9 +369,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x2
                	b.ne	<addr>
+               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -394,9 +394,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x2
                	b.ne	<addr>
+               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -424,9 +424,9 @@ Disassembly of section .text:
                	ldrsw	x0, [sp, #0x30]
                	cmp	w0, #0xc
                	b.ne	<addr>
+               	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0xa0
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -443,9 +443,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x20, x0
                	cbz	x20, <addr>
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0
@@ -458,9 +458,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, x20
                	bl	<addr>
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x20
                	sub	x2, x29, #0x130
                	bl	<addr>
                	sxtw	x0, w0

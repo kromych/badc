@@ -47,9 +47,9 @@ Disassembly of section .text:
                	sub	x1, x29, #0x18
                	mov	x2, #0x1                // =1
                	blr	x3
+               	ldursw	x1, [x29, #-0x18]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldursw	x1, [x29, #-0x18]
                	bl	<addr>
                	ldursw	x0, [x29, #-0x18]
                	add	sp, sp, #0x20

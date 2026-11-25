@@ -342,13 +342,13 @@ Disassembly of section .text:
                	movl	$0x0, 0x38(%rsp)
                	movq	$0x0, 0x40(%rsp)
                	movl	$0x0, 0x48(%rsp)
-               	leaq	<rip>, %rsi
                	leaq	0xc0(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	leaq	0x30(%rsp), %rdx
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	<rip>, %rsi
                	leaq	0xc0(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	leaq	0x40(%rsp), %rdx
                	movb	$0x0, %al
                	callq	<addr>
@@ -398,8 +398,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	cmpq	$0x2, %rax
                	jne	<addr>
-               	leaq	<rip>, %rsi
                	leaq	0x140(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -424,8 +424,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	cmpq	$0x2, %rax
                	jne	<addr>
-               	leaq	<rip>, %rsi
                	leaq	0x140(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -455,8 +455,8 @@ Disassembly of section .text:
                	movl	0x30(%rsp), %eax
                	cmpl	$0xc, %eax
                	jne	<addr>
-               	leaq	<rip>, %rsi
                	leaq	0xc0(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -477,8 +477,8 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	testq	%rbx, %rbx
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movq	%rbx, %rsi
+               	leaq	<rip>, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -493,8 +493,8 @@ Disassembly of section .text:
                	retq
                	movq	%rbx, %rdi
                	callq	<addr>
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	leaq	0x30(%rsp), %rdx
                	movb	$0x0, %al
                	callq	<addr>

@@ -46,19 +46,19 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-<rip>, %rdx # <addr>
                	movq	0x18(%rsp), %r11
                	leaq	0x20(%rsp), %rdi
                	xorl	%esi, %esi
+               	leaq	-<rip>, %rdx # <addr>
                	xorl	%ecx, %ecx
                	callq	*%r11
                	movq	0x20(%rsp), %rdi

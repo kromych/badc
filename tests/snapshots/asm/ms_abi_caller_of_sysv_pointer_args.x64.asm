@@ -117,9 +117,9 @@ Disassembly of section .text:
                	leaq	0x6(%rax), %r9
                	movq	<rip>, %rax # <addr>
                	leaq	0x7(%rax), %r13
-               	leaq	-<rip>, %rax # <addr>
                	movq	%r13, (%rsp)
-               	movq	%rax, 0x8(%rsp)
+               	leaq	-<rip>, %r10 # <addr>
+               	movq	%r10, 0x8(%rsp)
                	movq	%rbx, %rsi
                	movq	%r14, %r8
                	movq	%r12, %rcx

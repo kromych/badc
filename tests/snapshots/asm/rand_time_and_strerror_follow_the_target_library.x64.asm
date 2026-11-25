@@ -49,10 +49,10 @@ Disassembly of section .text:
                	cmpq	%rax, %r14
                	sete	%dl
                	movzbq	%dl, %rdx
-               	leaq	<rip>, %rdi
                	movq	%r13, %rsi
                	movq	%r12, %r8
                	movq	%rbx, %rcx
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x2a, %edi
@@ -79,10 +79,10 @@ Disassembly of section .text:
                	movl	$0xa, %edi
                	movl	$0x4, %esi
                	callq	<addr>
-               	leaq	<rip>, %rdi
                	movq	%rbx, %rsi
                	movq	%r13, %rcx
                	movq	%r12, %rdx
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x2, %edi
@@ -94,9 +94,9 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	callq	<addr>
                	movq	%rax, %rcx
-               	leaq	<rip>, %rdi
                	movq	%rbx, %rsi
                	movq	%r12, %rdx
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	callq	<addr>

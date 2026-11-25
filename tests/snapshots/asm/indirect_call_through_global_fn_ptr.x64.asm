@@ -36,9 +36,9 @@ Disassembly of section .text:
                	movl	$0x7, <rip> # <addr>
                	movl	$0x23, %edx
                	movl	%edx, <rip> # <addr>
-               	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %esi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	movl	<rip>, %eax # <addr>
                	popq	%r11
@@ -49,9 +49,9 @@ Disassembly of section .text:
                	movl	$0x7, <rip> # <addr>
                	movl	$0x23, %edx
                	movl	%edx, <rip> # <addr>
-               	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %esi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	movl	<rip>, %eax # <addr>
                	popq	%r11

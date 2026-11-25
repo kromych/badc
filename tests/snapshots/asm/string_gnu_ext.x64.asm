@@ -223,9 +223,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rsi
                	movq	%rcx, 0x8(%rsp)
                	movq	%rcx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x8(%rsp), %rcx
@@ -242,9 +242,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rsi
                	movq	%rcx, 0x8(%rsp)
                	movq	%rcx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x8(%rsp), %rcx

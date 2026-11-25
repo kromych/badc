@@ -95,8 +95,8 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x30, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	leaq	0x20(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

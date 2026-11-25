@@ -64,8 +64,8 @@ Disassembly of section .text:
                	nopw	(%rax,%rax)
                	cmpl	$0x20, %ecx
                	je	<addr>
-               	leaq	<rip>, %rsi
                	leaq	0x10(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

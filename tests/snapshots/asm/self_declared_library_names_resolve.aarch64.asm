@@ -30,9 +30,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	stur	x0, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldur	x1, [x29, #-0x8]
                	blr	x1
                	mov	x1, #0x0                // =0
                	mov	x2, #0x2                // =2

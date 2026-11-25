@@ -36,27 +36,27 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%r11
                	retq
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	testl	%eax, %eax
                	jl	<addr>
                	movl	$0x2, %eax
                	popq	%r11
                	retq
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	testl	%eax, %eax
                	jg	<addr>
                	movl	$0x3, %eax
                	popq	%r11
                	retq
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	testl	%eax, %eax
                	je	<addr>

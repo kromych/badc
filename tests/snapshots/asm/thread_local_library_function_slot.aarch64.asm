@@ -30,18 +30,18 @@ Disassembly of section .text:
                	cmp	x1, x4
                	csel	x1, x3, x0, eq
                	cbz	x1, <addr>
+               	ldr	x1, [x2]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x1, [x2]
                	blr	x1
                	cmp	x0, #0x3
                	cset	x0, eq
                	mov	x1, #0x0                // =0
                	cbz	x0, <addr>
                	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
+               	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	x0, #0x2
                	cset	x1, eq

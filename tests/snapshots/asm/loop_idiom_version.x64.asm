@@ -161,17 +161,17 @@ Disassembly of section .text:
                	xorl	%r13d, %r13d
                	xorl	%r12d, %r12d
                	xorl	%ebx, %ebx
-               	leaq	-<rip>, %rdi # <addr>
                	movq	%r13, %rsi
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leaq	-<rip>, %rdi # <addr>
                	movq	%r13, %rsi
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
+               	leaq	-<rip>, %rdi # <addr>
                	nop
                	callq	<addr>
                	testl	%eax, %eax
@@ -518,9 +518,9 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	movl	$0x20, %edx
                	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x20(%rax), %rsi
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x20, %edx
                	callq	<addr>
                	movslq	%eax, %rax

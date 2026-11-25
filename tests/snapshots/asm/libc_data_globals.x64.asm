@@ -56,9 +56,9 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%r11
                	retq
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rsi
+               	leaq	<rip>, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

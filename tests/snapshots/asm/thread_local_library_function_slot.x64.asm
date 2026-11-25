@@ -40,8 +40,8 @@ Disassembly of section .text:
                	cmovneq	%rax, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movq	(%rdx), %rax
+               	leaq	<rip>, %rdi
                	callq	*%rax
                	cmpq	$0x3, %rax
                	sete	%al
@@ -49,8 +49,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi
                	callq	*%rax
                	cmpq	$0x2, %rax
                	sete	%cl

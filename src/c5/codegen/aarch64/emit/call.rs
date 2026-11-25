@@ -1354,6 +1354,12 @@ impl CallArgs<'_> {
                 emit_frame_addr(code, Place::IntReg(into.0), loc, self.frame).ok()?;
                 return Some(into);
             }
+            // An `adrp` / `add` pair, relocated as the walker records.
+            Some(&set @ (ArgSet::Data(_) | ArgSet::Code(_))) => {
+                code.note_address(code.len(), self.args[i], set);
+                emit_adrp_add(code, into);
+                return Some(into);
+            }
             None => {}
         }
         // A frame load it left to the call (`Allocation::stack_load`): an

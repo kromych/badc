@@ -86,8 +86,8 @@ Disassembly of section .text:
                	movl	0x18(%rsp), %edi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	<rip>, %rdi
                	movq	%rbx, %rsi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax

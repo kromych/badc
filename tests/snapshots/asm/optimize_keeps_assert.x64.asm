@@ -27,10 +27,9 @@ Disassembly of section .text:
 
 <__c5_assert_fail>:
                	pushq	%rax
-               	leaq	<rip>, %rax
                	movq	%rsi, %rdx
                	movq	%rdi, %rsi
-               	movq	%rax, %rdi
+               	leaq	<rip>, %rdi
                	movl	$0x7, %ecx
                	movb	$0x0, %al
                	callq	<addr>

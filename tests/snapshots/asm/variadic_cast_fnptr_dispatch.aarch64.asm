@@ -20,13 +20,13 @@ Disassembly of section .text:
                	sturb	wzr, [x29, #-0x20]
                	adrp	x0, <page>
                	ldr	x6, [x0, #0x10]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
                	sub	x0, x29, #0x20
                	mov	x1, #0x20               // =32
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	mov	x3, #0x4                // =4
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
                	mov	x5, #0x9                // =9
                	blr	x6
                	cmp	w0, #0x7
@@ -35,9 +35,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

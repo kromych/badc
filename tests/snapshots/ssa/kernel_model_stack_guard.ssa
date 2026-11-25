@@ -19,7 +19,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v13  LocalAddr(-2)                                    -> x0
     v14  BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x0
     v15  StoreLocal { off=-2, disp=8, value=v3, kind=I64 } -> -
-    v16  ImmData(0)                                       -> x7
+    v16  ImmData(0)                                       -> -
     v17  LocalAddr(-2)                                    -> x0
     v18  Imm(1)                                           -> -
     v19  Imm(0)                                           -> -

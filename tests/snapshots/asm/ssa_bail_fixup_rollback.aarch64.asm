@@ -52,11 +52,11 @@ Disassembly of section .text:
                	ldrb	w1, [x3, #0x7]
                	sturb	w1, [x29, #-0x49]
                	sub	x21, x29, #0x40
-               	adrp	x3, <addr>
-               	add	x3, x3, <lo12>
                	mov	x0, x21
                	mov	x2, x22
                	sub	x1, x29, #0x50
+               	adrp	x3, <addr>
+               	add	x3, x3, <lo12>
                	bl	<addr>
                	mov	x1, #0x0                // =0
                	ldrb	w0, [x21, x1]

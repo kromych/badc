@@ -81,9 +81,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret
+               	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

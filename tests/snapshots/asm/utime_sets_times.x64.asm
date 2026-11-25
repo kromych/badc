@@ -49,10 +49,10 @@ Disassembly of section .text:
                	movq	%r10, 0x18(%rsp)
                	callq	<addr>
                	movq	%rax, %r9
-               	leaq	<rip>, %rdi # <addr>
-               	leaq	<rip>, %rdx
                	movq	%rbx, %rcx
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x200, %esi            # imm = 0x200
+               	leaq	<rip>, %rdx
                	movq	0x18(%rsp), %r8
                	movb	$0x0, %al
                	callq	<addr>

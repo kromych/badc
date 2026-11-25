@@ -109,9 +109,9 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x2
                	b.ne	<addr>
+               	sub	x0, x29, #0x88
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x88
                	mov	x2, #0x2                // =2
                	bl	<addr>
                	sxtw	x0, w0

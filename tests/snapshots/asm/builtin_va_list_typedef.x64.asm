@@ -396,9 +396,9 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%r11
                	retq
+               	movsd	<rip>, %xmm0
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movsd	<rip>, %xmm0
                	movl	$0x7, %edx
                	movb	$0x1, %al
                	callq	<addr>

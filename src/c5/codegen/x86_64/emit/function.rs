@@ -1244,6 +1244,7 @@ impl FnEmit<'_, '_> {
             extern_data_names,
             data_fixups_pre_inst,
         );
+        self.out.cx.record_addresses(extern_data_names);
         Ok(())
     }
 
@@ -1319,6 +1320,7 @@ impl FnEmit<'_, '_> {
                         self.out.cx.user_extern_data_refs,
                         &mut steps,
                     )?;
+                    self.out.cx.record_addresses(self.fcx.extern_data_names);
                 } else {
                     emit_return(
                         self.out.cx.code,

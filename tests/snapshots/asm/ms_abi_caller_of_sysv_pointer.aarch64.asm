@@ -43,9 +43,9 @@ Disassembly of section .text:
                	ldr	x21, [x0, #0x8]
                	ldr	x22, [x0, #0x10]
                	ldr	x23, [x0, #0x18]
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	cmp	x0, #0xa
                	b.ne	<addr>

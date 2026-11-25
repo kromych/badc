@@ -33,13 +33,13 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x6, #0x1                // =1
                	cbz	w6, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	x2, [x1, #0x8]
                	ldr	x3, [x1, #0x18]
                	ldrsw	x4, [x1, #0x14]
                	ldrsw	x5, [x1, #0x24]
                	mov	x1, x6
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10

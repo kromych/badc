@@ -217,11 +217,11 @@ Disassembly of section .text:
                	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	x1, [x3, #0x8]
-               	ldr	x2, [x3, #0x10]
-               	ldr	x3, [x3, #0x20]
+               	ldr	x1, [x0, #0x8]
+               	ldr	x2, [x0, #0x10]
+               	ldr	x3, [x0, #0x20]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	orr	x1, x20, #0x8
                	cmp	x0, #0x23

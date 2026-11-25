@@ -558,15 +558,15 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xe, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rsi
                	leaq	0x30(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	movl	$0x4, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	<rip>, %rsi
                	leaq	0x38(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	movl	$0x4, %edx
                	callq	<addr>
                	movslq	%eax, %rax

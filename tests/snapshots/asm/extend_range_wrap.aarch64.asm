@@ -280,9 +280,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldur	w1, [x29, #-0x10]
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	ldur	w1, [x29, #-0x10]
                	mov	x2, #0x2                // =2
                	bl	<addr>
                	cmp	x0, #0x16

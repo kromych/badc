@@ -151,9 +151,9 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jl	<addr>
                	leaq	<rip>, %rdx # <addr>
-               	leaq	<rip>, %rsi # <addr>
                	movq	%rdx, 0x8(%rsp)
                	movq	%rdx, %rdi
+               	leaq	<rip>, %rsi # <addr>
                	movl	$0x28, %edx
                	callq	<addr>
                	movq	0x8(%rsp), %rdx

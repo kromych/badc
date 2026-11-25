@@ -284,8 +284,8 @@ Disassembly of section .text:
                	leaq	0x1388(%rsi), %rax
                	cmpq	$0x1393, %rax           # imm = 0x1393
                	jne	<addr>
-               	leaq	<rip>, %rdi # <addr>
                	movq	0x48(%rsp), %rdx
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x3, %ecx
                	callq	<addr>
                	cmpq	$0x13a9, %rax           # imm = 0x13A9

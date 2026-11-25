@@ -255,6 +255,10 @@ pub(crate) enum ArgSet {
     Imm(i64),
     /// The address of the local at this slot offset.
     Local(i64),
+    /// The address of the unit's data at this offset (`Inst::ImmData`).
+    Data(i64),
+    /// The address of the function at this entry (`Inst::ImmCode`).
+    Code(usize),
 }
 
 /// The code the saves around loops and branch arms add at block boundaries
@@ -5437,23 +5441,31 @@ fn call_plan<'f>(
     Some((args, fp_arg_mask, plan))
 }
 
-/// The constants and local addresses every reader of which is an integer
-/// argument of a call that sets it ([`Allocation::call_set`]): a constant
-/// the call places on the stack; a value the call sets in one instruction,
-/// the move a register holding it would take; or a value whose reading
-/// calls lie in its own block, which sets it as often.
+/// The constants and the local, data and code addresses every reader of
+/// which is an integer argument of a call that sets it
+/// ([`Allocation::call_set`]): a constant the call places on the stack; a
+/// value the call sets in one instruction, the move a register holding it
+/// would take; or a value whose reading calls lie in its own block, which
+/// sets it as often.
 fn call_set_arguments(
     func: &FunctionSsa,
     target: Target,
     use_counts: &[u32],
 ) -> alloc::collections::BTreeMap<ValueId, ArgSet> {
     use crate::c5::codegen::ArgPlacement;
-    let one = |inst: &Inst| match *inst {
+    // Another unit's object or function may be reached through its GOT
+    // entry, a load where a register would take a move.
+    let bound: alloc::collections::BTreeSet<ValueId> = (func.extern_imm_data_refs.iter())
+        .chain(&func.extern_imm_code_refs)
+        .map(|&(v, _)| v)
+        .collect();
+    let one = |v: ValueId, inst: &Inst| match *inst {
         Inst::Imm(k) => {
             target.is_x86_64() || crate::c5::codegen::aarch64::encode::imm64_insts(k as u64) == 1
         }
-        // An AArch64 frame address spans as many instructions as the frame needs.
-        _ => target.is_x86_64(),
+        // An AArch64 frame address spans as many instructions as the frame
+        // needs, a data or code address two.
+        _ => target.is_x86_64() && !bound.contains(&v),
     };
     let mut readers: alloc::collections::BTreeMap<ValueId, u32> =
         alloc::collections::BTreeMap::new();
@@ -5468,9 +5480,14 @@ fn call_set_arguments(
                 let set = match (func.insts.get(v as usize), p) {
                     (Some(Inst::Imm(_)), ArgPlacement::Stack(_)) => true,
                     (
-                        Some(def @ (Inst::Imm(_) | Inst::LocalAddr(_))),
+                        Some(
+                            def @ (Inst::Imm(_)
+                            | Inst::LocalAddr(_)
+                            | Inst::ImmData(_)
+                            | Inst::ImmCode(_)),
+                        ),
                         ArgPlacement::IntReg(_) | ArgPlacement::Stack(_),
-                    ) => here || one(def),
+                    ) => here || one(v, def),
                     _ => false,
                 };
                 if set && !fp.has(i) && !func.f32_values.get(v as usize).copied().unwrap_or(false) {
@@ -5485,6 +5502,8 @@ fn call_set_arguments(
         .filter_map(|(v, _)| match func.insts[v as usize] {
             Inst::Imm(k) => Some((v, ArgSet::Imm(k))),
             Inst::LocalAddr(off) if off < 0 => Some((v, ArgSet::Local(off))),
+            Inst::ImmData(off) => Some((v, ArgSet::Data(off))),
+            Inst::ImmCode(pc) => Some((v, ArgSet::Code(pc))),
             _ => None,
         })
         .collect()

@@ -225,11 +225,11 @@ Disassembly of section .text:
                	movzbq	0x80(%rsp), %rcx
                	addq	%rcx, %rax
                	addq	%rax, %rbx
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %r8 # <addr>
                	movl	$0x4, %edi
                	movl	$0x30, %esi
                	leaq	0x10(%rsp), %rdx
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %r8 # <addr>
                	callq	<addr>
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rdx # <addr>

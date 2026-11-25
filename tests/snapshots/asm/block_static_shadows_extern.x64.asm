@@ -42,8 +42,8 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x18, %rsp
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x2, %esi
                	callq	*%rax
                	cmpl	$0x12, %eax
@@ -51,8 +51,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x18, %rsp
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x3, %esi
                	callq	*%rax
                	cmpl	$0x345, %eax            # imm = 0x345
@@ -60,8 +60,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x18, %rsp
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x2, %esi
                	callq	*%rax
                	cmpl	$0x67, %eax
@@ -69,8 +69,8 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	addq	$0x18, %rsp
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	callq	*%rax
                	cmpl	$0x8, %eax
@@ -78,8 +78,8 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	addq	$0x18, %rsp
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	callq	*%rax
                	cmpl	$0x9, %eax
@@ -107,8 +107,8 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %r10
                	addq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	callq	*%rax
                	movq	0x8(%rsp), %r10

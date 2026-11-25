@@ -84,11 +84,11 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	addq	$0x48, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	fldt	(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	leaq	0x20(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	movb	$0x1, %al
                	callq	<addr>
                	testl	%eax, %eax

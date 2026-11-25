@@ -49,9 +49,9 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x28, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	movq	%rcx, (%rsp)
                	movq	%rcx, %rdi
+               	leaq	<rip>, %rsi
                	movl	$0x3, %edx
                	callq	<addr>
                	movq	(%rsp), %rcx
@@ -65,8 +65,8 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	addq	$0x28, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	leaq	0x10(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %rcx
                	testq	%rcx, %rcx
@@ -105,8 +105,8 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	addq	$0x28, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	leaq	0x10(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %rcx
                	testq	%rcx, %rcx

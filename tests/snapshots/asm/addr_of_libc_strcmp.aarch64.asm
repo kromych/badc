@@ -27,36 +27,36 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x2, <page>
+               	ldr	x2, [x2, <lo12>]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cmp	w0, #0x0
                	b.lt	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x2, <page>
+               	ldr	x2, [x2, <lo12>]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cmp	w0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x2, <page>
+               	ldr	x2, [x2, <lo12>]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cbz	w0, <addr>
                	mov	x0, #0x4                // =4

@@ -717,7 +717,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v9   Imm(1)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  Imm(2779096485)                                  -> -
-    v12  ImmData(16)                                      -> x6
+    v12  ImmData(16)                                      -> -
     v13  Call { target_pc=1, args=[v11, v12], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x3
     v14  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x0
     v15  BinopI { op=xor, lhs=v13, rhs_imm=0 }            -> x0
@@ -736,7 +736,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v28  Imm(1)                                           -> x0
     v29  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x0
     v30  Imm(3539278528)                                  -> -
-    v31  ImmData(16)                                      -> x6
+    v31  ImmData(16)                                      -> -
     v32  Call { target_pc=1, args=[v30, v31], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v33  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x1
     v34  Binop { op=xor, lhs=v13, rhs=v32 }               -> x3
@@ -755,7 +755,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v47  Imm(1)                                           -> x0
     v48  BinopI { op=and, lhs=v34, rhs_imm=4294967295 }   -> x0
     v49  Imm(944361247)                                   -> -
-    v50  ImmData(16)                                      -> x6
+    v50  ImmData(16)                                      -> -
     v51  Call { target_pc=1, args=[v49, v50], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v52  BinopI { op=and, lhs=v51, rhs_imm=4294967295 }   -> x1
     v53  Binop { op=xor, lhs=v34, rhs=v51 }               -> x3
@@ -774,7 +774,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v66  Imm(1)                                           -> x0
     v67  BinopI { op=and, lhs=v53, rhs_imm=4294967295 }   -> x0
     v68  Imm(3132871154)                                  -> -
-    v69  ImmData(16)                                      -> x6
+    v69  ImmData(16)                                      -> -
     v70  Call { target_pc=1, args=[v68, v69], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v71  BinopI { op=and, lhs=v70, rhs_imm=4294967295 }   -> x1
     v72  Binop { op=xor, lhs=v53, rhs=v70 }               -> x3
@@ -793,7 +793,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v85  Imm(1)                                           -> x0
     v86  BinopI { op=and, lhs=v72, rhs_imm=4294967295 }   -> x0
     v87  Imm(239143081)                                   -> -
-    v88  ImmData(16)                                      -> x6
+    v88  ImmData(16)                                      -> -
     v89  Call { target_pc=1, args=[v87, v88], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v90  BinopI { op=and, lhs=v89, rhs_imm=4294967295 }   -> x1
     v91  Binop { op=xor, lhs=v72, rhs=v89 }               -> x3
@@ -812,7 +812,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v104 Imm(1)                                           -> x0
     v105 BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x0
     v106 Imm(3081812468)                                  -> -
-    v107 ImmData(16)                                      -> x6
+    v107 ImmData(16)                                      -> -
     v108 Call { target_pc=1, args=[v106, v107], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v109 BinopI { op=and, lhs=v108, rhs_imm=4294967295 }  -> x1
     v110 Binop { op=xor, lhs=v91, rhs=v108 }              -> x3
@@ -831,7 +831,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v123 Imm(1)                                           -> x0
     v124 BinopI { op=and, lhs=v110, rhs_imm=4294967295 }  -> x0
     v125 Imm(592682179)                                   -> -
-    v126 ImmData(16)                                      -> x6
+    v126 ImmData(16)                                      -> -
     v127 Call { target_pc=1, args=[v125, v126], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v128 BinopI { op=and, lhs=v127, rhs_imm=4294967295 }  -> x1
     v129 Binop { op=xor, lhs=v110, rhs=v127 }             -> x3
@@ -850,7 +850,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v142 Imm(1)                                           -> x0
     v143 BinopI { op=and, lhs=v129, rhs_imm=4294967295 }  -> x0
     v144 Imm(2804849478)                                  -> -
-    v145 ImmData(16)                                      -> x6
+    v145 ImmData(16)                                      -> -
     v146 Call { target_pc=1, args=[v144, v145], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v147 BinopI { op=and, lhs=v146, rhs_imm=4294967295 }  -> x1
     v148 Binop { op=xor, lhs=v129, rhs=v146 }             -> x3
@@ -869,7 +869,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v161 Imm(1)                                           -> x0
     v162 BinopI { op=and, lhs=v148, rhs_imm=4294967295 }  -> x0
     v163 Imm(1971370477)                                  -> -
-    v164 ImmData(16)                                      -> x6
+    v164 ImmData(16)                                      -> -
     v165 Call { target_pc=1, args=[v163, v164], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v166 BinopI { op=and, lhs=v165, rhs_imm=4294967295 }  -> x1
     v167 Binop { op=xor, lhs=v148, rhs=v165 }             -> x3
@@ -888,7 +888,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v180 Imm(1)                                           -> x0
     v181 BinopI { op=and, lhs=v167, rhs_imm=4294967295 }  -> x0
     v182 Imm(2788282984)                                  -> -
-    v183 ImmData(16)                                      -> x6
+    v183 ImmData(16)                                      -> -
     v184 Call { target_pc=1, args=[v182, v183], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v185 BinopI { op=and, lhs=v184, rhs_imm=4294967295 }  -> x1
     v186 Binop { op=xor, lhs=v167, rhs=v184 }             -> x3
@@ -907,7 +907,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v199 Imm(1)                                           -> x0
     v200 BinopI { op=and, lhs=v186, rhs_imm=4294967295 }  -> x0
     v201 Imm(317985447)                                   -> -
-    v202 ImmData(16)                                      -> x6
+    v202 ImmData(16)                                      -> -
     v203 Call { target_pc=1, args=[v201, v202], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v204 BinopI { op=and, lhs=v203, rhs_imm=4294967295 }  -> x1
     v205 Binop { op=xor, lhs=v186, rhs=v203 }             -> x3
@@ -926,7 +926,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v218 Imm(1)                                           -> x0
     v219 BinopI { op=and, lhs=v205, rhs_imm=4294967295 }  -> x0
     v220 Imm(1150382042)                                  -> -
-    v221 ImmData(16)                                      -> x6
+    v221 ImmData(16)                                      -> -
     v222 Call { target_pc=1, args=[v220, v221], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v223 BinopI { op=and, lhs=v222, rhs_imm=4294967295 }  -> x1
     v224 Binop { op=xor, lhs=v205, rhs=v222 }             -> x3
@@ -945,7 +945,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v237 Imm(1)                                           -> x0
     v238 BinopI { op=and, lhs=v224, rhs_imm=4294967295 }  -> x0
     v239 Imm(2527886705)                                  -> -
-    v240 ImmData(16)                                      -> x6
+    v240 ImmData(16)                                      -> -
     v241 Call { target_pc=1, args=[v239, v240], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v242 BinopI { op=and, lhs=v241, rhs_imm=4294967295 }  -> x1
     v243 Binop { op=xor, lhs=v224, rhs=v241 }             -> x3
@@ -964,7 +964,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v256 Imm(1)                                           -> x0
     v257 BinopI { op=and, lhs=v243, rhs_imm=4294967295 }  -> x0
     v258 Imm(3711260700)                                  -> -
-    v259 ImmData(16)                                      -> x6
+    v259 ImmData(16)                                      -> -
     v260 Call { target_pc=1, args=[v258, v259], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v261 BinopI { op=and, lhs=v260, rhs_imm=4294967295 }  -> x1
     v262 Binop { op=xor, lhs=v243, rhs=v260 }             -> x3
@@ -983,7 +983,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v275 Imm(1)                                           -> x0
     v276 BinopI { op=and, lhs=v262, rhs_imm=4294967295 }  -> x0
     v277 Imm(1408996555)                                  -> -
-    v278 ImmData(16)                                      -> x6
+    v278 ImmData(16)                                      -> -
     v279 Call { target_pc=1, args=[v277, v278], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v280 BinopI { op=and, lhs=v279, rhs_imm=4294967295 }  -> x1
     v281 Binop { op=xor, lhs=v262, rhs=v279 }             -> x3
@@ -1002,7 +1002,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v294 Imm(1)                                           -> x0
     v295 BinopI { op=and, lhs=v281, rhs_imm=4294967295 }  -> x0
     v296 Imm(1162961838)                                  -> -
-    v297 ImmData(16)                                      -> x6
+    v297 ImmData(16)                                      -> -
     v298 Call { target_pc=1, args=[v296, v297], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v299 BinopI { op=and, lhs=v298, rhs_imm=4294967295 }  -> x1
     v300 Binop { op=xor, lhs=v281, rhs=v298 }             -> x0
@@ -1075,7 +1075,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v3   Binop { op=ne, lhs=v1, rhs=v2 }                  -> x0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
-    v4   ImmCode(ent_pc=2)                                -> x7
+    v4   ImmCode(ent_pc=2)                                -> -
     v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
@@ -1134,7 +1134,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
-    v32  ImmCode(ent_pc=2)                                -> x7
+    v32  ImmCode(ent_pc=2)                                -> -
     v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)

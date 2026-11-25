@@ -257,9 +257,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
+               	sub	x0, x29, #0x40
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x40
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldur	w1, [x29, #-0x40]

@@ -43,7 +43,6 @@ Disassembly of section .text:
                	jb	<addr>
                	cmpl	$0x7, %ecx
                	je	<addr>
-               	leaq	<rip>, %rdi
                	leaq	<rip>, %rax # <addr>
                	xorl	%esi, %esi
                	movabsq	$0x200000001, %rcx      # imm = 0x200000001
@@ -57,6 +56,7 @@ Disassembly of section .text:
                	addq	$0x4, %rax
                	cmpq	%rcx, %rax
                	jb	<addr>
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax

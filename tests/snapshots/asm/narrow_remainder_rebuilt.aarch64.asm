@@ -72,9 +72,9 @@ Disassembly of section .text:
                	and	x2, x20, x2
                	ldrsw	x1, [x1, x2, lsl #2]
                	str	w1, [x0, #0x20]
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	cmp	w20, #0x3
                	cset	x0, ne

@@ -37,17 +37,17 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %r12
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-<rip>, %rdx # <addr>
                	leaq	0x10(%rsp), %rdi
                	xorl	%esi, %esi
+               	leaq	-<rip>, %rdx # <addr>
                	xorl	%ecx, %ecx
                	callq	*%r12
                	movq	0x10(%rsp), %rdi

@@ -435,10 +435,10 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	sub	x0, x29, #0x58
                	mov	x1, #0x0                // =0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	mov	x3, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
@@ -464,10 +464,10 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	sub	x0, x29, #0x58
                	mov	x1, #0x0                // =0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	sub	x3, x29, #0x58
                	bl	<addr>
                	sxtw	x0, w0

@@ -36,8 +36,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbx
                	retq
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
@@ -48,8 +48,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbx
                	retq
-               	leaq	<rip>, %rsi
                	xorl	%edi, %edi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
@@ -61,8 +61,8 @@ Disassembly of section .text:
                	popq	%rbx
                	retq
                	callq	<addr>
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

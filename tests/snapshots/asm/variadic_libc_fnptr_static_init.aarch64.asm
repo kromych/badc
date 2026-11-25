@@ -21,18 +21,18 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x6, [x0, #0x8]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
                	sub	x0, x29, #0x40
                	mov	x1, #0x40               // =64
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	mov	x3, #0x2a               // =42
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
                	mov	x5, #0x63               // =99
                	blr	x6
+               	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x40
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

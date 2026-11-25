@@ -96,9 +96,9 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
+               	movsd	<rip>, %xmm0
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movsd	<rip>, %xmm0
                	movl	$0x2a, %edx
                	movb	$0x1, %al
                	callq	<addr>

@@ -553,16 +553,16 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	b	<addr>
+               	sub	x0, x29, #0xe0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0xe0
                	mov	x2, #0x4                // =4
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
+               	sub	x0, x29, #0xd8
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0xd8
                	mov	x2, #0x4                // =4
                	bl	<addr>
                	sxtw	x0, w0

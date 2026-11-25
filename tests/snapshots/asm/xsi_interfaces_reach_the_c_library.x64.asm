@@ -81,8 +81,8 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movups	0x10(%rcx), %xmm14
                	movups	%xmm14, 0x10(%rax)
-               	leaq	<rip>, %rsi
                	leaq	0x30(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	leaq	0x30(%rsp), %rdi
                	callq	<addr>
@@ -91,15 +91,15 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x1c8, %rsp            # imm = 0x1C8
                	retq
-               	leaq	<rip>, %rdx
                	leaq	0x70(%rsp), %rdi
                	movl	$0x60, %esi
+               	leaq	<rip>, %rdx
                	leaq	0x30(%rsp), %rcx
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	<rip>, %rdx
                	leaq	0xd0(%rsp), %rdi
                	movl	$0x60, %esi
+               	leaq	<rip>, %rdx
                	leaq	0x30(%rsp), %rcx
                	movb	$0x0, %al
                	callq	<addr>
@@ -179,8 +179,8 @@ Disassembly of section .text:
                	leaq	0xd0(%rsp), %rdi
                	callq	<addr>
                	movl	$0x0, <rip> # <addr>
-               	leaq	-<rip>, %rsi # <addr>
                	leaq	0x30(%rsp), %rdi
+               	leaq	-<rip>, %rsi # <addr>
                	movl	$0x4, %edx
                	movl	$0x9, %ecx
                	callq	<addr>
@@ -359,8 +359,8 @@ Disassembly of section .text:
                	leaq	0x28(%rsp), %rsi
                	movl	$0x4, %edx
                	callq	<addr>
-               	leaq	<rip>, %rsi
                	leaq	0x28(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -391,8 +391,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x17, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rsi
                	xorl	%edi, %edi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %rdi
                	testq	%rdi, %rdi

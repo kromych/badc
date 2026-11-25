@@ -281,8 +281,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	xorl	%ebx, %ebx
-               	leaq	<rip>, %rsi
                	movl	$0x1, %edi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rbx, %rbx
                	je	<addr>

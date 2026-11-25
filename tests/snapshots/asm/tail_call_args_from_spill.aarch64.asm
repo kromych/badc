@@ -59,9 +59,9 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x8]
                	bl	<addr>
                	mov	x20, x0
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, #0x1                // =1

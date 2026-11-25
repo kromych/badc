@@ -242,9 +242,9 @@ Disassembly of section .text:
                	movups	0xa0(%rsp), %xmm1
                	vaesenclast	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, 0xb0(%rsp)
-               	leaq	<rip>, %rdi # <addr>
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -274,9 +274,9 @@ Disassembly of section .text:
                	movups	(%rsp), %xmm1
                	vaesdeclast	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, 0xb0(%rsp)
-               	leaq	<rip>, %rdi # <addr>
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	addq	$0xc8, %rsp
                	retq
@@ -311,9 +311,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	leaq	<rip>, %rdi # <addr>
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -324,9 +324,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	leaq	<rip>, %rdi # <addr>
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -337,9 +337,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	leaq	<rip>, %rdi # <addr>
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -350,9 +350,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	leaq	<rip>, %rdi # <addr>
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>

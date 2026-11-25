@@ -30,8 +30,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	callq	<addr>
-               	leaq	<rip>, %rdi
                	movsd	%xmm0, 0x8(%rsp)
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movsd	0x8(%rsp), %xmm0

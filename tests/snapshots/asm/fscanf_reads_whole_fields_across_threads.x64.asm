@@ -102,8 +102,8 @@ Disassembly of section .text:
                	testl	%r12d, %r12d
                	je	<addr>
                	movq	<rip>, %rdi # <addr>
-               	leaq	<rip>, %rsi
                	leaq	0x186a0(%rbx), %rdx
+               	leaq	<rip>, %rsi
                	movb	$0x0, %al
                	nopl	(%rax)
                	callq	<addr>
@@ -112,8 +112,8 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movq	<rip>, %rdi # <addr>
-               	leaq	<rip>, %rsi
                	leaq	0x186a0(%rbx), %rdx
+               	leaq	<rip>, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -125,9 +125,9 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	<rip>, %rdi # <addr>
                	callq	<addr>
-               	leaq	-<rip>, %rdx # <addr>
                	leaq	0x10(%rsp), %rdi
                	xorl	%esi, %esi
+               	leaq	-<rip>, %rdx # <addr>
                	xorl	%ecx, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
@@ -140,8 +140,8 @@ Disassembly of section .text:
                	retq
                	leaq	0x10(%rsp), %rax
                	leaq	0x8(%rax), %rdi
-               	leaq	-<rip>, %rdx # <addr>
                	xorl	%esi, %esi
+               	leaq	-<rip>, %rdx # <addr>
                	movl	$0x1, %ecx
                	callq	<addr>
                	movslq	%eax, %rax

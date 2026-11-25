@@ -128,9 +128,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
+               	fcvt	d0, s0
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
@@ -142,19 +142,19 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	lsl	x1, x2, #4
+               	add	x4, x4, x1
+               	ldr	s0, [x4, x3, lsl #2]
+               	fcvt	d0, s0
+               	adrp	x4, <addr>
+               	add	x4, x4, <lo12>
+               	add	x1, x4, x1
+               	ldr	s1, [x1, x3, lsl #2]
+               	fcvt	d1, s1
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	lsl	x4, x2, #4
-               	add	x5, x5, x4
-               	ldr	s0, [x5, x3, lsl #2]
-               	fcvt	d0, s0
-               	adrp	x5, <addr>
-               	add	x5, x5, <lo12>
-               	add	x4, x5, x4
-               	ldr	s1, [x4, x3, lsl #2]
-               	fcvt	d1, s1
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10

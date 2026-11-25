@@ -29,8 +29,8 @@ Disassembly of section .text:
                	pushq	%rax
                	movq	<rip>, %rax # <addr>
                	movl	(%rax), %edi
-               	leaq	<rip>, %rdx # <addr>
                	movl	$0x5, %esi
+               	leaq	<rip>, %rdx # <addr>
                	movl	$0x5, %ecx
                	movl	$0x5, %r8d
                	callq	<addr>
@@ -62,8 +62,8 @@ Disassembly of section .text:
                	pushq	%rax
                	movq	<rip>, %rax # <addr>
                	movl	(%rax), %edi
-               	leaq	<rip>, %rdx # <addr>
                	movl	$0x5, %esi
+               	leaq	<rip>, %rdx # <addr>
                	movl	$0x5, %ecx
                	movl	$0x5, %r8d
                	callq	<addr>

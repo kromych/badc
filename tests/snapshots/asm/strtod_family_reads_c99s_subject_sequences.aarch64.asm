@@ -351,9 +351,9 @@ Disassembly of section .text:
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x20, #0x0               // =0
+               	mov	x0, #0x1                // =1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, #0x1                // =1
                	bl	<addr>
                	cbz	x20, <addr>
                	add	x0, x20, #0xdc

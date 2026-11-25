@@ -33,9 +33,9 @@ Disassembly of section .text:
                	fmov	s1, #1.50000000
                	fcmp	s0, s1
                	b.eq	<addr>
+               	fcvt	d0, s0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0x7                // =7
                	adrp	x1, <page>
@@ -44,9 +44,9 @@ Disassembly of section .text:
                	fmov	s1, #2.50000000
                	fcmp	s0, s1
                	b.eq	<addr>
+               	fcvt	d0, s0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0x8                // =8
                	adrp	x1, <page>
@@ -55,9 +55,9 @@ Disassembly of section .text:
                	fmov	s1, #3.50000000
                	fcmp	s0, s1
                	b.eq	<addr>
+               	fcvt	d0, s0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0x9                // =9
                	adrp	x1, <page>
@@ -66,9 +66,9 @@ Disassembly of section .text:
                	fmov	s1, #4.50000000
                	fcmp	s0, s1
                	b.eq	<addr>
+               	fcvt	d0, s0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0xa                // =10
                	fmov	s0, #1.00000000

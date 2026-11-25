@@ -143,8 +143,8 @@ Disassembly of section .text:
                	je	<addr>
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rdi
-               	leaq	<rip>, %rsi # <addr>
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rsi # <addr>
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x2, %eax
@@ -157,17 +157,17 @@ Disassembly of section .text:
                	movq	<rip>, %rdx # <addr>
                	movq	(%rdx), %rdi
                	leaq	<rip>, %rsi # <addr>
-               	leaq	<rip>, %r8 # <addr>
                	movq	%rax, %rdx
                	shlq	$0x4, %rdx
-               	addq	%rdx, %r8
-               	movss	(%r8,%rcx,4), %xmm0
+               	addq	%rdx, %rsi
+               	movss	(%rsi,%rcx,4), %xmm0
                	cvtss2sd	%xmm0, %xmm0
-               	leaq	<rip>, %r8 # <addr>
-               	addq	%r8, %rdx
+               	leaq	<rip>, %rsi # <addr>
+               	addq	%rsi, %rdx
                	movss	(%rdx,%rcx,4), %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	movq	%rax, %rdx
+               	leaq	<rip>, %rsi # <addr>
                	movb	$0x2, %al
                	callq	<addr>
                	movl	$0x1, %eax

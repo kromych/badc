@@ -36,7 +36,6 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x38, %rax
                	jb	<addr>
-               	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %eax # <addr>
                	shlq	$0x2b, %rax
                	sarq	$0x2b, %rax
@@ -56,6 +55,7 @@ Disassembly of section .text:
                	movq	$0x0, 0x10(%rsp)
                	movq	$0x0, 0x18(%rsp)
                	movb	$0x38, 0x10(%rsp)
+               	leaq	<rip>, %rdi # <addr>
                	leaq	0x8(%rsp), %rsi
                	movl	$0x18, %edx
                	callq	<addr>

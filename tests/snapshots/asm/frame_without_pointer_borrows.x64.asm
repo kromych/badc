@@ -672,11 +672,11 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x38, %rsp
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	0x30(%rsp), %r10
                	movq	%r10, (%rsp)
                	movq	%rbx, %rsi
                	movq	%r12, %rdx
+               	leaq	<rip>, %rdi # <addr>
                	movq	0x48(%rsp), %rcx
                	movq	0x40(%rsp), %r8
                	movq	0x38(%rsp), %r9
@@ -689,9 +689,9 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x38, %rsp
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	%rbx, %rsi
                	movq	%r12, %rdx
+               	leaq	<rip>, %rdi # <addr>
                	movq	0x48(%rsp), %rcx
                	movq	0x40(%rsp), %r8
                	callq	<addr>
@@ -703,10 +703,10 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x38, %rsp
                	retq
-               	leaq	<rip>, %rdi # <addr>
-               	leaq	<rip>, %rsi # <addr>
                	movq	%rbx, %rcx
                	movq	%r12, %r8
+               	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movl	$0x3, %edx
                	movq	0x48(%rsp), %r9
                	callq	<addr>
@@ -724,9 +724,9 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x38, %rsp
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	%rbx, %rsi
                	movq	%r12, %rdx
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0x3c, %rax
                	je	<addr>

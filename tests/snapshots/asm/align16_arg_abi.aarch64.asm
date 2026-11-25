@@ -313,9 +313,9 @@ Disassembly of section .text:
                	mov	x17, #0x1393            // =5011
                	cmp	x0, x17
                	b.ne	<addr>
+               	ldur	x3, [x29, #-0x28]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldur	x3, [x29, #-0x28]
                	mov	x4, #0x3                // =3
                	bl	<addr>
                	mov	x17, #0x13a9            // =5033

@@ -229,10 +229,10 @@ Disassembly of section .text:
                	ucomisd	<rip>, %xmm0
                	cmovneq	%rax, %rbx
                	cmovpq	%rax, %rbx
-               	leaq	-<rip>, %rdi # <addr>
                	movq	<rip>, %rsi # <addr>
                	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rcx # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	movq	%rbx, %rcx
                	orq	$0x8, %rcx

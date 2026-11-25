@@ -16,9 +16,9 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1

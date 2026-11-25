@@ -47,23 +47,23 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x1, #0x2                // =2
                	bl	<addr>
+               	mov	x0, #0x14a              // =330
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x2                // =2
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	mov	x0, #0x14a              // =330
-               	mov	x2, #0x2                // =2
                	bl	<addr>
                	mov	x22, x0
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
                	mov	x0, #0x100              // =256
                	mov	x1, #0x0                // =0
                	mov	x2, #0x4                // =4
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	mov	x4, #0x0                // =0
                	mov	x5, #0x0                // =0
                	bl	<addr>

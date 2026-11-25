@@ -150,8 +150,8 @@ Disassembly of section .text:
 <by_value>:
                	subq	$0x18, %rsp
                	movq	%rdi, 0x8(%rsp)
-               	leaq	<rip>, %rsi # <addr>
                	leaq	0x8(%rsp), %rdi
+               	leaq	<rip>, %rsi # <addr>
                	movl	$0x3, %edx
                	callq	<addr>
                	addq	$0x18, %rsp

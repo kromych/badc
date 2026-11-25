@@ -19,9 +19,9 @@ Disassembly of section .text:
                	add	x29, sp, #0xd0
                	bl	<addr>
                	mov	x2, x0
+               	sub	x0, x29, #0xc0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0xc0
                	bl	<addr>
                	sub	x0, x29, #0xc0
                	bl	<addr>

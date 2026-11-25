@@ -27,8 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	leaq	<rip>, %rsi
                	xorl	%edi, %edi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

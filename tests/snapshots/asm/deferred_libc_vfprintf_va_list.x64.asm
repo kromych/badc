@@ -64,15 +64,15 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x48, %rsp
-               	leaq	<rip>, %rdx
                	leaq	(%rsp), %rdi
                	movl	$0x40, %esi
+               	leaq	<rip>, %rdx
                	movl	$0x2a, %ecx
                	movl	$0x63, %r8d
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	<rip>, %rsi
                	leaq	(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

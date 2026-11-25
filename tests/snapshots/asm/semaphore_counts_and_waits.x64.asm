@@ -150,9 +150,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-<rip>, %rdx # <addr>
                	leaq	0x8(%rsp), %rdi
                	xorl	%esi, %esi
+               	leaq	-<rip>, %rdx # <addr>
                	movl	$0x7, %ecx
                	callq	<addr>
                	movslq	%eax, %rax

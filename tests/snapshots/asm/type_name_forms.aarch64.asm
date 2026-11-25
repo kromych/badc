@@ -154,15 +154,16 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	add	x6, x3, #0xc
+               	mov	x0, #0x2                // =2
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	add	x6, x3, #0xc
-               	mov	x5, x2
-               	mov	x0, #0x2                // =2
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	bl	<addr>
                	cmp	x0, #0xcc
                	b.eq	<addr>

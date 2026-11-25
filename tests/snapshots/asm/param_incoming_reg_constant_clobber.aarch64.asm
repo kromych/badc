@@ -19,9 +19,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldrsw	x0, [x0]
+               	mov	x1, #0x5                // =5
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x1, #0x5                // =5
                	mov	x3, #0x5                // =5
                	mov	x4, #0x5                // =5
                	bl	<addr>
@@ -59,9 +59,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldrsw	x0, [x0]
+               	mov	x1, #0x5                // =5
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x1, #0x5                // =5
                	mov	x3, #0x5                // =5
                	mov	x4, #0x5                // =5
                	bl	<addr>

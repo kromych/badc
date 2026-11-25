@@ -41,8 +41,8 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x7, %eax
@@ -50,8 +50,8 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x8, %eax
@@ -59,8 +59,8 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x9, %eax
@@ -68,8 +68,8 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0xa, %eax

@@ -80,8 +80,8 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x18, %rsp
-               	leaq	<rip>, %rdi # <addr>
                	movq	$0x7, <rip> # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0x7, %rax
                	je	<addr>

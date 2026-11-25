@@ -56,9 +56,9 @@ Disassembly of section .text:
                	ldrb	w2, [x2, x3]
                	cmp	w2, #0x20
                	b.eq	<addr>
+               	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x40
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

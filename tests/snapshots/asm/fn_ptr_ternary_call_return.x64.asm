@@ -44,8 +44,8 @@ Disassembly of section .text:
                	movabsq	$0x123456789, %rax      # imm = 0x123456789
                	cmpq	%rax, %rbx
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movq	%rbx, %rsi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
@@ -55,15 +55,15 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	cmpq	%r11, %rdx
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movq	%rdx, %rsi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
                	retq
-               	leaq	<rip>, %rdi
                	movq	%rbx, %rsi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax

@@ -55,8 +55,8 @@ Disassembly of section .text:
                	leaq	0x8(%rsp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax
-               	leaq	<rip>, %rdi
                	movl	0x8(%rsp), %esi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	0x8(%rsp), %eax

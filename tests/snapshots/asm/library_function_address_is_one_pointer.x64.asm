@@ -40,14 +40,14 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	callq	*%rax
                	movq	%rax, 0x8(%rsp)
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi
                	callq	*%rax
                	movq	0x8(%rsp), %r10
                	addq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi
                	callq	*%rax
                	movq	%rax, %r10
                	movq	0x8(%rsp), %rax

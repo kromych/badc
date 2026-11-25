@@ -131,10 +131,10 @@ Disassembly of section .text:
                	mov	x0, #0xf                // =15
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -144,10 +144,10 @@ Disassembly of section .text:
                	mov	x0, #0x10               // =16
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -157,20 +157,20 @@ Disassembly of section .text:
                	mov	x0, #0x11               // =17
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>

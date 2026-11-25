@@ -6117,6 +6117,62 @@ fn register_arguments_the_call_sets_take_no_slot() {
     );
 }
 
+/// A data or code address of this unit read only as a register argument is
+/// set by the call's marshaling, RIP-relative on x86-64 and by an `adrp` /
+/// `add` pair on AArch64, with nothing loaded into an argument register
+/// ahead of the call, under two registers per bank.
+#[test]
+fn address_arguments_the_call_sets_take_no_slot() {
+    const SRC: &str = "int table[4];\n\
+        static int helper(void) { return 1; }\n\
+        void sink(int *t, int (*f)(void), char *p, long k, long v);\n\
+        long f(long a, long b, long c, long d) {\n\
+            char p[16];\n\
+            sink(table, helper, p, 7, a + 3);\n\
+            return a + b + c + d + p[0];\n\
+        }\n";
+    let caps = (2, 2);
+    let insns = x64_insns(&function_bytes(
+        &object_with_pool(SRC, Target::LinuxX64, caps),
+        "f",
+    ));
+    let call = insns.iter().position(|i| i.op == 0xE8).expect("call");
+    let before = &insns[..call];
+    // `lea reg, [rip + disp32]`: ModRM mod 00, rm 101.
+    let rip_lea = |reg: u8| {
+        before
+            .iter()
+            .any(|i| i.op == 0x8D && i.regs().0 == reg && i.modrm.is_some_and(|m| m & 0xC7 == 0x05))
+    };
+    assert!(rip_lea(7) && rip_lea(6), "x86-64: {before:x?}");
+    for reg in [7u8, 6] {
+        assert!(
+            !before
+                .iter()
+                .any(|i| i.op == 0x8B && !i.reg_form() && i.regs().0 == reg),
+            "x86-64: register {reg} loaded ahead of the call: {before:x?}"
+        );
+    }
+    let words = function_words(&object_with_pool(SRC, Target::LinuxAarch64, caps), "f");
+    let call = words
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .expect("bl");
+    let before = &words[..call];
+    for rd in 0..2u32 {
+        let adrp = |w: u32| w & 0x9F00_001F == 0x9000_0000 | rd;
+        assert!(
+            before.iter().any(|&w| adrp(w)),
+            "aarch64: x{rd}: {before:08x?}"
+        );
+    }
+    let ldr_x = |w: u32| w & 0xFFC0_0000 == 0xF940_0000 && w & 0x1F < 2;
+    assert!(
+        !before.iter().any(|&w| ldr_x(w)),
+        "aarch64: an argument register loaded ahead of the call: {before:08x?}"
+    );
+}
+
 /// A stack argument read from a local array, with nothing between the read
 /// and the call that writes memory, is read by the call's marshaling into
 /// its slot: the 63 elements take no register ahead of the call and spill

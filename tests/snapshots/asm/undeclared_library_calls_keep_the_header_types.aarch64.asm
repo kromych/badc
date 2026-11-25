@@ -22,9 +22,9 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	fmov	d8, d0
+               	fmov	d0, d8
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	fmov	d0, d8
                	bl	<addr>
                	fmov	d0, #1.50000000
                	mov	x1, #0x0                // =0

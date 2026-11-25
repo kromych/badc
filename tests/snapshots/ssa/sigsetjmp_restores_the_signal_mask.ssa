@@ -61,7 +61,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     v51  Imm(1)                                           -> x0
     terminator Return(v51)   (exit_acc=v51)
   block 3  start_pc=0
-    v52  ImmData(16)                                      -> x7
+    v52  ImmData(16)                                      -> -
     v53  Imm(1)                                           -> -
     v54  CallExt { binding_idx=5, args=[v52, v53], fp_arg_mask=0x0 } -> x0
     v55  BinopI { op=eq, lhs=v54, rhs_imm=0 }             -> x1
@@ -111,7 +111,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     v94  Imm(3)                                           -> x0
     terminator Return(v94)   (exit_acc=v94)
   block 8  start_pc=0
-    v95  ImmData(16)                                      -> x7
+    v95  ImmData(16)                                      -> -
     v96  Imm(0)                                           -> -
     v97  CallExt { binding_idx=5, args=[v95, v96], fp_arg_mask=0x0 } -> x0
     v98  BinopI { op=eq, lhs=v97, rhs_imm=0 }             -> x1
@@ -152,7 +152,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     v147 Extend { value=v140, kind=I32 }                  -> x1
     terminator Return(v140)   (exit_acc=v140)
   block 11  start_pc=0
-    v91  ImmData(16)                                      -> x7
+    v91  ImmData(16)                                      -> -
     v92  Imm(1)                                           -> -
     v93  CallExt { binding_idx=6, args=[v91, v92], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
@@ -168,7 +168,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     v107 LocalAddr(-16)                                   -> -
     v108 CallExt { binding_idx=17, args=[v106, v107, v106], fp_arg_mask=0x0 } -> x0
     v109 LifetimeEnd(-16)                                 -> -
-    v110 ImmData(16)                                      -> x7
+    v110 ImmData(16)                                      -> -
     v111 Imm(1)                                           -> -
     v112 CallExt { binding_idx=6, args=[v110, v111], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
@@ -217,7 +217,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v3   Binop { op=ne, lhs=v1, rhs=v2 }                  -> x0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
-    v4   ImmCode(ent_pc=2)                                -> x7
+    v4   ImmCode(ent_pc=2)                                -> -
     v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
@@ -276,7 +276,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
-    v32  ImmCode(ent_pc=2)                                -> x7
+    v32  ImmCode(ent_pc=2)                                -> -
     v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)

@@ -27,9 +27,9 @@ Disassembly of section .text:
 
 <aligned_here>:
                	subq	$0x28, %rsp
-               	leaq	<rip>, %rdx
                	leaq	(%rsp), %rdi
                	movl	$0x20, %esi
+               	leaq	<rip>, %rdx
                	movb	$0x1, %al
                	callq	<addr>
                	leaq	(%rsp), %rcx

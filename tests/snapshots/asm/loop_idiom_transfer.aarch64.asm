@@ -157,10 +157,10 @@ Disassembly of section .text:
                	b.lt	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	str	x2, [sp, #0x8]
                	mov	x0, x2
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	mov	x2, #0x28               // =40
                	bl	<addr>
                	ldr	x2, [sp, #0x8]

@@ -28,11 +28,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x2, #0x23               // =35
                	str	w2, [x0, #0x38]
+               	ldrsw	x1, [x1, #0x34]
+               	adrp	x0, <page>
+               	ldr	x3, [x0, #0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x1, [x1, #0x34]
-               	adrp	x3, <page>
-               	ldr	x3, [x3, <lo12>]
                	blr	x3
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x30]
@@ -48,11 +48,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x2, #0x23               // =35
                	str	w2, [x0, #0x38]
+               	ldrsw	x1, [x1, #0x34]
+               	adrp	x0, <page>
+               	ldr	x3, [x0, #0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x1, [x1, #0x34]
-               	adrp	x3, <page>
-               	ldr	x3, [x3, <lo12>]
                	blr	x3
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x30]

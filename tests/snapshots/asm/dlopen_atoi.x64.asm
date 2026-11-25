@@ -38,8 +38,8 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x20, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

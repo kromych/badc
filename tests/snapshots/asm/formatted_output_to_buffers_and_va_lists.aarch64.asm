@@ -124,12 +124,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
+               	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x2a               // =42
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	sub	x0, x29, #0x40
-               	mov	x2, #0x2a               // =42
                	mov	x4, #0x7a               // =122
                	bl	<addr>
                	mov	x1, x0
@@ -141,34 +141,30 @@ Disassembly of section .text:
                	mov	x1, #0x23               // =35
                	mov	x2, #0x40               // =64
                	bl	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	sub	x0, x29, #0x40
                	mov	x1, #0x5                // =5
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	mov	x3, #0xe240             // =57920
                	movk	x3, #0x1, lsl #16
                	bl	<addr>
                	mov	x1, x0
+               	ldurb	w3, [x29, #-0x3b]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldurb	w3, [x29, #-0x3b]
                	sub	x2, x29, #0x40
                	bl	<addr>
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x0                // =0
                	bl	<addr>
                	mov	x1, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
                	fmov	d0, #3.50000000
                	fmov	d1, #4.50000000
                	sub	x0, x29, #0x50
@@ -178,7 +174,11 @@ Disassembly of section .text:
                	ldr	q0, [x0]
                	sub	x0, x29, #0x40
                	mov	x1, #0x40               // =64
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	mov	x3, #0x1                // =1
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
                	mov	x5, #0x7a               // =122
                	mov	x6, #-0x5               // =-5
                	mov	x7, #0x12c              // =300

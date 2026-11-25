@@ -86,10 +86,10 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	leaq	<rip>, %rcx
                	movabsq	$0x140000000a, %rsi     # imm = 0x140000000A
                	movabsq	$0x280000001e, %rdx     # imm = 0x280000001E
                	xorl	%edi, %edi
+               	leaq	<rip>, %rcx
                	movl	$0x63, %r8d
                	movb	$0x0, %al
                	callq	<addr>

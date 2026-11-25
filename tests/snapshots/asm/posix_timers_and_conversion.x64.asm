@@ -61,8 +61,8 @@ Disassembly of section .text:
                	addq	$0x188, %rsp            # imm = 0x188
                	retq
                	movl	$0x0, 0x10(%rsp)
-               	leaq	<rip>, %rsi
                	leaq	0x10(%rsp), %rdi
+               	leaq	<rip>, %rsi
                	movl	$0x1, %edx
                	callq	<addr>
                	movslq	%eax, %rax

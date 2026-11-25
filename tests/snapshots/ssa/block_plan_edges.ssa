@@ -1342,7 +1342,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v486 Imm(46)                                          -> x0
     terminator Return(v486)   (exit_acc=v486)
   block 119  start_pc=0
-    v487 ImmData(16)                                      -> x7
+    v487 ImmData(16)                                      -> -
     v488 Call { target_pc=13, args=[v487], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v489 BinopI { op=ne, lhs=v488, rhs_imm=-60 }          -> x0
     terminator Bz { cond=v489, target=b121, fall=b120 }   (exit_acc=v489)
@@ -1514,7 +1514,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v3   Binop { op=ne, lhs=v1, rhs=v2 }                  -> x0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
-    v4   ImmCode(ent_pc=2)                                -> x7
+    v4   ImmCode(ent_pc=2)                                -> -
     v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
@@ -1573,7 +1573,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
-    v32  ImmCode(ent_pc=2)                                -> x7
+    v32  ImmCode(ent_pc=2)                                -> -
     v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)

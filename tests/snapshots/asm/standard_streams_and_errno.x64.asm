@@ -99,9 +99,9 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%r11
                	retq
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
+               	leaq	<rip>, %rdi
                	movl	$0x1, %esi
                	movl	$0xc, %edx
                	callq	<addr>
@@ -110,9 +110,9 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%r11
                	retq
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rsi
+               	leaq	<rip>, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

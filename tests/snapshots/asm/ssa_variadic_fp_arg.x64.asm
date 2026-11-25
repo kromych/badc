@@ -27,17 +27,17 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	leaq	<rip>, %rdi # <addr>
-               	movsd	<rip>, %xmm0 # <addr>
-               	movb	$0x1, %al
-               	callq	<addr>
                	movsd	<rip>, %xmm0 # <addr>
                	leaq	<rip>, %rdi # <addr>
                	movb	$0x1, %al
                	callq	<addr>
+               	movsd	<rip>, %xmm0 # <addr>
                	leaq	<rip>, %rdi # <addr>
+               	movb	$0x1, %al
+               	callq	<addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movb	$0x2, %al
                	callq	<addr>
                	movsd	<rip>, %xmm0 # <addr>

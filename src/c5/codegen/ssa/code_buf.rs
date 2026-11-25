@@ -89,6 +89,9 @@ pub(crate) struct CodeBuf {
     /// Each instruction's text, when a listing is asked for.
     #[cfg(feature = "listing")]
     listing: Option<alloc::boxed::Box<super::super::listing::Listing>>,
+    /// The data and code addresses a lowering set from their encoding, as
+    /// `(offset, value, address)`, whose relocations the walker records.
+    addresses: Vec<(usize, u32, super::reg_alloc::ArgSet)>,
 }
 
 /// x86-64 branch groups padded so that none crosses or ends on a 32-byte
@@ -282,6 +285,22 @@ impl CodeBuf {
     /// The keep slots taken since the last call, which it clears.
     pub(crate) fn take_kept(&mut self) -> u32 {
         core::mem::take(&mut self.kept)
+    }
+
+    /// The instruction at `at` sets `value`, a data or code address, from
+    /// its encoding.
+    pub(crate) fn note_address(
+        &mut self,
+        at: usize,
+        value: u32,
+        address: super::reg_alloc::ArgSet,
+    ) {
+        self.addresses.push((at, value, address));
+    }
+
+    /// The addresses noted since the last call, which it clears.
+    pub(crate) fn take_addresses(&mut self) -> Vec<(usize, u32, super::reg_alloc::ArgSet)> {
+        core::mem::take(&mut self.addresses)
     }
 
     pub(crate) fn scratch_plan(&self) -> Option<ScratchPlan> {

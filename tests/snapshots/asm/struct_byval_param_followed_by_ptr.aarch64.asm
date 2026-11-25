@@ -24,11 +24,11 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x20, #0x1e              // =30
                	cbz	w20, <addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldrsw	x3, [x2, #0xc]
                	mov	x2, x1
                	mov	x1, x20
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, x20
                	ldp	x29, x30, [sp, #0x10]

@@ -38,8 +38,8 @@ Disassembly of section .text:
                	retq
                	movq	<rip>, %rax # <addr>
                	movq	%rax, 0x8(%rsp)
-               	leaq	<rip>, %rdi
                	movq	0x8(%rsp), %rax
+               	leaq	<rip>, %rdi
                	callq	*%rax
                	xorl	%ecx, %ecx
                	movl	$0x2, %edx

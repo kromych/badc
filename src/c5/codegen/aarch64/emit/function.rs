@@ -1178,6 +1178,7 @@ impl FunctionEmitter<'_, '_> {
                     import_slot: false,
                 });
         }
+        self.cx.record_addresses(self.fcx.extern_data_names);
         Ok(())
     }
 
@@ -1287,6 +1288,7 @@ impl FunctionEmitter<'_, '_> {
                     self.cx.user_extern_data_refs,
                     Some(&mut steps),
                 )?;
+                self.cx.record_addresses(self.fcx.extern_data_names);
                 return self.record_exit(start, steps);
             }
             Terminator::Return(v) => {

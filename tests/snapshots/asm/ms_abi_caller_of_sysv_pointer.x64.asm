@@ -51,8 +51,8 @@ Disassembly of section .text:
                	movq	%r10, 0x20(%rsp)
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x18(%rsp)
-               	leaq	-<rip>, %rdi # <addr>
                	movq	%rbx, %rsi
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0xa, %rax
                	jne	<addr>

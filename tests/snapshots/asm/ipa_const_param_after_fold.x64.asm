@@ -47,9 +47,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	xorl	%esi, %esi
                	movl	$0x5, %edi
-               	movq	%rsi, %rdx
+               	xorl	%esi, %esi
+               	xorl	%edx, %edx
                	callq	<addr>
                	cmpq	$0x5, %rax
                	je	<addr>

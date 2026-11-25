@@ -40,8 +40,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%r11
                	retq
-               	movl	$0x7a, %esi
                	leaq	<rip>, %rdi
+               	movl	$0x7a, %esi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>

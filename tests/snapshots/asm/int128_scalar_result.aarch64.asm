@@ -111,15 +111,15 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
                	orr	x23, x0, x1
-               	mov	x0, #0x2                // =2
                	cmp	x21, x20
-               	cset	x1, lo
+               	cset	x0, lo
                	cmp	x21, x20
-               	cset	x2, eq
+               	cset	x1, eq
                	cmp	x23, x22
-               	cset	x3, lo
-               	and	x2, x2, x3
-               	orr	x1, x1, x2
+               	cset	x2, lo
+               	and	x1, x1, x2
+               	orr	x1, x0, x1
+               	mov	x0, #0x2                // =2
                	mov	x2, #0x4d               // =77
                	bl	<addr>
                	cmp	w0, #0x1
@@ -133,15 +133,15 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	mov	x0, #0x2                // =2
                	cmp	x20, x21
-               	cset	x1, lo
+               	cset	x0, lo
                	cmp	x20, x21
-               	cset	x2, eq
+               	cset	x1, eq
                	cmp	x22, x23
-               	cset	x3, lo
-               	and	x2, x2, x3
-               	orr	x1, x1, x2
+               	cset	x2, lo
+               	and	x1, x1, x2
+               	orr	x1, x0, x1
+               	mov	x0, #0x2                // =2
                	mov	x2, #0x4d               // =77
                	bl	<addr>
                	cbnz	w0, <addr>
@@ -198,16 +198,16 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	mov	x0, #0x2                // =2
                	cmp	x20, x21
-               	cset	x1, lo
+               	cset	x0, lo
                	cmp	x20, x21
-               	cset	x2, eq
+               	cset	x1, eq
                	cmp	x22, x23
-               	cset	x3, lo
-               	and	x2, x2, x3
-               	orr	x1, x1, x2
-               	eor	x1, x1, #0x1
+               	cset	x2, lo
+               	and	x1, x1, x2
+               	orr	x0, x0, x1
+               	eor	x1, x0, #0x1
+               	mov	x0, #0x2                // =2
                	mov	x2, #0x4d               // =77
                	bl	<addr>
                	cmp	w0, #0x1

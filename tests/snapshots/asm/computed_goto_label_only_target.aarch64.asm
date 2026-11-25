@@ -70,8 +70,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x5                // =5
                	ldursw	x1, [x29, #-0x8]
+               	mov	x0, #0x5                // =5
                	bl	<addr>
                	cmp	w0, #0x19
                	b.eq	<addr>

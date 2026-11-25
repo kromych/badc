@@ -52,11 +52,11 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	addq	$0x28, %rsp
                	retq
-               	leaq	0x8(%rsp), %rsi
                	movq	$0x0, 0x8(%rsp)
                	movq	$0x0, 0x10(%rsp)
                	movq	$0x0, 0x18(%rsp)
                	movb	$0x38, 0x10(%rsp)
+               	leaq	0x8(%rsp), %rsi
                	movl	$0x18, %edx
                	callq	<addr>
                	movslq	%eax, %rax

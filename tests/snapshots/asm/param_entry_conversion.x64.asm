@@ -137,24 +137,24 @@ Disassembly of section .text:
                	movq	%rax, 0x10(%rsp)
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, 0x18(%rsp)
+               	movq	(%rsp), %rax
                	movabsq	$0x5a5a5a5a5a5a5afb, %rdi # imm = 0x5A5A5A5A5A5A5AFB
                	movabsq	$-0x5a5a5a5a5a5a012c, %rsi # imm = 0xA5A5A5A5A5A5FED4
                	movabsq	$0x5a5a5a5afffffff0, %rdx # imm = 0x5A5A5A5AFFFFFFF0
                	movabsq	$-0x5a5a5a5a5a5a5a38, %rcx # imm = 0xA5A5A5A5A5A5A5C8
                	movq	$-0x3e8, %r8            # imm = 0xFC18
                	movabsq	$0x5a5a5a5a5a5aff00, %r9 # imm = 0x5A5A5A5A5A5AFF00
-               	movq	(%rsp), %rax
                	callq	*%rax
                	cmpq	$0xf81d, %rax           # imm = 0xF81D
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x28, %rsp
                	retq
+               	movq	0x8(%rsp), %rax
                	movabsq	$-0x5a5a5a5a5a5a5a9c, %rdi # imm = 0xA5A5A5A5A5A5A564
                	movabsq	$0x5a5a5a5a5a5afffe, %rsi # imm = 0x5A5A5A5A5A5AFFFE
                	movabsq	$-0x5a5a5a5af8a432eb, %rdx # imm = 0xA5A5A5A5075BCD15
                	movabsq	$0x5a5a5a5afffffff9, %rcx # imm = 0x5A5A5A5AFFFFFFF9
-               	movq	0x8(%rsp), %rax
                	callq	*%rax
                	movabsq	$0x5af3266f22b8, %r11   # imm = 0x5AF3266F22B8
                	cmpq	%r11, %rax
@@ -162,19 +162,19 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x28, %rsp
                	retq
+               	movq	0x10(%rsp), %rax
                	movabsq	$-0x5a5a5a5a00009c40, %rdi # imm = 0xA5A5A5A5FFFF63C0
                	movabsq	$0x5a5a5a5a5a5a04d2, %rsi # imm = 0x5A5A5A5A5A5A04D2
                	movabsq	$-0x5a5a5a5a5a5a5a80, %rdx # imm = 0xA5A5A5A5A5A5A580
-               	movq	0x10(%rsp), %rax
                	callq	*%rax
                	cmpq	$-0x10c090e, %rax       # imm = 0xFEF3F6F2
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x28, %rsp
                	retq
+               	movq	0x18(%rsp), %rax
                	movabsq	$0x5a5a5a5a00000003, %rdi # imm = 0x5A5A5A5A00000003
                	movabsq	$-0x5a5a5a5a00000002, %rsi # imm = 0xA5A5A5A5FFFFFFFE
-               	movq	0x18(%rsp), %rax
                	callq	*%rax
                	cmpl	$-0x5, %eax
                	je	<addr>

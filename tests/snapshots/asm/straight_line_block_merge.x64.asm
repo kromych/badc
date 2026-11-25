@@ -623,7 +623,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x7, %esi
                	movl	$0x3, %edx
-               	movq	%rsi, %rcx
+               	movl	$0x7, %ecx
                	callq	<addr>
                	cmpl	$0xcb, %eax
                	je	<addr>
@@ -644,8 +644,8 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rdi # <addr>
                	xorl	%esi, %esi
+               	xorl	%edx, %edx
                	movl	$0x64, %ecx
-               	movq	%rsi, %rdx
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>

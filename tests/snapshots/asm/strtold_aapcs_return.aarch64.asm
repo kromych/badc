@@ -83,12 +83,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	add	x16, sp, #0x40
                	bl	<addr>
                	fmov	d0, x16
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	cmp	w0, #0x0
                	b.gt	<addr>

@@ -133,8 +133,8 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	addq	$0x18, %rsp
                	retq
-               	xorl	%edi, %edi
                	movq	<rip>, %rax # <addr>
+               	xorl	%edi, %edi
                	callq	*%rax
                	movl	$0x3, %edi
                	callq	*%rax
@@ -143,8 +143,8 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x1, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x1, %edi
                	callq	*%rax
                	movl	$0x3, %edi
                	callq	*%rax

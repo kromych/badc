@@ -47,11 +47,11 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x20
                	b.lt	<addr>
+               	adrp	x3, <addr>
+               	add	x3, x3, <lo12>
                	sub	x0, x29, #0x38
                	sub	x1, x29, #0x30
                	sub	x2, x29, #0x20
-               	adrp	x3, <addr>
-               	add	x3, x3, <lo12>
                	bl	<addr>
                	ldurb	w0, [x29, #-0x38]
                	add	sp, sp, #0x40

@@ -166,15 +166,15 @@ Disassembly of section .text:
                	popq	%r13
                	addq	$0x30, %rsp
                	retq
-               	movl	$0x3, %edx
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
+               	movl	$0x3, %edx
                	callq	<addr>
                	cmpq	$0x2a, %rax
                	jne	<addr>
-               	xorl	%edx, %edx
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
+               	xorl	%edx, %edx
                	callq	<addr>
                	cmpq	$0x3, %rax
                	je	<addr>

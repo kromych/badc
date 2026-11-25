@@ -24,11 +24,11 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	mov	x20, x0
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x0, lsl #12   // =0x0
+               	add	x0, x0, #0x10
+               	ldr	x1, [x0]
                	mov	x0, #0x7                // =7
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x10
-               	ldr	x1, [x1]
                	blr	x1
                	cmp	w20, #0xa
                	b.ne	<addr>

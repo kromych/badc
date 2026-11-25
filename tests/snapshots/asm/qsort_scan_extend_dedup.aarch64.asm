@@ -86,9 +86,9 @@ Disassembly of section .text:
                	cmp	w0, #0x40
                	b.lt	<addr>
                	sub	x20, x29, #0x100
+               	mov	x0, x20
                	mov	x1, #0x0                // =0
                	mov	x2, #0x3f               // =63
-               	mov	x0, x20
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldrsw	x1, [x20, x0, lsl #2]

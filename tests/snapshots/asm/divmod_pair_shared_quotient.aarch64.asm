@@ -107,14 +107,14 @@ Disassembly of section .text:
                	mov	x0, #0xffffffff         // =4294967295
                	mov	x1, #0xfffffffe         // =4294967294
                	mov	x2, #0x1                // =1
-               	mov	x3, x2
+               	mov	x3, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
                	mov	x1, #0x3                // =3
-               	mov	x2, x0
-               	mov	x3, x0
+               	mov	x2, #0x0                // =0
+               	mov	x3, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>

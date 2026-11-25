@@ -526,11 +526,11 @@ Disassembly of section .text:
                	ret
                	sub	x20, x29, #0xf0
                	sub	x4, x29, #0xa0
-               	mov	x2, #0x28               // =40
-               	mov	x3, #0x5                // =5
                	str	x4, [sp, #0x10]
                	mov	x0, x20
                	mov	x1, x4
+               	mov	x2, #0x28               // =40
+               	mov	x3, #0x5                // =5
                	bl	<addr>
                	ldr	x4, [sp, #0x10]
                	mov	x1, #0x5                // =5
@@ -639,10 +639,10 @@ Disassembly of section .text:
                	ldrb	w16, [x0, #0x20]
                	strb	w16, [x20, #0x20]
                	sub	x1, x29, #0x138
-               	mov	x2, #0x20               // =32
                	str	x1, [sp, #0x10]
                	mov	x0, x1
                	mov	x1, x20
+               	mov	x2, #0x20               // =32
                	bl	<addr>
                	ldr	x1, [sp, #0x10]
                	mov	x0, #0x0                // =0

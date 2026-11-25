@@ -215,27 +215,27 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x40]
                	mov	x0, #-0xf0f0f0f0f0f0f10 // =-1085102592571150096
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x40]
                	bl	<addr>
                	cmp	x0, #0x20
                	b.ne	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x8]
                	mov	x0, #0xff               // =255
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x8]
                	bl	<addr>
                	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x40]
                	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x40]
                	bl	<addr>
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
@@ -277,13 +277,13 @@ Disassembly of section .text:
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x48]
                	mov	x0, #0xcdef             // =52719
                	movk	x0, #0x89ab, lsl #16
                	movk	x0, #0x4567, lsl #32
                	movk	x0, #0x123, lsl #48
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x48]
                	bl	<addr>
                	mov	x17, #0xabcd            // =43981
                	movk	x17, #0x6789, lsl #16
@@ -294,17 +294,17 @@ Disassembly of section .text:
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x50]
                	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x50]
                	bl	<addr>
                	cmp	x0, #0x1
                	b.ne	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x38]
                	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x38]
                	bl	<addr>
                	mov	x17, #-0x8000000000000000 // =-9223372036854775808
                	cmp	x0, x17

@@ -40,9 +40,9 @@ Disassembly of section .text:
                	movw	$0x41, 0x8(%r12)
                	movq	%rax, (%rbx)
                	movw	$0x41, 0x8(%rbx)
-               	movl	$0xa, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0xa, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -53,9 +53,9 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	movb	$0x42, 0x5(%rbx)
-               	movl	$0xa, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0xa, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

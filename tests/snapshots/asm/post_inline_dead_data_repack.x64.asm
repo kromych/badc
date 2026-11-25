@@ -59,8 +59,8 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	leaq	<rip>, %rdi # <addr>
-               	movl	$0x28, %esi
                	movq	<rip>, %rcx # <addr>
+               	movl	$0x28, %esi
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax

@@ -377,8 +377,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x98, %rsp
                	retq
-               	leaq	(%rsp), %rdi
                	movq	<rip>, %rsi # <addr>
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	cmpq	$0x3ad34, %rax          # imm = 0x3AD34
                	je	<addr>

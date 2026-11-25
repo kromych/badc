@@ -29,8 +29,8 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x1, #0x3                // =3
                	mov	x0, x20
+               	mov	x1, #0x3                // =3
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	mov	x2, #0x1f40             // =8000

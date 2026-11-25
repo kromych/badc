@@ -46,8 +46,8 @@ Disassembly of section .text:
                	movl	$0x8, %edi
                	callq	<addr>
                	movq	%rax, %rcx
-               	movl	$0x4, %edi
                	movq	%rcx, 0x8(%rsp)
+               	movl	$0x4, %edi
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
                	movq	%rax, (%rcx)

@@ -26,7 +26,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
-               	mov	x2, x1
+               	mov	x2, #0x0                // =0
                	bl	<addr>
                	mov	x0, #0x7                // =7
                	bl	<addr>

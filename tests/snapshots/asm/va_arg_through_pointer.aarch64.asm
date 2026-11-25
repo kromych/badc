@@ -124,8 +124,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x2, #0x2a               // =42
                	fmov	d0, #1.50000000
+               	mov	x2, #0x2a               // =42
                	bl	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x28]

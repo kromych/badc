@@ -574,10 +574,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movl	$0x1, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movsd	0x8(%r10), %xmm1
+               	movl	$0x1, %edi
                	movb	$0x2, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
@@ -587,7 +587,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	addq	$0xe8, %rsp
                	retq
-               	movl	$0x2, %edi
                	leaq	0xd8(%rsp), %r9
                	leaq	0xe8(%rsp), %rax
                	movq	%r9, %r10
@@ -596,6 +595,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movsd	(%r10), %xmm2
                	movsd	0x8(%r10), %xmm3
+               	movl	$0x2, %edi
                	movb	$0x4, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
@@ -605,7 +605,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	addq	$0xe8, %rsp
                	retq
-               	movl	$0x5, %edi
                	leaq	0xd8(%rsp), %r9
                	leaq	0xe8(%rsp), %rax
                	leaq	0xf8(%rsp), %rcx
@@ -628,6 +627,7 @@ Disassembly of section .text:
                	movq	%rdx, %r10
                	movsd	(%r10), %xmm6
                	movsd	0x8(%r10), %xmm7
+               	movl	$0x5, %edi
                	movb	$0x8, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
@@ -637,11 +637,11 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	addq	$0xe8, %rsp
                	retq
-               	movl	$0x1, %edi
                	leaq	0x130(%rsp), %r9
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movsd	0x8(%r10), %xmm1
+               	movl	$0x1, %edi
                	movb	$0x2, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
@@ -651,7 +651,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	addq	$0xe8, %rsp
                	retq
-               	movl	$0x3, %edi
                	leaq	0x130(%rsp), %r9
                	leaq	0x148(%rsp), %rax
                	leaq	0x160(%rsp), %rcx
@@ -664,6 +663,7 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	movsd	(%r10), %xmm4
                	movsd	0x8(%r10), %xmm5
+               	movl	$0x3, %edi
                	movb	$0x6, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
@@ -691,7 +691,6 @@ Disassembly of section .text:
                	movups	%xmm14, (%rcx)
                	movq	0x10(%rdx), %r10
                	movq	%r10, 0x10(%rcx)
-               	movl	$0x3, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	movq	%r9, %r10
@@ -715,6 +714,7 @@ Disassembly of section .text:
                	movq	%r11, 0x38(%rsp)
                	movq	0x10(%r10), %r11
                	movq	%r11, 0x40(%rsp)
+               	movl	$0x3, %edi
                	movb	$0x2, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
@@ -724,7 +724,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	addq	$0xe8, %rsp
                	retq
-               	movl	$0x2, %edi
                	leaq	0x90(%rsp), %r9
                	leaq	0xa0(%rsp), %rax
                	movq	%r9, %r10
@@ -737,6 +736,7 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x18(%rsp)
+               	movl	$0x2, %edi
                	movb	$0x0, %al
                	callq	<addr>
                	fstpt	0xb0(%rsp)
@@ -750,7 +750,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	addq	$0xe8, %rsp
                	retq
-               	movl	$0x9, %edi
                	leaq	0x90(%rsp), %r9
                	leaq	0xa0(%rsp), %rax
                	movq	%r9, %r10
@@ -798,6 +797,7 @@ Disassembly of section .text:
                	movq	%r11, 0x80(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x88(%rsp)
+               	movl	$0x9, %edi
                	movb	$0x0, %al
                	callq	<addr>
                	fstpt	0xb0(%rsp)
@@ -811,15 +811,15 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	addq	$0xe8, %rsp
                	retq
-               	movl	$0x2, %edi
-               	movl	$0x1, %esi
                	leaq	0xc8(%rsp), %r9
                	leaq	0xd0(%rsp), %rax
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movq	%rax, %r10
                	movsd	(%r10), %xmm1
-               	movq	%rdi, %rdx
+               	movl	$0x2, %edi
+               	movl	$0x1, %esi
+               	movl	$0x2, %edx
                	movb	$0x2, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
@@ -829,7 +829,6 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	addq	$0xe8, %rsp
                	retq
-               	movl	$0x5, %edi
                	leaq	0xd8(%rsp), %r9
                	leaq	0xe8(%rsp), %rax
                	leaq	0xf8(%rsp), %rcx
@@ -852,6 +851,7 @@ Disassembly of section .text:
                	movq	%rdx, %r10
                	movsd	(%r10), %xmm6
                	movsd	0x8(%r10), %xmm7
+               	movl	$0x5, %edi
                	movb	$0x8, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0

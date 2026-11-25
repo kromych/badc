@@ -40,8 +40,8 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	bl	<addr>
                	mov	x1, x0
-               	mov	x0, #0x4                // =4
                	str	x1, [sp, #0x8]
+               	mov	x0, #0x4                // =4
                	bl	<addr>
                	ldr	x1, [sp, #0x8]
                	str	x0, [x1]

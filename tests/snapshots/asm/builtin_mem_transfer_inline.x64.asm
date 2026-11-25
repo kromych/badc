@@ -269,9 +269,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
-               	movl	$0x18, %edx
                	leaq	0x220(%rsp), %rdi
                	xorl	%esi, %esi
+               	movl	$0x18, %edx
                	callq	<addr>
                	xorl	%eax, %eax
                	nop

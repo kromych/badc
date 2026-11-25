@@ -66,9 +66,9 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x38, %rsp
                	retq
-               	leaq	0x18(%rsp), %rdi
                	movl	$0x6070809, 0x18(%rsp)  # imm = 0x6070809
                	movl	%ebx, 0x1c(%rsp)
+               	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movzbq	(%rax), %rcx
                	cmpl	$0x9, %ecx

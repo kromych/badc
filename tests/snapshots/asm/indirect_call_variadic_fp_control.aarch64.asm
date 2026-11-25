@@ -108,11 +108,11 @@ Disassembly of section .text:
                	str	d8, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
+               	fmov	d0, #2.50000000
+               	fmov	d1, #4.25000000
                	mov	x0, #0x4                // =4
                	mov	x1, #0x1                // =1
-               	fmov	d0, #2.50000000
                	mov	x2, #0x3                // =3
-               	fmov	d1, #4.25000000
                	bl	<addr>
                	fmov	d8, d0
                	adrp	x16, <page>
@@ -123,11 +123,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	d8, [sp], #0x20
                	ret
+               	fmov	d0, #2.50000000
+               	fmov	d1, #4.25000000
                	mov	x0, #0x4                // =4
                	mov	x1, #0x1                // =1
-               	fmov	d0, #2.50000000
                	mov	x2, #0x3                // =3
-               	fmov	d1, #4.25000000
                	bl	<addr>
                	fcmp	d8, d0
                	b.eq	<addr>

@@ -43,11 +43,11 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x20, %rsp
                	movb	$0x1, -0x1000(%rbp)
-               	leaq	-0x1020(%rbp), %rdi
                	movq	$0x1, -0x1020(%rbp)
                	movq	$0x2, -0x1018(%rbp)
                	movq	$0x3, -0x1010(%rbp)
                	movq	$0x4, -0x1008(%rbp)
+               	leaq	-0x1020(%rbp), %rdi
                	movl	$0xa, %esi
                	callq	<addr>
                	movq	-0x1020(%rbp), %rax

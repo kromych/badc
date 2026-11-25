@@ -205,7 +205,7 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
-               	movq	%rdi, %rcx
+               	movl	$0x3, %ecx
                	movb	$0x0, %al
                	callq	<addr>
                	movq	%rbx, %rcx

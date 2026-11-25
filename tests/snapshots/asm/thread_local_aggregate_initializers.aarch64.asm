@@ -179,11 +179,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, x1
+               	sub	x0, x29, #0x10
+               	mov	x1, #0x0                // =0
+               	mov	x3, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

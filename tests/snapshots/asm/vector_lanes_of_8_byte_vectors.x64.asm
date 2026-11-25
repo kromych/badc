@@ -60,11 +60,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movl	$0x3, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movq	%rax, %r10
                	movsd	(%r10), %xmm1
+               	movl	$0x3, %edi
                	callq	<addr>
                	cmpl	$0xab, %eax
                	je	<addr>
@@ -73,11 +73,11 @@ Disassembly of section .text:
                	retq
                	leaq	0x10(%rsp), %r9
                	leaq	0x18(%rsp), %rax
-               	xorl	%edi, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movq	%rax, %r10
                	movsd	(%r10), %xmm1
+               	xorl	%edi, %edi
                	callq	<addr>
                	cmpl	$0x8a, %eax
                	je	<addr>
@@ -92,11 +92,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movq	$-0x7, %rdi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movq	%rax, %r10
                	movsd	(%r10), %xmm1
+               	movq	$-0x7, %rdi
                	callq	<addr>
                	vpextrw	$0x0, %xmm0, %eax
                	movswq	%ax, %rax

@@ -51,7 +51,7 @@ use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
     Unsupported, param_entry_ext, place_same_loc,
 };
-use super::ssa::reg_alloc::{Allocation, Place};
+use super::ssa::reg_alloc::{Allocation, ArgSet, Place};
 use super::{AddrPart, DataFixup};
 use alloc::vec::Vec;
 

@@ -35,11 +35,11 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x20, x0
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, x1
+               	sub	x0, x29, #0x10
+               	mov	x1, #0x0                // =0
+               	mov	x3, #0x0                // =0
                	blr	x21
                	ldur	x0, [x29, #-0x10]
                	sub	x1, x29, #0x8

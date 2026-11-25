@@ -212,16 +212,15 @@ Disassembly of section .text:
                	str	x16, [x21, #0x10]
                	mov	x20, #0x0               // =0
                	ldr	x0, [x21, x20, lsl #3]
-               	sub	x22, x29, #0x130
+               	sub	x1, x29, #0x130
                	mov	x2, #0x12c              // =300
-               	mov	x1, x22
                	bl	<addr>
-               	mov	x23, x0
+               	mov	x22, x0
                	ldr	x0, [x21, x20, lsl #3]
+               	sub	x1, x29, #0x130
                	mov	x2, #0x12c              // =300
-               	mov	x1, x22
                	bl	<addr>
-               	cmp	w23, w0
+               	cmp	w22, w0
                	b.ne	<addr>
                	sub	x22, x29, #0x148
                	ldr	x0, [x22, x20, lsl #3]

@@ -158,8 +158,8 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	movl	$0x7, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x7, %edi
                	callq	*%rax
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
@@ -193,8 +193,8 @@ Disassembly of section .text:
                	movq	%rsi, %rbx
                	movl	$0x7, %edi
                	callq	*%rax
-               	movl	$0x3, %edx
                	movq	%rbx, %rcx
+               	movl	$0x3, %edx
                	callq	*%rax
                	addq	$0x20, %rsp
                	popq	%rbx

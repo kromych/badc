@@ -324,7 +324,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v152 LifetimeEnd(0)                                   -> -
     terminator Return(v147)   (exit_acc=v147)
   block 12  start_pc=0
-    v153 LocalAddr(-81)                                   -> x7
+    v153 LocalAddr(-81)                                   -> -
     v154 Imm(0)                                           -> x0
     v155 Imm(0)                                           -> x0
     v156 LocalAddr(-77)                                   -> x9
@@ -374,7 +374,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v194 ImmData(144)                                     -> x1
     v195 Mcpy { dst=v193, src=v194, size=16, align=8 }    -> -
     v196 LocalAddr(-80)                                   -> x1
-    v197 Imm(5)                                           -> x7
+    v197 Imm(5)                                           -> -
     v198 Call { target_pc=4, args=[v189, v193, v197], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v199 RetPart(0, kind=V128)                            -> d0
     v200 Imm(0)                                           -> x0
@@ -464,7 +464,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -523,7 +523,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

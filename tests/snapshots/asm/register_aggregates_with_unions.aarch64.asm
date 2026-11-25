@@ -347,8 +347,8 @@ Disassembly of section .text:
                	ldurb	w0, [x29, #-0x58]
                	add	x0, x0, #0x1
                	sturb	w0, [x29, #-0x48]
-               	mov	x2, #0x8                // =8
                	mov	x0, x3
+               	mov	x2, #0x8                // =8
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

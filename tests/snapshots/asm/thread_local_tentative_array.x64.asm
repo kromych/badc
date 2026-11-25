@@ -55,11 +55,11 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	0x20(%rsp), %rdi
-               	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	movq	0x18(%rsp), %r11
-               	movq	%rsi, %rcx
+               	leaq	0x20(%rsp), %rdi
+               	xorl	%esi, %esi
+               	xorl	%ecx, %ecx
                	callq	*%r11
                	movq	0x20(%rsp), %rdi
                	leaq	0x28(%rsp), %rsi

@@ -78,21 +78,21 @@ Disassembly of section .text:
                	ldrsw	x3, [x2, #0x30]
                	add	x3, x3, #0x1
                	str	w3, [x2, #0x30]
-               	mov	x2, #0x3c               // =60
-               	mov	x3, #0x34               // =52
-               	mov	x5, #0x2                // =2
                	mov	x4, x0
                	mov	x16, x1
                	mov	x1, x0
                	mov	x0, x16
+               	mov	x2, #0x3c               // =60
+               	mov	x3, #0x34               // =52
+               	mov	x5, #0x2                // =2
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	mov	x2, #0x7                // =7
                	mov	x3, #0x5                // =5
+               	mov	x4, #0x0                // =0
                	mov	x5, #0x1                // =1
-               	mov	x4, x1
                	bl	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x30]

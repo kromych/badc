@@ -218,9 +218,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	q2, [x0]
                	fmul	v0.2d, v0.2d, v2.2d
-               	mov	x0, #0x1f               // =31
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x1f               // =31
                	bl	<addr>
                	ldr	q0, [sp, #0x220]
                	ldr	q1, [sp, #0x210]
@@ -901,9 +901,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lo	<addr>
-               	mov	x0, #0x1                // =1
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -912,9 +912,9 @@ Disassembly of section .text:
                	cset	x0, eq
                	cmp	w0, #0x0
                	cset	x22, eq
-               	mov	x0, #0x2                // =2
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -924,9 +924,9 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	cset	x0, eq
                	orr	x22, x22, x0, lsl #1
-               	mov	x0, #0x4                // =4
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x4                // =4
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -936,9 +936,9 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	cset	x0, eq
                	orr	x22, x22, x0, lsl #2
-               	mov	x0, #0x8                // =8
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x8                // =8
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -948,9 +948,9 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	cset	x0, eq
                	orr	x22, x22, x0, lsl #3
-               	mov	x0, #0x10               // =16
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]

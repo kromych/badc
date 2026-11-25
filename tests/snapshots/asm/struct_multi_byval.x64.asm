@@ -76,28 +76,24 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	subq	$0x48, %rsp
+               	subq	$0x38, %rsp
                	subq	$0x30, %rsp
-               	leaq	0x48(%rsp), %rdi
+               	leaq	0x38(%rsp), %rdi
                	leaq	<rip>, %rax
                	movq	(%rax), %r10
                	movq	%r10, (%rdi)
-               	leaq	0x50(%rsp), %r8
+               	leaq	0x40(%rsp), %r8
                	leaq	<rip>, %rax
                	movl	(%rax), %r10d
                	movl	%r10d, (%r8)
-               	leaq	0x58(%rsp), %rax
+               	leaq	0x48(%rsp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	movl	$0x3e8, %r10d           # imm = 0x3E8
-               	movq	%r10, 0x38(%rsp)
-               	movl	$0x7d0, %r10d           # imm = 0x7D0
-               	movq	%r10, 0x30(%rsp)
-               	movabsq	$0x400000003, %rcx      # imm = 0x400000003
-               	movl	$0x5, %edx
+               	movabsq	$0x400000003, %rdx      # imm = 0x400000003
+               	movl	$0x5, %ecx
                	movabsq	$0x200000001, %rsi      # imm = 0x200000001
                	movabsq	$0x400000003, %r9       # imm = 0x400000003
                	movq	%rsi, (%rsp)
@@ -110,9 +106,8 @@ Disassembly of section .text:
                	movq	%r11, 0x18(%rsp)
                	movq	0x10(%r10), %r11
                	movq	%r11, 0x20(%rsp)
-               	xchgq	%rcx, %rdx
-               	movq	0x38(%rsp), %rsi
-               	movq	0x30(%rsp), %r9
+               	movl	$0x3e8, %esi            # imm = 0x3E8
+               	movl	$0x7d0, %r9d            # imm = 0x7D0
                	movq	(%rdi), %rdi
                	movl	(%r8), %r8d
                	callq	<addr>
@@ -121,9 +116,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x30, %rsp
-               	addq	$0x48, %rsp
+               	addq	$0x38, %rsp
                	retq
                	xorl	%eax, %eax
                	addq	$0x30, %rsp
-               	addq	$0x48, %rsp
+               	addq	$0x38, %rsp
                	retq

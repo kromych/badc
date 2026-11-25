@@ -268,11 +268,11 @@ Disassembly of section .text:
                	bl	<addr>
                	and	x0, x0, #0xff
                	sturb	w0, [x29, #-0x41]
-               	sub	x0, x29, #0x60
                	ldur	q0, [x29, #-0x70]
                	ldr	q17, [sp, #0xb0]
                	aese	v0.16b, v17.16b
                	stur	q0, [x29, #-0x60]
+               	sub	x0, x29, #0x60
                	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
@@ -287,14 +287,14 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xd0
                	ret
                	movi	v0.2d, #0000000000000000
-               	sub	x0, x29, #0x60
-               	sub	x1, x29, #0x70
                	ldur	q1, [x29, #-0x70]
                	aese	v1.16b, v0.16b
                	mov	v16.16b, v1.16b
                	aesd	v16.16b, v0.16b
                	mov	v0.16b, v16.16b
                	stur	q0, [x29, #-0x60]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x70
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -307,12 +307,12 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xd0
                	ret
-               	sub	x0, x29, #0x60
-               	sub	x1, x29, #0x70
                	ldur	q0, [x29, #-0x70]
                	aesmc	v0.16b, v0.16b
                	aesimc	v0.16b, v0.16b
                	stur	q0, [x29, #-0x60]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x70
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0

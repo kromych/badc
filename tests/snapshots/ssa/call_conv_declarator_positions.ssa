@@ -504,10 +504,10 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
   block 34  start_pc=0
     v246 ImmCode(ent_pc=3)                                -> x0
     v247 Imm(0)                                           -> x0
-    v248 Imm(1)                                           -> x1
-    v249 Imm(2)                                           -> x2
-    v250 Imm(3)                                           -> x8
-    v251 Imm(4)                                           -> x9
+    v248 Imm(1)                                           -> -
+    v249 Imm(2)                                           -> -
+    v250 Imm(3)                                           -> -
+    v251 Imm(4)                                           -> -
     v252 Imm(5)                                           -> -
     v253 Imm(6)                                           -> -
     v254 Imm(0)                                           -> x0
@@ -523,12 +523,12 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
   block 36  start_pc=0
     v261 ImmCode(ent_pc=4)                                -> x0
     v262 Imm(0)                                           -> x0
-    v263 Imm(1)                                           -> x7
-    v264 Imm(2)                                           -> x6
-    v265 Imm(3)                                           -> x2
-    v266 Imm(4)                                           -> x1
-    v267 Imm(5)                                           -> x8
-    v268 Imm(6)                                           -> x9
+    v263 Imm(1)                                           -> -
+    v264 Imm(2)                                           -> -
+    v265 Imm(3)                                           -> -
+    v266 Imm(4)                                           -> -
+    v267 Imm(5)                                           -> -
+    v268 Imm(6)                                           -> -
     v269 Imm(0)                                           -> x0
     v270 Call { target_pc=4, args=[v263, v264, v265, v266, v267, v268], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v271 BinopI { op=ne, lhs=v270, rhs_imm=-21 }          -> x0
@@ -542,9 +542,9 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
   block 38  start_pc=0
     v276 ImmCode(ent_pc=5)                                -> x0
     v277 Imm(0)                                           -> x0
-    v278 Imm(1)                                           -> x1
+    v278 Imm(1)                                           -> -
     v279 Imm(4612811918334230528)                         -> d1
-    v280 Imm(3)                                           -> x8
+    v280 Imm(3)                                           -> -
     v281 Imm(4616752568008179712)                         -> d3
     v282 Imm(0)                                           -> x0
     v283 Call { target_pc=5, args=[v278, v279, v280, v281], fixed_args=4, fp_return=true, fp_arg_mask=0xa } -> d0
@@ -563,9 +563,9 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
   block 40  start_pc=0
     v293 ImmCode(ent_pc=6)                                -> x0
     v294 Imm(0)                                           -> x0
-    v295 Imm(1)                                           -> x7
+    v295 Imm(1)                                           -> -
     v296 Imm(4612811918334230528)                         -> d0
-    v297 Imm(3)                                           -> x6
+    v297 Imm(3)                                           -> -
     v298 Imm(4616752568008179712)                         -> d1
     v299 Imm(0)                                           -> x0
     v300 Call { target_pc=6, args=[v295, v296, v297, v298], fixed_args=4, fp_return=true, fp_arg_mask=0xa } -> d0
@@ -718,8 +718,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(4)                                           -> x7
-    v2   Imm(3)                                           -> x6
+    v1   Imm(4)                                           -> -
+    v2   Imm(3)                                           -> -
     v3   Call { target_pc=7, args=[v1, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v4   Extend { value=v3, kind=I32 }                    -> x0
     v5   Imm(0)                                           -> x1
@@ -735,8 +735,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v16  Extend { value=v14, kind=I32 }                   -> x1
     terminator Return(v14)   (exit_acc=v14)
   block 3  start_pc=0
-    v9   Imm(4)                                           -> x7
-    v10  Imm(3)                                           -> x6
+    v9   Imm(4)                                           -> -
+    v10  Imm(3)                                           -> -
     v11  Call { target_pc=8, args=[v9, v10], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v12  Extend { value=v11, kind=I32 }                   -> x1
     v13  Imm(0)                                           -> x1
@@ -787,7 +787,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -846,7 +846,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

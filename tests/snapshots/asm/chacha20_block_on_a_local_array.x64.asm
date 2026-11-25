@@ -350,8 +350,8 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x48, %rsp
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi # <addr>
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	xorl	%eax, %eax
                	movl	(%rsp), %ecx

@@ -57,15 +57,15 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	sub	x3, x29, #0x50
                	mov	x0, #-0x100000002       // =-4294967298
                	stur	x0, [x29, #-0x50]
                	stur	x0, [x29, #-0x48]
                	ldr	x1, [x21, #0x10]
-               	mov	x2, #0x2                // =2
                	add	x0, x23, x24
                	ldrsw	x4, [x0, #0x18]
                	mov	x0, x22
+               	mov	x2, #0x2                // =2
+               	sub	x3, x29, #0x50
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x1, #0x0                // =0

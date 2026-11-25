@@ -62,10 +62,10 @@ Disassembly of section .text:
                	movb	%dl, 0x16(%rsp)
                	movzbq	0x7(%rcx), %rcx
                	movb	%cl, 0x17(%rsp)
-               	leaq	0x20(%rsp), %rdi
-               	leaq	0x10(%rsp), %rsi
                	leaq	<rip>, %rcx # <addr>
                	movq	%r12, %rdx
+               	leaq	0x20(%rsp), %rdi
+               	leaq	0x10(%rsp), %rsi
                	callq	<addr>
                	xorl	%eax, %eax
                	movzbq	0x20(%rsp,%rax), %rcx

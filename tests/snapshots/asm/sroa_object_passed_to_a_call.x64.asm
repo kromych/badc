@@ -36,13 +36,13 @@ Disassembly of section .text:
 <main>:
                	subq	$0x40, %rsp
                	pushq	%rbx
-               	leaq	0x28(%rsp), %rdi
                	movq	$0x4, 0x30(%rsp)
+               	leaq	0x28(%rsp), %rdi
                	callq	<addr>
                	addq	$0x6, %rax
                	leaq	0x5(%rax), %rbx
-               	leaq	0x18(%rsp), %rdi
                	movq	$0x2, 0x20(%rsp)
+               	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	addq	$0x2, %rax
                	addq	$0x2, %rax

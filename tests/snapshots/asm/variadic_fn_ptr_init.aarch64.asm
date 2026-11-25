@@ -109,7 +109,7 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	mov	x2, #0x32               // =50
                	mov	x3, #0x46               // =70
-               	mov	x4, x1
+               	mov	x4, #0x3                // =3
                	bl	<addr>
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x7b

@@ -184,7 +184,7 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	xorl	%esi, %esi
                	leaq	0x50(%rsp), %rdx
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -193,7 +193,6 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0xd0, %rsp
                	retq
-               	leaq	0x30(%rsp), %rdx
                	movq	0x38(%rsp), %rax
                	addq	$0x1c9c380, %rax        # imm = 0x1C9C380
                	movq	%rax, 0x38(%rsp)
@@ -203,8 +202,9 @@ Disassembly of section .text:
                	movq	%rax, 0x38(%rsp)
                	addq	$0x1, 0x30(%rsp)
                	movl	$0x1, %edi
+               	movl	$0x1, %esi
+               	leaq	0x30(%rsp), %rdx
                	xorl	%ecx, %ecx
-               	movq	%rdi, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -244,7 +244,7 @@ Disassembly of section .text:
                	movq	$-0x1, %rdi
                	xorl	%esi, %esi
                	leaq	0x50(%rsp), %rdx
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0x16, %rax

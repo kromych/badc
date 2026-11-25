@@ -229,7 +229,7 @@ Disassembly of section .text:
                	addq	$0x28, %rsp
                	retq
                	movl	$0x4, %edi
-               	movq	%rdi, %rsi
+               	movl	$0x4, %esi
                	movb	$0x0, %al
                	callq	<addr>
                	testl	%eax, %eax

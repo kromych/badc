@@ -43,8 +43,8 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
                	fmov	d0, #1.00000000
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	fcvt	s0, d0
                	fmov	s1, #4.00000000

@@ -74,9 +74,9 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x20, x29, #0x28
                	sub	x21, x29, #0x50
-               	mov	x2, #0x27               // =39
                	mov	x0, x20
                	mov	x1, x21
+               	mov	x2, #0x27               // =39
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldrb	w1, [x20, x0]

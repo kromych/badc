@@ -92,8 +92,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rax
                	leaq	<rip>, %rdx
-               	xorl	%edi, %edi
                	leaq	<rip>, %rsi
+               	xorl	%edi, %edi
                	movl	$0x64, %ecx
                	movb	$0x0, %al
                	callq	<addr>
@@ -107,9 +107,9 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%r11
                	retq
-               	xorl	%edi, %edi
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rdx
+               	xorl	%edi, %edi
                	movl	$0x1, %ecx
                	movb	$0x0, %al
                	callq	<addr>

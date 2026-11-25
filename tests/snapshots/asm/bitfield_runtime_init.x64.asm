@@ -129,9 +129,9 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	movq	$-0x10, %rdx
-               	movq	%rdi, %rsi
-               	movq	%rdi, %rcx
+               	xorl	%ecx, %ecx
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>

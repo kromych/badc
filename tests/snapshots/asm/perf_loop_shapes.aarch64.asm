@@ -289,11 +289,11 @@ Disassembly of section .text:
                	stp	x16, x17, [x4, #0x10]
                	ldr	w16, [x0, #0x20]
                	str	w16, [x4, #0x20]
+               	str	x4, [sp]
+               	mov	x0, x4
                	mov	x1, #0x0                // =0
                	mov	x2, #0x8                // =8
                	mov	x3, #0x4                // =4
-               	str	x4, [sp]
-               	mov	x0, x4
                	bl	<addr>
                	ldr	x4, [sp]
                	mov	x0, #0x0                // =0
@@ -451,8 +451,8 @@ Disassembly of section .text:
                	mul	x1, x1, x1
                	cmp	x0, x1
                	b.ne	<addr>
-               	mov	x1, #0x8                // =8
                	mov	x0, x2
+               	mov	x1, #0x8                // =8
                	bl	<addr>
                	ldursw	x1, [x29, #-0x8]
                	mul	x1, x1, x1
@@ -607,7 +607,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
-               	mov	x1, x0
+               	mov	x1, #0x1                // =1
                	bl	<addr>
                	cmn	x0, #0x1
                	b.ne	<addr>

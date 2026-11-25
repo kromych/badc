@@ -44,8 +44,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x2, %rax
                	jne	<addr>
-               	leaq	0x8(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

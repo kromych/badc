@@ -51,9 +51,9 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x22
-               	mov	x1, #0x5a               // =90
                	mov	x0, x22
                	mov	x2, x21
+               	mov	x1, #0x5a               // =90
                	bl	<addr>
                	add	x0, x20, #0x3
                	lsl	x25, x0, #6
@@ -78,7 +78,6 @@ Disassembly of section .text:
                	mov	x0, x23
                	mov	x1, x20
                	bl	<addr>
-               	mov	x2, #0x60               // =96
                	mov	x0, #0x70               // =112
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -95,6 +94,7 @@ Disassembly of section .text:
                	and	x26, x0, #0xffffffffffffffe0
                	add	x1, x20, #0x1
                	mov	x0, x26
+               	mov	x2, #0x60               // =96
                	bl	<addr>
                	and	x1, x23, #0x3f
                	mov	x0, #0x1                // =1
@@ -174,9 +174,9 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x22
-               	mov	x1, #0x5a               // =90
                	mov	x0, x22
                	mov	x2, x21
+               	mov	x1, #0x5a               // =90
                	bl	<addr>
                	add	x25, x20, #0x3
                	add	x0, x25, #0x70

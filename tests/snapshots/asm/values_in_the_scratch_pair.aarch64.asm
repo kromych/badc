@@ -439,9 +439,9 @@ Disassembly of section .text:
                	mov	x1, x23
                	bl	<addr>
                	mov	x24, x0
+               	ldr	x2, [x21, x20, lsl #3]
                	sub	x0, x29, #0xc0
                	sub	x1, x29, #0x80
-               	ldr	x2, [x21, x20, lsl #3]
                	bl	<addr>
                	cmp	x24, x0
                	b.ne	<addr>

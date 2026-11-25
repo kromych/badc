@@ -204,12 +204,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
                	sub	x7, x29, #0x20
-               	mov	x1, #0x2                // =2
-               	sub	x3, x29, #0x8
+               	sub	x0, x29, #0x8
                	fmov	d0, #3.00000000
-               	sub	x4, x29, #0x18
+               	sub	x1, x29, #0x18
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
                	mov	x2, #0x4                // =4
                	bl	<addr>
                	cmp	w0, #0x4d2
@@ -218,9 +218,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x7, x29, #0x8
                	mov	x0, #0x5                // =5
                	mov	x1, #0x6                // =6
-               	sub	x7, x29, #0x8
                	bl	<addr>
                	cmp	x0, #0xb
                	b.eq	<addr>
@@ -241,12 +241,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x7, x29, #0x28
+               	sub	x0, x29, #0x8
+               	fmov	d0, #4.00000000
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
-               	sub	x7, x29, #0x28
                	mov	x2, #0x3                // =3
-               	sub	x3, x29, #0x8
-               	fmov	d0, #4.00000000
                	bl	<addr>
                	mov	x17, #0x10e1            // =4321
                	cmp	w0, w17

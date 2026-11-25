@@ -161,7 +161,7 @@ Disassembly of section .text:
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3                // =3
                	mov	x4, #0x4                // =4
-               	mov	x5, x0
+               	mov	x5, #0x5                // =5
                	bl	<addr>
                	cmp	x0, #0xf
                	b.eq	<addr>

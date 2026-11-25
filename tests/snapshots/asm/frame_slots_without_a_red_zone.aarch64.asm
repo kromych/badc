@@ -239,13 +239,13 @@ Disassembly of section .text:
                	add	x16, sp, #0x30
                	fmov	x17, d0
                	bl	<addr>
-               	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x10]
-               	scvtf	d0, x1
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, #0x10]
+               	scvtf	d0, x0
                	fmov	d1, #0.50000000
                	fadd	d0, d0, d1
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	sub	x0, x29, #0x10
                	bl	<addr>

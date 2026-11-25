@@ -168,11 +168,10 @@ Disassembly of section .text:
                	incq	%rdx
                	cmpl	$0x4, %edx
                	jl	<addr>
-               	leaq	0x40(%rsp), %rax
                	movups	%xmm1, 0x40(%rsp)
-               	movl	$0x10, %edx
                	movq	%rdi, %rsi
-               	movq	%rax, %rdi
+               	leaq	0x40(%rsp), %rdi
+               	movl	$0x10, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

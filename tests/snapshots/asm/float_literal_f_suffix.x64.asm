@@ -81,9 +81,9 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	movl	$0x2, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
+               	movl	$0x2, %edi
                	movb	$0x2, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
@@ -92,8 +92,8 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	popq	%r11
                	retq
-               	movl	$0x1, %edi
                	movsd	<rip>, %xmm0
+               	movl	$0x1, %edi
                	movb	$0x1, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0

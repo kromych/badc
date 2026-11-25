@@ -58,7 +58,6 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x48, %rsp
-               	leaq	0x8(%rsp), %rsi
                	movq	$0x67, 0x8(%rsp)
                	movq	$0xc9, 0x10(%rsp)
                	movq	$0x12c, 0x18(%rsp)      # imm = 0x12C
@@ -68,6 +67,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rdi)
                	movups	0x10(%rax), %xmm14
                	movups	%xmm14, 0x10(%rdi)
+               	leaq	0x8(%rsp), %rsi
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movl	$0x1, %edx

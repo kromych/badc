@@ -37,9 +37,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
-               	mov	x1, #0x0                // =0
                	mov	x0, #0x5                // =5
-               	mov	x2, x1
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	bl	<addr>
                	cmp	x0, #0x5
                	b.eq	<addr>

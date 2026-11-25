@@ -128,8 +128,8 @@ Disassembly of section .text:
                	stur	wzr, [x29, #-0x38]
                	sub	x7, x29, #0x50
                	ldursw	x0, [x29, #-0x8]
-               	sub	x1, x29, #0x38
                	ldr	q0, [x7]
+               	sub	x1, x29, #0x38
                	bl	<addr>
                	ldursw	x0, [x29, #-0x38]
                	cmp	w0, #0x1e

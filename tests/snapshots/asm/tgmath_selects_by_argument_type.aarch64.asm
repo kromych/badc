@@ -67,8 +67,8 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x4
                	b.ne	<addr>
-               	mov	x0, #0x2                // =2
                	fmov	s0, #0.50000000
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	fmov	s1, #2.00000000
                	fcmp	s0, s1

@@ -156,11 +156,11 @@ Disassembly of section .text:
                	jne	<addr>
                	cmpq	$0x0, 0xc8(%rsp)
                	jne	<addr>
-               	leaq	0x8(%rsp), %rdi
                	movabsq	$-0x5555555555555556, %rax # imm = 0xAAAAAAAAAAAAAAAA
                	movq	%rax, 0x8(%rsp)
                	movq	$0x3, 0xd8(%rsp)
                	movq	0xd8(%rsp), %rsi
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movzbq	0xb(%rsp), %rax
                	cmpl	$0xc3, %eax
@@ -337,7 +337,7 @@ Disassembly of section .text:
                	retq
                	movb	$0x5, 0x20(%rsp)
                	leaq	0x20(%rsp), %rdi
-               	movq	%rdi, %rsi
+               	leaq	0x20(%rsp), %rsi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
@@ -347,7 +347,7 @@ Disassembly of section .text:
                	addq	$0xe8, %rsp
                	retq
                	leaq	0x20(%rsp), %rdi
-               	movq	%rdi, %rsi
+               	leaq	0x20(%rsp), %rsi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>

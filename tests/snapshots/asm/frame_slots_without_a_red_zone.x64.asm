@@ -148,11 +148,11 @@ Disassembly of section .text:
                	movsd	%xmm14, (%rsp)
                	fldl	(%rsp)
                	fstpt	0x10(%rsp)
-               	leaq	0x10(%rsp), %rdi
                	movq	<rip>, %rax # <addr>
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0
+               	leaq	0x10(%rsp), %rdi
                	callq	<addr>
                	leaq	0x10(%rsp), %rdi
                	callq	<addr>

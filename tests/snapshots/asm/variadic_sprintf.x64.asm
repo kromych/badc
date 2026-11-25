@@ -31,11 +31,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	<rip>, %rsi
+               	movq	%rbx, %rdi
                	movl	$0xb, %edx
                	movl	$0x16, %ecx
                	movl	$0x21, %r8d
                	movl	$0x2c, %r9d
-               	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	cmpl	$0xb, %eax
@@ -44,8 +44,8 @@ Disassembly of section .text:
                	popq	%rbx
                	retq
                	leaq	<rip>, %rsi
-               	movl	$0xb, %edx
                	movq	%rbx, %rdi
+               	movl	$0xb, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

@@ -606,7 +606,6 @@ Disassembly of section .text:
                	movq	$0x60006, 0x38(%rsp)    # imm = 0x60006
                	movq	$0x70007, 0x80(%rsp)    # imm = 0x70007
                	movq	$0x70007, 0x40(%rsp)    # imm = 0x70007
-               	leaq	0x20(%rsp), %rcx
                	movq	$0x80008, 0x88(%rsp)    # imm = 0x80008
                	movq	$0x80008, 0x48(%rsp)    # imm = 0x80008
                	movq	$0x90009, 0x90(%rsp)    # imm = 0x90009
@@ -616,6 +615,7 @@ Disassembly of section .text:
                	leaq	0xf8(%rsp), %rdi
                	movl	$0xc8, %esi
                	leaq	0xa0(%rsp), %rdx
+               	leaq	0x20(%rsp), %rcx
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	0xf8(%rsp), %rdi
@@ -679,7 +679,6 @@ Disassembly of section .text:
                	movq	$0x0, 0x58(%rsp)
                	movq	$0x70, 0x68(%rsp)
                	movq	$0x70, 0x28(%rsp)
-               	leaq	0x20(%rsp), %rcx
                	movq	$0x7, 0x90(%rsp)
                	movq	$0x7, 0x50(%rsp)
                	leaq	0x18(%rsp), %rdi
@@ -688,6 +687,7 @@ Disassembly of section .text:
                	movl	%r10d, (%rdi)
                	movl	$0x4, %esi
                	leaq	0xa0(%rsp), %rdx
+               	leaq	0x20(%rsp), %rcx
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	0x18(%rsp), %rdi

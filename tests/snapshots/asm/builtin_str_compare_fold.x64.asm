@@ -27,9 +27,9 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x18, %rsp
-               	leaq	0x8(%rsp), %rdi
                	movl	$0x636261, 0x8(%rsp)    # imm = 0x636261
                	leaq	<rip>, %rsi
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -48,11 +48,11 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	leaq	<rip>, %rdi
-               	leaq	0x8(%rsp), %rsi
                	movsbq	0x8(%rsp), %rax
                	subq	$0x61, %rax
                	addq	$0x3, %rax
                	movl	%eax, %edx
+               	leaq	0x8(%rsp), %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

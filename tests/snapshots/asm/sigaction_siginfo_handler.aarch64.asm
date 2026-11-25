@@ -75,7 +75,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x98
                	mov	x1, #0x0                // =0
                	stur	x1, [x29, #-0x98]
                	stur	x1, [x29, #-0x90]
@@ -97,6 +96,7 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
                	mov	x0, #0xa                // =10
+               	sub	x2, x29, #0x98
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

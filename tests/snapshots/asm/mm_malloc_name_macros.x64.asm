@@ -36,9 +36,9 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x40, %edx
-               	movl	$0x20, %esi
                	leaq	0x8(%rsp), %rdi
+               	movl	$0x20, %esi
+               	movl	$0x40, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

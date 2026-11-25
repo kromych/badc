@@ -46,8 +46,8 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x20, %rsp
                	retq
-               	leaq	0x10(%rsp), %rsi
                	movq	%rbx, %rdi
+               	leaq	0x10(%rsp), %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -66,8 +66,8 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x20, %rsp
                	retq
-               	leaq	0x10(%rsp), %rsi
                	movq	%rbx, %rdi
+               	leaq	0x10(%rsp), %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

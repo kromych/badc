@@ -202,9 +202,9 @@ Disassembly of section .text:
                	addq	%rax, %rbx
                	movq	%r12, %r14
                	crc32q	%rbx, %r14
-               	movl	$0x8, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0x8, %edx
                	callq	<addr>
                	movl	%eax, %eax
                	cmpq	%rax, %r14
@@ -212,9 +212,9 @@ Disassembly of section .text:
                	movl	%ebx, %eax
                	movq	%r12, %r14
                	crc32l	%eax, %r14d
-               	movl	$0x4, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0x4, %edx
                	callq	<addr>
                	cmpl	%eax, %r14d
                	jne	<addr>
@@ -222,9 +222,9 @@ Disassembly of section .text:
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	movq	%r12, %r14
                	crc32w	%ax, %r14d
-               	movl	$0x2, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0x2, %edx
                	callq	<addr>
                	nopl	(%rax)
                	cmpl	%eax, %r14d
@@ -233,9 +233,9 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	movq	%r12, %r14
                	crc32b	%al, %r14d
-               	movl	$0x1, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0x1, %edx
                	callq	<addr>
                	cmpl	%eax, %r14d
                	jne	<addr>

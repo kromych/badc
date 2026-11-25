@@ -16,60 +16,50 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x370
+               	sub	sp, sp, #0x360
                	stp	x20, x21, [sp, #0x60]
-               	str	x22, [sp, #0x70]
-               	mov	x3, #-0x64              // =-100
-               	mov	x4, #-0x3039            // =-12345
-               	mov	x5, #-0x7fffffff        // =-2147483647
-               	str	wzr, [sp, #0xe8]
-               	str	wzr, [sp, #0xf0]
-               	mov	x6, #-0x2d2             // =-722
-               	movk	x6, #0xb669, lsl #16
-               	mov	x7, #0x1                // =1
-               	movk	x7, #0x20, lsl #48
+               	str	wzr, [sp, #0xd8]
+               	str	wzr, [sp, #0xe0]
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x140]
                	fmov	d0, #3.25000000
-               	add	x16, sp, #0x80
+               	add	x16, sp, #0x70
                	fmov	x17, d0
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x148]
-               	add	x16, sp, #0x90
+               	add	x16, sp, #0x80
                	fmov	x17, d0
                	bl	<addr>
                	fmov	d0, #1.50000000
-               	add	x16, sp, #0xa0
+               	add	x16, sp, #0x90
                	fmov	x17, d0
                	bl	<addr>
-               	sub	x0, x29, #0x200
-               	mov	x1, #0x100              // =256
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x150]
-               	add	x16, sp, #0x80
+               	add	x16, sp, #0x70
                	bl	<addr>
                	fmov	d2, x16
-               	add	x16, sp, #0x90
+               	add	x16, sp, #0x80
                	bl	<addr>
                	fmov	d3, x16
-               	add	x16, sp, #0xa0
+               	add	x16, sp, #0x90
                	bl	<addr>
                	fmov	d4, x16
-               	adrp	x8, <page>
-               	add	x8, x8, <lo12>
-               	sub	x9, x29, #0x2f0
-               	add	x16, sp, #0x80
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	sub	x1, x29, #0x2f0
+               	add	x16, sp, #0x70
                	fmov	x17, d2
                	bl	<addr>
-               	sub	x10, x29, #0x2e0
-               	add	x16, sp, #0x90
+               	sub	x3, x29, #0x2e0
+               	add	x16, sp, #0x80
                	fmov	x17, d3
                	bl	<addr>
-               	sub	x11, x29, #0x2d0
-               	add	x16, sp, #0xa0
+               	sub	x4, x29, #0x2d0
+               	add	x16, sp, #0x90
                	fmov	x17, d4
                	bl	<addr>
                	mov	x16, #0x2800            // =10240
@@ -80,102 +70,111 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x16, #0x1ed             // =493
                	str	x16, [sp, #0x10]
-               	str	x8, [sp, #0x18]
+               	str	x0, [sp, #0x18]
                	mov	x16, #0x71              // =113
                	str	x16, [sp, #0x20]
                	mov	x16, #0x1234            // =4660
                	str	x16, [sp, #0x28]
-               	ldr	q2, [x9]
-               	ldr	q3, [x10]
-               	ldr	q4, [x11]
+               	ldr	q2, [x1]
+               	ldr	q3, [x3]
+               	ldr	q4, [x4]
+               	sub	x0, x29, #0x200
+               	mov	x1, #0x100              // =256
+               	mov	x3, #-0x64              // =-100
+               	mov	x4, #-0x3039            // =-12345
+               	mov	x5, #-0x7fffffff        // =-2147483647
+               	mov	x6, #-0x2d2             // =-722
+               	movk	x6, #0xb669, lsl #16
+               	mov	x7, #0x1                // =1
+               	movk	x7, #0x20, lsl #48
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sub	x1, x29, #0x200
                	bl	<addr>
-               	sub	x0, x29, #0x200
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x16, x29, #0x240
+               	str	x16, [sp]
+               	sub	x16, x29, #0x260
+               	str	x16, [sp, #0x8]
+               	sub	x16, x29, #0x238
+               	str	x16, [sp, #0x10]
+               	sub	x16, x29, #0x230
+               	str	x16, [sp, #0x18]
+               	sub	x16, x29, #0x2c0
+               	str	x16, [sp, #0x20]
+               	sub	x16, x29, #0x2b0
+               	str	x16, [sp, #0x28]
+               	sub	x16, x29, #0x2a0
+               	str	x16, [sp, #0x30]
+               	sub	x16, x29, #0x220
+               	str	x16, [sp, #0x38]
+               	sub	x16, x29, #0x290
+               	str	x16, [sp, #0x40]
+               	sub	x16, x29, #0x228
+               	str	x16, [sp, #0x48]
+               	sub	x16, x29, #0x288
+               	str	x16, [sp, #0x50]
+               	sub	x0, x29, #0x200
                	sub	x2, x29, #0x278
                	sub	x3, x29, #0x270
                	sub	x4, x29, #0x268
                	sub	x5, x29, #0x258
                	sub	x6, x29, #0x250
                	sub	x7, x29, #0x248
-               	sub	x8, x29, #0x240
-               	sub	x9, x29, #0x260
-               	sub	x10, x29, #0x238
-               	sub	x11, x29, #0x230
-               	sub	x12, x29, #0x2c0
-               	sub	x13, x29, #0x2b0
-               	sub	x14, x29, #0x2a0
-               	sub	x15, x29, #0x220
-               	sub	x20, x29, #0x290
-               	sub	x21, x29, #0x228
-               	sub	x22, x29, #0x288
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	str	x10, [sp, #0x10]
-               	str	x11, [sp, #0x18]
-               	str	x12, [sp, #0x20]
-               	str	x13, [sp, #0x28]
-               	str	x14, [sp, #0x30]
-               	str	x15, [sp, #0x38]
-               	str	x20, [sp, #0x40]
-               	str	x21, [sp, #0x48]
-               	str	x22, [sp, #0x50]
                	bl	<addr>
                	mov	x20, x0
-               	sub	x0, x29, #0x100
-               	mov	x1, #0x100              // =256
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	ldrsb	x3, [sp, #0xf8]
-               	ldrsh	x4, [sp, #0x100]
-               	ldrsw	x5, [sp, #0x108]
-               	ldr	x6, [sp, #0x118]
-               	ldr	x7, [sp, #0x120]
-               	ldr	w8, [sp, #0x128]
-               	ldr	x9, [sp, #0x130]
-               	ldrsw	x10, [sp, #0x110]
-               	ldr	s0, [sp, #0x138]
+               	ldrsb	x3, [sp, #0xe8]
+               	ldrsh	x4, [sp, #0xf0]
+               	ldrsw	x5, [sp, #0xf8]
+               	ldr	x6, [sp, #0x108]
+               	ldr	x7, [sp, #0x110]
+               	ldr	w0, [sp, #0x118]
+               	ldr	x1, [sp, #0x120]
+               	ldrsw	x8, [sp, #0x100]
+               	ldr	s0, [sp, #0x128]
                	fcvt	d0, s0
-               	ldr	d1, [sp, #0x140]
-               	add	x16, sp, #0xb0
+               	ldr	d1, [sp, #0x130]
+               	add	x16, sp, #0xa0
                	bl	<addr>
                	fmov	d2, x16
-               	add	x16, sp, #0xc0
+               	add	x16, sp, #0xb0
                	bl	<addr>
                	fmov	d3, x16
-               	add	x16, sp, #0xd0
+               	add	x16, sp, #0xc0
                	bl	<addr>
                	fmov	d4, x16
-               	sub	x11, x29, #0x220
-               	ldrb	w12, [sp, #0xe0]
-               	ldr	x13, [sp, #0x148]
-               	sub	x14, x29, #0x2f0
-               	add	x16, sp, #0x80
+               	ldrb	w9, [sp, #0xd0]
+               	ldr	x10, [sp, #0x138]
+               	sub	x11, x29, #0x2f0
+               	add	x16, sp, #0x70
                	fmov	x17, d2
                	bl	<addr>
-               	sub	x15, x29, #0x2e0
-               	add	x16, sp, #0x90
+               	sub	x12, x29, #0x2e0
+               	add	x16, sp, #0x80
                	fmov	x17, d3
                	bl	<addr>
-               	sub	x21, x29, #0x2d0
-               	add	x16, sp, #0xa0
+               	sub	x13, x29, #0x2d0
+               	add	x16, sp, #0x90
                	fmov	x17, d4
                	bl	<addr>
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	str	x10, [sp, #0x10]
-               	str	x11, [sp, #0x18]
-               	str	x12, [sp, #0x20]
-               	str	x13, [sp, #0x28]
-               	ldr	q2, [x14]
-               	ldr	q3, [x15]
-               	ldr	q4, [x21]
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
+               	str	x8, [sp, #0x10]
+               	sub	x16, x29, #0x220
+               	str	x16, [sp, #0x18]
+               	str	x9, [sp, #0x20]
+               	str	x10, [sp, #0x28]
+               	ldr	q2, [x11]
+               	ldr	q3, [x12]
+               	ldr	q4, [x13]
+               	sub	x0, x29, #0x100
+               	mov	x1, #0x100              // =256
                	bl	<addr>
-               	ldrsw	x21, [sp, #0xe8]
+               	ldrsw	x21, [sp, #0xd8]
                	sub	x0, x29, #0x200
                	bl	<addr>
                	cmp	w21, w0
@@ -201,8 +200,8 @@ Disassembly of section .text:
                	mov	x1, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	ldrb	w3, [sp, #0xd0]
                	sub	x2, x29, #0x210
-               	ldrb	w3, [sp, #0xe0]
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -251,9 +250,8 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	ldr	x22, [sp, #0x70]
                	ldp	x20, x21, [sp, #0x60]
-               	add	sp, sp, #0x370
+               	add	sp, sp, #0x360
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x3, <page>

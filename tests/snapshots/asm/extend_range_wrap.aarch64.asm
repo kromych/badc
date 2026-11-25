@@ -250,7 +250,7 @@ Disassembly of section .text:
                	ret
                	ldur	w0, [x29, #-0x10]
                	mov	x1, #0x2                // =2
-               	mov	x2, x1
+               	mov	x2, #0x2                // =2
                	bl	<addr>
                	cmp	w0, #0x1
                	b.eq	<addr>

@@ -152,11 +152,11 @@ Disassembly of section .text:
                	movl	$0x32, %esi
                	callq	<addr>
                	movq	%rax, %rbx
+               	movq	%rbx, %rdi
                	movl	$0x1e, %esi
-               	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	$0x46, %esi
                	movq	%rbx, %rdi
+               	movl	$0x46, %esi
                	callq	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>

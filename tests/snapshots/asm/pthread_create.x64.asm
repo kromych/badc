@@ -45,10 +45,10 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %rbx
+               	leaq	-<rip>, %rdx # <addr>
                	leaq	0x10(%rsp), %rdi
                	xorl	%esi, %esi
-               	leaq	-<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	*%r12
                	movq	0x10(%rsp), %rdi
                	leaq	0x18(%rsp), %rsi

@@ -57,12 +57,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	stur	w0, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
+               	and	x0, x0, #0xff
+               	sturb	w0, [x29, #-0x10]
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
                	sub	x0, x29, #0x10
-               	ldursw	x1, [x29, #-0x8]
-               	and	x1, x1, #0xff
-               	sturb	w1, [x29, #-0x10]
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -72,12 +72,12 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xff               // =255
                	stur	w0, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
+               	and	x0, x0, #0xff
+               	sturb	w0, [x29, #-0x10]
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
                	sub	x0, x29, #0x10
-               	ldursw	x1, [x29, #-0x8]
-               	and	x1, x1, #0xff
-               	sturb	w1, [x29, #-0x10]
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x2
                	b.eq	<addr>

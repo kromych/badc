@@ -91,12 +91,12 @@ Disassembly of section .text:
 <main>:
                	subq	$0x18, %rsp
                	movl	$0x3dcccccd, 0x8(%rsp)  # imm = 0x3DCCCCCD
-               	movl	$0x5, %edi
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	movsd	<rip>, %xmm2 # <addr>
                	movsd	<rip>, %xmm3 # <addr>
                	movsd	<rip>, %xmm4 # <addr>
+               	movl	$0x5, %edi
                	movb	$0x5, %al
                	callq	<addr>
                	movss	0x8(%rsp), %xmm0

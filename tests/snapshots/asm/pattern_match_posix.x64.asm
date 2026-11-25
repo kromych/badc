@@ -56,26 +56,26 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	$0x2f, %ebx
                	jge	<addr>
-               	leaq	0x20(%rsp), %rdi
                	leaq	<rip>, %rax # <addr>
                	imulq	$0x30, %rbx, %r12
                	addq	%r12, %rax
                	movq	(%rax), %rsi
                	movl	0x8(%rax), %edx
+               	leaq	0x20(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	0x10(%rsp), %rcx
                	movabsq	$-0x100000002, %rax     # imm = 0xFFFFFFFEFFFFFFFE
                	movq	%rax, 0x10(%rsp)
                	movq	%rax, 0x18(%rsp)
-               	leaq	0x20(%rsp), %rdi
                	leaq	<rip>, %rax # <addr>
                	addq	%r12, %rax
                	movq	0x10(%rax), %rsi
-               	movl	$0x2, %edx
                	movl	0x18(%rax), %r8d
+               	leaq	0x20(%rsp), %rdi
+               	movl	$0x2, %edx
+               	leaq	0x10(%rsp), %rcx
                	callq	<addr>
                	movslq	%eax, %rax
                	xorl	%ecx, %ecx

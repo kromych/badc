@@ -353,6 +353,12 @@ pub(crate) fn compute_frame_base(
         }
         asm_locals(func, i, &mut note);
     }
+    // A local address the calls reading it set is reached at the calls.
+    for set in alloc.call_set.values() {
+        if let super::reg_alloc::ArgSet::Local(off) = *set {
+            note(off);
+        }
+    }
     FrameBase {
         locals: if local {
             slots16(func.locals.max(0) as u32)

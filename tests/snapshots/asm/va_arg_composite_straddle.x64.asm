@@ -116,12 +116,6 @@ Disassembly of section .text:
                	leaq	0x20(%rsp), %rax
                	movq	$0x6f, 0x20(%rsp)
                	movq	$0xde, 0x28(%rsp)
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
-               	movl	$0x3, %edx
-               	movl	$0x4, %ecx
-               	movl	$0x5, %r8d
-               	movl	$0x6, %r9d
                	movq	$0x7, (%rsp)
                	movq	$0x309, 0x18(%rsp)      # imm = 0x309
                	movq	%rax, %r10
@@ -129,6 +123,12 @@ Disassembly of section .text:
                	movq	%r11, 0x8(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x10(%rsp)
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
+               	movl	$0x3, %edx
+               	movl	$0x4, %ecx
+               	movl	$0x5, %r8d
+               	movl	$0x6, %r9d
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x20, %rsp

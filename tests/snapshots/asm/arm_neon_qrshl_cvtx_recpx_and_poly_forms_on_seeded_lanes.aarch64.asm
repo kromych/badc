@@ -548,8 +548,8 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	q1, [x0]
                	fmul	v0.2d, v0.2d, v1.2d
-               	mov	x0, #0x1f               // =31
                	str	q0, [sp, #0x150]
+               	mov	x0, #0x1f               // =31
                	bl	<addr>
                	ldr	q0, [sp, #0x150]
                	fcvtxn	v1.2s, v0.2d

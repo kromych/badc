@@ -164,12 +164,12 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x38, %rsp
                	retq
-               	movl	$0x1, %edi
                	leaq	0x10(%rsp), %r9
-               	movl	$0x2, %esi
                	leaq	0x28(%rsp), %rax
                	movsd	<rip>, %xmm0
                	leaq	0x18(%rsp), %rcx
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
                	movl	$0x4, %edx
                	callq	<addr>
                	cmpl	$0x4d2, %eax            # imm = 0x4D2
@@ -177,9 +177,9 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	addq	$0x38, %rsp
                	retq
+               	leaq	0x28(%rsp), %r9
                	movl	$0x5, %edi
                	movl	$0x6, %esi
-               	leaq	0x28(%rsp), %r9
                	callq	<addr>
                	cmpq	$0xb, %rax
                	je	<addr>
@@ -198,12 +198,12 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	addq	$0x38, %rsp
                	retq
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
                	leaq	0x8(%rsp), %r9
-               	movl	$0x3, %edx
                	leaq	0x28(%rsp), %rax
                	movsd	<rip>, %xmm0
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
+               	movl	$0x3, %edx
                	movb	$0x1, %al
                	callq	<addr>
                	cmpl	$0x10e1, %eax           # imm = 0x10E1

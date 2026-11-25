@@ -142,13 +142,6 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	mov	x0, #0xde               // =222
                	stur	x0, [x29, #-0x8]
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x6, #0x7                // =7
                	mov	x16, #0x309             // =777
                	str	x16, [sp, #0x10]
                	mov	x16, x7
@@ -156,6 +149,13 @@ Disassembly of section .text:
                	str	x17, [sp]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x8]
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
                	bl	<addr>
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

@@ -97,7 +97,7 @@ Disassembly of section .text:
                	retq
                	movq	<rip>, %rax # <addr>
                	movl	$0x1, %edi
-               	movq	%rdi, %rsi
+               	movl	$0x1, %esi
                	callq	*%rax
                	cmpl	$0x2, %eax
                	je	<addr>

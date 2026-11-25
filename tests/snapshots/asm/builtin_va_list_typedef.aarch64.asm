@@ -491,7 +491,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3                // =3
-               	mov	x4, x0
+               	mov	x4, #0x4                // =4
                	bl	<addr>
                	cmp	w0, #0xa
                	b.eq	<addr>

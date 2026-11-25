@@ -7,30 +7,28 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	pushq	%r14
+               	subq	$0x28, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movq	%rdx, %r14
+               	movq	%rdx, %r13
                	leaq	-0x20(%rbp), %r12
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%r12)
                	movups	%xmm14, 0x10(%r12)
                	movq	%rdi, -0x20(%rbp)
                	movq	%rsi, -0x18(%rbp)
-               	movl	$0x1a, %r13d
                	movl	$0xa, %ebx
                	jmp	<addr>
-               	nop
+               	nopw	%cs:(%rax,%rax)
                	subq	$0x1, %rbx
                	je	<addr>
                	addl	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	nest_count-0x5
                	movb	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	cache_dirty-0x5
-               	movq	%r13, %rdi
                	movq	%r12, %rsi
+               	movl	$0x1a, %edi
                	callq	<addr>
 		R_X86_64_PLT32	entry_ret-0x4
                	subl	$0x1, (%rip)            # <addr>
@@ -39,20 +37,20 @@ Disassembly of section .text:
                	callq	<addr>
 		R_X86_64_PLT32	resched_thunk-0x4
                	nopw	%cs:(%rax,%rax)
-               	nopl	(%rax)
+               	nopl	(%rax,%rax)
                	movabsq	$-0x7ffffdfd00000000, %r11 # imm = 0x8000020300000000
                	movq	%rax, %rcx
                	cmpq	%r11, %rax
                	je	<addr>
                	movq	-0x10(%rbp), %rcx
-               	movq	%rcx, (%r14)
+               	movq	%rcx, (%r13)
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	nop
                	nop
                	nop
                	nop
@@ -83,8 +81,8 @@ Disassembly of section .text:
 <enter_entry>:
                	endbr64
                	movq	%rdi, (%rsi)
-               	xorl	%edi, %edi
                	movb	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	cache_dirty-0x5
+               	xorl	%edi, %edi
                	jmp	<addr>
 		R_X86_64_PLT32	entry_saved_ret-0x4

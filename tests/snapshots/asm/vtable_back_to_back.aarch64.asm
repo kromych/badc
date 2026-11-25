@@ -41,9 +41,9 @@ Disassembly of section .text:
                	mov	x2, #0x2a               // =42
                	mov	x3, #0x8                // =8
                	blr	x4
+               	ldur	x0, [x29, #-0x10]
+               	ldr	x3, [x0, #0x8]
                	sub	x0, x29, #0x10
-               	ldur	x1, [x29, #-0x10]
-               	ldr	x3, [x1, #0x8]
                	sub	x1, x29, #0x18
                	mov	x2, #0x1                // =1
                	blr	x3

@@ -59,11 +59,11 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	addq	$0x78, %rsp
                	retq
-               	leaq	0x10(%rsp), %rdi
                	movl	0x8(%rsp), %eax
                	movl	%eax, 0x10(%rsp)
-               	movl	$0x1, %esi
                	movl	$0x1, 0x14(%rsp)
+               	leaq	0x10(%rsp), %rdi
+               	movl	$0x1, %esi
                	movl	$0x3e8, %edx            # imm = 0x3E8
                	callq	<addr>
                	cmpl	$0x1, %eax

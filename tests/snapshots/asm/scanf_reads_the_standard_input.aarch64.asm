@@ -42,8 +42,8 @@ Disassembly of section .text:
                	ldursw	x2, [x29, #-0x28]
                	ldursw	x3, [x29, #-0x20]
                	ldur	d0, [x29, #-0x18]
-               	sub	x5, x29, #0x10
                	mov	x1, x20
+               	sub	x5, x29, #0x10
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -65,9 +65,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	mov	x0, #0x6                // =6
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x0, #0x6                // =6
                	bl	<addr>
                	cmp	x0, #0x0
                	cset	x1, eq

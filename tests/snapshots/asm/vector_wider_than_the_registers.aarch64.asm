@@ -172,11 +172,11 @@ Disassembly of section .text:
                	b	<addr>
                	sxtb	x2, w2
                	b	<addr>
-               	sub	x0, x29, #0x1a0
                	sub	x20, x29, #0x1e0
                	sub	x21, x29, #0x1c0
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x1a0
                	bl	<addr>
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -583,11 +583,11 @@ Disassembly of section .text:
                	str	x1, [x2, #0x10]
                	ubfx	x1, x1, #11, #8
                	b	<addr>
-               	sub	x0, x29, #0x340
                	sub	x20, x29, #0x3c0
                	sub	x21, x29, #0x380
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x340
                	bl	<addr>
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -893,11 +893,11 @@ Disassembly of section .text:
                	str	x1, [x2, #0x10]
                	ubfx	x1, x1, #11, #16
                	b	<addr>
-               	sub	x0, x29, #0x1a0
                	sub	x20, x29, #0x1e0
                	sub	x21, x29, #0x1c0
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x1a0
                	bl	<addr>
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -1310,11 +1310,11 @@ Disassembly of section .text:
                	b	<addr>
                	sxth	x2, w2
                	b	<addr>
-               	sub	x0, x29, #0x340
                	sub	x20, x29, #0x3c0
                	sub	x21, x29, #0x380
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x340
                	bl	<addr>
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -1618,11 +1618,11 @@ Disassembly of section .text:
                	lsr	x2, x2, #11
                	b	<addr>
                	b	<addr>
-               	sub	x0, x29, #0x1a0
                	sub	x20, x29, #0x1e0
                	sub	x21, x29, #0x1c0
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x1a0
                	bl	<addr>
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -2024,11 +2024,11 @@ Disassembly of section .text:
                	b	<addr>
                	mov	w2, w2
                	b	<addr>
-               	sub	x0, x29, #0x340
                	sub	x20, x29, #0x3c0
                	sub	x21, x29, #0x380
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x340
                	bl	<addr>
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -2332,11 +2332,11 @@ Disassembly of section .text:
                	str	x1, [x2, #0x10]
                	lsr	x1, x1, #11
                	b	<addr>
-               	sub	x0, x29, #0x1a0
                	sub	x20, x29, #0x1e0
                	sub	x21, x29, #0x1c0
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x1a0
                	bl	<addr>
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -2752,11 +2752,11 @@ Disassembly of section .text:
                	str	x1, [x2, #0x10]
                	lsr	x1, x1, #11
                	b	<addr>
-               	sub	x0, x29, #0x340
                	sub	x20, x29, #0x3c0
                	sub	x21, x29, #0x380
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x340
                	bl	<addr>
                	mov	x3, #0x0                // =0
                	mov	x0, x3
@@ -3327,10 +3327,10 @@ Disassembly of section .text:
                	fmov	s1, #4.00000000
                	fdiv	s0, s0, s1
                	stur	s0, [x29, #-0xa4]
-               	sub	x0, x29, #0xa0
                	sub	x21, x29, #0xe0
                	mov	x1, x21
                	mov	x2, x20
+               	sub	x0, x29, #0xa0
                	bl	<addr>
                	mov	x2, #0x0                // =0
                	mov	x0, x2
@@ -4238,9 +4238,9 @@ Disassembly of section .text:
                	fmov	s1, #4.00000000
                	fdiv	s0, s0, s1
                	str	s0, [sp, #0x8c]
-               	sub	x0, x29, #0x140
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0x140
                	bl	<addr>
                	mov	x2, #0x0                // =0
                	mov	x0, x2
@@ -4545,11 +4545,11 @@ Disassembly of section .text:
                	fmov	d1, #4.00000000
                	fdiv	d0, d0, d1
                	stur	d0, [x29, #-0xa8]
-               	sub	x0, x29, #0xa0
                	sub	x20, x29, #0xe0
                	sub	x21, x29, #0xc0
                	mov	x1, x20
                	mov	x2, x21
+               	sub	x0, x29, #0xa0
                	bl	<addr>
                	mov	x2, #0x0                // =0
                	mov	x0, x2
@@ -5079,10 +5079,10 @@ Disassembly of section .text:
                	fmov	d1, #4.00000000
                	fdiv	d0, d0, d1
                	str	d0, [sp, #0x88]
-               	sub	x0, x29, #0x140
                	sub	x21, x29, #0x1c0
                	mov	x1, x21
                	mov	x2, x20
+               	sub	x0, x29, #0x140
                	bl	<addr>
                	mov	x2, #0x0                // =0
                	mov	x0, x2

@@ -175,8 +175,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xe0]
                	ldr	x20, [sp], #0xf0
                	ret
-               	mov	x1, #0xc8               // =200
                	mov	x0, x2
+               	mov	x1, #0xc8               // =200
                	bl	<addr>
                	mov	x20, x0
                	sub	x0, x29, #0xc8
@@ -220,8 +220,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xe0]
                	ldr	x20, [sp], #0xf0
                	ret
-               	mov	x1, #0xc8               // =200
                	mov	x0, x2
+               	mov	x1, #0xc8               // =200
                	bl	<addr>
                	mov	x20, x0
                	sub	x0, x29, #0xc8
@@ -241,33 +241,33 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xe0]
                	ldr	x20, [sp], #0xf0
                	ret
+               	ldurb	w0, [x29, #-0xc8]
+               	lsl	x0, x0, #4
+               	ldurb	w1, [x29, #-0xc7]
+               	eor	x0, x0, x1, lsl #3
+               	ldurb	w1, [x29, #-0xc6]
+               	eor	x0, x0, x1, lsl #2
+               	ldurb	w1, [x29, #-0xc5]
+               	eor	x0, x0, x1, lsl #1
+               	ldurb	w1, [x29, #-0xc4]
+               	eor	x0, x0, x1
+               	ldurb	w1, [x29, #-0xc3]
+               	eor	x0, x0, x1, lsl #7
+               	ldurb	w1, [x29, #-0xc2]
+               	eor	x0, x0, x1, lsl #6
+               	ldurb	w1, [x29, #-0xc1]
+               	eor	x0, x0, x1, lsl #5
+               	ldurb	w1, [x29, #-0xc0]
+               	eor	x0, x0, x1, lsl #4
+               	ldurb	w1, [x29, #-0xbf]
+               	eor	x0, x0, x1, lsl #3
+               	ldurb	w1, [x29, #-0xbe]
+               	eor	x0, x0, x1, lsl #2
+               	ldurb	w1, [x29, #-0xbd]
+               	eor	x0, x0, x1, lsl #1
+               	ldurb	w1, [x29, #-0xbc]
+               	eor	x20, x0, x1
                	sub	x0, x29, #0xc8
-               	ldurb	w1, [x29, #-0xc8]
-               	lsl	x1, x1, #4
-               	ldurb	w2, [x29, #-0xc7]
-               	eor	x1, x1, x2, lsl #3
-               	ldurb	w2, [x29, #-0xc6]
-               	eor	x1, x1, x2, lsl #2
-               	ldurb	w2, [x29, #-0xc5]
-               	eor	x1, x1, x2, lsl #1
-               	ldurb	w2, [x29, #-0xc4]
-               	eor	x1, x1, x2
-               	ldurb	w2, [x29, #-0xc3]
-               	eor	x1, x1, x2, lsl #7
-               	ldurb	w2, [x29, #-0xc2]
-               	eor	x1, x1, x2, lsl #6
-               	ldurb	w2, [x29, #-0xc1]
-               	eor	x1, x1, x2, lsl #5
-               	ldurb	w2, [x29, #-0xc0]
-               	eor	x1, x1, x2, lsl #4
-               	ldurb	w2, [x29, #-0xbf]
-               	eor	x1, x1, x2, lsl #3
-               	ldurb	w2, [x29, #-0xbe]
-               	eor	x1, x1, x2, lsl #2
-               	ldurb	w2, [x29, #-0xbd]
-               	eor	x1, x1, x2, lsl #1
-               	ldurb	w2, [x29, #-0xbc]
-               	eor	x20, x1, x2
                	mov	x1, #0xd                // =13
                	bl	<addr>
                	cmp	w0, w20

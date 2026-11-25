@@ -27,12 +27,12 @@ Disassembly of section .text:
 
 <func_1>:
                	pushq	%rax
-               	movl	$0x5, %esi
                	movq	<rip>, %rax # <addr>
                	movl	(%rax), %edi
                	leaq	<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
-               	movq	%rsi, %r8
+               	movl	$0x5, %esi
+               	movl	$0x5, %ecx
+               	movl	$0x5, %r8d
                	callq	<addr>
                	xorl	%eax, %eax
                	popq	%r11
@@ -60,12 +60,12 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	movl	$0x5, %esi
                	movq	<rip>, %rax # <addr>
                	movl	(%rax), %edi
                	leaq	<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
-               	movq	%rsi, %r8
+               	movl	$0x5, %esi
+               	movl	$0x5, %ecx
+               	movl	$0x5, %r8d
                	callq	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>

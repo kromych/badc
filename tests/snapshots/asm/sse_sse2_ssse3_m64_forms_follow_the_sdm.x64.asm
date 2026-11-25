@@ -470,12 +470,12 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	jne	<addr>
                	vmovq	%rbx, %xmm2
-               	xorl	%esi, %esi
                	pshuflw	$0x0, %xmm2, %xmm2      # xmm2 = xmm2[0,0,0,0,4,5,6,7]
                	vmovq	%xmm2, %r14
                	movsd	%xmm1, 0x20(%rsp)
                	movsd	%xmm0, 0x28(%rsp)
                	movq	%rbx, %rdi
+               	xorl	%esi, %esi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -483,12 +483,12 @@ Disassembly of section .text:
                	cmpq	%rax, %r14
                	jne	<addr>
                	vmovq	%rbx, %xmm2
-               	xorl	%esi, %esi
                	pshuflw	$0x0, %xmm2, %xmm2      # xmm2 = xmm2[0,0,0,0,4,5,6,7]
                	vmovq	%xmm2, %r14
                	movsd	%xmm1, 0x20(%rsp)
                	movsd	%xmm0, 0x28(%rsp)
                	movq	%rbx, %rdi
+               	xorl	%esi, %esi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -498,10 +498,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0x1b, %xmm2, %xmm2     # xmm2 = xmm2[3,2,1,0,4,5,6,7]
                	vmovq	%xmm2, %r14
-               	movl	$0x1b, %esi
                	movsd	%xmm1, 0x20(%rsp)
                	movsd	%xmm0, 0x28(%rsp)
                	movq	%rbx, %rdi
+               	movl	$0x1b, %esi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -511,10 +511,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0x1b, %xmm2, %xmm2     # xmm2 = xmm2[3,2,1,0,4,5,6,7]
                	vmovq	%xmm2, %r14
+               	movsd	%xmm1, 0x20(%rsp)
+               	movsd	%xmm0, 0x28(%rsp)
+               	movq	%rbx, %rdi
                	movl	$0x1b, %esi
-               	movsd	%xmm1, 0x20(%rsp)
-               	movsd	%xmm0, 0x28(%rsp)
-               	movq	%rbx, %rdi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -524,10 +524,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0x4e, %xmm2, %xmm2     # xmm2 = xmm2[2,3,0,1,4,5,6,7]
                	vmovq	%xmm2, %r14
-               	movl	$0x4e, %esi
                	movsd	%xmm1, 0x20(%rsp)
                	movsd	%xmm0, 0x28(%rsp)
                	movq	%rbx, %rdi
+               	movl	$0x4e, %esi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -537,10 +537,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0x4e, %xmm2, %xmm2     # xmm2 = xmm2[2,3,0,1,4,5,6,7]
                	vmovq	%xmm2, %r14
+               	movsd	%xmm1, 0x20(%rsp)
+               	movsd	%xmm0, 0x28(%rsp)
+               	movq	%rbx, %rdi
                	movl	$0x4e, %esi
-               	movsd	%xmm1, 0x20(%rsp)
-               	movsd	%xmm0, 0x28(%rsp)
-               	movq	%rbx, %rdi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -550,10 +550,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0x93, %xmm2, %xmm2     # xmm2 = xmm2[3,0,1,2,4,5,6,7]
                	vmovq	%xmm2, %r14
-               	movl	$0x93, %esi
                	movsd	%xmm1, 0x20(%rsp)
                	movsd	%xmm0, 0x28(%rsp)
                	movq	%rbx, %rdi
+               	movl	$0x93, %esi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -563,10 +563,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0x93, %xmm2, %xmm2     # xmm2 = xmm2[3,0,1,2,4,5,6,7]
                	vmovq	%xmm2, %r14
+               	movsd	%xmm1, 0x20(%rsp)
+               	movsd	%xmm0, 0x28(%rsp)
+               	movq	%rbx, %rdi
                	movl	$0x93, %esi
-               	movsd	%xmm1, 0x20(%rsp)
-               	movsd	%xmm0, 0x28(%rsp)
-               	movq	%rbx, %rdi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -576,10 +576,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0xe4, %xmm2, %xmm2     # xmm2 = xmm2[0,1,2,3,4,5,6,7]
                	vmovq	%xmm2, %r14
-               	movl	$0xe4, %esi
                	movsd	%xmm1, 0x20(%rsp)
                	movsd	%xmm0, 0x28(%rsp)
                	movq	%rbx, %rdi
+               	movl	$0xe4, %esi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -589,10 +589,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0xe4, %xmm2, %xmm2     # xmm2 = xmm2[0,1,2,3,4,5,6,7]
                	vmovq	%xmm2, %r14
+               	movsd	%xmm1, 0x20(%rsp)
+               	movsd	%xmm0, 0x28(%rsp)
+               	movq	%rbx, %rdi
                	movl	$0xe4, %esi
-               	movsd	%xmm1, 0x20(%rsp)
-               	movsd	%xmm0, 0x28(%rsp)
-               	movq	%rbx, %rdi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -602,10 +602,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0xff, %xmm2, %xmm2     # xmm2 = xmm2[3,3,3,3,4,5,6,7]
                	vmovq	%xmm2, %r14
-               	movl	$0xff, %esi
                	movsd	%xmm1, 0x20(%rsp)
                	movsd	%xmm0, 0x28(%rsp)
                	movq	%rbx, %rdi
+               	movl	$0xff, %esi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0
@@ -615,10 +615,10 @@ Disassembly of section .text:
                	vmovq	%rbx, %xmm2
                	pshuflw	$0xff, %xmm2, %xmm2     # xmm2 = xmm2[3,3,3,3,4,5,6,7]
                	vmovq	%xmm2, %r14
-               	movl	$0xff, %esi
                	movsd	%xmm1, 0x20(%rsp)
                	movsd	%xmm0, 0x28(%rsp)
                	movq	%rbx, %rdi
+               	movl	$0xff, %esi
                	callq	<addr>
                	movsd	0x20(%rsp), %xmm1
                	movsd	0x28(%rsp), %xmm0

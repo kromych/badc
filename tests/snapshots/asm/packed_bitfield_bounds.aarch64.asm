@@ -20,19 +20,19 @@ Disassembly of section .text:
                	mov	x0, #0x1e               // =30
                	bl	<addr>
                	mov	x20, x0
-               	mov	x0, #0x0                // =0
                	lsl	x1, x20, #1
+               	mov	x0, #0x0                // =0
                	mov	x2, #0x3                // =3
                	mov	x3, #0x22               // =34
                	mov	x4, #-0x1               // =-1
-               	mov	x5, x0
+               	mov	x5, #0x0                // =0
                	bl	<addr>
                	mov	x21, x0
                	cmn	x21, #0x1
                	b.eq	<addr>
                	add	x0, x21, x20
-               	mov	x2, #0x0                // =0
                	mov	x1, x20
+               	mov	x2, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

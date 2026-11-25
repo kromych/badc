@@ -40,8 +40,8 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xc0
                	ret
-               	mov	x1, #0x400              // =1024
                	mov	x0, x20
+               	mov	x1, #0x400              // =1024
                	blr	x21
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
@@ -50,8 +50,8 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xc0
                	ret
-               	sub	x1, x29, #0x80
                	mov	x0, x20
+               	sub	x1, x29, #0x80
                	blr	x22
                	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
@@ -60,9 +60,9 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xc0
                	ret
+               	mov	x0, x20
                	mov	x1, #0x2                // =2
                	mov	x2, #0x1                // =1
-               	mov	x0, x20
                	blr	x23
                	cbz	w0, <addr>
                	mov	x0, #0x4                // =4

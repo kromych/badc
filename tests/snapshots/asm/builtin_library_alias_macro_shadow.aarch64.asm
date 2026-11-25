@@ -74,10 +74,10 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x65               // =101
-               	mov	x2, #0x5                // =5
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x65               // =101
+               	mov	x2, #0x5                // =5
                	bl	<addr>
                	mov	x1, x0
                	adrp	x0, <addr>
@@ -98,18 +98,18 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	mov	x2, #0x5                // =5
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x5                // =5
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x6c               // =108
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x6c               // =108
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -119,9 +119,9 @@ Disassembly of section .text:
                	mov	x0, #0xe                // =14
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x6c               // =108
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x6c               // =108
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -194,9 +194,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	strb	wzr, [x0]
-               	mov	x2, #0x3                // =3
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x3                // =3
                	bl	<addr>
                	mov	x1, x0
                	adrp	x0, <page>

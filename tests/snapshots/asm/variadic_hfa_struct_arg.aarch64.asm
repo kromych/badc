@@ -92,9 +92,9 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x10]
                	fmov	d0, #2.25000000
                	stur	d0, [x29, #-0x8]
-               	mov	x0, #0x1                // =1
                	ldr	d0, [x7]
                	ldr	d1, [x7, #0x8]
+               	mov	x0, #0x1                // =1
                	bl	<addr>
                	fmov	d1, #3.75000000
                	mov	x0, #0x0                // =0

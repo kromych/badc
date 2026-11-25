@@ -27,9 +27,9 @@ Disassembly of section .text:
 
 <singles>:
                	subq	$0xb8, %rsp
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -156,9 +156,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -220,9 +220,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -279,9 +279,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -343,9 +343,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -574,9 +574,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -639,9 +639,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -754,9 +754,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -818,9 +818,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -929,9 +929,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -993,9 +993,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1158,9 +1158,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1488,9 +1488,9 @@ Disassembly of section .text:
 <doubles>:
                	subq	$0xe8, %rsp
                	movups	%xmm2, 0x60(%rsp)
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1619,9 +1619,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1683,9 +1683,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1740,9 +1740,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -1805,9 +1805,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2032,9 +2032,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2096,9 +2096,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2179,9 +2179,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2243,9 +2243,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2320,9 +2320,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2384,9 +2384,9 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1
@@ -2583,9 +2583,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movl	$0x3d, %edi
                	movups	%xmm0, 0x50(%rsp)
                	movups	%xmm1, 0x40(%rsp)
+               	movl	$0x3d, %edi
                	callq	<addr>
                	movups	0x50(%rsp), %xmm0
                	movups	0x40(%rsp), %xmm1

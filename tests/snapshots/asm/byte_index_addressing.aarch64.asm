@@ -639,14 +639,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x3c00             // =15360
-               	sub	x0, x29, #0x8
                	stur	w1, [x29, #-0x8]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x1, [x2]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
-               	str	x2, [sp, #0x18]
-               	mov	x2, x0
+               	str	x0, [sp, #0x18]
+               	sub	x0, x29, #0x8
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	mov	x17, #0x1775            // =6005
                	cmp	w0, w17

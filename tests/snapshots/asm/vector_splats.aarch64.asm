@@ -832,8 +832,8 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cmp	x0, x1
                	b.ne	<addr>
-               	mov	x1, #0x5                // =5
                	mov	x0, x20
+               	mov	x1, #0x5                // =5
                	bl	<addr>
                	lsl	x1, x20, #1
                	cmp	w0, w1

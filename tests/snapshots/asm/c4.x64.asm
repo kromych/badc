@@ -1214,8 +1214,8 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x29, %rax
                	je	<addr>
-               	movl	$0x8e, %edi
                	movq	%rcx, 0x18(%rsp)
+               	movl	$0x8e, %edi
                	callq	<addr>
                	movq	0x18(%rsp), %rcx
                	movq	<rip>, %rax # <addr>
@@ -2103,8 +2103,8 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	movq	<rip>, %rsi # <addr>
-               	movl	$0x3ffff, %edx          # imm = 0x3FFFF
                	movq	%rbx, %rdi
+               	movl	$0x3ffff, %edx          # imm = 0x3FFFF
                	callq	<addr>
                	testq	%rax, %rax
                	jg	<addr>

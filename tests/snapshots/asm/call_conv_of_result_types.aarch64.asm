@@ -155,9 +155,9 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x20, x0
                	mov	x21, x1
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
                	mov	x0, #0x7                // =7
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	mov	x2, x0
                	mov	x0, x20
@@ -192,8 +192,8 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	blr	x2
                	mov	x2, x0
-               	mov	x1, #0x3                // =3
                	mov	x0, x20
+               	mov	x1, #0x3                // =3
                	blr	x2
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

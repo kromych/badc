@@ -122,18 +122,18 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
-               	movl	$0x3, %edx
-               	movl	$0x4, %ecx
-               	movl	$0x5, %r8d
-               	movl	$0x6, %r9d
                	movq	$0x7, (%rsp)
                	movq	$0x8, 0x8(%rsp)
                	movq	%r12, 0x10(%rsp)
                	movq	$0x9, 0x18(%rsp)
                	movq	%rbx, 0x20(%rsp)
                	movsd	0x58(%rsp), %xmm0
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
+               	movl	$0x3, %edx
+               	movl	$0x4, %ecx
+               	movl	$0x5, %r8d
+               	movl	$0x6, %r9d
                	callq	<addr>
                	addq	%rax, %r13
                	movsd	<rip>, %xmm0

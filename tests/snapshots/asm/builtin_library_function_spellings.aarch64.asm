@@ -62,13 +62,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	x0, x29, #0x20
-               	mov	x1, #0x20               // =32
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, #0x2a               // =42
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
+               	sub	x0, x29, #0x20
+               	mov	x1, #0x20               // =32
+               	mov	x3, #0x2a               // =42
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x4
@@ -77,9 +77,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -87,11 +87,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	fmov	d0, #16.00000000
                	fsqrt	d0, d0
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x3
@@ -100,9 +100,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -165,19 +165,19 @@ Disassembly of section .text:
                	ret
                	mov	x0, x2
                	bl	<addr>
-               	sub	x0, x29, #0x20
-               	mov	x1, #0x20               // =32
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
+               	sub	x0, x29, #0x20
+               	mov	x1, #0x20               // =32
                	mov	x4, #0x7                // =7
                	bl	<addr>
                	cmp	w0, #0x2
                	b.ne	<addr>
-               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

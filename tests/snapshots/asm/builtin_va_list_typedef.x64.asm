@@ -411,7 +411,7 @@ Disassembly of section .text:
                	movl	$0x1, %esi
                	movl	$0x2, %edx
                	movl	$0x3, %ecx
-               	movq	%rdi, %r8
+               	movl	$0x4, %r8d
                	movb	$0x0, %al
                	callq	<addr>
                	cmpl	$0xa, %eax

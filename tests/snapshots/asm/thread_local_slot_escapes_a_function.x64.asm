@@ -35,10 +35,10 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	callq	<addr>
                	movq	%rax, %rbx
-               	movl	$0x7, %edi
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
                	movq	(%rax), %rax
+               	movl	$0x7, %edi
                	callq	*%rax
                	cmpl	$0xa, %ebx
                	jne	<addr>

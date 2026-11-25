@@ -310,8 +310,8 @@ Disassembly of section .text:
                	shlxq	%rcx, %rsi, %rcx
                	orq	%rcx, %r12
                	jmp	<addr>
-               	leaq	0x20(%rsp), %rdi
                	movq	%r8, 0x18(%rsp)
+               	leaq	0x20(%rsp), %rdi
                	callq	<addr>
                	movq	0x18(%rsp), %r8
                	movl	0x20(%rsp), %eax

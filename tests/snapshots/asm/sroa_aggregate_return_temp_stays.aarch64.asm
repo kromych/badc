@@ -113,13 +113,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x20
-               	mov	x1, #0x3ef00000000      // =4325032067072
-               	stur	x1, [x29, #-0x20]
-               	mov	x1, #0xff00000000       // =1095216660480
-               	stur	x1, [x29, #-0x18]
+               	mov	x0, #0x3ef00000000      // =4325032067072
+               	stur	x0, [x29, #-0x20]
+               	mov	x0, #0xff00000000       // =1095216660480
+               	stur	x0, [x29, #-0x18]
                	stur	xzr, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	sub	x0, x29, #0x20
                	bl	<addr>

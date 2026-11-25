@@ -37,10 +37,9 @@ Disassembly of section .text:
                	subq	$0x28, %rsp
                	movq	$0x64, <rip> # <addr>
                	movl	$0x7, <rip> # <addr>
-               	leaq	0x8(%rsp), %rdi
                	movq	<rip>, %rax # <addr>
+               	leaq	0x8(%rsp), %rdi
                	callq	*%rax
-               	leaq	0x8(%rsp), %rsi
                	movq	0x10(%rsp), %rcx
                	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
                	movq	%rcx, %rax
@@ -60,9 +59,8 @@ Disassembly of section .text:
                	movq	%rax, <rip> # <addr>
                	movl	$0x9, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
-               	movq	%rsi, %rdi
+               	leaq	0x8(%rsp), %rdi
                	callq	*%rax
-               	leaq	0x8(%rsp), %rsi
                	movq	0x10(%rsp), %rcx
                	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
                	movq	%rcx, %rax
@@ -81,7 +79,7 @@ Disassembly of section .text:
                	movabsq	$-0x7ffffffffffffffc, %rax # imm = 0x8000000000000004
                	movq	%rax, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
-               	movq	%rsi, %rdi
+               	leaq	0x8(%rsp), %rdi
                	callq	*%rax
                	movq	0x10(%rsp), %rcx
                	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF

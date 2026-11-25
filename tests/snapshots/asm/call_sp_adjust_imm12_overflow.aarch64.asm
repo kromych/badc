@@ -2884,517 +2884,517 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x105
                	b.lt	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	add	x8, x0, #0x40
-               	add	x9, x0, #0x50
-               	add	x10, x0, #0x60
-               	add	x11, x0, #0x70
-               	add	x12, x0, #0x80
-               	add	x13, x0, #0x90
-               	add	x14, x0, #0xa0
-               	add	x15, x0, #0xb0
-               	add	x20, x0, #0xc0
-               	add	x21, x0, #0xd0
-               	add	x22, x0, #0xe0
-               	add	x23, x0, #0xf0
-               	add	x24, x0, #0x100
-               	add	x25, x0, #0x110
-               	add	x26, x0, #0x120
-               	add	x27, x0, #0x130
-               	add	x28, x0, #0x140
-               	add	x16, x0, #0x150
+               	adrp	x7, <page>
+               	add	x7, x7, <lo12>
+               	add	x8, x7, #0x40
+               	add	x9, x7, #0x50
+               	add	x10, x7, #0x60
+               	add	x11, x7, #0x70
+               	add	x12, x7, #0x80
+               	add	x13, x7, #0x90
+               	add	x14, x7, #0xa0
+               	add	x15, x7, #0xb0
+               	add	x20, x7, #0xc0
+               	add	x21, x7, #0xd0
+               	add	x22, x7, #0xe0
+               	add	x23, x7, #0xf0
+               	add	x24, x7, #0x100
+               	add	x25, x7, #0x110
+               	add	x26, x7, #0x120
+               	add	x27, x7, #0x130
+               	add	x28, x7, #0x140
+               	add	x16, x7, #0x150
                	str	x16, [sp, #0x17d8]
-               	add	x16, x0, #0x160
+               	add	x16, x7, #0x160
                	str	x16, [sp, #0x17d0]
-               	add	x16, x0, #0x170
+               	add	x16, x7, #0x170
                	str	x16, [sp, #0x17c8]
-               	add	x16, x0, #0x180
+               	add	x16, x7, #0x180
                	str	x16, [sp, #0x17c0]
-               	add	x16, x0, #0x190
+               	add	x16, x7, #0x190
                	str	x16, [sp, #0x17b8]
-               	add	x16, x0, #0x1a0
+               	add	x16, x7, #0x1a0
                	str	x16, [sp, #0x17b0]
-               	add	x16, x0, #0x1b0
+               	add	x16, x7, #0x1b0
                	str	x16, [sp, #0x17a8]
-               	add	x16, x0, #0x1c0
+               	add	x16, x7, #0x1c0
                	str	x16, [sp, #0x17a0]
-               	add	x16, x0, #0x1d0
+               	add	x16, x7, #0x1d0
                	str	x16, [sp, #0x1798]
-               	add	x16, x0, #0x1e0
+               	add	x16, x7, #0x1e0
                	str	x16, [sp, #0x1790]
-               	add	x16, x0, #0x1f0
+               	add	x16, x7, #0x1f0
                	str	x16, [sp, #0x1788]
-               	add	x16, x0, #0x200
+               	add	x16, x7, #0x200
                	str	x16, [sp, #0x1780]
-               	add	x16, x0, #0x210
+               	add	x16, x7, #0x210
                	str	x16, [sp, #0x1778]
-               	add	x16, x0, #0x220
+               	add	x16, x7, #0x220
                	str	x16, [sp, #0x1770]
-               	add	x16, x0, #0x230
+               	add	x16, x7, #0x230
                	str	x16, [sp, #0x1768]
-               	add	x16, x0, #0x240
+               	add	x16, x7, #0x240
                	str	x16, [sp, #0x1760]
-               	add	x16, x0, #0x250
+               	add	x16, x7, #0x250
                	str	x16, [sp, #0x1758]
-               	add	x16, x0, #0x260
+               	add	x16, x7, #0x260
                	str	x16, [sp, #0x1750]
-               	add	x16, x0, #0x270
+               	add	x16, x7, #0x270
                	str	x16, [sp, #0x1748]
-               	add	x16, x0, #0x280
+               	add	x16, x7, #0x280
                	str	x16, [sp, #0x1740]
-               	add	x16, x0, #0x290
+               	add	x16, x7, #0x290
                	str	x16, [sp, #0x1738]
-               	add	x16, x0, #0x2a0
+               	add	x16, x7, #0x2a0
                	str	x16, [sp, #0x1730]
-               	add	x16, x0, #0x2b0
+               	add	x16, x7, #0x2b0
                	str	x16, [sp, #0x1728]
-               	add	x16, x0, #0x2c0
+               	add	x16, x7, #0x2c0
                	str	x16, [sp, #0x1720]
-               	add	x16, x0, #0x2d0
+               	add	x16, x7, #0x2d0
                	str	x16, [sp, #0x1718]
-               	add	x16, x0, #0x2e0
+               	add	x16, x7, #0x2e0
                	str	x16, [sp, #0x1710]
-               	add	x16, x0, #0x2f0
+               	add	x16, x7, #0x2f0
                	str	x16, [sp, #0x1708]
-               	add	x16, x0, #0x300
+               	add	x16, x7, #0x300
                	str	x16, [sp, #0x1700]
-               	add	x16, x0, #0x310
+               	add	x16, x7, #0x310
                	str	x16, [sp, #0x16f8]
-               	add	x16, x0, #0x320
+               	add	x16, x7, #0x320
                	str	x16, [sp, #0x16f0]
-               	add	x16, x0, #0x330
+               	add	x16, x7, #0x330
                	str	x16, [sp, #0x16e8]
-               	add	x16, x0, #0x340
+               	add	x16, x7, #0x340
                	str	x16, [sp, #0x16e0]
-               	add	x16, x0, #0x350
+               	add	x16, x7, #0x350
                	str	x16, [sp, #0x16d8]
-               	add	x16, x0, #0x360
+               	add	x16, x7, #0x360
                	str	x16, [sp, #0x16d0]
-               	add	x16, x0, #0x370
+               	add	x16, x7, #0x370
                	str	x16, [sp, #0x16c8]
-               	add	x16, x0, #0x380
+               	add	x16, x7, #0x380
                	str	x16, [sp, #0x16c0]
-               	add	x16, x0, #0x390
+               	add	x16, x7, #0x390
                	str	x16, [sp, #0x16b8]
-               	add	x16, x0, #0x3a0
+               	add	x16, x7, #0x3a0
                	str	x16, [sp, #0x16b0]
-               	add	x16, x0, #0x3b0
+               	add	x16, x7, #0x3b0
                	str	x16, [sp, #0x16a8]
-               	add	x16, x0, #0x3c0
+               	add	x16, x7, #0x3c0
                	str	x16, [sp, #0x16a0]
-               	add	x16, x0, #0x3d0
+               	add	x16, x7, #0x3d0
                	str	x16, [sp, #0x1698]
-               	add	x16, x0, #0x3e0
+               	add	x16, x7, #0x3e0
                	str	x16, [sp, #0x1690]
-               	add	x16, x0, #0x3f0
+               	add	x16, x7, #0x3f0
                	str	x16, [sp, #0x1688]
-               	add	x16, x0, #0x400
+               	add	x16, x7, #0x400
                	str	x16, [sp, #0x1680]
-               	add	x16, x0, #0x410
+               	add	x16, x7, #0x410
                	str	x16, [sp, #0x1678]
-               	add	x16, x0, #0x420
+               	add	x16, x7, #0x420
                	str	x16, [sp, #0x1670]
-               	add	x16, x0, #0x430
+               	add	x16, x7, #0x430
                	str	x16, [sp, #0x1668]
-               	add	x16, x0, #0x440
+               	add	x16, x7, #0x440
                	str	x16, [sp, #0x1660]
-               	add	x16, x0, #0x450
+               	add	x16, x7, #0x450
                	str	x16, [sp, #0x1658]
-               	add	x16, x0, #0x460
+               	add	x16, x7, #0x460
                	str	x16, [sp, #0x1650]
-               	add	x16, x0, #0x470
+               	add	x16, x7, #0x470
                	str	x16, [sp, #0x1648]
-               	add	x16, x0, #0x480
+               	add	x16, x7, #0x480
                	str	x16, [sp, #0x1640]
-               	add	x16, x0, #0x490
+               	add	x16, x7, #0x490
                	str	x16, [sp, #0x1638]
-               	add	x16, x0, #0x4a0
+               	add	x16, x7, #0x4a0
                	str	x16, [sp, #0x1630]
-               	add	x16, x0, #0x4b0
+               	add	x16, x7, #0x4b0
                	str	x16, [sp, #0x1628]
-               	add	x16, x0, #0x4c0
+               	add	x16, x7, #0x4c0
                	str	x16, [sp, #0x1620]
-               	add	x16, x0, #0x4d0
+               	add	x16, x7, #0x4d0
                	str	x16, [sp, #0x1618]
-               	add	x16, x0, #0x4e0
+               	add	x16, x7, #0x4e0
                	str	x16, [sp, #0x1610]
-               	add	x16, x0, #0x4f0
+               	add	x16, x7, #0x4f0
                	str	x16, [sp, #0x1608]
-               	add	x16, x0, #0x500
+               	add	x16, x7, #0x500
                	str	x16, [sp, #0x1600]
-               	add	x16, x0, #0x510
+               	add	x16, x7, #0x510
                	str	x16, [sp, #0x15f8]
-               	add	x16, x0, #0x520
+               	add	x16, x7, #0x520
                	str	x16, [sp, #0x15f0]
-               	add	x16, x0, #0x530
+               	add	x16, x7, #0x530
                	str	x16, [sp, #0x15e8]
-               	add	x16, x0, #0x540
+               	add	x16, x7, #0x540
                	str	x16, [sp, #0x15e0]
-               	add	x16, x0, #0x550
+               	add	x16, x7, #0x550
                	str	x16, [sp, #0x15d8]
-               	add	x16, x0, #0x560
+               	add	x16, x7, #0x560
                	str	x16, [sp, #0x15d0]
-               	add	x16, x0, #0x570
+               	add	x16, x7, #0x570
                	str	x16, [sp, #0x15c8]
-               	add	x16, x0, #0x580
+               	add	x16, x7, #0x580
                	str	x16, [sp, #0x15c0]
-               	add	x16, x0, #0x590
+               	add	x16, x7, #0x590
                	str	x16, [sp, #0x15b8]
-               	add	x16, x0, #0x5a0
+               	add	x16, x7, #0x5a0
                	str	x16, [sp, #0x15b0]
-               	add	x16, x0, #0x5b0
+               	add	x16, x7, #0x5b0
                	str	x16, [sp, #0x15a8]
-               	add	x16, x0, #0x5c0
+               	add	x16, x7, #0x5c0
                	str	x16, [sp, #0x15a0]
-               	add	x16, x0, #0x5d0
+               	add	x16, x7, #0x5d0
                	str	x16, [sp, #0x1598]
-               	add	x16, x0, #0x5e0
+               	add	x16, x7, #0x5e0
                	str	x16, [sp, #0x1590]
-               	add	x16, x0, #0x5f0
+               	add	x16, x7, #0x5f0
                	str	x16, [sp, #0x1588]
-               	add	x16, x0, #0x600
+               	add	x16, x7, #0x600
                	str	x16, [sp, #0x1580]
-               	add	x16, x0, #0x610
+               	add	x16, x7, #0x610
                	str	x16, [sp, #0x1578]
-               	add	x16, x0, #0x620
+               	add	x16, x7, #0x620
                	str	x16, [sp, #0x1570]
-               	add	x16, x0, #0x630
+               	add	x16, x7, #0x630
                	str	x16, [sp, #0x1568]
-               	add	x16, x0, #0x640
+               	add	x16, x7, #0x640
                	str	x16, [sp, #0x1560]
-               	add	x16, x0, #0x650
+               	add	x16, x7, #0x650
                	str	x16, [sp, #0x1558]
-               	add	x16, x0, #0x660
+               	add	x16, x7, #0x660
                	str	x16, [sp, #0x1550]
-               	add	x16, x0, #0x670
+               	add	x16, x7, #0x670
                	str	x16, [sp, #0x1548]
-               	add	x16, x0, #0x680
+               	add	x16, x7, #0x680
                	str	x16, [sp, #0x1540]
-               	add	x16, x0, #0x690
+               	add	x16, x7, #0x690
                	str	x16, [sp, #0x1538]
-               	add	x16, x0, #0x6a0
+               	add	x16, x7, #0x6a0
                	str	x16, [sp, #0x1530]
-               	add	x16, x0, #0x6b0
+               	add	x16, x7, #0x6b0
                	str	x16, [sp, #0x1528]
-               	add	x16, x0, #0x6c0
+               	add	x16, x7, #0x6c0
                	str	x16, [sp, #0x1520]
-               	add	x16, x0, #0x6d0
+               	add	x16, x7, #0x6d0
                	str	x16, [sp, #0x1518]
-               	add	x16, x0, #0x6e0
+               	add	x16, x7, #0x6e0
                	str	x16, [sp, #0x1510]
-               	add	x16, x0, #0x6f0
+               	add	x16, x7, #0x6f0
                	str	x16, [sp, #0x1508]
-               	add	x16, x0, #0x700
+               	add	x16, x7, #0x700
                	str	x16, [sp, #0x1500]
-               	add	x16, x0, #0x710
+               	add	x16, x7, #0x710
                	str	x16, [sp, #0x14f8]
-               	add	x16, x0, #0x720
+               	add	x16, x7, #0x720
                	str	x16, [sp, #0x14f0]
-               	add	x16, x0, #0x730
+               	add	x16, x7, #0x730
                	str	x16, [sp, #0x14e8]
-               	add	x16, x0, #0x740
+               	add	x16, x7, #0x740
                	str	x16, [sp, #0x14e0]
-               	add	x16, x0, #0x750
+               	add	x16, x7, #0x750
                	str	x16, [sp, #0x14d8]
-               	add	x16, x0, #0x760
+               	add	x16, x7, #0x760
                	str	x16, [sp, #0x14d0]
-               	add	x16, x0, #0x770
+               	add	x16, x7, #0x770
                	str	x16, [sp, #0x14c8]
-               	add	x16, x0, #0x780
+               	add	x16, x7, #0x780
                	str	x16, [sp, #0x14c0]
-               	add	x16, x0, #0x790
+               	add	x16, x7, #0x790
                	str	x16, [sp, #0x14b8]
-               	add	x16, x0, #0x7a0
+               	add	x16, x7, #0x7a0
                	str	x16, [sp, #0x14b0]
-               	add	x16, x0, #0x7b0
+               	add	x16, x7, #0x7b0
                	str	x16, [sp, #0x14a8]
-               	add	x16, x0, #0x7c0
+               	add	x16, x7, #0x7c0
                	str	x16, [sp, #0x14a0]
-               	add	x16, x0, #0x7d0
+               	add	x16, x7, #0x7d0
                	str	x16, [sp, #0x1498]
-               	add	x16, x0, #0x7e0
+               	add	x16, x7, #0x7e0
                	str	x16, [sp, #0x1490]
-               	add	x16, x0, #0x7f0
+               	add	x16, x7, #0x7f0
                	str	x16, [sp, #0x1488]
-               	add	x16, x0, #0x800
+               	add	x16, x7, #0x800
                	str	x16, [sp, #0x1480]
-               	add	x16, x0, #0x810
+               	add	x16, x7, #0x810
                	str	x16, [sp, #0x1478]
-               	add	x16, x0, #0x820
+               	add	x16, x7, #0x820
                	str	x16, [sp, #0x1470]
-               	add	x16, x0, #0x830
+               	add	x16, x7, #0x830
                	str	x16, [sp, #0x1468]
-               	add	x16, x0, #0x840
+               	add	x16, x7, #0x840
                	str	x16, [sp, #0x1460]
-               	add	x16, x0, #0x850
+               	add	x16, x7, #0x850
                	str	x16, [sp, #0x1458]
-               	add	x16, x0, #0x860
+               	add	x16, x7, #0x860
                	str	x16, [sp, #0x1450]
-               	add	x16, x0, #0x870
+               	add	x16, x7, #0x870
                	str	x16, [sp, #0x1448]
-               	add	x16, x0, #0x880
+               	add	x16, x7, #0x880
                	str	x16, [sp, #0x1440]
-               	add	x16, x0, #0x890
+               	add	x16, x7, #0x890
                	str	x16, [sp, #0x1438]
-               	add	x16, x0, #0x8a0
+               	add	x16, x7, #0x8a0
                	str	x16, [sp, #0x1430]
-               	add	x16, x0, #0x8b0
+               	add	x16, x7, #0x8b0
                	str	x16, [sp, #0x1428]
-               	add	x16, x0, #0x8c0
+               	add	x16, x7, #0x8c0
                	str	x16, [sp, #0x1420]
-               	add	x16, x0, #0x8d0
+               	add	x16, x7, #0x8d0
                	str	x16, [sp, #0x1418]
-               	add	x16, x0, #0x8e0
+               	add	x16, x7, #0x8e0
                	str	x16, [sp, #0x1410]
-               	add	x16, x0, #0x8f0
+               	add	x16, x7, #0x8f0
                	str	x16, [sp, #0x1408]
-               	add	x16, x0, #0x900
+               	add	x16, x7, #0x900
                	str	x16, [sp, #0x1400]
-               	add	x16, x0, #0x910
+               	add	x16, x7, #0x910
                	str	x16, [sp, #0x13f8]
-               	add	x16, x0, #0x920
+               	add	x16, x7, #0x920
                	str	x16, [sp, #0x13f0]
-               	add	x16, x0, #0x930
+               	add	x16, x7, #0x930
                	str	x16, [sp, #0x13e8]
-               	add	x16, x0, #0x940
+               	add	x16, x7, #0x940
                	str	x16, [sp, #0x13e0]
-               	add	x16, x0, #0x950
+               	add	x16, x7, #0x950
                	str	x16, [sp, #0x13d8]
-               	add	x16, x0, #0x960
+               	add	x16, x7, #0x960
                	str	x16, [sp, #0x13d0]
-               	add	x16, x0, #0x970
+               	add	x16, x7, #0x970
                	str	x16, [sp, #0x13c8]
-               	add	x16, x0, #0x980
+               	add	x16, x7, #0x980
                	str	x16, [sp, #0x13c0]
-               	add	x16, x0, #0x990
+               	add	x16, x7, #0x990
                	str	x16, [sp, #0x13b8]
-               	add	x16, x0, #0x9a0
+               	add	x16, x7, #0x9a0
                	str	x16, [sp, #0x13b0]
-               	add	x16, x0, #0x9b0
+               	add	x16, x7, #0x9b0
                	str	x16, [sp, #0x13a8]
-               	add	x16, x0, #0x9c0
+               	add	x16, x7, #0x9c0
                	str	x16, [sp, #0x13a0]
-               	add	x16, x0, #0x9d0
+               	add	x16, x7, #0x9d0
                	str	x16, [sp, #0x1398]
-               	add	x16, x0, #0x9e0
+               	add	x16, x7, #0x9e0
                	str	x16, [sp, #0x1390]
-               	add	x16, x0, #0x9f0
+               	add	x16, x7, #0x9f0
                	str	x16, [sp, #0x1388]
-               	add	x16, x0, #0xa00
+               	add	x16, x7, #0xa00
                	str	x16, [sp, #0x1380]
-               	add	x16, x0, #0xa10
+               	add	x16, x7, #0xa10
                	str	x16, [sp, #0x1378]
-               	add	x16, x0, #0xa20
+               	add	x16, x7, #0xa20
                	str	x16, [sp, #0x1370]
-               	add	x16, x0, #0xa30
+               	add	x16, x7, #0xa30
                	str	x16, [sp, #0x1368]
-               	add	x16, x0, #0xa40
+               	add	x16, x7, #0xa40
                	str	x16, [sp, #0x1360]
-               	add	x16, x0, #0xa50
+               	add	x16, x7, #0xa50
                	str	x16, [sp, #0x1358]
-               	add	x16, x0, #0xa60
+               	add	x16, x7, #0xa60
                	str	x16, [sp, #0x1350]
-               	add	x16, x0, #0xa70
+               	add	x16, x7, #0xa70
                	str	x16, [sp, #0x1348]
-               	add	x16, x0, #0xa80
+               	add	x16, x7, #0xa80
                	str	x16, [sp, #0x1340]
-               	add	x16, x0, #0xa90
+               	add	x16, x7, #0xa90
                	str	x16, [sp, #0x1338]
-               	add	x16, x0, #0xaa0
+               	add	x16, x7, #0xaa0
                	str	x16, [sp, #0x1330]
-               	add	x16, x0, #0xab0
+               	add	x16, x7, #0xab0
                	str	x16, [sp, #0x1328]
-               	add	x16, x0, #0xac0
+               	add	x16, x7, #0xac0
                	str	x16, [sp, #0x1320]
-               	add	x16, x0, #0xad0
+               	add	x16, x7, #0xad0
                	str	x16, [sp, #0x1318]
-               	add	x16, x0, #0xae0
+               	add	x16, x7, #0xae0
                	str	x16, [sp, #0x1310]
-               	add	x16, x0, #0xaf0
+               	add	x16, x7, #0xaf0
                	str	x16, [sp, #0x1308]
-               	add	x16, x0, #0xb00
+               	add	x16, x7, #0xb00
                	str	x16, [sp, #0x1300]
-               	add	x16, x0, #0xb10
+               	add	x16, x7, #0xb10
                	str	x16, [sp, #0x12f8]
-               	add	x16, x0, #0xb20
+               	add	x16, x7, #0xb20
                	str	x16, [sp, #0x12f0]
-               	add	x16, x0, #0xb30
+               	add	x16, x7, #0xb30
                	str	x16, [sp, #0x12e8]
-               	add	x16, x0, #0xb40
+               	add	x16, x7, #0xb40
                	str	x16, [sp, #0x12e0]
-               	add	x16, x0, #0xb50
+               	add	x16, x7, #0xb50
                	str	x16, [sp, #0x12d8]
-               	add	x16, x0, #0xb60
+               	add	x16, x7, #0xb60
                	str	x16, [sp, #0x12d0]
-               	add	x16, x0, #0xb70
+               	add	x16, x7, #0xb70
                	str	x16, [sp, #0x12c8]
-               	add	x16, x0, #0xb80
+               	add	x16, x7, #0xb80
                	str	x16, [sp, #0x12c0]
-               	add	x16, x0, #0xb90
+               	add	x16, x7, #0xb90
                	str	x16, [sp, #0x12b8]
-               	add	x16, x0, #0xba0
+               	add	x16, x7, #0xba0
                	str	x16, [sp, #0x12b0]
-               	add	x16, x0, #0xbb0
+               	add	x16, x7, #0xbb0
                	str	x16, [sp, #0x12a8]
-               	add	x16, x0, #0xbc0
+               	add	x16, x7, #0xbc0
                	str	x16, [sp, #0x12a0]
-               	add	x16, x0, #0xbd0
+               	add	x16, x7, #0xbd0
                	str	x16, [sp, #0x1298]
-               	add	x16, x0, #0xbe0
+               	add	x16, x7, #0xbe0
                	str	x16, [sp, #0x1290]
-               	add	x16, x0, #0xbf0
+               	add	x16, x7, #0xbf0
                	str	x16, [sp, #0x1288]
-               	add	x16, x0, #0xc00
+               	add	x16, x7, #0xc00
                	str	x16, [sp, #0x1280]
-               	add	x16, x0, #0xc10
+               	add	x16, x7, #0xc10
                	str	x16, [sp, #0x1278]
-               	add	x16, x0, #0xc20
+               	add	x16, x7, #0xc20
                	str	x16, [sp, #0x1270]
-               	add	x16, x0, #0xc30
+               	add	x16, x7, #0xc30
                	str	x16, [sp, #0x1268]
-               	add	x16, x0, #0xc40
+               	add	x16, x7, #0xc40
                	str	x16, [sp, #0x1260]
-               	add	x16, x0, #0xc50
+               	add	x16, x7, #0xc50
                	str	x16, [sp, #0x1258]
-               	add	x16, x0, #0xc60
+               	add	x16, x7, #0xc60
                	str	x16, [sp, #0x1250]
-               	add	x16, x0, #0xc70
+               	add	x16, x7, #0xc70
                	str	x16, [sp, #0x1248]
-               	add	x16, x0, #0xc80
+               	add	x16, x7, #0xc80
                	str	x16, [sp, #0x1240]
-               	add	x16, x0, #0xc90
+               	add	x16, x7, #0xc90
                	str	x16, [sp, #0x1238]
-               	add	x16, x0, #0xca0
+               	add	x16, x7, #0xca0
                	str	x16, [sp, #0x1230]
-               	add	x16, x0, #0xcb0
+               	add	x16, x7, #0xcb0
                	str	x16, [sp, #0x1228]
-               	add	x16, x0, #0xcc0
+               	add	x16, x7, #0xcc0
                	str	x16, [sp, #0x1220]
-               	add	x16, x0, #0xcd0
+               	add	x16, x7, #0xcd0
                	str	x16, [sp, #0x1218]
-               	add	x16, x0, #0xce0
+               	add	x16, x7, #0xce0
                	str	x16, [sp, #0x1210]
-               	add	x16, x0, #0xcf0
+               	add	x16, x7, #0xcf0
                	str	x16, [sp, #0x1208]
-               	add	x16, x0, #0xd00
+               	add	x16, x7, #0xd00
                	str	x16, [sp, #0x1200]
-               	add	x16, x0, #0xd10
+               	add	x16, x7, #0xd10
                	str	x16, [sp, #0x11f8]
-               	add	x16, x0, #0xd20
+               	add	x16, x7, #0xd20
                	str	x16, [sp, #0x11f0]
-               	add	x16, x0, #0xd30
+               	add	x16, x7, #0xd30
                	str	x16, [sp, #0x11e8]
-               	add	x16, x0, #0xd40
+               	add	x16, x7, #0xd40
                	str	x16, [sp, #0x11e0]
-               	add	x16, x0, #0xd50
+               	add	x16, x7, #0xd50
                	str	x16, [sp, #0x11d8]
-               	add	x16, x0, #0xd60
+               	add	x16, x7, #0xd60
                	str	x16, [sp, #0x11d0]
-               	add	x16, x0, #0xd70
+               	add	x16, x7, #0xd70
                	str	x16, [sp, #0x11c8]
-               	add	x16, x0, #0xd80
+               	add	x16, x7, #0xd80
                	str	x16, [sp, #0x11c0]
-               	add	x16, x0, #0xd90
+               	add	x16, x7, #0xd90
                	str	x16, [sp, #0x11b8]
-               	add	x16, x0, #0xda0
+               	add	x16, x7, #0xda0
                	str	x16, [sp, #0x11b0]
-               	add	x16, x0, #0xdb0
+               	add	x16, x7, #0xdb0
                	str	x16, [sp, #0x11a8]
-               	add	x16, x0, #0xdc0
+               	add	x16, x7, #0xdc0
                	str	x16, [sp, #0x11a0]
-               	add	x16, x0, #0xdd0
+               	add	x16, x7, #0xdd0
                	str	x16, [sp, #0x1198]
-               	add	x16, x0, #0xde0
+               	add	x16, x7, #0xde0
                	str	x16, [sp, #0x1190]
-               	add	x16, x0, #0xdf0
+               	add	x16, x7, #0xdf0
                	str	x16, [sp, #0x1188]
-               	add	x16, x0, #0xe00
+               	add	x16, x7, #0xe00
                	str	x16, [sp, #0x1180]
-               	add	x16, x0, #0xe10
+               	add	x16, x7, #0xe10
                	str	x16, [sp, #0x1178]
-               	add	x16, x0, #0xe20
+               	add	x16, x7, #0xe20
                	str	x16, [sp, #0x1170]
-               	add	x16, x0, #0xe30
+               	add	x16, x7, #0xe30
                	str	x16, [sp, #0x1168]
-               	add	x16, x0, #0xe40
+               	add	x16, x7, #0xe40
                	str	x16, [sp, #0x1160]
-               	add	x16, x0, #0xe50
+               	add	x16, x7, #0xe50
                	str	x16, [sp, #0x1158]
-               	add	x16, x0, #0xe60
+               	add	x16, x7, #0xe60
                	str	x16, [sp, #0x1150]
-               	add	x16, x0, #0xe70
+               	add	x16, x7, #0xe70
                	str	x16, [sp, #0x1148]
-               	add	x16, x0, #0xe80
+               	add	x16, x7, #0xe80
                	str	x16, [sp, #0x1140]
-               	add	x16, x0, #0xe90
+               	add	x16, x7, #0xe90
                	str	x16, [sp, #0x1138]
-               	add	x16, x0, #0xea0
+               	add	x16, x7, #0xea0
                	str	x16, [sp, #0x1130]
-               	add	x16, x0, #0xeb0
+               	add	x16, x7, #0xeb0
                	str	x16, [sp, #0x1128]
-               	add	x16, x0, #0xec0
+               	add	x16, x7, #0xec0
                	str	x16, [sp, #0x1120]
-               	add	x16, x0, #0xed0
+               	add	x16, x7, #0xed0
                	str	x16, [sp, #0x1118]
-               	add	x16, x0, #0xee0
+               	add	x16, x7, #0xee0
                	str	x16, [sp, #0x1110]
-               	add	x16, x0, #0xef0
+               	add	x16, x7, #0xef0
                	str	x16, [sp, #0x1108]
-               	add	x16, x0, #0xf00
+               	add	x16, x7, #0xf00
                	str	x16, [sp, #0x1100]
-               	add	x16, x0, #0xf10
+               	add	x16, x7, #0xf10
                	str	x16, [sp, #0x10f8]
-               	add	x16, x0, #0xf20
+               	add	x16, x7, #0xf20
                	str	x16, [sp, #0x10f0]
-               	add	x16, x0, #0xf30
+               	add	x16, x7, #0xf30
                	str	x16, [sp, #0x10e8]
-               	add	x16, x0, #0xf40
+               	add	x16, x7, #0xf40
                	str	x16, [sp, #0x10e0]
-               	add	x16, x0, #0xf50
+               	add	x16, x7, #0xf50
                	str	x16, [sp, #0x10d8]
-               	add	x16, x0, #0xf60
+               	add	x16, x7, #0xf60
                	str	x16, [sp, #0x10d0]
-               	add	x16, x0, #0xf70
+               	add	x16, x7, #0xf70
                	str	x16, [sp, #0x10c8]
-               	add	x16, x0, #0xf80
+               	add	x16, x7, #0xf80
                	str	x16, [sp, #0x10c0]
-               	add	x16, x0, #0xf90
+               	add	x16, x7, #0xf90
                	str	x16, [sp, #0x10b8]
-               	add	x16, x0, #0xfa0
+               	add	x16, x7, #0xfa0
                	str	x16, [sp, #0x10b0]
-               	add	x16, x0, #0xfb0
+               	add	x16, x7, #0xfb0
                	str	x16, [sp, #0x10a8]
-               	add	x16, x0, #0xfc0
+               	add	x16, x7, #0xfc0
                	str	x16, [sp, #0x10a0]
-               	add	x16, x0, #0xfd0
+               	add	x16, x7, #0xfd0
                	str	x16, [sp, #0x1098]
-               	add	x16, x0, #0xfe0
+               	add	x16, x7, #0xfe0
                	str	x16, [sp, #0x1090]
-               	add	x16, x0, #0xff0
+               	add	x16, x7, #0xff0
                	str	x16, [sp, #0x1088]
-               	add	x16, x0, #0x1, lsl #12  // =0x1000
+               	add	x16, x7, #0x1, lsl #12  // =0x1000
                	str	x16, [sp, #0x1080]
                	mov	x17, #0x1010            // =4112
-               	add	x16, x0, x17
+               	add	x16, x7, x17
                	str	x16, [sp, #0x1078]
                	mov	x17, #0x1020            // =4128
-               	add	x16, x0, x17
+               	add	x16, x7, x17
                	str	x16, [sp, #0x1070]
                	mov	x17, #0x1030            // =4144
-               	add	x16, x0, x17
+               	add	x16, x7, x17
                	str	x16, [sp, #0x1068]
                	mov	x17, #0x1040            // =4160
-               	add	x16, x0, x17
+               	add	x16, x7, x17
                	str	x16, [sp, #0x1060]
-               	ldr	x1, [x0]
-               	ldr	x2, [x0, #0x8]
-               	ldr	x3, [x0, #0x10]
-               	ldr	x4, [x0, #0x18]
-               	ldr	x5, [x0, #0x20]
-               	ldr	x6, [x0, #0x28]
-               	ldr	x7, [x0, #0x30]
-               	ldr	x0, [x0, #0x38]
+               	ldr	x0, [x7]
+               	ldr	x1, [x7, #0x8]
+               	ldr	x2, [x7, #0x10]
+               	ldr	x3, [x7, #0x18]
+               	ldr	x4, [x7, #0x20]
+               	ldr	x5, [x7, #0x28]
+               	ldr	x6, [x7, #0x30]
+               	ldr	x7, [x7, #0x38]
                	mov	x16, x8
                	ldr	x17, [x16]
                	str	x17, [sp]
@@ -4680,15 +4680,6 @@ Disassembly of section .text:
                	str	x17, [sp, #0x1000]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x1008]
-               	mov	x16, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x6
-               	mov	x6, x7
-               	mov	x7, x0
-               	mov	x0, x16
                	bl	<addr>
                	mov	x17, #0x8d9e            // =36254
                	movk	x17, #0x1, lsl #16
@@ -4706,14 +4697,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x7e0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x6, #0x7                // =7
-               	mov	x7, #0x8                // =8
                	mov	x16, #0x9               // =9
                	str	x16, [sp]
                	mov	x16, #0xa               // =10
@@ -5218,6 +5201,14 @@ Disassembly of section .text:
                	str	x16, [sp, #0x7d0]
                	mov	x16, #0x104             // =260
                	str	x16, [sp, #0x7d8]
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
+               	mov	x7, #0x8                // =8
                	bl	<addr>
                	mov	x17, #0x848a            // =33930
                	cmp	x0, x17
@@ -5234,517 +5225,517 @@ Disassembly of section .text:
                	add	sp, sp, #0x7e0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	add	x8, x0, #0x40
-               	add	x9, x0, #0x50
-               	add	x10, x0, #0x60
-               	add	x11, x0, #0x70
-               	add	x12, x0, #0x80
-               	add	x13, x0, #0x90
-               	add	x14, x0, #0xa0
-               	add	x15, x0, #0xb0
-               	add	x20, x0, #0xc0
-               	add	x21, x0, #0xd0
-               	add	x22, x0, #0xe0
-               	add	x23, x0, #0xf0
-               	add	x24, x0, #0x100
-               	add	x25, x0, #0x110
-               	add	x26, x0, #0x120
-               	add	x27, x0, #0x130
-               	add	x28, x0, #0x140
-               	add	x16, x0, #0x150
+               	adrp	x7, <page>
+               	add	x7, x7, <lo12>
+               	add	x8, x7, #0x40
+               	add	x9, x7, #0x50
+               	add	x10, x7, #0x60
+               	add	x11, x7, #0x70
+               	add	x12, x7, #0x80
+               	add	x13, x7, #0x90
+               	add	x14, x7, #0xa0
+               	add	x15, x7, #0xb0
+               	add	x20, x7, #0xc0
+               	add	x21, x7, #0xd0
+               	add	x22, x7, #0xe0
+               	add	x23, x7, #0xf0
+               	add	x24, x7, #0x100
+               	add	x25, x7, #0x110
+               	add	x26, x7, #0x120
+               	add	x27, x7, #0x130
+               	add	x28, x7, #0x140
+               	add	x16, x7, #0x150
                	str	x16, [sp, #0x17d8]
-               	add	x16, x0, #0x160
+               	add	x16, x7, #0x160
                	str	x16, [sp, #0x17d0]
-               	add	x16, x0, #0x170
+               	add	x16, x7, #0x170
                	str	x16, [sp, #0x17c8]
-               	add	x16, x0, #0x180
+               	add	x16, x7, #0x180
                	str	x16, [sp, #0x17c0]
-               	add	x16, x0, #0x190
+               	add	x16, x7, #0x190
                	str	x16, [sp, #0x17b8]
-               	add	x16, x0, #0x1a0
+               	add	x16, x7, #0x1a0
                	str	x16, [sp, #0x17b0]
-               	add	x16, x0, #0x1b0
+               	add	x16, x7, #0x1b0
                	str	x16, [sp, #0x17a8]
-               	add	x16, x0, #0x1c0
+               	add	x16, x7, #0x1c0
                	str	x16, [sp, #0x17a0]
-               	add	x16, x0, #0x1d0
+               	add	x16, x7, #0x1d0
                	str	x16, [sp, #0x1798]
-               	add	x16, x0, #0x1e0
+               	add	x16, x7, #0x1e0
                	str	x16, [sp, #0x1790]
-               	add	x16, x0, #0x1f0
+               	add	x16, x7, #0x1f0
                	str	x16, [sp, #0x1788]
-               	add	x16, x0, #0x200
+               	add	x16, x7, #0x200
                	str	x16, [sp, #0x1780]
-               	add	x16, x0, #0x210
+               	add	x16, x7, #0x210
                	str	x16, [sp, #0x1778]
-               	add	x16, x0, #0x220
+               	add	x16, x7, #0x220
                	str	x16, [sp, #0x1770]
-               	add	x16, x0, #0x230
+               	add	x16, x7, #0x230
                	str	x16, [sp, #0x1768]
-               	add	x16, x0, #0x240
+               	add	x16, x7, #0x240
                	str	x16, [sp, #0x1760]
-               	add	x16, x0, #0x250
+               	add	x16, x7, #0x250
                	str	x16, [sp, #0x1758]
-               	add	x16, x0, #0x260
+               	add	x16, x7, #0x260
                	str	x16, [sp, #0x1750]
-               	add	x16, x0, #0x270
+               	add	x16, x7, #0x270
                	str	x16, [sp, #0x1748]
-               	add	x16, x0, #0x280
+               	add	x16, x7, #0x280
                	str	x16, [sp, #0x1740]
-               	add	x16, x0, #0x290
+               	add	x16, x7, #0x290
                	str	x16, [sp, #0x1738]
-               	add	x16, x0, #0x2a0
+               	add	x16, x7, #0x2a0
                	str	x16, [sp, #0x1730]
-               	add	x16, x0, #0x2b0
+               	add	x16, x7, #0x2b0
                	str	x16, [sp, #0x1728]
-               	add	x16, x0, #0x2c0
+               	add	x16, x7, #0x2c0
                	str	x16, [sp, #0x1720]
-               	add	x16, x0, #0x2d0
+               	add	x16, x7, #0x2d0
                	str	x16, [sp, #0x1718]
-               	add	x16, x0, #0x2e0
+               	add	x16, x7, #0x2e0
                	str	x16, [sp, #0x1710]
-               	add	x16, x0, #0x2f0
+               	add	x16, x7, #0x2f0
                	str	x16, [sp, #0x1708]
-               	add	x16, x0, #0x300
+               	add	x16, x7, #0x300
                	str	x16, [sp, #0x1700]
-               	add	x16, x0, #0x310
+               	add	x16, x7, #0x310
                	str	x16, [sp, #0x16f8]
-               	add	x16, x0, #0x320
+               	add	x16, x7, #0x320
                	str	x16, [sp, #0x16f0]
-               	add	x16, x0, #0x330
+               	add	x16, x7, #0x330
                	str	x16, [sp, #0x16e8]
-               	add	x16, x0, #0x340
+               	add	x16, x7, #0x340
                	str	x16, [sp, #0x16e0]
-               	add	x16, x0, #0x350
+               	add	x16, x7, #0x350
                	str	x16, [sp, #0x16d8]
-               	add	x16, x0, #0x360
+               	add	x16, x7, #0x360
                	str	x16, [sp, #0x16d0]
-               	add	x16, x0, #0x370
+               	add	x16, x7, #0x370
                	str	x16, [sp, #0x16c8]
-               	add	x16, x0, #0x380
+               	add	x16, x7, #0x380
                	str	x16, [sp, #0x16c0]
-               	add	x16, x0, #0x390
+               	add	x16, x7, #0x390
                	str	x16, [sp, #0x16b8]
-               	add	x16, x0, #0x3a0
+               	add	x16, x7, #0x3a0
                	str	x16, [sp, #0x16b0]
-               	add	x16, x0, #0x3b0
+               	add	x16, x7, #0x3b0
                	str	x16, [sp, #0x16a8]
-               	add	x16, x0, #0x3c0
+               	add	x16, x7, #0x3c0
                	str	x16, [sp, #0x16a0]
-               	add	x16, x0, #0x3d0
+               	add	x16, x7, #0x3d0
                	str	x16, [sp, #0x1698]
-               	add	x16, x0, #0x3e0
+               	add	x16, x7, #0x3e0
                	str	x16, [sp, #0x1690]
-               	add	x16, x0, #0x3f0
+               	add	x16, x7, #0x3f0
                	str	x16, [sp, #0x1688]
-               	add	x16, x0, #0x400
+               	add	x16, x7, #0x400
                	str	x16, [sp, #0x1680]
-               	add	x16, x0, #0x410
+               	add	x16, x7, #0x410
                	str	x16, [sp, #0x1678]
-               	add	x16, x0, #0x420
+               	add	x16, x7, #0x420
                	str	x16, [sp, #0x1670]
-               	add	x16, x0, #0x430
+               	add	x16, x7, #0x430
                	str	x16, [sp, #0x1668]
-               	add	x16, x0, #0x440
+               	add	x16, x7, #0x440
                	str	x16, [sp, #0x1660]
-               	add	x16, x0, #0x450
+               	add	x16, x7, #0x450
                	str	x16, [sp, #0x1658]
-               	add	x16, x0, #0x460
+               	add	x16, x7, #0x460
                	str	x16, [sp, #0x1650]
-               	add	x16, x0, #0x470
+               	add	x16, x7, #0x470
                	str	x16, [sp, #0x1648]
-               	add	x16, x0, #0x480
+               	add	x16, x7, #0x480
                	str	x16, [sp, #0x1640]
-               	add	x16, x0, #0x490
+               	add	x16, x7, #0x490
                	str	x16, [sp, #0x1638]
-               	add	x16, x0, #0x4a0
+               	add	x16, x7, #0x4a0
                	str	x16, [sp, #0x1630]
-               	add	x16, x0, #0x4b0
+               	add	x16, x7, #0x4b0
                	str	x16, [sp, #0x1628]
-               	add	x16, x0, #0x4c0
+               	add	x16, x7, #0x4c0
                	str	x16, [sp, #0x1620]
-               	add	x16, x0, #0x4d0
+               	add	x16, x7, #0x4d0
                	str	x16, [sp, #0x1618]
-               	add	x16, x0, #0x4e0
+               	add	x16, x7, #0x4e0
                	str	x16, [sp, #0x1610]
-               	add	x16, x0, #0x4f0
+               	add	x16, x7, #0x4f0
                	str	x16, [sp, #0x1608]
-               	add	x16, x0, #0x500
+               	add	x16, x7, #0x500
                	str	x16, [sp, #0x1600]
-               	add	x16, x0, #0x510
+               	add	x16, x7, #0x510
                	str	x16, [sp, #0x15f8]
-               	add	x16, x0, #0x520
+               	add	x16, x7, #0x520
                	str	x16, [sp, #0x15f0]
-               	add	x16, x0, #0x530
+               	add	x16, x7, #0x530
                	str	x16, [sp, #0x15e8]
-               	add	x16, x0, #0x540
+               	add	x16, x7, #0x540
                	str	x16, [sp, #0x15e0]
-               	add	x16, x0, #0x550
+               	add	x16, x7, #0x550
                	str	x16, [sp, #0x15d8]
-               	add	x16, x0, #0x560
+               	add	x16, x7, #0x560
                	str	x16, [sp, #0x15d0]
-               	add	x16, x0, #0x570
+               	add	x16, x7, #0x570
                	str	x16, [sp, #0x15c8]
-               	add	x16, x0, #0x580
+               	add	x16, x7, #0x580
                	str	x16, [sp, #0x15c0]
-               	add	x16, x0, #0x590
+               	add	x16, x7, #0x590
                	str	x16, [sp, #0x15b8]
-               	add	x16, x0, #0x5a0
+               	add	x16, x7, #0x5a0
                	str	x16, [sp, #0x15b0]
-               	add	x16, x0, #0x5b0
+               	add	x16, x7, #0x5b0
                	str	x16, [sp, #0x15a8]
-               	add	x16, x0, #0x5c0
+               	add	x16, x7, #0x5c0
                	str	x16, [sp, #0x15a0]
-               	add	x16, x0, #0x5d0
+               	add	x16, x7, #0x5d0
                	str	x16, [sp, #0x1598]
-               	add	x16, x0, #0x5e0
+               	add	x16, x7, #0x5e0
                	str	x16, [sp, #0x1590]
-               	add	x16, x0, #0x5f0
+               	add	x16, x7, #0x5f0
                	str	x16, [sp, #0x1588]
-               	add	x16, x0, #0x600
+               	add	x16, x7, #0x600
                	str	x16, [sp, #0x1580]
-               	add	x16, x0, #0x610
+               	add	x16, x7, #0x610
                	str	x16, [sp, #0x1578]
-               	add	x16, x0, #0x620
+               	add	x16, x7, #0x620
                	str	x16, [sp, #0x1570]
-               	add	x16, x0, #0x630
+               	add	x16, x7, #0x630
                	str	x16, [sp, #0x1568]
-               	add	x16, x0, #0x640
+               	add	x16, x7, #0x640
                	str	x16, [sp, #0x1560]
-               	add	x16, x0, #0x650
+               	add	x16, x7, #0x650
                	str	x16, [sp, #0x1558]
-               	add	x16, x0, #0x660
+               	add	x16, x7, #0x660
                	str	x16, [sp, #0x1550]
-               	add	x16, x0, #0x670
+               	add	x16, x7, #0x670
                	str	x16, [sp, #0x1548]
-               	add	x16, x0, #0x680
+               	add	x16, x7, #0x680
                	str	x16, [sp, #0x1540]
-               	add	x16, x0, #0x690
+               	add	x16, x7, #0x690
                	str	x16, [sp, #0x1538]
-               	add	x16, x0, #0x6a0
+               	add	x16, x7, #0x6a0
                	str	x16, [sp, #0x1530]
-               	add	x16, x0, #0x6b0
+               	add	x16, x7, #0x6b0
                	str	x16, [sp, #0x1528]
-               	add	x16, x0, #0x6c0
+               	add	x16, x7, #0x6c0
                	str	x16, [sp, #0x1520]
-               	add	x16, x0, #0x6d0
+               	add	x16, x7, #0x6d0
                	str	x16, [sp, #0x1518]
-               	add	x16, x0, #0x6e0
+               	add	x16, x7, #0x6e0
                	str	x16, [sp, #0x1510]
-               	add	x16, x0, #0x6f0
+               	add	x16, x7, #0x6f0
                	str	x16, [sp, #0x1508]
-               	add	x16, x0, #0x700
+               	add	x16, x7, #0x700
                	str	x16, [sp, #0x1500]
-               	add	x16, x0, #0x710
+               	add	x16, x7, #0x710
                	str	x16, [sp, #0x14f8]
-               	add	x16, x0, #0x720
+               	add	x16, x7, #0x720
                	str	x16, [sp, #0x14f0]
-               	add	x16, x0, #0x730
+               	add	x16, x7, #0x730
                	str	x16, [sp, #0x14e8]
-               	add	x16, x0, #0x740
+               	add	x16, x7, #0x740
                	str	x16, [sp, #0x14e0]
-               	add	x16, x0, #0x750
+               	add	x16, x7, #0x750
                	str	x16, [sp, #0x14d8]
-               	add	x16, x0, #0x760
+               	add	x16, x7, #0x760
                	str	x16, [sp, #0x14d0]
-               	add	x16, x0, #0x770
+               	add	x16, x7, #0x770
                	str	x16, [sp, #0x14c8]
-               	add	x16, x0, #0x780
+               	add	x16, x7, #0x780
                	str	x16, [sp, #0x14c0]
-               	add	x16, x0, #0x790
+               	add	x16, x7, #0x790
                	str	x16, [sp, #0x14b8]
-               	add	x16, x0, #0x7a0
+               	add	x16, x7, #0x7a0
                	str	x16, [sp, #0x14b0]
-               	add	x16, x0, #0x7b0
+               	add	x16, x7, #0x7b0
                	str	x16, [sp, #0x14a8]
-               	add	x16, x0, #0x7c0
+               	add	x16, x7, #0x7c0
                	str	x16, [sp, #0x14a0]
-               	add	x16, x0, #0x7d0
+               	add	x16, x7, #0x7d0
                	str	x16, [sp, #0x1498]
-               	add	x16, x0, #0x7e0
+               	add	x16, x7, #0x7e0
                	str	x16, [sp, #0x1490]
-               	add	x16, x0, #0x7f0
+               	add	x16, x7, #0x7f0
                	str	x16, [sp, #0x1488]
-               	add	x16, x0, #0x800
+               	add	x16, x7, #0x800
                	str	x16, [sp, #0x1480]
-               	add	x16, x0, #0x810
+               	add	x16, x7, #0x810
                	str	x16, [sp, #0x1478]
-               	add	x16, x0, #0x820
+               	add	x16, x7, #0x820
                	str	x16, [sp, #0x1470]
-               	add	x16, x0, #0x830
+               	add	x16, x7, #0x830
                	str	x16, [sp, #0x1468]
-               	add	x16, x0, #0x840
+               	add	x16, x7, #0x840
                	str	x16, [sp, #0x1460]
-               	add	x16, x0, #0x850
+               	add	x16, x7, #0x850
                	str	x16, [sp, #0x1458]
-               	add	x16, x0, #0x860
+               	add	x16, x7, #0x860
                	str	x16, [sp, #0x1450]
-               	add	x16, x0, #0x870
+               	add	x16, x7, #0x870
                	str	x16, [sp, #0x1448]
-               	add	x16, x0, #0x880
+               	add	x16, x7, #0x880
                	str	x16, [sp, #0x1440]
-               	add	x16, x0, #0x890
+               	add	x16, x7, #0x890
                	str	x16, [sp, #0x1438]
-               	add	x16, x0, #0x8a0
+               	add	x16, x7, #0x8a0
                	str	x16, [sp, #0x1430]
-               	add	x16, x0, #0x8b0
+               	add	x16, x7, #0x8b0
                	str	x16, [sp, #0x1428]
-               	add	x16, x0, #0x8c0
+               	add	x16, x7, #0x8c0
                	str	x16, [sp, #0x1420]
-               	add	x16, x0, #0x8d0
+               	add	x16, x7, #0x8d0
                	str	x16, [sp, #0x1418]
-               	add	x16, x0, #0x8e0
+               	add	x16, x7, #0x8e0
                	str	x16, [sp, #0x1410]
-               	add	x16, x0, #0x8f0
+               	add	x16, x7, #0x8f0
                	str	x16, [sp, #0x1408]
-               	add	x16, x0, #0x900
+               	add	x16, x7, #0x900
                	str	x16, [sp, #0x1400]
-               	add	x16, x0, #0x910
+               	add	x16, x7, #0x910
                	str	x16, [sp, #0x13f8]
-               	add	x16, x0, #0x920
+               	add	x16, x7, #0x920
                	str	x16, [sp, #0x13f0]
-               	add	x16, x0, #0x930
+               	add	x16, x7, #0x930
                	str	x16, [sp, #0x13e8]
-               	add	x16, x0, #0x940
+               	add	x16, x7, #0x940
                	str	x16, [sp, #0x13e0]
-               	add	x16, x0, #0x950
+               	add	x16, x7, #0x950
                	str	x16, [sp, #0x13d8]
-               	add	x16, x0, #0x960
+               	add	x16, x7, #0x960
                	str	x16, [sp, #0x13d0]
-               	add	x16, x0, #0x970
+               	add	x16, x7, #0x970
                	str	x16, [sp, #0x13c8]
-               	add	x16, x0, #0x980
+               	add	x16, x7, #0x980
                	str	x16, [sp, #0x13c0]
-               	add	x16, x0, #0x990
+               	add	x16, x7, #0x990
                	str	x16, [sp, #0x13b8]
-               	add	x16, x0, #0x9a0
+               	add	x16, x7, #0x9a0
                	str	x16, [sp, #0x13b0]
-               	add	x16, x0, #0x9b0
+               	add	x16, x7, #0x9b0
                	str	x16, [sp, #0x13a8]
-               	add	x16, x0, #0x9c0
+               	add	x16, x7, #0x9c0
                	str	x16, [sp, #0x13a0]
-               	add	x16, x0, #0x9d0
+               	add	x16, x7, #0x9d0
                	str	x16, [sp, #0x1398]
-               	add	x16, x0, #0x9e0
+               	add	x16, x7, #0x9e0
                	str	x16, [sp, #0x1390]
-               	add	x16, x0, #0x9f0
+               	add	x16, x7, #0x9f0
                	str	x16, [sp, #0x1388]
-               	add	x16, x0, #0xa00
+               	add	x16, x7, #0xa00
                	str	x16, [sp, #0x1380]
-               	add	x16, x0, #0xa10
+               	add	x16, x7, #0xa10
                	str	x16, [sp, #0x1378]
-               	add	x16, x0, #0xa20
+               	add	x16, x7, #0xa20
                	str	x16, [sp, #0x1370]
-               	add	x16, x0, #0xa30
+               	add	x16, x7, #0xa30
                	str	x16, [sp, #0x1368]
-               	add	x16, x0, #0xa40
+               	add	x16, x7, #0xa40
                	str	x16, [sp, #0x1360]
-               	add	x16, x0, #0xa50
+               	add	x16, x7, #0xa50
                	str	x16, [sp, #0x1358]
-               	add	x16, x0, #0xa60
+               	add	x16, x7, #0xa60
                	str	x16, [sp, #0x1350]
-               	add	x16, x0, #0xa70
+               	add	x16, x7, #0xa70
                	str	x16, [sp, #0x1348]
-               	add	x16, x0, #0xa80
+               	add	x16, x7, #0xa80
                	str	x16, [sp, #0x1340]
-               	add	x16, x0, #0xa90
+               	add	x16, x7, #0xa90
                	str	x16, [sp, #0x1338]
-               	add	x16, x0, #0xaa0
+               	add	x16, x7, #0xaa0
                	str	x16, [sp, #0x1330]
-               	add	x16, x0, #0xab0
+               	add	x16, x7, #0xab0
                	str	x16, [sp, #0x1328]
-               	add	x16, x0, #0xac0
+               	add	x16, x7, #0xac0
                	str	x16, [sp, #0x1320]
-               	add	x16, x0, #0xad0
+               	add	x16, x7, #0xad0
                	str	x16, [sp, #0x1318]
-               	add	x16, x0, #0xae0
+               	add	x16, x7, #0xae0
                	str	x16, [sp, #0x1310]
-               	add	x16, x0, #0xaf0
+               	add	x16, x7, #0xaf0
                	str	x16, [sp, #0x1308]
-               	add	x16, x0, #0xb00
+               	add	x16, x7, #0xb00
                	str	x16, [sp, #0x1300]
-               	add	x16, x0, #0xb10
+               	add	x16, x7, #0xb10
                	str	x16, [sp, #0x12f8]
-               	add	x16, x0, #0xb20
+               	add	x16, x7, #0xb20
                	str	x16, [sp, #0x12f0]
-               	add	x16, x0, #0xb30
+               	add	x16, x7, #0xb30
                	str	x16, [sp, #0x12e8]
-               	add	x16, x0, #0xb40
+               	add	x16, x7, #0xb40
                	str	x16, [sp, #0x12e0]
-               	add	x16, x0, #0xb50
+               	add	x16, x7, #0xb50
                	str	x16, [sp, #0x12d8]
-               	add	x16, x0, #0xb60
+               	add	x16, x7, #0xb60
                	str	x16, [sp, #0x12d0]
-               	add	x16, x0, #0xb70
+               	add	x16, x7, #0xb70
                	str	x16, [sp, #0x12c8]
-               	add	x16, x0, #0xb80
+               	add	x16, x7, #0xb80
                	str	x16, [sp, #0x12c0]
-               	add	x16, x0, #0xb90
+               	add	x16, x7, #0xb90
                	str	x16, [sp, #0x12b8]
-               	add	x16, x0, #0xba0
+               	add	x16, x7, #0xba0
                	str	x16, [sp, #0x12b0]
-               	add	x16, x0, #0xbb0
+               	add	x16, x7, #0xbb0
                	str	x16, [sp, #0x12a8]
-               	add	x16, x0, #0xbc0
+               	add	x16, x7, #0xbc0
                	str	x16, [sp, #0x12a0]
-               	add	x16, x0, #0xbd0
+               	add	x16, x7, #0xbd0
                	str	x16, [sp, #0x1298]
-               	add	x16, x0, #0xbe0
+               	add	x16, x7, #0xbe0
                	str	x16, [sp, #0x1290]
-               	add	x16, x0, #0xbf0
+               	add	x16, x7, #0xbf0
                	str	x16, [sp, #0x1288]
-               	add	x16, x0, #0xc00
+               	add	x16, x7, #0xc00
                	str	x16, [sp, #0x1280]
-               	add	x16, x0, #0xc10
+               	add	x16, x7, #0xc10
                	str	x16, [sp, #0x1278]
-               	add	x16, x0, #0xc20
+               	add	x16, x7, #0xc20
                	str	x16, [sp, #0x1270]
-               	add	x16, x0, #0xc30
+               	add	x16, x7, #0xc30
                	str	x16, [sp, #0x1268]
-               	add	x16, x0, #0xc40
+               	add	x16, x7, #0xc40
                	str	x16, [sp, #0x1260]
-               	add	x16, x0, #0xc50
+               	add	x16, x7, #0xc50
                	str	x16, [sp, #0x1258]
-               	add	x16, x0, #0xc60
+               	add	x16, x7, #0xc60
                	str	x16, [sp, #0x1250]
-               	add	x16, x0, #0xc70
+               	add	x16, x7, #0xc70
                	str	x16, [sp, #0x1248]
-               	add	x16, x0, #0xc80
+               	add	x16, x7, #0xc80
                	str	x16, [sp, #0x1240]
-               	add	x16, x0, #0xc90
+               	add	x16, x7, #0xc90
                	str	x16, [sp, #0x1238]
-               	add	x16, x0, #0xca0
+               	add	x16, x7, #0xca0
                	str	x16, [sp, #0x1230]
-               	add	x16, x0, #0xcb0
+               	add	x16, x7, #0xcb0
                	str	x16, [sp, #0x1228]
-               	add	x16, x0, #0xcc0
+               	add	x16, x7, #0xcc0
                	str	x16, [sp, #0x1220]
-               	add	x16, x0, #0xcd0
+               	add	x16, x7, #0xcd0
                	str	x16, [sp, #0x1218]
-               	add	x16, x0, #0xce0
+               	add	x16, x7, #0xce0
                	str	x16, [sp, #0x1210]
-               	add	x16, x0, #0xcf0
+               	add	x16, x7, #0xcf0
                	str	x16, [sp, #0x1208]
-               	add	x16, x0, #0xd00
+               	add	x16, x7, #0xd00
                	str	x16, [sp, #0x1200]
-               	add	x16, x0, #0xd10
+               	add	x16, x7, #0xd10
                	str	x16, [sp, #0x11f8]
-               	add	x16, x0, #0xd20
+               	add	x16, x7, #0xd20
                	str	x16, [sp, #0x11f0]
-               	add	x16, x0, #0xd30
+               	add	x16, x7, #0xd30
                	str	x16, [sp, #0x11e8]
-               	add	x16, x0, #0xd40
+               	add	x16, x7, #0xd40
                	str	x16, [sp, #0x11e0]
-               	add	x16, x0, #0xd50
+               	add	x16, x7, #0xd50
                	str	x16, [sp, #0x11d8]
-               	add	x16, x0, #0xd60
+               	add	x16, x7, #0xd60
                	str	x16, [sp, #0x11d0]
-               	add	x16, x0, #0xd70
+               	add	x16, x7, #0xd70
                	str	x16, [sp, #0x11c8]
-               	add	x16, x0, #0xd80
+               	add	x16, x7, #0xd80
                	str	x16, [sp, #0x11c0]
-               	add	x16, x0, #0xd90
+               	add	x16, x7, #0xd90
                	str	x16, [sp, #0x11b8]
-               	add	x16, x0, #0xda0
+               	add	x16, x7, #0xda0
                	str	x16, [sp, #0x11b0]
-               	add	x16, x0, #0xdb0
+               	add	x16, x7, #0xdb0
                	str	x16, [sp, #0x11a8]
-               	add	x16, x0, #0xdc0
+               	add	x16, x7, #0xdc0
                	str	x16, [sp, #0x11a0]
-               	add	x16, x0, #0xdd0
+               	add	x16, x7, #0xdd0
                	str	x16, [sp, #0x1198]
-               	add	x16, x0, #0xde0
+               	add	x16, x7, #0xde0
                	str	x16, [sp, #0x1190]
-               	add	x16, x0, #0xdf0
+               	add	x16, x7, #0xdf0
                	str	x16, [sp, #0x1188]
-               	add	x16, x0, #0xe00
+               	add	x16, x7, #0xe00
                	str	x16, [sp, #0x1180]
-               	add	x16, x0, #0xe10
+               	add	x16, x7, #0xe10
                	str	x16, [sp, #0x1178]
-               	add	x16, x0, #0xe20
+               	add	x16, x7, #0xe20
                	str	x16, [sp, #0x1170]
-               	add	x16, x0, #0xe30
+               	add	x16, x7, #0xe30
                	str	x16, [sp, #0x1168]
-               	add	x16, x0, #0xe40
+               	add	x16, x7, #0xe40
                	str	x16, [sp, #0x1160]
-               	add	x16, x0, #0xe50
+               	add	x16, x7, #0xe50
                	str	x16, [sp, #0x1158]
-               	add	x16, x0, #0xe60
+               	add	x16, x7, #0xe60
                	str	x16, [sp, #0x1150]
-               	add	x16, x0, #0xe70
+               	add	x16, x7, #0xe70
                	str	x16, [sp, #0x1148]
-               	add	x16, x0, #0xe80
+               	add	x16, x7, #0xe80
                	str	x16, [sp, #0x1140]
-               	add	x16, x0, #0xe90
+               	add	x16, x7, #0xe90
                	str	x16, [sp, #0x1138]
-               	add	x16, x0, #0xea0
+               	add	x16, x7, #0xea0
                	str	x16, [sp, #0x1130]
-               	add	x16, x0, #0xeb0
+               	add	x16, x7, #0xeb0
                	str	x16, [sp, #0x1128]
-               	add	x16, x0, #0xec0
+               	add	x16, x7, #0xec0
                	str	x16, [sp, #0x1120]
-               	add	x16, x0, #0xed0
+               	add	x16, x7, #0xed0
                	str	x16, [sp, #0x1118]
-               	add	x16, x0, #0xee0
+               	add	x16, x7, #0xee0
                	str	x16, [sp, #0x1110]
-               	add	x16, x0, #0xef0
+               	add	x16, x7, #0xef0
                	str	x16, [sp, #0x1108]
-               	add	x16, x0, #0xf00
+               	add	x16, x7, #0xf00
                	str	x16, [sp, #0x1100]
-               	add	x16, x0, #0xf10
+               	add	x16, x7, #0xf10
                	str	x16, [sp, #0x10f8]
-               	add	x16, x0, #0xf20
+               	add	x16, x7, #0xf20
                	str	x16, [sp, #0x10f0]
-               	add	x16, x0, #0xf30
+               	add	x16, x7, #0xf30
                	str	x16, [sp, #0x10e8]
-               	add	x16, x0, #0xf40
+               	add	x16, x7, #0xf40
                	str	x16, [sp, #0x10e0]
-               	add	x16, x0, #0xf50
+               	add	x16, x7, #0xf50
                	str	x16, [sp, #0x10d8]
-               	add	x16, x0, #0xf60
+               	add	x16, x7, #0xf60
                	str	x16, [sp, #0x10d0]
-               	add	x16, x0, #0xf70
+               	add	x16, x7, #0xf70
                	str	x16, [sp, #0x10c8]
-               	add	x16, x0, #0xf80
+               	add	x16, x7, #0xf80
                	str	x16, [sp, #0x10c0]
-               	add	x16, x0, #0xf90
+               	add	x16, x7, #0xf90
                	str	x16, [sp, #0x10b8]
-               	add	x16, x0, #0xfa0
+               	add	x16, x7, #0xfa0
                	str	x16, [sp, #0x10b0]
-               	add	x16, x0, #0xfb0
+               	add	x16, x7, #0xfb0
                	str	x16, [sp, #0x10a8]
-               	add	x16, x0, #0xfc0
+               	add	x16, x7, #0xfc0
                	str	x16, [sp, #0x10a0]
-               	add	x16, x0, #0xfd0
+               	add	x16, x7, #0xfd0
                	str	x16, [sp, #0x1098]
-               	add	x16, x0, #0xfe0
+               	add	x16, x7, #0xfe0
                	str	x16, [sp, #0x1090]
-               	add	x16, x0, #0xff0
+               	add	x16, x7, #0xff0
                	str	x16, [sp, #0x1088]
-               	add	x16, x0, #0x1, lsl #12  // =0x1000
+               	add	x16, x7, #0x1, lsl #12  // =0x1000
                	str	x16, [sp, #0x1080]
                	mov	x17, #0x1010            // =4112
-               	add	x16, x0, x17
+               	add	x16, x7, x17
                	str	x16, [sp, #0x1078]
                	mov	x17, #0x1020            // =4128
-               	add	x16, x0, x17
+               	add	x16, x7, x17
                	str	x16, [sp, #0x1070]
                	mov	x17, #0x1030            // =4144
-               	add	x16, x0, x17
+               	add	x16, x7, x17
                	str	x16, [sp, #0x1068]
                	mov	x17, #0x1040            // =4160
-               	add	x16, x0, x17
+               	add	x16, x7, x17
                	str	x16, [sp, #0x1060]
-               	ldr	x1, [x0]
-               	ldr	x2, [x0, #0x8]
-               	ldr	x3, [x0, #0x10]
-               	ldr	x4, [x0, #0x18]
-               	ldr	x5, [x0, #0x20]
-               	ldr	x6, [x0, #0x28]
-               	ldr	x7, [x0, #0x30]
-               	ldr	x0, [x0, #0x38]
+               	ldr	x0, [x7]
+               	ldr	x1, [x7, #0x8]
+               	ldr	x2, [x7, #0x10]
+               	ldr	x3, [x7, #0x18]
+               	ldr	x4, [x7, #0x20]
+               	ldr	x5, [x7, #0x28]
+               	ldr	x6, [x7, #0x30]
+               	ldr	x7, [x7, #0x38]
                	mov	x16, x8
                	ldr	x17, [x16]
                	str	x17, [sp]
@@ -7030,15 +7021,6 @@ Disassembly of section .text:
                	str	x17, [sp, #0x1000]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x1008]
-               	mov	x16, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x6
-               	mov	x6, x7
-               	mov	x7, x0
-               	mov	x0, x16
                	bl	<addr>
                	mov	x17, #0x8d9e            // =36254
                	movk	x17, #0x1, lsl #16

@@ -82,13 +82,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x1, [x0]
-               	sub	x0, x29, #0x28
                	stur	w1, [x29, #-0x28]
-               	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x10]
-               	stur	w1, [x29, #-0x24]
-               	mov	x1, #0x5                // =5
-               	stur	w1, [x29, #-0x20]
+               	adrp	x0, <page>
+               	ldrsw	x0, [x0, #0x10]
+               	stur	w0, [x29, #-0x24]
+               	mov	x0, #0x5                // =5
+               	stur	w0, [x29, #-0x20]
+               	sub	x0, x29, #0x28
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x3

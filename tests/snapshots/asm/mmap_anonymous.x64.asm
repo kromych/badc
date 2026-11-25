@@ -27,12 +27,12 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	movl	$0x4000, %esi           # imm = 0x4000
                	xorl	%edi, %edi
+               	movl	$0x4000, %esi           # imm = 0x4000
                	movl	$0x3, %edx
                	movl	$0x22, %ecx
                	movq	$-0x1, %r8
-               	movq	%rdi, %r9
+               	xorl	%r9d, %r9d
                	callq	<addr>
                	movq	%rax, %rdi
                	cmpq	$-0x1, %rdi

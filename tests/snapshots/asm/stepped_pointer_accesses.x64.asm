@@ -480,10 +480,10 @@ Disassembly of section .text:
                	addq	$0x170, %rsp            # imm = 0x170
                	retq
                	leaq	0x80(%rsp), %rbx
+               	movq	%rbx, %rdi
                	leaq	0xd0(%rsp), %rsi
                	movl	$0x28, %edx
                	movl	$0x5, %ecx
-               	movq	%rbx, %rdi
                	callq	<addr>
                	movl	$0x5, %ecx
                	xorl	%eax, %eax
@@ -574,8 +574,8 @@ Disassembly of section .text:
                	movzbq	0x20(%rax), %r10
                	movb	%r10b, 0x20(%rsi)
                	leaq	0x38(%rsp), %rbx
-               	movl	$0x20, %edx
                	movq	%rbx, %rdi
+               	movl	$0x20, %edx
                	callq	<addr>
                	xorl	%eax, %eax
                	movsbq	0x38(%rsp,%rax), %rdx

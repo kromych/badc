@@ -412,11 +412,11 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	ldr	d4, [x0, #0x130]
                	fmul	d8, d8, d4
-               	mov	x0, #0x1f               // =31
                	str	q3, [sp, #0x2e0]
                	str	q0, [sp, #0x2d0]
                	str	q1, [sp, #0x2c0]
                	str	q2, [sp, #0x2b0]
+               	mov	x0, #0x1f               // =31
                	bl	<addr>
                	ldr	q3, [sp, #0x2e0]
                	ldr	q0, [sp, #0x2d0]

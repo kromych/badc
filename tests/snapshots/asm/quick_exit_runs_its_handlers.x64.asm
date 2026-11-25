@@ -59,7 +59,7 @@ Disassembly of section .text:
                	pushq	%rax
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
-               	movq	%rsi, %rdx
+               	xorl	%edx, %edx
                	callq	<addr>
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi

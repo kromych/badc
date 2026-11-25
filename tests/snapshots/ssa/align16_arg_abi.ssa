@@ -510,7 +510,7 @@ fn ent_pc=11 n_params=1 variadic=true locals=3
 ; --- SSA dump (ok=true) ent_pc=12 ---
 ; name=main
 fn ent_pc=12 n_params=0 variadic=false locals=0
-  spill_count=1 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(5011)                                        -> x0
@@ -651,62 +651,62 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v136 LifetimeEnd(0)                                   -> -
     v137 LocalAddr(-147)                                  -> x0
     v138 Imm(0)                                           -> x0
-    v139 LoadLocal { off=-147, kind=I64 }                 -> x0
-    v140 Imm(0)                                           -> x1
-    v141 LoadLocal { off=-147, disp=8, kind=I64 }         -> x1
-    v142 Imm(0)                                           -> x1
-    v143 Imm(0)                                           -> x1
-    v144 Imm(0)                                           -> x1
-    v145 Imm(0)                                           -> x1
-    v146 Imm(0)                                           -> x1
-    v147 Imm(0)                                           -> x1
-    v148 Imm(0)                                           -> x1
-    v149 Imm(0)                                           -> x1
-    v150 Imm(0)                                           -> x1
-    v151 Imm(0)                                           -> x1
-    v152 Imm(5000)                                        -> x1
-    v153 Imm(0)                                           -> x1
-    v154 Imm(0)                                           -> x1
-    v155 BinopI { op=add, lhs=v139, rhs_imm=5000 }        -> x1
+    v139 LoadLocal { off=-147, kind=I64 }                 -> x6
+    v140 Imm(0)                                           -> x0
+    v141 LoadLocal { off=-147, disp=8, kind=I64 }         -> x0
+    v142 Imm(0)                                           -> x0
+    v143 Imm(0)                                           -> x0
+    v144 Imm(0)                                           -> x0
+    v145 Imm(0)                                           -> x0
+    v146 Imm(0)                                           -> x0
+    v147 Imm(0)                                           -> x0
+    v148 Imm(0)                                           -> x0
+    v149 Imm(0)                                           -> x0
+    v150 Imm(0)                                           -> x0
+    v151 Imm(0)                                           -> x0
+    v152 Imm(5000)                                        -> x0
+    v153 Imm(0)                                           -> x0
+    v154 Imm(0)                                           -> x0
+    v155 BinopI { op=add, lhs=v139, rhs_imm=5000 }        -> x0
     v156 LifetimeEnd(0)                                   -> -
     v157 LifetimeEnd(0)                                   -> -
-    v158 Imm(0)                                           -> x2
-    v159 BinopI { op=ne, lhs=v155, rhs_imm=5011 }         -> x1
-    v160 Imm(0)                                           -> x2
+    v158 Imm(0)                                           -> x1
+    v159 BinopI { op=ne, lhs=v155, rhs_imm=5011 }         -> x0
+    v160 Imm(0)                                           -> x1
     terminator Bnz { cond=v159, target=b49, fall=b1 }   (exit_acc=v159)
   block 1  start_pc=0
-    v161 LocalAddr(-148)                                  -> x1
-    v162 Imm(0)                                           -> x1
-    v163 LoadLocal { off=-148, kind=I64 }                 -> x1
-    v164 Imm(0)                                           -> x1
-    v165 LoadLocal { off=-148, disp=8, kind=I64 }         -> x1
-    v166 Imm(0)                                           -> x1
-    v167 Imm(0)                                           -> x1
-    v168 Imm(0)                                           -> x1
-    v169 Imm(0)                                           -> x1
-    v170 Imm(-1)                                          -> x1
-    v171 Imm(0)                                           -> x1
-    v172 Imm(0)                                           -> x1
-    v173 Imm(0)                                           -> x1
-    v174 Imm(0)                                           -> x1
-    v175 Imm(0)                                           -> x1
-    v176 Imm(-2000)                                       -> x1
-    v177 Imm(0)                                           -> x1
-    v178 Imm(0)                                           -> x1
-    v179 Imm(-1960)                                       -> x1
+    v161 LocalAddr(-148)                                  -> x0
+    v162 Imm(0)                                           -> x0
+    v163 LoadLocal { off=-148, kind=I64 }                 -> x0
+    v164 Imm(0)                                           -> x0
+    v165 LoadLocal { off=-148, disp=8, kind=I64 }         -> x0
+    v166 Imm(0)                                           -> x0
+    v167 Imm(0)                                           -> x0
+    v168 Imm(0)                                           -> x0
+    v169 Imm(0)                                           -> x0
+    v170 Imm(-1)                                          -> x0
+    v171 Imm(0)                                           -> x0
+    v172 Imm(0)                                           -> x0
+    v173 Imm(0)                                           -> x0
+    v174 Imm(0)                                           -> x0
+    v175 Imm(0)                                           -> x0
+    v176 Imm(-2000)                                       -> x0
+    v177 Imm(0)                                           -> x0
+    v178 Imm(0)                                           -> x0
+    v179 Imm(-1960)                                       -> x0
     v180 LifetimeEnd(0)                                   -> -
     v181 LifetimeEnd(0)                                   -> -
-    v182 Imm(0)                                           -> x1
-    v183 Imm(0)                                           -> x1
-    v184 Imm(0)                                           -> x1
-    v185 Imm(0)                                           -> x1
-    v186 Imm(0)                                           -> x1
+    v182 Imm(0)                                           -> x0
+    v183 Imm(0)                                           -> x0
+    v184 Imm(0)                                           -> x0
+    v185 Imm(0)                                           -> x0
+    v186 Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v183)
   block 2  start_pc=0
     v190 ImmData(16)                                      -> x7
-    v191 LocalAddr(-147)                                  -> x1
-    v192 Imm(3)                                           -> x1
-    v193 LoadLocal { off=-147, kind=I64 }                 -> x2
+    v191 LocalAddr(-147)                                  -> x0
+    v192 Imm(3)                                           -> -
+    v193 LoadLocal { off=-147, kind=I64 }                 -> x0
     v194 LoadLocal { off=-147, disp=8, kind=I64 }         -> x2
     v195 AggParts { desc=4, parts=[v139, v194], fp_mask=0x0 } -> -
     v196 Call { target_pc=2, args=[v190, v195, v192], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -721,10 +721,10 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v203 LifetimeEnd(-147)                                -> -
     terminator Return(v201)   (exit_acc=v201)
   block 4  start_pc=0
-    v204 Imm(0)                                           -> x7
+    v204 Imm(0)                                           -> -
     v205 LocalAddr(-148)                                  -> x0
-    v206 Imm(4)                                           -> x1
-    v207 LoadLocal { off=-148, kind=I64 }                 -> x0
+    v206 Imm(4)                                           -> -
+    v207 LoadLocal { off=-148, kind=I64 }                 -> x6
     v208 LoadLocal { off=-148, disp=8, kind=I64 }         -> x2
     v209 AggParts { desc=5, parts=[v207, v208], fp_mask=0x0 } -> -
     v210 Call { target_pc=2, args=[v204, v209, v206], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -738,14 +738,14 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v216 LifetimeEnd(-147)                                -> -
     terminator Return(v214)   (exit_acc=v214)
   block 6  start_pc=0
-    v217 Imm(1)                                           -> x7
-    v218 Imm(2)                                           -> x6
-    v219 Imm(3)                                           -> x2
-    v220 Imm(4)                                           -> x1
-    v221 Imm(5)                                           -> x8
+    v217 Imm(1)                                           -> -
+    v218 Imm(2)                                           -> -
+    v219 Imm(3)                                           -> -
+    v220 Imm(4)                                           -> -
+    v221 Imm(5)                                           -> -
     v222 LocalAddr(-147)                                  -> x0
     v223 LoadLocal { off=-147, kind=I64 }                 -> x0
-    v224 LoadLocal { off=-147, disp=8, kind=I64 }         -> x9
+    v224 LoadLocal { off=-147, disp=8, kind=I64 }         -> x1
     v225 AggParts { desc=6, parts=[v223, v224], fp_mask=0x0 } -> -
     v226 Call { target_pc=3, args=[v217, v218, v219, v220, v221, v225, v219], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v227 Imm(0)                                           -> x1
@@ -759,13 +759,13 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v233 LifetimeEnd(-147)                                -> -
     terminator Return(v231)   (exit_acc=v231)
   block 8  start_pc=0
-    v234 Imm(5)                                           -> x7
-    v235 Imm(4)                                           -> x6
-    v236 Imm(3)                                           -> x2
-    v237 Imm(2)                                           -> x8
-    v238 Imm(1)                                           -> x9
+    v234 Imm(5)                                           -> -
+    v235 Imm(4)                                           -> -
+    v236 Imm(3)                                           -> -
+    v237 Imm(2)                                           -> -
+    v238 Imm(1)                                           -> -
     v239 LocalAddr(-148)                                  -> x0
-    v240 Imm(6)                                           -> [spill 0]
+    v240 Imm(6)                                           -> -
     v241 LoadLocal { off=-148, kind=I64 }                 -> x0
     v242 LoadLocal { off=-148, disp=8, kind=I64 }         -> x1
     v243 AggParts { desc=7, parts=[v241, v242], fp_mask=0x0 } -> -
@@ -781,12 +781,12 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v251 LifetimeEnd(-147)                                -> -
     terminator Return(v249)   (exit_acc=v249)
   block 10  start_pc=0
-    v252 Imm(1)                                           -> x7
-    v253 Imm(2)                                           -> x6
-    v254 Imm(3)                                           -> x2
-    v255 Imm(4)                                           -> x8
-    v256 Imm(5)                                           -> x9
-    v257 Imm(6)                                           -> [spill 0]
+    v252 Imm(1)                                           -> -
+    v253 Imm(2)                                           -> -
+    v254 Imm(3)                                           -> -
+    v255 Imm(4)                                           -> -
+    v256 Imm(5)                                           -> -
+    v257 Imm(6)                                           -> -
     v258 Imm(7)                                           -> -
     v259 LocalAddr(-147)                                  -> x0
     v260 LoadLocal { off=-147, kind=I64 }                 -> x0
@@ -804,7 +804,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v270 LifetimeEnd(-147)                                -> -
     terminator Return(v268)   (exit_acc=v268)
   block 12  start_pc=0
-    v271 Imm(0)                                           -> x7
+    v271 Imm(0)                                           -> -
     v272 Imm(1)                                           -> -
     v273 LocalAddr(-148)                                  -> x0
     v274 Imm(9)                                           -> -
@@ -824,10 +824,10 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     terminator Return(v283)   (exit_acc=v283)
   block 14  start_pc=0
     v286 Imm(4611686018427387904)                         -> d0
-    v287 Imm(1)                                           -> x7
+    v287 Imm(1)                                           -> -
     v288 LocalAddr(-147)                                  -> x0
-    v289 Imm(3)                                           -> x1
-    v290 LoadLocal { off=-147, kind=I64 }                 -> x0
+    v289 Imm(3)                                           -> -
+    v290 LoadLocal { off=-147, kind=I64 }                 -> x6
     v291 LoadLocal { off=-147, disp=8, kind=I64 }         -> x2
     v292 AggParts { desc=10, parts=[v290, v291], fp_mask=0x0 } -> -
     v293 Call { target_pc=5, args=[v286, v287, v292, v289], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
@@ -845,10 +845,10 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
   block 16  start_pc=0
     v302 Imm(4607182418800017408)                         -> x0
     v303 Imm(-4616189618054758400)                        -> d0
-    v304 Imm(4)                                           -> x7
+    v304 Imm(4)                                           -> -
     v305 LocalAddr(-148)                                  -> x0
-    v306 Imm(5)                                           -> x1
-    v307 LoadLocal { off=-148, kind=I64 }                 -> x0
+    v306 Imm(5)                                           -> -
+    v307 LoadLocal { off=-148, kind=I64 }                 -> x6
     v308 LoadLocal { off=-148, disp=8, kind=I64 }         -> x2
     v309 AggParts { desc=11, parts=[v307, v308], fp_mask=0x0 } -> -
     v310 Call { target_pc=5, args=[v303, v304, v309, v306], fixed_args=4, fp_return=false, fp_arg_mask=0x1 } -> x0
@@ -864,10 +864,10 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v318 LifetimeEnd(-147)                                -> -
     terminator Return(v316)   (exit_acc=v316)
   block 18  start_pc=0
-    v319 Imm(1)                                           -> x7
+    v319 Imm(1)                                           -> -
     v320 LocalAddr(-147)                                  -> x0
-    v321 Imm(2)                                           -> x1
-    v322 LoadLocal { off=-147, kind=I64 }                 -> x0
+    v321 Imm(2)                                           -> -
+    v322 LoadLocal { off=-147, kind=I64 }                 -> x6
     v323 LoadLocal { off=-147, disp=8, kind=I64 }         -> x2
     v324 AggParts { desc=12, parts=[v322, v323], fp_mask=0x0 } -> -
     v325 Call { target_pc=6, args=[v319, v324, v321], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -954,10 +954,10 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v404 LifetimeEnd(-147)                                -> -
     terminator Return(v402)   (exit_acc=v402)
   block 20  start_pc=0
-    v405 Imm(-3)                                          -> x7
+    v405 Imm(-3)                                          -> -
     v406 LocalAddr(-148)                                  -> x0
-    v407 Imm(4)                                           -> x1
-    v408 LoadLocal { off=-148, kind=I64 }                 -> x0
+    v407 Imm(4)                                           -> -
+    v408 LoadLocal { off=-148, kind=I64 }                 -> x6
     v409 LoadLocal { off=-148, disp=8, kind=I64 }         -> x2
     v410 AggParts { desc=15, parts=[v408, v409], fp_mask=0x0 } -> -
     v411 Call { target_pc=6, args=[v405, v410, v407], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -1044,17 +1044,17 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v490 LifetimeEnd(-147)                                -> -
     terminator Return(v488)   (exit_acc=v488)
   block 22  start_pc=0
-    v491 Imm(1)                                           -> x7
+    v491 Imm(1)                                           -> -
     v492 LocalAddr(-147)                                  -> x0
     v493 Imm(0)                                           -> x0
-    v494 LoadLocal { off=-147, kind=I64 }                 -> x0
-    v495 Imm(0)                                           -> x1
+    v494 LoadLocal { off=-147, kind=I64 }                 -> x6
+    v495 Imm(0)                                           -> x0
     v496 LoadLocal { off=-147, disp=8, kind=I64 }         -> x2
-    v497 Imm(0)                                           -> x1
-    v498 Imm(0)                                           -> x1
-    v499 Imm(3)                                           -> x1
-    v500 Imm(0)                                           -> x6
-    v501 Imm(0)                                           -> x6
+    v497 Imm(0)                                           -> x0
+    v498 Imm(0)                                           -> x0
+    v499 Imm(3)                                           -> -
+    v500 Imm(0)                                           -> x0
+    v501 Imm(0)                                           -> x0
     v502 AggParts { desc=18, parts=[v494, v496], fp_mask=0x0 } -> -
     v503 Call { target_pc=7, args=[v491, v502, v499], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v504 Imm(0)                                           -> x1
@@ -1068,17 +1068,17 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v510 LifetimeEnd(-147)                                -> -
     terminator Return(v508)   (exit_acc=v508)
   block 24  start_pc=0
-    v511 Imm(2)                                           -> x7
+    v511 Imm(2)                                           -> -
     v512 LocalAddr(-148)                                  -> x0
     v513 Imm(0)                                           -> x0
-    v514 LoadLocal { off=-148, kind=I64 }                 -> x0
-    v515 Imm(0)                                           -> x1
+    v514 LoadLocal { off=-148, kind=I64 }                 -> x6
+    v515 Imm(0)                                           -> x0
     v516 LoadLocal { off=-148, disp=8, kind=I64 }         -> x2
-    v517 Imm(0)                                           -> x1
-    v518 Imm(0)                                           -> x1
-    v519 Imm(4)                                           -> x1
-    v520 Imm(0)                                           -> x6
-    v521 Imm(0)                                           -> x6
+    v517 Imm(0)                                           -> x0
+    v518 Imm(0)                                           -> x0
+    v519 Imm(4)                                           -> -
+    v520 Imm(0)                                           -> x0
+    v521 Imm(0)                                           -> x0
     v522 AggParts { desc=19, parts=[v514, v516], fp_mask=0x0 } -> -
     v523 Call { target_pc=7, args=[v511, v522, v519], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v524 Imm(0)                                           -> x1
@@ -1092,17 +1092,17 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v530 LifetimeEnd(-147)                                -> -
     terminator Return(v528)   (exit_acc=v528)
   block 26  start_pc=0
-    v531 Imm(1)                                           -> x7
+    v531 Imm(1)                                           -> -
     v532 Imm(0)                                           -> x0
     v533 Imm(0)                                           -> x0
-    v534 Imm(11)                                          -> x0
-    v535 Imm(0)                                           -> x1
+    v534 Imm(11)                                          -> x6
+    v535 Imm(0)                                           -> x0
     v536 Imm(5)                                           -> x2
-    v537 Imm(0)                                           -> x1
-    v538 Imm(0)                                           -> x1
-    v539 Imm(3)                                           -> x1
-    v540 Imm(0)                                           -> x6
-    v541 Imm(0)                                           -> x6
+    v537 Imm(0)                                           -> x0
+    v538 Imm(0)                                           -> x0
+    v539 Imm(3)                                           -> -
+    v540 Imm(0)                                           -> x0
+    v541 Imm(0)                                           -> x0
     v542 AggParts { desc=20, parts=[v534, v536], fp_mask=0x0 } -> -
     v543 Call { target_pc=8, args=[v531, v542, v539], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v544 Imm(0)                                           -> x1
@@ -1116,17 +1116,17 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v550 LifetimeEnd(-147)                                -> -
     terminator Return(v548)   (exit_acc=v548)
   block 28  start_pc=0
-    v551 Imm(2)                                           -> x7
+    v551 Imm(2)                                           -> -
     v552 Imm(0)                                           -> x0
     v553 Imm(0)                                           -> x0
-    v554 Imm(40)                                          -> x0
-    v555 Imm(0)                                           -> x1
+    v554 Imm(40)                                          -> x6
+    v555 Imm(0)                                           -> x0
     v556 Imm(-2)                                          -> x2
-    v557 Imm(0)                                           -> x1
-    v558 Imm(0)                                           -> x1
-    v559 Imm(4)                                           -> x1
-    v560 Imm(0)                                           -> x6
-    v561 Imm(0)                                           -> x6
+    v557 Imm(0)                                           -> x0
+    v558 Imm(0)                                           -> x0
+    v559 Imm(4)                                           -> -
+    v560 Imm(0)                                           -> x0
+    v561 Imm(0)                                           -> x0
     v562 AggParts { desc=21, parts=[v554, v556], fp_mask=0x0 } -> -
     v563 Call { target_pc=8, args=[v551, v562, v559], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v564 Imm(0)                                           -> x1
@@ -1140,17 +1140,17 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v570 LifetimeEnd(-147)                                -> -
     terminator Return(v568)   (exit_acc=v568)
   block 30  start_pc=0
-    v571 Imm(1)                                           -> x7
+    v571 Imm(1)                                           -> -
     v572 Imm(0)                                           -> x0
     v573 Imm(0)                                           -> x0
-    v574 Imm(11)                                          -> x0
-    v575 Imm(0)                                           -> x1
+    v574 Imm(11)                                          -> x6
+    v575 Imm(0)                                           -> x0
     v576 Imm(5)                                           -> x2
-    v577 Imm(0)                                           -> x1
-    v578 Imm(0)                                           -> x1
-    v579 Imm(3)                                           -> x1
-    v580 Imm(0)                                           -> x6
-    v581 Imm(0)                                           -> x6
+    v577 Imm(0)                                           -> x0
+    v578 Imm(0)                                           -> x0
+    v579 Imm(3)                                           -> -
+    v580 Imm(0)                                           -> x0
+    v581 Imm(0)                                           -> x0
     v582 AggParts { desc=22, parts=[v574, v576], fp_mask=0x0 } -> -
     v583 Call { target_pc=9, args=[v571, v582, v579], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v584 Imm(0)                                           -> x1
@@ -1164,17 +1164,17 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v590 LifetimeEnd(-147)                                -> -
     terminator Return(v588)   (exit_acc=v588)
   block 32  start_pc=0
-    v591 Imm(2)                                           -> x7
+    v591 Imm(2)                                           -> -
     v592 Imm(0)                                           -> x0
     v593 Imm(0)                                           -> x0
-    v594 Imm(40)                                          -> x0
-    v595 Imm(0)                                           -> x1
+    v594 Imm(40)                                          -> x6
+    v595 Imm(0)                                           -> x0
     v596 Imm(-2)                                          -> x2
-    v597 Imm(0)                                           -> x1
-    v598 Imm(0)                                           -> x1
-    v599 Imm(4)                                           -> x1
-    v600 Imm(0)                                           -> x6
-    v601 Imm(0)                                           -> x6
+    v597 Imm(0)                                           -> x0
+    v598 Imm(0)                                           -> x0
+    v599 Imm(4)                                           -> -
+    v600 Imm(0)                                           -> x0
+    v601 Imm(0)                                           -> x0
     v602 AggParts { desc=23, parts=[v594, v596], fp_mask=0x0 } -> -
     v603 Call { target_pc=9, args=[v591, v602, v599], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v604 Imm(0)                                           -> x1
@@ -1188,12 +1188,12 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v610 LifetimeEnd(-147)                                -> -
     terminator Return(v608)   (exit_acc=v608)
   block 34  start_pc=0
-    v611 Imm(1)                                           -> x7
-    v612 Imm(2)                                           -> x6
-    v613 Imm(3)                                           -> x2
-    v614 Imm(4)                                           -> x8
-    v615 Imm(5)                                           -> x9
-    v616 Imm(6)                                           -> [spill 0]
+    v611 Imm(1)                                           -> -
+    v612 Imm(2)                                           -> -
+    v613 Imm(3)                                           -> -
+    v614 Imm(4)                                           -> -
+    v615 Imm(5)                                           -> -
+    v616 Imm(6)                                           -> -
     v617 Imm(7)                                           -> -
     v618 Imm(8)                                           -> -
     v619 Imm(0)                                           -> x0
@@ -1201,10 +1201,10 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v621 Imm(11)                                          -> x0
     v622 Imm(0)                                           -> x1
     v623 Imm(5)                                           -> x1
-    v624 Imm(0)                                           -> x10
-    v625 Imm(0)                                           -> x10
-    v626 Imm(0)                                           -> x10
-    v627 Imm(0)                                           -> x10
+    v624 Imm(0)                                           -> x2
+    v625 Imm(0)                                           -> x2
+    v626 Imm(0)                                           -> x2
+    v627 Imm(0)                                           -> x2
     v628 AggParts { desc=24, parts=[v621, v623], fp_mask=0x0 } -> -
     v629 Call { target_pc=10, args=[v611, v612, v613, v614, v615, v616, v617, v618, v611, v628, v613], fixed_args=11, fp_return=false, fp_arg_mask=0x0 } -> x0
     v630 Imm(0)                                           -> x1
@@ -1219,7 +1219,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v637 LifetimeEnd(-147)                                -> -
     terminator Return(v635)   (exit_acc=v635)
   block 36  start_pc=0
-    v638 Imm(0)                                           -> x7
+    v638 Imm(0)                                           -> -
     v639 Imm(1)                                           -> -
     v640 Imm(2)                                           -> -
     v641 Imm(0)                                           -> x0
@@ -1246,9 +1246,9 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v660 LifetimeEnd(-147)                                -> -
     terminator Return(v658)   (exit_acc=v658)
   block 38  start_pc=0
-    v661 Imm(0)                                           -> x7
+    v661 Imm(0)                                           -> -
     v662 LocalAddr(-147)                                  -> x6
-    v663 Imm(3)                                           -> x1
+    v663 Imm(3)                                           -> -
     v664 Call { target_pc=11, args=[v661, v662, v663], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v665 Imm(0)                                           -> x1
     v666 Imm(5032)                                        -> x1
@@ -1260,10 +1260,10 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v670 LifetimeEnd(-147)                                -> -
     terminator Return(v668)   (exit_acc=v668)
   block 40  start_pc=0
-    v671 Imm(1)                                           -> x7
-    v672 Imm(2)                                           -> x6
+    v671 Imm(1)                                           -> -
+    v672 Imm(2)                                           -> -
     v673 LocalAddr(-148)                                  -> x2
-    v674 Imm(4)                                           -> x8
+    v674 Imm(4)                                           -> -
     v675 Call { target_pc=11, args=[v671, v672, v673, v674], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v676 Imm(2)                                           -> x1
     v677 Imm(0)                                           -> x1
@@ -1277,8 +1277,8 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v683 LifetimeEnd(-147)                                -> -
     terminator Return(v681)   (exit_acc=v681)
   block 42  start_pc=0
-    v684 Imm(2)                                           -> x7
-    v685 Imm(3)                                           -> x2
+    v684 Imm(2)                                           -> -
+    v685 Imm(3)                                           -> -
     v686 LocalAddr(-147)                                  -> x1
     v687 Call { target_pc=11, args=[v684, v684, v685, v686, v685], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v688 Imm(8)                                           -> x1
@@ -1293,8 +1293,8 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v695 LifetimeEnd(-147)                                -> -
     terminator Return(v693)   (exit_acc=v693)
   block 44  start_pc=0
-    v696 Imm(7)                                           -> x7
-    v697 Imm(1)                                           -> x6
+    v696 Imm(7)                                           -> -
+    v697 Imm(1)                                           -> -
     v698 LocalAddr(-148)                                  -> x0
     v699 Imm(5)                                           -> -
     v700 Call { target_pc=11, args=[v696, v697, v697, v697, v697, v697, v697, v697, v698, v699], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -1310,8 +1310,8 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v708 LifetimeEnd(-147)                                -> -
     terminator Return(v706)   (exit_acc=v706)
   block 46  start_pc=0
-    v709 Imm(8)                                           -> x7
-    v710 Imm(1)                                           -> x6
+    v709 Imm(8)                                           -> -
+    v710 Imm(1)                                           -> -
     v711 LocalAddr(-147)                                  -> x0
     v712 Imm(3)                                           -> -
     v713 Call { target_pc=11, args=[v709, v710, v710, v710, v710, v710, v710, v710, v710, v711, v712], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -1382,7 +1382,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -1441,7 +1441,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

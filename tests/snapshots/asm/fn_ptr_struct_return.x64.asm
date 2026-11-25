@@ -31,8 +31,8 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	xorl	%edi, %edi
                	movq	<rip>, %rax # <addr>
+               	xorl	%edi, %edi
                	callq	*%rax
                	testq	%rax, %rax
                	jne	<addr>

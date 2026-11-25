@@ -40,10 +40,10 @@ Disassembly of section .text:
                	strh	w16, [x20]
                	ldrb	w16, [x0, #0x2]
                	strb	w16, [x20, #0x2]
-               	sub	x2, x29, #0x8
-               	mov	x0, #0x3                // =3
-               	mov	x3, #0x5                // =5
                	mov	x1, x20
+               	mov	x0, #0x3                // =3
+               	sub	x2, x29, #0x8
+               	mov	x3, #0x5                // =5
                	bl	<addr>
                	ldurb	w0, [x29, #-0x8]
                	ldurb	w1, [x29, #-0x6]

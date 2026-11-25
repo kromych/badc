@@ -55,7 +55,7 @@ Disassembly of section .text:
                	movq	$-0x4, %rdi
                	xorl	%esi, %esi
                	movl	$0x3b9aca00, %edx       # imm = 0x3B9ACA00
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	<addr>
                	movabsq	$-0xee6b2800, %r11      # imm = 0xFFFFFFFF1194D800
                	cmpq	%r11, %rax
@@ -84,8 +84,8 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	movl	$0xf4240, %edi          # imm = 0xF4240
+               	movl	$0xf4240, %esi          # imm = 0xF4240
                	xorl	%edx, %edx
-               	movq	%rdi, %rsi
                	callq	<addr>
                	movabsq	$-0xe8d4a51000, %r11    # imm = 0xFFFFFF172B5AF000
                	cmpq	%r11, %rax

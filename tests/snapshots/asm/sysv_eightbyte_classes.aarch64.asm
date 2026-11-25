@@ -99,10 +99,10 @@ Disassembly of section .text:
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3                // =3
-               	mov	x3, #0x2                // =2
                	mov	x1, #0x0                // =0
                	mov	x2, #0x4012000000000000 // =4616752568008179712
+               	mov	x0, #0x3                // =3
+               	mov	x3, #0x2                // =2
                	bl	<addr>
                	cmp	x0, #0xbe7
                	b.eq	<addr>
@@ -110,9 +110,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	d0, #0.50000000
-               	mov	x2, #0x2                // =2
                	mov	x0, #0x0                // =0
                	mov	x1, #0x7                // =7
+               	mov	x2, #0x2                // =2
                	bl	<addr>
                	cmp	x0, #0x2c3
                	b.eq	<addr>

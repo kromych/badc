@@ -703,8 +703,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x78, %rsp
                	retq
-               	movl	$0x1, %edi
                	movq	<rip>, %rsi # <addr>
+               	movl	$0x1, %edi
                	movb	$0x0, %al
                	callq	<addr>
                	movsd	0x68(%rsp), %xmm15

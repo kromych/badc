@@ -291,8 +291,8 @@ Disassembly of section .text:
                	strh	w0, [sp, #0xc]
                	mov	x0, #0xc9d0             // =51664
                	strh	w0, [sp, #0xe]
-               	mov	x0, #-0x3c              // =-60
                	ldr	q0, [x7]
+               	mov	x0, #-0x3c              // =-60
                	bl	<addr>
                	sub	x2, x29, #0x210
                	str	q0, [sp, #0x40]
@@ -424,9 +424,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x7]
+               	ldr	q0, [x7]
                	mov	x0, #0xcd15             // =52501
                	movk	x0, #0x75b, lsl #16
-               	ldr	q0, [x7]
                	bl	<addr>
                	smov	x0, v0.s[0]
                	cmn	x0, #0x7

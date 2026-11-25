@@ -208,7 +208,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
-               	mov	x3, x0
+               	mov	x3, #0x3                // =3
                	bl	<addr>
                	orr	x1, x20, #0x1000
                	cmp	x0, #0x6

@@ -652,7 +652,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v192 Load { addr=v191, disp=0, kind=I32, volatile pc_rel } -> x0
     v193 BinopI { op=add, lhs=v192, rhs_imm=-8 }          -> x6
     v194 Extend { value=v193, kind=I32, nsw }             -> x0
-    v195 Imm(200)                                         -> x2
+    v195 Imm(200)                                         -> -
     v196 Call { target_pc=7, args=[v189, v193, v195], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v197 ImmData(32)                                      -> x0
     v198 Imm(16)                                          -> x1
@@ -662,7 +662,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v202 Load { addr=v201, disp=0, kind=I32, volatile pc_rel } -> x0
     v203 BinopI { op=add, lhs=v202, rhs_imm=-8 }          -> x6
     v204 Extend { value=v203, kind=I32, nsw }             -> x0
-    v205 Imm(40000)                                       -> x2
+    v205 Imm(40000)                                       -> -
     v206 Call { target_pc=8, args=[v199, v203, v205], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v207 ImmData(64)                                      -> x0
     v208 Imm(32)                                          -> x1
@@ -672,7 +672,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v212 Load { addr=v211, disp=0, kind=I32, volatile pc_rel } -> x0
     v213 BinopI { op=add, lhs=v212, rhs_imm=-8 }          -> x6
     v214 Extend { value=v213, kind=I32, nsw }             -> x0
-    v215 Imm(-5)                                          -> x2
+    v215 Imm(-5)                                          -> -
     v216 Call { target_pc=9, args=[v209, v213, v215], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v217 ImmData(128)                                     -> x0
     v218 Imm(64)                                          -> x1
@@ -682,7 +682,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v222 Load { addr=v221, disp=0, kind=I32, volatile pc_rel } -> x0
     v223 BinopI { op=add, lhs=v222, rhs_imm=-8 }          -> x6
     v224 Extend { value=v223, kind=I32, nsw }             -> x0
-    v225 Imm(-6)                                          -> x2
+    v225 Imm(-6)                                          -> -
     v226 Call { target_pc=10, args=[v219, v223, v225], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v227 ImmData(1)                                       -> x0
     v228 Imm(0)                                           -> x0
@@ -809,7 +809,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v323 BinopI { op=add, lhs=v322, rhs_imm=3 }           -> x6
     v324 Extend { value=v323, kind=I32, nsw }             -> x0
     v325 BinopI { op=and, lhs=v323, rhs_imm=4294967295 }  -> x0
-    v326 Imm(33)                                          -> x2
+    v326 Imm(33)                                          -> -
     v327 Call { target_pc=12, args=[v319, v323, v326], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v328 ImmData(128)                                     -> x0
     v329 Imm(24)                                          -> x0
@@ -1080,7 +1080,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -1139,7 +1139,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

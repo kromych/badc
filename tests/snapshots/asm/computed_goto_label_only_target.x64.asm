@@ -73,8 +73,8 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x5, %edi
                	movl	0x8(%rsp), %esi
+               	movl	$0x5, %edi
                	callq	<addr>
                	cmpl	$0x19, %eax
                	je	<addr>

@@ -94,10 +94,8 @@ Disassembly of section .text:
                	mov	x0, #0x14               // =20
                	bl	<addr>
                	mov	x20, x0
-               	mov	x1, #0x0                // =0
                	mov	x0, #0xc                // =12
                	movk	x0, #0x7, lsl #32
-               	mov	x2, #0x4                // =4
                	str	x0, [x20]
                	mov	x0, #0xf                // =15
                	movk	x0, #0x5, lsl #32
@@ -105,6 +103,8 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	str	w0, [x20, #0x10]
                	mov	x0, x20
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x4                // =4
                	bl	<addr>
                	ldrsw	x0, [x20]
                	cmp	w0, #0x5

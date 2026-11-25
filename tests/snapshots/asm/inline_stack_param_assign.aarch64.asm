@@ -81,20 +81,20 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x12c              // =300
-               	mov	x3, #0x9c40             // =40000
-               	mov	x4, #-0x32              // =-50
-               	mov	x5, #0x3c               // =60
-               	mov	x7, #0x320              // =800
-               	adrp	x9, <page>
-               	ldr	x9, [x9, <lo12>]
+               	adrp	x1, <page>
+               	ldr	x9, [x1, #0x10]
                	mov	x16, #0x9               // =9
                	str	x16, [sp]
                	mov	x16, #0x86a0            // =34464
                	movk	x16, #0x1, lsl #16
                	str	x16, [sp, #0x8]
                	str	x8, [sp, #0x10]
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x12c              // =300
+               	mov	x3, #0x9c40             // =40000
+               	mov	x4, #-0x32              // =-50
+               	mov	x5, #0x3c               // =60
+               	mov	x7, #0x320              // =800
                	blr	x9
                	mov	x17, #0x8602            // =34306
                	movk	x17, #0xb2d2, lsl #16

@@ -98,7 +98,7 @@ Disassembly of section .text:
                	movl	$0x2, -0x108(%rbp)
                	xorl	%edi, %edi
                	leaq	-0x100(%rbp), %rsi
-               	movq	%rdi, %rdx
+               	xorl	%edx, %edx
                	callq	<addr>
                	callq	<addr>
                	ud2

@@ -81,8 +81,8 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	movl	$0x1, %edi
                	movsd	<rip>, %xmm0
+               	movl	$0x1, %edi
                	movb	$0x1, %al
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
@@ -96,8 +96,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%r11
                	retq
-               	movl	$0x1, %edi
                	movsd	<rip>, %xmm0
+               	movl	$0x1, %edi
                	movb	$0x1, %al
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
@@ -111,9 +111,9 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%r11
                	retq
-               	movl	$0x2, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
+               	movl	$0x2, %edi
                	movb	$0x2, %al
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
@@ -127,10 +127,10 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%r11
                	retq
-               	movl	$0x3, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
+               	movl	$0x3, %edi
                	movb	$0x3, %al
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0

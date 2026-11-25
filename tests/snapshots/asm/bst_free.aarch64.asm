@@ -122,11 +122,11 @@ Disassembly of section .text:
                	mov	x1, #0x32               // =50
                	bl	<addr>
                	mov	x20, x0
+               	mov	x0, x20
                	mov	x1, #0x1e               // =30
-               	mov	x0, x20
                	bl	<addr>
-               	mov	x1, #0x46               // =70
                	mov	x0, x20
+               	mov	x1, #0x46               // =70
                	bl	<addr>
                	mov	x0, x20
                	bl	<addr>

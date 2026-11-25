@@ -35,10 +35,10 @@ Disassembly of section .text:
                	bl	<addr>
                	bl	<addr>
                	str	wzr, [x0]
-               	sub	x1, x29, #0x8
-               	mov	x2, #0xa                // =10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	sub	x1, x29, #0x8
+               	mov	x2, #0xa                // =10
                	bl	<addr>
                	mov	x20, x0
                	ldur	x0, [x29, #-0x8]

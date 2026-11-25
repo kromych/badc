@@ -51,13 +51,13 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movl	$0x3, %esi
                	leaq	0x8(%rsp), %rdi
                	movq	$0x0, (%rdi)
                	leaq	0x10(%rsp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
+               	movl	$0x3, %esi
                	callq	<addr>
                	movl	$0x3, %edi
                	callq	<addr>

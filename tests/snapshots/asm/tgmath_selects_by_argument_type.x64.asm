@@ -84,8 +84,8 @@ Disassembly of section .text:
                	movl	0x48(%rsp), %eax
                	cmpl	$0x4, %eax
                	jne	<addr>
-               	movl	$0x2, %edi
                	movss	<rip>, %xmm0
+               	movl	$0x2, %edi
                	callq	<addr>
                	ucomiss	<rip>, %xmm0
                	jp	<addr>

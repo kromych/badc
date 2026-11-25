@@ -1207,6 +1207,7 @@ struct CallArgs<'a> {
     plan: &'a super::CallPlan,
     args: &'a [u32],
     alloc: &'a Allocation,
+    func: &'a FunctionSsa,
     scratch: &'a ScratchPool,
     frame: Frame,
     arg_aggs: &'a [Option<u32>],
@@ -1341,10 +1342,19 @@ impl CallArgs<'_> {
     /// Argument `i`'s value in an integer register, reloaded into `into`
     /// when spilled, with the call's sp lowering applied.
     fn arg_int(&self, code: &mut CodeBuf, i: usize, into: Reg) -> Option<Reg> {
-        // A constant the allocator left to the call (`Allocation::stack_imm`).
-        if let Some(&k) = self.alloc.stack_imm.get(&self.args[i]) {
-            load_imm64(code, into, k as u64);
-            return Some(into);
+        // A value the allocator left to the call (`Allocation::call_set`),
+        // an sp-based address reaching over the call's sp lowering.
+        match self.alloc.call_set.get(&self.args[i]) {
+            Some(&ArgSet::Imm(k)) => {
+                load_imm64(code, into, k as u64);
+                return Some(into);
+            }
+            Some(&ArgSet::Local(off)) => {
+                let loc = local_slot(off, self.func, self.frame).sp_lowered(self.sp_shift());
+                emit_frame_addr(code, Place::IntReg(into.0), loc, self.frame).ok()?;
+                return Some(into);
+            }
+            None => {}
         }
         // A frame load it left to the call (`Allocation::stack_load`): an
         // ordinary local, read while sp stands lowered for the call.
@@ -1393,7 +1403,7 @@ impl CallArgs<'_> {
                 emit_mem(code, op, dn, Reg(31), off.into(), self.scratch.primary);
             } else {
                 // A zero constant the call sets is stored from xzr / wzr.
-                let zero = self.alloc.stack_imm.get(&self.args[i]) == Some(&0);
+                let zero = self.alloc.call_set.get(&self.args[i]) == Some(&ArgSet::Imm(0));
                 let src = if zero {
                     Reg(31)
                 } else {
@@ -1737,6 +1747,7 @@ pub(super) fn marshal_args(
         plan,
         args,
         alloc,
+        func,
         scratch,
         frame,
         arg_aggs,

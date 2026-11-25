@@ -96,7 +96,7 @@ Disassembly of section .text:
                	str	w0, [sp, #0x8]
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x100
-               	mov	x2, x0
+               	mov	x2, #0x0                // =0
                	bl	<addr>
                	bl	<addr>
                	brk	#0x1

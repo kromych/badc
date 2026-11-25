@@ -97,7 +97,7 @@ Disassembly of section .text:
                	ret
                	ldr	x2, [x0, #0x8]
                	mov	x0, #0x1                // =1
-               	mov	x1, x0
+               	mov	x1, #0x1                // =1
                	blr	x2
                	cmp	w0, #0x2
                	b.eq	<addr>

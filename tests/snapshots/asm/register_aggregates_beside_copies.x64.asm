@@ -119,7 +119,6 @@ Disassembly of section .text:
 <main>:
                	subq	$0x38, %rsp
                	movq	<rip>, %rax # <addr>
-               	leaq	0x10(%rsp), %rdx
                	movq	%rax, 0x10(%rsp)
                	movq	<rip>, %rax # <addr>
                	shlq	%rax
@@ -131,6 +130,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %r10
                	movq	%r10, (%rdi)
+               	leaq	0x10(%rsp), %rdx
                	movq	(%rdi), %rdi
                	callq	<addr>
                	cmpq	$0x30, %rax

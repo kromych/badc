@@ -85,19 +85,19 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x8]
                	ldur	x0, [x29, #-0x10]
+               	adrp	x2, <page>
+               	ldr	x9, [x2, #0x10]
+               	mov	x16, x8
+               	ldr	x17, [x16]
+               	str	x17, [sp]
+               	ldr	x17, [x16, #0x8]
+               	str	x17, [sp, #0x8]
                	mov	x2, #0x3                // =3
                	mov	x3, #0x4                // =4
                	mov	x4, #0x5                // =5
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	adrp	x9, <page>
-               	ldr	x9, [x9, <lo12>]
-               	mov	x16, x8
-               	ldr	x17, [x16]
-               	str	x17, [sp]
-               	ldr	x17, [x16, #0x8]
-               	str	x17, [sp, #0x8]
                	blr	x9
                	cmp	x0, #0xbe0
                	b.eq	<addr>
@@ -113,13 +113,8 @@ Disassembly of section .text:
                	mov	x3, #0x4                // =4
                	stur	w3, [x29, #-0x18]
                	ldur	x0, [x29, #-0x10]
-               	mov	x1, #0x2                // =2
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x6, #0x7                // =7
-               	mov	x7, #0x8                // =8
-               	adrp	x9, <page>
-               	ldr	x9, [x9, <lo12>]
+               	adrp	x1, <page>
+               	ldr	x9, [x1, #0x18]
                	mov	x16, x8
                	ldr	x17, [x16]
                	str	x17, [sp]
@@ -131,6 +126,11 @@ Disassembly of section .text:
                	strb	w17, [sp, #0xa]
                	ldrb	w17, [x16, #0xb]
                	strb	w17, [sp, #0xb]
+               	mov	x1, #0x2                // =2
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
+               	mov	x7, #0x8                // =8
                	blr	x9
                	cmp	x0, #0x10e
                	b.eq	<addr>

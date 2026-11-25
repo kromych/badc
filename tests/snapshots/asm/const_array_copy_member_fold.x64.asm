@@ -82,19 +82,19 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx
                	movl	%ecx, <rip> # <addr>
-               	movl	$0x3c, %edx
-               	movl	$0x34, %ecx
-               	movl	$0x2, %r9d
                	movq	%rsi, %rdi
                	movq	%rax, %r8
                	movq	%rax, %rsi
+               	movl	$0x3c, %edx
+               	movl	$0x34, %ecx
+               	movl	$0x2, %r9d
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	xorl	%esi, %esi
                	movl	$0x7, %edx
                	movl	$0x5, %ecx
+               	xorl	%r8d, %r8d
                	movl	$0x1, %r9d
-               	movq	%rsi, %r8
                	callq	<addr>
                	movl	<rip>, %eax # <addr>
                	addq	$0x18, %rsp

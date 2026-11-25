@@ -445,7 +445,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v34  LocalAddr(-20)                                   -> x0
     v35  ImmData(176)                                     -> x1
     v36  Mcpy { dst=v34, src=v35, size=8, align=8 }       -> -
-    v37  Imm(1)                                           -> x7
+    v37  Imm(1)                                           -> -
     v38  LocalAddr(-19)                                   -> x0
     v39  Call { target_pc=0, args=[v37, v1], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v40  Imm(12)                                          -> x0
@@ -471,7 +471,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v58  LifetimeEnd(-19)                                 -> -
     terminator Return(v43)   (exit_acc=v43)
   block 2  start_pc=0
-    v59  Imm(2)                                           -> x7
+    v59  Imm(2)                                           -> -
     v60  LocalAddr(-19)                                   -> x9
     v61  LocalAddr(-17)                                   -> x0
     v62  Call { target_pc=0, args=[v59, v60, v61], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
@@ -498,7 +498,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v81  LifetimeEnd(-19)                                 -> -
     terminator Return(v66)   (exit_acc=v66)
   block 4  start_pc=0
-    v82  Imm(5)                                           -> x7
+    v82  Imm(5)                                           -> -
     v83  LocalAddr(-19)                                   -> x9
     v84  LocalAddr(-17)                                   -> x0
     v85  LocalAddr(-15)                                   -> x1
@@ -528,7 +528,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v107 LifetimeEnd(-19)                                 -> -
     terminator Return(v92)   (exit_acc=v92)
   block 6  start_pc=0
-    v108 Imm(1)                                           -> x7
+    v108 Imm(1)                                           -> -
     v109 LocalAddr(-8)                                    -> x9
     v110 Call { target_pc=1, args=[v108, v109], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v111 Imm(1234)                                        -> x0
@@ -554,7 +554,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v129 LifetimeEnd(-19)                                 -> -
     terminator Return(v114)   (exit_acc=v114)
   block 8  start_pc=0
-    v130 Imm(3)                                           -> x7
+    v130 Imm(3)                                           -> -
     v131 LocalAddr(-8)                                    -> x9
     v132 LocalAddr(-5)                                    -> x0
     v133 LocalAddr(-2)                                    -> x1
@@ -590,7 +590,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v159 LocalAddr(-3)                                    -> x1
     v160 ImmData(232)                                     -> x2
     v161 Mcpy { dst=v159, src=v160, size=24, align=8 }    -> -
-    v162 Imm(3)                                           -> x7
+    v162 Imm(3)                                           -> -
     v163 Imm(4602678819172646912)                         -> d0
     v164 LocalAddr(-9)                                    -> x2
     v165 LocalAddr(-6)                                    -> x2
@@ -619,7 +619,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v186 LifetimeEnd(-19)                                 -> -
     terminator Return(v171)   (exit_acc=v171)
   block 12  start_pc=0
-    v187 Imm(2)                                           -> x7
+    v187 Imm(2)                                           -> -
     v188 LocalAddr(-46)                                   -> x9
     v189 LocalAddr(-47)                                   -> x0
     v190 Call { target_pc=3, args=[v187, v188, v189], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -647,7 +647,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v210 LifetimeEnd(-19)                                 -> -
     terminator Return(v195)   (exit_acc=v195)
   block 14  start_pc=0
-    v211 Imm(9)                                           -> x7
+    v211 Imm(9)                                           -> -
     v212 LocalAddr(-46)                                   -> x9
     v213 LocalAddr(-46)                                   -> x0
     v214 LocalAddr(-46)                                   -> x0
@@ -682,8 +682,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v241 LifetimeEnd(-19)                                 -> -
     terminator Return(v226)   (exit_acc=v226)
   block 16  start_pc=0
-    v242 Imm(2)                                           -> x7
-    v243 Imm(1)                                           -> x6
+    v242 Imm(2)                                           -> -
+    v243 Imm(1)                                           -> -
     v244 LocalAddr(-21)                                   -> x9
     v245 LocalAddr(-20)                                   -> x0
     v246 Call { target_pc=4, args=[v242, v243, v244, v242, v245], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
@@ -710,7 +710,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v265 LifetimeEnd(-19)                                 -> -
     terminator Return(v250)   (exit_acc=v250)
   block 18  start_pc=0
-    v266 Imm(5)                                           -> x7
+    v266 Imm(5)                                           -> -
     v267 LocalAddr(-19)                                   -> x9
     v268 LocalAddr(-17)                                   -> x0
     v269 LocalAddr(-15)                                   -> x1
@@ -803,7 +803,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -862,7 +862,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

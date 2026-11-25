@@ -143,7 +143,7 @@ Disassembly of section .text:
                	movl	$0x2, %edx
                	movl	$0x3, %ecx
                	movl	$0x4, %r8d
-               	movq	%rdi, %r9
+               	movl	$0x5, %r9d
                	movb	$0x0, %al
                	callq	<addr>
                	cmpq	$0xf, %rax

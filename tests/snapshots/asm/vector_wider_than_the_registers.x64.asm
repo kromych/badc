@@ -6061,10 +6061,10 @@ Disassembly of section .text:
                	addss	%xmm0, %xmm0
                	vdivss	<rip>, %xmm0, %xmm1
                	movss	%xmm1, 0x3c(%rsp)
-               	leaq	0x40(%rsp), %rdi
                	leaq	(%rsp), %rbx
-               	leaq	0x20(%rsp), %rdx
                	movq	%rbx, %rsi
+               	leaq	0x40(%rsp), %rdi
+               	leaq	0x20(%rsp), %rdx
                	callq	<addr>
                	xorl	%eax, %eax
                	movss	(%rsp,%rax,4), %xmm1
@@ -6911,10 +6911,10 @@ Disassembly of section .text:
                	addss	%xmm0, %xmm0
                	vdivss	<rip>, %xmm0, %xmm1
                	movss	%xmm1, 0x7c(%rsp)
-               	leaq	0x80(%rsp), %rdi
                	leaq	(%rsp), %rbx
-               	leaq	0x40(%rsp), %rdx
                	movq	%rbx, %rsi
+               	leaq	0x80(%rsp), %rdi
+               	leaq	0x40(%rsp), %rdx
                	callq	<addr>
                	xorl	%eax, %eax
                	movss	(%rsp,%rax,4), %xmm1
@@ -7180,10 +7180,10 @@ Disassembly of section .text:
                	addsd	%xmm0, %xmm0
                	vdivsd	<rip>, %xmm0, %xmm1
                	movsd	%xmm1, 0x38(%rsp)
-               	leaq	0x40(%rsp), %rdi
                	leaq	(%rsp), %rbx
-               	leaq	0x20(%rsp), %rdx
                	movq	%rbx, %rsi
+               	leaq	0x40(%rsp), %rdi
+               	leaq	0x20(%rsp), %rdx
                	callq	<addr>
                	xorl	%eax, %eax
                	vmovq	(%rsp,%rax,8), %xmm1
@@ -7664,10 +7664,10 @@ Disassembly of section .text:
                	addsd	%xmm0, %xmm0
                	vdivsd	<rip>, %xmm0, %xmm1
                	movsd	%xmm1, 0x78(%rsp)
-               	leaq	0x80(%rsp), %rdi
                	leaq	(%rsp), %rbx
-               	leaq	0x40(%rsp), %rdx
                	movq	%rbx, %rsi
+               	leaq	0x80(%rsp), %rdi
+               	leaq	0x40(%rsp), %rdx
                	callq	<addr>
                	xorl	%eax, %eax
                	vmovq	(%rsp,%rax,8), %xmm1

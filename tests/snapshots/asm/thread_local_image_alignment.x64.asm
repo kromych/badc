@@ -87,15 +87,15 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x10(%rsp)
-               	leaq	0x20(%rsp), %rdi
-               	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	movq	0x18(%rsp), %r11
-               	movq	%rsi, %rcx
+               	leaq	0x20(%rsp), %rdi
+               	xorl	%esi, %esi
+               	xorl	%ecx, %ecx
                	callq	*%r11
                	movq	0x20(%rsp), %rdi
-               	leaq	0x28(%rsp), %rsi
                	movq	0x10(%rsp), %r11
+               	leaq	0x28(%rsp), %rsi
                	callq	*%r11
                	movq	0x28(%rsp), %rax
                	addq	$0x38, %rsp

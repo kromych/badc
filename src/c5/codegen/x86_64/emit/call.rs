@@ -11,7 +11,7 @@ use super::*;
 fn marshal_args(
     code: &mut CodeBuf,
     plan: &super::CallPlan,
-    (args, insts): (&[u32], &[Inst]),
+    (args, insts, func): (&[u32], &[Inst], &FunctionSsa),
     aggs: &[Option<super::ArgAgg>],
     alloc: &Allocation,
     frame: Frame,
@@ -28,6 +28,7 @@ fn marshal_args(
         args,
         aggs,
         alloc,
+        func,
         frame,
         abi,
         site,
@@ -108,6 +109,7 @@ struct Marshal<'a> {
     /// vector register 16.
     aggs: &'a [Option<super::ArgAgg>],
     alloc: &'a Allocation,
+    func: &'a FunctionSsa,
     frame: Frame,
     abi: super::Abi,
     site: &'a str,
@@ -159,10 +161,23 @@ impl Marshal<'_> {
     /// produced.
     fn arg_int(&self, code: &mut CodeBuf, i: usize, stage: impl Into<Stage>) -> Option<Reg> {
         let stage = stage.into();
-        // A constant the allocator left to the call (`Allocation::stack_imm`).
-        if let Some(&k) = self.alloc.stack_imm.get(&self.args[i]) {
+        // A value the allocator left to the call (`Allocation::call_set`).
+        if let Some(&set) = self.alloc.call_set.get(&self.args[i]) {
             let scratch = stage.reg(code);
-            emit_mov_r_imm64(code, scratch, k);
+            match set {
+                ArgSet::Imm(k) => emit_mov_r_imm64(code, scratch, k),
+                // An rsp-based address reaches over the window rsp descended by.
+                ArgSet::Local(off) => {
+                    let (base, bytes) = local_slot_base_disp(off, self.func, self.frame, self.abi);
+                    let shift = if base.0 == Reg::RSP.0 {
+                        self.plan.scratch_bytes
+                    } else {
+                        0
+                    };
+                    let disp = i32::try_from(bytes + i64::from(shift)).ok()?;
+                    emit_lea_r_mem(code, scratch, base, disp);
+                }
+            }
             return Some(scratch);
         }
         // A frame load it left to the call (`Allocation::stack_load`): an
@@ -203,7 +218,7 @@ impl Marshal<'_> {
             if let super::ArgPlacement::Stack(off) = placement {
                 // `mov m64, imm32` sign-extends: a constant in its range
                 // goes to the slot from the instruction itself.
-                if let Some(&k) = self.alloc.stack_imm.get(&self.args[i])
+                if let Some(&ArgSet::Imm(k)) = self.alloc.call_set.get(&self.args[i])
                     && let Ok(k) = i32::try_from(k)
                 {
                     super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, off as i32, k);
@@ -730,7 +745,7 @@ pub(super) fn emit_call(
     marshal_args(
         code,
         &plan,
-        (args, &func.insts),
+        (args, &func.insts, func),
         &aggs,
         alloc,
         frame,
@@ -818,7 +833,7 @@ pub(super) fn emit_call_ext(
     marshal_args(
         code,
         &plan,
-        (args, &func.insts),
+        (args, &func.insts, func),
         &aggs,
         alloc,
         frame,
@@ -1003,7 +1018,7 @@ pub(super) fn emit_call_indirect(
         marshal_args(
             code,
             &plan,
-            (args, &func.insts),
+            (args, &func.insts, func),
             &aggs,
             alloc,
             frame,
@@ -1048,7 +1063,7 @@ pub(super) fn emit_call_indirect(
             marshal_args(
                 code,
                 &windowed(&plan, frame)?,
-                (args, &func.insts),
+                (args, &func.insts, func),
                 &aggs,
                 alloc,
                 frame,
@@ -1079,7 +1094,7 @@ pub(super) fn emit_call_indirect(
             marshal_args(
                 code,
                 &shifted,
-                (args, &func.insts),
+                (args, &func.insts, func),
                 &aggs,
                 alloc,
                 frame,
@@ -1455,7 +1470,16 @@ pub(super) fn emit_tail_call(
     // this function's caller), so rsp has not moved and the marshal's
     // sp shift must be zero.
     plan.scratch_bytes = 0;
-    marshal_args(code, &plan, (args, &[]), &[], alloc, frame, abi, "TailCall")?;
+    marshal_args(
+        code,
+        &plan,
+        (args, &[], func),
+        &[],
+        alloc,
+        frame,
+        abi,
+        "TailCall",
+    )?;
     // `emit_return`'s epilogue without the return-value staging. A frame
     // realigned for an over-aligned object has rsp below the saves;
     // `detect_tail_call` admits it, no address of the object being taken.
@@ -1564,7 +1588,7 @@ mod tests {
         marshal_args(
             &mut code,
             &plan,
-            (args, &[]),
+            (args, &[], func),
             &[],
             &alloc,
             frame,

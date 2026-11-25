@@ -343,12 +343,12 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x28, %rsp
                	retq
+               	movq	$0x5, 0x20(%rsp)
+               	movq	$0x6, 0x28(%rsp)
                	movl	$0x1, %ecx
                	movl	$0x2, %edx
                	movl	$0x3, %r8d
                	movl	$0x4, %r9d
-               	movq	$0x5, 0x20(%rsp)
-               	movq	$0x6, 0x28(%rsp)
                	callq	<addr>
                	cmpq	$0x5b, %rax
                	je	<addr>
@@ -373,10 +373,10 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x28, %rsp
                	retq
-               	movl	$0x1, %ecx
                	movsd	<rip>, %xmm1
-               	movl	$0x3, %r8d
                	movsd	<rip>, %xmm3
+               	movl	$0x1, %ecx
+               	movl	$0x3, %r8d
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
                	jp	<addr>
@@ -387,10 +387,10 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x28, %rsp
                	retq
-               	movl	$0x1, %edi
                	movsd	<rip>, %xmm0
-               	movl	$0x3, %esi
                	movsd	<rip>, %xmm1
+               	movl	$0x1, %edi
+               	movl	$0x3, %esi
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
                	jp	<addr>

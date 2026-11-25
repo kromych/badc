@@ -82,16 +82,16 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%r11
                	retq
-               	movl	$0x21, %edi
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rsi
+               	movl	$0x21, %edi
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0x21, %rax
                	jne	<addr>
-               	movl	$0xa, %edi
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rsi
+               	movl	$0xa, %edi
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0xa, %rax
@@ -100,10 +100,10 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	leaq	<rip>, %rdi
-               	movl	$0x1, %esi
-               	movl	$0xc, %edx
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
+               	movl	$0x1, %esi
+               	movl	$0xc, %edx
                	callq	<addr>
                	cmpq	$0xc, %rax
                	je	<addr>

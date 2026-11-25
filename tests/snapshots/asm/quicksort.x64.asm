@@ -106,14 +106,14 @@ Disassembly of section .text:
                	movl	$0x14, %edi
                	callq	<addr>
                	movq	%rax, %rbx
-               	xorl	%esi, %esi
                	movabsq	$0x70000000c, %rax      # imm = 0x70000000C
-               	movl	$0x4, %edx
                	movq	%rax, (%rbx)
                	movabsq	$0x50000000f, %rax      # imm = 0x50000000F
                	movq	%rax, 0x8(%rbx)
                	movl	$0xa, 0x10(%rbx)
                	movq	%rbx, %rdi
+               	xorl	%esi, %esi
+               	movl	$0x4, %edx
                	callq	<addr>
                	movl	(%rbx), %eax
                	cmpl	$0x5, %eax

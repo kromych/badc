@@ -165,36 +165,36 @@ Disassembly of section .text:
                	movl	$0x32, %esi
                	callq	<addr>
                	movq	%rax, %rbx
+               	movq	%rbx, %rdi
                	movl	$0x1e, %esi
-               	movq	%rbx, %rdi
                	callq	<addr>
+               	movq	%rbx, %rdi
                	movl	$0x46, %esi
-               	movq	%rbx, %rdi
                	callq	<addr>
+               	movq	%rbx, %rdi
                	movl	$0x14, %esi
-               	movq	%rbx, %rdi
                	callq	<addr>
+               	movq	%rbx, %rdi
                	movl	$0x28, %esi
-               	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	$0x14, %esi
                	movq	%rbx, %rdi
+               	movl	$0x14, %esi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
                	retq
-               	movl	$0x28, %esi
                	movq	%rbx, %rdi
+               	movl	$0x28, %esi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
                	retq
-               	movl	$0x63, %esi
                	movq	%rbx, %rdi
+               	movl	$0x63, %esi
                	callq	<addr>
                	cmpl	$0x1, %eax
                	jne	<addr>

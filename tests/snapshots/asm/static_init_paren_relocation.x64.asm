@@ -31,9 +31,9 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	xorl	%edi, %edi
                	movq	<rip>, %rax # <addr>
-               	movq	%rdi, %rsi
+               	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	callq	*%rax
                	cmpl	$0x7, %eax
                	je	<addr>
@@ -56,9 +56,9 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%r11
                	retq
-               	xorl	%edi, %edi
                	movq	<rip>, %rax # <addr>
-               	movq	%rdi, %rsi
+               	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	callq	*%rax
                	cmpl	$0x7, %eax
                	je	<addr>

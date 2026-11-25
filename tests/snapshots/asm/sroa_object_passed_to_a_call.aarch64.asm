@@ -25,15 +25,15 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x50]!
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
+               	mov	x0, #0x4                // =4
+               	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x18
-               	mov	x1, #0x4                // =4
-               	stur	x1, [x29, #-0x10]
                	bl	<addr>
                	add	x0, x0, #0x6
                	add	x20, x0, #0x5
+               	mov	x0, #0x2                // =2
+               	stur	x0, [x29, #-0x20]
                	sub	x0, x29, #0x28
-               	mov	x1, #0x2                // =2
-               	stur	x1, [x29, #-0x20]
                	bl	<addr>
                	add	x0, x0, #0x2
                	add	x0, x0, #0x2

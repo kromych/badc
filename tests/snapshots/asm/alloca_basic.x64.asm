@@ -191,7 +191,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	movl	$0x33, %esi
                	movl	$0x40, %edx
                	movq	%rdx, %r11
                	addq	$0xf, %r11
@@ -207,6 +206,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rbx, %rsp
                	movq	%rbx, %rdi
+               	movl	$0x33, %esi
                	callq	<addr>
                	movl	$0x14, %edi
                	callq	<addr>

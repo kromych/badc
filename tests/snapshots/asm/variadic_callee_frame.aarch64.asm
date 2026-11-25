@@ -296,7 +296,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x4                // =4
-               	mov	x1, x0
+               	mov	x1, #0x4                // =4
                	bl	<addr>
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2

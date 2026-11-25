@@ -181,7 +181,6 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x1, #0x33               // =51
                	mov	x2, #0x40               // =64
                	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -195,6 +194,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x20
                	mov	x0, x20
+               	mov	x1, #0x33               // =51
                	bl	<addr>
                	mov	x0, #0x14               // =20
                	bl	<addr>

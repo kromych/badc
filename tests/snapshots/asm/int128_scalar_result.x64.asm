@@ -95,7 +95,6 @@ Disassembly of section .text:
                	movq	<rip>, %r12 # <addr>
                	movq	<rip>, %rax # <addr>
                	orq	%rax, %r14
-               	movl	$0x2, %edi
                	cmpq	%rbx, %r12
                	setb	%sil
                	movzbq	%sil, %rsi
@@ -107,6 +106,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	andq	%rcx, %rax
                	orq	%rax, %rsi
+               	movl	$0x2, %edi
                	movl	$0x4d, %edx
                	movb	$0x0, %al
                	callq	<addr>
@@ -122,7 +122,6 @@ Disassembly of section .text:
                	popq	%r14
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x2, %edi
                	cmpq	%r12, %rbx
                	setb	%sil
                	movzbq	%sil, %rsi
@@ -134,6 +133,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	andq	%rcx, %rax
                	orq	%rax, %rsi
+               	movl	$0x2, %edi
                	movl	$0x4d, %edx
                	movb	$0x0, %al
                	callq	<addr>
@@ -200,7 +200,6 @@ Disassembly of section .text:
                	popq	%r14
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x2, %edi
                	cmpq	%r12, %rbx
                	setb	%sil
                	movzbq	%sil, %rsi
@@ -213,6 +212,7 @@ Disassembly of section .text:
                	andq	%rcx, %rax
                	orq	%rax, %rsi
                	xorq	$0x1, %rsi
+               	movl	$0x2, %edi
                	movl	$0x4d, %edx
                	movb	$0x0, %al
                	callq	<addr>

@@ -155,14 +155,13 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x23, x0, x24, lsl #5
-               	sub	x0, x29, #0x100
                	ldr	x1, [x23]
-               	mov	x20, #0x20              // =32
-               	mov	x2, x20
+               	sub	x0, x29, #0x100
+               	mov	x2, #0x20               // =32
                	bl	<addr>
-               	sub	x0, x29, #0x80
                	ldr	x1, [x23, #0x8]
-               	mov	x2, x20
+               	sub	x0, x29, #0x80
+               	mov	x2, #0x20               // =32
                	bl	<addr>
                	mov	x20, #0x0               // =0
                	cmp	w20, #0x2
@@ -180,8 +179,8 @@ Disassembly of section .text:
                	cbz	x22, <addr>
                	cmp	w20, #0x6
                	b.ne	<addr>
-               	sub	x0, x29, #0x100
                	mov	x1, x22
+               	sub	x0, x29, #0x100
                	bl	<addr>
                	cbz	x22, <addr>
                	mov	x0, x22
@@ -192,9 +191,9 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	w20, #0x6
                	b.lt	<addr>
+               	mov	x0, x22
                	sub	x1, x29, #0x80
                	sub	x2, x29, #0x110
-               	mov	x0, x22
                	bl	<addr>
                	mov	x21, x0
                	cbz	x22, <addr>
@@ -272,8 +271,8 @@ Disassembly of section .text:
                	mov	x21, x0
                	b	<addr>
                	ldr	x1, [x23, #0x8]
-               	sub	x2, x29, #0x110
                	mov	x0, x22
+               	sub	x2, x29, #0x110
                	bl	<addr>
                	mov	x21, x0
                	b	<addr>
@@ -282,8 +281,8 @@ Disassembly of section .text:
                	cmp	w20, #0x2
                	b.lt	<addr>
                	ldr	x1, [x23, #0x8]
-               	sub	x2, x29, #0x110
                	mov	x0, x22
+               	sub	x2, x29, #0x110
                	bl	<addr>
                	mov	x21, x0
                	b	<addr>
@@ -316,14 +315,14 @@ Disassembly of section .text:
                	str	wzr, [sp, #0x38]
                	str	xzr, [sp, #0x40]
                	str	wzr, [sp, #0x48]
-               	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x0, x29, #0xa0
                	sub	x2, x29, #0x130
                	bl	<addr>
-               	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x0, x29, #0xa0
                	sub	x2, x29, #0x120
                	bl	<addr>
                	sxtw	x0, w0
@@ -370,9 +369,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x2
                	b.ne	<addr>
-               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -395,9 +394,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x2
                	b.ne	<addr>
-               	sub	x0, x29, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -425,9 +424,9 @@ Disassembly of section .text:
                	ldrsw	x0, [sp, #0x30]
                	cmp	w0, #0xc
                	b.ne	<addr>
-               	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	sub	x0, x29, #0xa0
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -461,8 +460,8 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x2, x29, #0x130
                	mov	x0, x20
+               	sub	x2, x29, #0x130
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x1

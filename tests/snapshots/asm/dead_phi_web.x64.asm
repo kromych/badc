@@ -110,9 +110,9 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x18, %rsp
                	retq
+               	movq	%rbx, %rsi
                	xorl	%edi, %edi
                	movl	$0x3, %edx
-               	movq	%rbx, %rsi
                	callq	<addr>
                	movabsq	$0x54f43e32d21c10b0, %r11 # imm = 0x54F43E32D21C10B0
                	cmpq	%r11, %rax
@@ -122,9 +122,9 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x18, %rsp
                	retq
+               	movq	%r12, %rdi
                	xorl	%esi, %esi
                	movl	$0x1, %edx
-               	movq	%r12, %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>

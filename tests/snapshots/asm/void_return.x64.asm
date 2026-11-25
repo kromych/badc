@@ -80,12 +80,11 @@ Disassembly of section .text:
 <main>:
                	subq	$0x18, %rsp
                	movl	$0xffffffff, 0x8(%rsp)  # imm = 0xFFFFFFFF
-               	leaq	0x8(%rsp), %rcx
                	movl	$0x0, 0x8(%rsp)
                	movl	$0x1, 0x8(%rsp)
                	movl	$0x1, 0x8(%rsp)
                	movl	$0x4, 0x8(%rsp)
-               	movq	%rcx, %rdi
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movl	$0x3, %edi
                	leaq	0x8(%rsp), %rsi

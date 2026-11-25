@@ -402,8 +402,8 @@ Disassembly of section .text:
                	subq	%rdi, %rax
                	cmpq	$0x9, %rax
                	jb	<addr>
-               	movl	$0x9, %edx
                	xchgq	%rsi, %rdi
+               	movl	$0x9, %edx
                	callq	<addr>
                	leaq	<rip>, %rax # <addr>
                	addq	$0x9, %rax
@@ -511,14 +511,14 @@ Disassembly of section .text:
                	subq	%rcx, %rsi
                	cmpq	$0x20, %rsi
                	jb	<addr>
-               	movl	$0x20, %edx
                	movq	%rax, %rdi
                	movq	%rcx, %rsi
+               	movl	$0x20, %edx
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rax # <addr>
-               	movl	$0x20, %edx
                	leaq	0x20(%rax), %rsi
+               	movl	$0x20, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

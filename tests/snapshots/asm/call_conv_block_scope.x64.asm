@@ -208,11 +208,11 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	pushq	%rbx
                	subq	$0x30, %rsp
+               	movq	$0x5, 0x20(%rsp)
                	movl	$0x1, %ecx
                	movl	$0x2, %edx
                	movl	$0x3, %r8d
                	movl	$0x4, %r9d
-               	movq	$0x5, 0x20(%rsp)
                	callq	<addr>
                	imulq	$0x64, %rax, %rbx
                	movl	$0x1, %edi

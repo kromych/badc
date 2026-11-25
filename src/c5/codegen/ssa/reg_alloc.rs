@@ -169,13 +169,13 @@ pub(crate) struct Allocation {
     /// is zero and it is never materialized; the instruction's own value
     /// is unread.
     pub imm_store: Vec<bool>,
-    /// The `Imm` values every reader of which is an integer argument a
-    /// call places on the stack ([`stack_arg_immediates`]), with their
-    /// constants. Such a value takes no place: the call's marshaling sets
-    /// it from its encoding, so it holds no register ahead of the call.
-    pub stack_imm: alloc::collections::BTreeMap<ValueId, i64>,
+    /// The constants and local addresses the calls reading them set
+    /// ([`call_set_arguments`]). Such a value takes no place: the call's
+    /// marshaling sets it from its encoding, so it holds no register ahead
+    /// of the call.
+    pub call_set: alloc::collections::BTreeMap<ValueId, ArgSet>,
     /// The frame loads ([`stack_arg_loads`]) the call's marshaling performs
-    /// itself, as `(slot, disp, kind)`, taking no place as `stack_imm` does.
+    /// itself, as `(slot, disp, kind)`, taking no place as `call_set` does.
     pub stack_load: alloc::collections::BTreeMap<ValueId, (i64, i32, LoadKind)>,
     /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
     pub fp_const: Vec<bool>,
@@ -246,6 +246,15 @@ pub(crate) struct Allocation {
     /// each site's scratch, and the first of the two spill slots a
     /// borrowed scratch register keeps its value in.
     pub scratch_sites: Option<ScratchSites>,
+}
+
+/// What a call's marshaling sets an argument from ([`Allocation::call_set`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ArgSet {
+    /// A constant.
+    Imm(i64),
+    /// The address of the local at this slot offset.
+    Local(i64),
 }
 
 /// The code the saves around loops and branch arms add at block boundaries
@@ -1991,9 +2000,9 @@ fn allocate_keeping(
     // operand live and weighs on no spill decision.
     let mut use_counts = compute_use_counts(func);
     drop_unread_incomes(func, &mut use_counts);
-    // Unread, a stack argument's constant is unemitted, and the liveness
+    // Unread, an argument its call sets is unemitted, and the liveness
     // reading only emitted values keeps it out of the coloring.
-    let stack_imm = stack_arg_immediates(func, target, &use_counts);
+    let call_set = call_set_arguments(func, target, &use_counts);
     let stack_load = stack_arg_loads(func, target, &use_counts);
     // Read off its literal by every reader, a floating constant is unemitted.
     let fp_literals = if target.is_x86_64() {
@@ -2001,11 +2010,7 @@ fn allocate_keeping(
     } else {
         alloc::collections::BTreeSet::new()
     };
-    for &v in stack_imm
-        .keys()
-        .chain(stack_load.keys())
-        .chain(&fp_literals)
-    {
+    for &v in call_set.keys().chain(stack_load.keys()).chain(&fp_literals) {
         use_counts[v as usize] = 0;
     }
     // Likewise a constant the SVE rows reading it take from their encoding.
@@ -2046,7 +2051,7 @@ fn allocate_keeping(
             select_inc: Vec::new(),
             imm_held: Vec::new(),
             imm_store: Vec::new(),
-            stack_imm: alloc::collections::BTreeMap::new(),
+            call_set: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),
             fp_mem_operand: alloc::collections::BTreeSet::new(),
             fp_const,
@@ -2369,7 +2374,7 @@ fn allocate_keeping(
         coloring = color(&node_cons);
     }
     places = coloring.places;
-    for &v in stack_imm.keys().chain(stack_load.keys()) {
+    for &v in call_set.keys().chain(stack_load.keys()) {
         places[v as usize] = Place::None;
     }
     let mut spill_count = coloring.spill_count;
@@ -3082,7 +3087,7 @@ fn allocate_keeping(
         select_inc,
         imm_held,
         imm_store,
-        stack_imm,
+        call_set,
         stack_load,
         fp_mem_operand,
         fp_const,
@@ -5432,13 +5437,24 @@ fn call_plan<'f>(
     Some((args, fp_arg_mask, plan))
 }
 
-/// The `Imm` values every reader of which is an integer argument a call
-/// places on the stack, with their constants (`Allocation::stack_imm`).
-fn stack_arg_immediates(
+/// The constants and local addresses every reader of which is an integer
+/// argument of a call that sets it ([`Allocation::call_set`]): a constant
+/// the call places on the stack; a value the call sets in one instruction,
+/// the move a register holding it would take; or a value whose reading
+/// calls lie in its own block, which sets it as often.
+fn call_set_arguments(
     func: &FunctionSsa,
     target: Target,
     use_counts: &[u32],
-) -> alloc::collections::BTreeMap<ValueId, i64> {
+) -> alloc::collections::BTreeMap<ValueId, ArgSet> {
+    use crate::c5::codegen::ArgPlacement;
+    let one = |inst: &Inst| match *inst {
+        Inst::Imm(k) => {
+            target.is_x86_64() || crate::c5::codegen::aarch64::encode::imm64_insts(k as u64) == 1
+        }
+        // An AArch64 frame address spans as many instructions as the frame needs.
+        _ => target.is_x86_64(),
+    };
     let mut readers: alloc::collections::BTreeMap<ValueId, u32> =
         alloc::collections::BTreeMap::new();
     for blk in &func.blocks {
@@ -5448,11 +5464,16 @@ fn stack_arg_immediates(
                 continue;
             };
             for (i, (&v, p)) in args.iter().zip(&plan.placements).enumerate() {
-                if matches!(p, crate::c5::codegen::ArgPlacement::Stack(_))
-                    && !fp.has(i)
-                    && matches!(func.insts.get(v as usize), Some(Inst::Imm(_)))
-                    && !func.f32_values.get(v as usize).copied().unwrap_or(false)
-                {
+                let here = blk.inst_range.contains(&v);
+                let set = match (func.insts.get(v as usize), p) {
+                    (Some(Inst::Imm(_)), ArgPlacement::Stack(_)) => true,
+                    (
+                        Some(def @ (Inst::Imm(_) | Inst::LocalAddr(_))),
+                        ArgPlacement::IntReg(_) | ArgPlacement::Stack(_),
+                    ) => here || one(def),
+                    _ => false,
+                };
+                if set && !fp.has(i) && !func.f32_values.get(v as usize).copied().unwrap_or(false) {
                     *readers.entry(v).or_default() += 1;
                 }
             }
@@ -5462,7 +5483,8 @@ fn stack_arg_immediates(
         .into_iter()
         .filter(|&(v, n)| use_counts.get(v as usize) == Some(&n))
         .filter_map(|(v, _)| match func.insts[v as usize] {
-            Inst::Imm(k) => Some((v, k)),
+            Inst::Imm(k) => Some((v, ArgSet::Imm(k))),
+            Inst::LocalAddr(off) if off < 0 => Some((v, ArgSet::Local(off))),
             _ => None,
         })
         .collect()
@@ -5737,6 +5759,21 @@ fn populate_call_arg_hints(
         let pc = pc as u32;
         for (&v, placement) in args.iter().zip(&plan.placements) {
             let vu = v as usize;
+            // An aggregate given as its parts takes each in its register.
+            if let (Some(Inst::AggParts { parts, .. }), ArgPlacement::StructRegs { regs, n, .. }) =
+                (func.insts.get(vu), placement.register_part())
+                && parts.len() == usize::from(n)
+            {
+                for (&p, c) in parts.iter().zip(&regs) {
+                    let pu = p as usize;
+                    let fp = fp_const.get(pu).copied().unwrap_or(false)
+                        || result_kind(&func.insts[pu]) == ResultKind::Fp;
+                    if fp == c.is_fp && last_use[pu] == pc && !calls_after_def[pu] {
+                        hints[pu].get_or_insert(c.reg);
+                    }
+                }
+                continue;
+            }
             let (r, fp) = match placement.register_part() {
                 ArgPlacement::IntReg(r) => (Some(r), false),
                 ArgPlacement::FpReg(r) => (Some(r), true),
@@ -7913,10 +7950,10 @@ int main(void) { return 0; }
                 // is unread -- the allocator nulls those out so
                 // the emit pass skips the dst-propagate step --
                 // and a phi nothing reads, whose edge moves are
-                // dropped. A constant or a local a stack argument reads in
-                // place takes none either: the call's marshaling reads it.
+                // dropped. A value its call sets, or a local a stack argument
+                // reads in place, takes none either: the call's marshaling does.
                 let kind = result_kind(&f.insts[i]);
-                let read_by_call = alloc.stack_imm.contains_key(&(i as u32))
+                let read_by_call = alloc.call_set.contains_key(&(i as u32))
                     || alloc.stack_load.contains_key(&(i as u32));
                 if read_by_call {
                     assert_eq!(*p, Place::None, "inst {i} is read by its call");

@@ -185,13 +185,13 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	movl	$0x1, %esi
                	callq	<addr>
-               	leaq	0x18(%rsp), %rdi
                	movzbq	0x18(%rsp), %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0xe8, %rsp
                	retq
+               	leaq	0x18(%rsp), %rdi
                	movl	$0xc8, %esi
                	callq	<addr>
                	movq	%rax, 0x8(%rsp)
@@ -230,13 +230,13 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	movl	$0x1, %esi
                	callq	<addr>
-               	leaq	0x18(%rsp), %rdi
                	movzbq	0x18(%rsp), %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	addq	$0xe8, %rsp
                	retq
+               	leaq	0x18(%rsp), %rdi
                	movl	$0xc8, %esi
                	callq	<addr>
                	movq	%rax, 0x8(%rsp)
@@ -283,7 +283,6 @@ Disassembly of section .text:
                	movzbq	0x20(%rsp), %rcx
                	shlq	$0x4, %rcx
                	xorq	%rcx, %rax
-               	leaq	0x18(%rsp), %rdi
                	movzbq	0x21(%rsp), %rcx
                	shlq	$0x3, %rcx
                	xorq	%rcx, %rax
@@ -297,6 +296,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	xorq	%rcx, %r10
                	movq	%r10, 0x8(%rsp)
+               	leaq	0x18(%rsp), %rdi
                	movl	$0xd, %esi
                	callq	<addr>
                	cmpl	0x8(%rsp), %eax

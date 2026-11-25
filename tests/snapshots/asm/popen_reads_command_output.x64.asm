@@ -38,9 +38,9 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x50, %rsp
                	retq
+               	movq	%rbx, %rdx
                	leaq	0x10(%rsp), %rdi
                	movl	$0x40, %esi
-               	movq	%rbx, %rdx
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -64,8 +64,8 @@ Disassembly of section .text:
                	nopw	(%rax,%rax)
                	cmpl	$0x20, %ecx
                	je	<addr>
-               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	0x10(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

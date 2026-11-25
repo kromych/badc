@@ -2449,8 +2449,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x20]
-               	mov	x2, #0x3ffff            // =262143
                	mov	x0, x20
+               	mov	x2, #0x3ffff            // =262143
                	bl	<addr>
                	cmp	x0, #0x0
                	b.gt	<addr>

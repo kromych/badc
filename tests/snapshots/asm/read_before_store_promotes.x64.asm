@@ -296,16 +296,16 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%r11
                	retq
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	movq	$0x9, 0x10(%rsp)
+               	movq	$0x28, 0x18(%rsp)
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	movq	$0x7, (%rsp)
-               	movq	$0x8, 0x8(%rsp)
-               	movq	$0x9, 0x10(%rsp)
-               	movq	$0x28, 0x18(%rsp)
                	callq	<addr>
                	cmpq	$0x27, %rax
                	je	<addr>

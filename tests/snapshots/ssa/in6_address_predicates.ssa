@@ -316,7 +316,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=36 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x7
+    v1   Imm(0)                                           -> -
     v2   Call { target_pc=0, args=[v1, v1, v1, v1, v1], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     v3   RetPart(0, kind=I64)                             -> x0
     v4   RetPart(1, kind=I64)                             -> x2
@@ -338,8 +338,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v20  BinopI { op=shru, lhs=v4, rhs_imm=32 }           -> [spill 1]
     v21  Imm(0)                                           -> x1
     v22  LifetimeEnd(0)                                   -> -
-    v23  Imm(0)                                           -> x7
-    v24  Imm(1)                                           -> x8
+    v23  Imm(0)                                           -> -
+    v24  Imm(1)                                           -> -
     v25  Copy { value=v3, fp=false }                      -> [spill 0]
     v26  Copy { value=v4, fp=false }                      -> [spill 15]
     v27  Call { target_pc=0, args=[v23, v23, v23, v23, v24], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -363,10 +363,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v45  BinopI { op=shru, lhs=v29, rhs_imm=32 }          -> [spill 2]
     v46  Imm(0)                                           -> x1
     v47  LifetimeEnd(0)                                   -> -
-    v48  Imm(254)                                         -> x7
-    v49  Imm(128)                                         -> x6
-    v50  Imm(0)                                           -> x1
-    v51  Imm(1)                                           -> x8
+    v48  Imm(254)                                         -> -
+    v49  Imm(128)                                         -> -
+    v50  Imm(0)                                           -> -
+    v51  Imm(1)                                           -> -
     v52  Copy { value=v28, fp=false }                     -> [spill 6]
     v53  Copy { value=v29, fp=false }                     -> [spill 8]
     v54  Call { target_pc=0, args=[v48, v49, v50, v50, v51], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -390,10 +390,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v72  BinopI { op=shru, lhs=v56, rhs_imm=32 }          -> [spill 17]
     v73  Imm(0)                                           -> x1
     v74  LifetimeEnd(0)                                   -> -
-    v75  Imm(254)                                         -> x7
-    v76  Imm(192)                                         -> x6
-    v77  Imm(0)                                           -> x1
-    v78  Imm(1)                                           -> x8
+    v75  Imm(254)                                         -> -
+    v76  Imm(192)                                         -> -
+    v77  Imm(0)                                           -> -
+    v78  Imm(1)                                           -> -
     v79  Copy { value=v55, fp=false }                     -> [spill 3]
     v80  Copy { value=v56, fp=false }                     -> [spill 18]
     v81  Call { target_pc=0, args=[v75, v76, v77, v77, v78], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -417,9 +417,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v99  BinopI { op=shru, lhs=v83, rhs_imm=32 }          -> [spill 20]
     v100 Imm(0)                                           -> x1
     v101 LifetimeEnd(0)                                   -> -
-    v102 Imm(0)                                           -> x7
-    v103 Imm(255)                                         -> x1
-    v104 Imm(1)                                           -> x8
+    v102 Imm(0)                                           -> -
+    v103 Imm(255)                                         -> -
+    v104 Imm(1)                                           -> -
     v105 Copy { value=v82, fp=false }                     -> [spill 4]
     v106 Copy { value=v83, fp=false }                     -> [spill 21]
     v107 Call { target_pc=0, args=[v102, v102, v103, v103, v104], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -452,8 +452,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v134 BinopI { op=and, lhs=v133, rhs_imm=255 }         -> [spill 26]
     v135 Imm(0)                                           -> x1
     v136 LifetimeEnd(0)                                   -> -
-    v137 Imm(0)                                           -> x7
-    v138 Imm(2)                                           -> x8
+    v137 Imm(0)                                           -> -
+    v138 Imm(2)                                           -> -
     v139 Copy { value=v108, fp=false }                    -> [spill 27]
     v140 Call { target_pc=0, args=[v137, v137, v137, v137, v138], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     v141 RetPart(0, kind=I64)                             -> x0
@@ -476,9 +476,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v158 BinopI { op=shru, lhs=v142, rhs_imm=32 }         -> [spill 29]
     v159 Imm(0)                                           -> x1
     v160 LifetimeEnd(0)                                   -> -
-    v161 Imm(255)                                         -> x7
-    v162 Imm(1)                                           -> x6
-    v163 Imm(0)                                           -> x1
+    v161 Imm(255)                                         -> -
+    v162 Imm(1)                                           -> -
+    v163 Imm(0)                                           -> -
     v164 Copy { value=v141, fp=false }                    -> [spill 30]
     v165 Copy { value=v142, fp=false }                    -> [spill 31]
     v166 Call { target_pc=0, args=[v161, v162, v163, v163, v162], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -497,10 +497,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v179 BinopI { op=and, lhs=v178, rhs_imm=255 }         -> [spill 9]
     v180 Imm(0)                                           -> x0
     v181 LifetimeEnd(0)                                   -> -
-    v182 Imm(255)                                         -> x7
-    v183 Imm(2)                                           -> x6
-    v184 Imm(0)                                           -> x2
-    v185 Imm(1)                                           -> x8
+    v182 Imm(255)                                         -> -
+    v183 Imm(2)                                           -> -
+    v184 Imm(0)                                           -> -
+    v185 Imm(1)                                           -> -
     v186 Call { target_pc=0, args=[v182, v183, v184, v184, v185], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     v187 RetPart(0, kind=I64)                             -> x0
     v188 RetPart(1, kind=I64)                             -> x2
@@ -517,10 +517,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v199 BinopI { op=and, lhs=v198, rhs_imm=255 }         -> [spill 10]
     v200 Imm(0)                                           -> x0
     v201 LifetimeEnd(0)                                   -> -
-    v202 Imm(255)                                         -> x7
-    v203 Imm(5)                                           -> x6
-    v204 Imm(0)                                           -> x2
-    v205 Imm(1)                                           -> x8
+    v202 Imm(255)                                         -> -
+    v203 Imm(5)                                           -> -
+    v204 Imm(0)                                           -> -
+    v205 Imm(1)                                           -> -
     v206 Call { target_pc=0, args=[v202, v203, v204, v204, v205], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     v207 RetPart(0, kind=I64)                             -> x0
     v208 RetPart(1, kind=I64)                             -> x2
@@ -537,10 +537,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v219 BinopI { op=and, lhs=v218, rhs_imm=255 }         -> [spill 12]
     v220 Imm(0)                                           -> x0
     v221 LifetimeEnd(0)                                   -> -
-    v222 Imm(255)                                         -> x7
-    v223 Imm(8)                                           -> x6
-    v224 Imm(0)                                           -> x2
-    v225 Imm(1)                                           -> x8
+    v222 Imm(255)                                         -> -
+    v223 Imm(8)                                           -> -
+    v224 Imm(0)                                           -> -
+    v225 Imm(1)                                           -> -
     v226 Call { target_pc=0, args=[v222, v223, v224, v224, v225], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     v227 RetPart(0, kind=I64)                             -> x0
     v228 RetPart(1, kind=I64)                             -> x2
@@ -557,10 +557,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v239 BinopI { op=and, lhs=v238, rhs_imm=255 }         -> [spill 14]
     v240 Imm(0)                                           -> x0
     v241 LifetimeEnd(0)                                   -> -
-    v242 Imm(255)                                         -> x7
-    v243 Imm(14)                                          -> x6
-    v244 Imm(0)                                           -> x2
-    v245 Imm(1)                                           -> x8
+    v242 Imm(255)                                         -> -
+    v243 Imm(14)                                          -> -
+    v244 Imm(0)                                           -> -
+    v245 Imm(1)                                           -> -
     v246 Call { target_pc=0, args=[v242, v243, v244, v244, v245], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     v247 RetPart(0, kind=I64)                             -> x0
     v248 RetPart(1, kind=I64)                             -> x2
@@ -1770,7 +1770,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -1829,7 +1829,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

@@ -20,18 +20,18 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
                	mov	x0, #0x29               // =41
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x18]
                	mov	x0, #0x14               // =20
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x15
                	b.eq	<addr>

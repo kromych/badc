@@ -28,9 +28,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v0   AllocaInit(-1)                                   -> -
     v1   Imm(10)                                          -> x0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-14)                                   -> x7
-    v4   Imm(3)                                           -> x6
-    v5   Imm(64)                                          -> x2
+    v3   LocalAddr(-14)                                   -> -
+    v4   Imm(3)                                           -> -
+    v5   Imm(64)                                          -> -
     v6   CallExt { binding_idx=25, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
@@ -38,17 +38,17 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v10  Intrinsic { kind=Alloca, args=[v9] }             -> x7
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
-    v13  Imm(4)                                           -> x6
+    v13  Imm(4)                                           -> -
     v14  Imm(0)                                           -> x0
     v15  Copy { value=v10, fp=false }                     -> [spill 0]
     v16  CallExt { binding_idx=25, args=[v10, v13, v9], fp_arg_mask=0x0 } -> x0
     v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
-    v19  Imm(10)                                          -> x6
+    v19  Imm(10)                                          -> -
     v20  Call { target_pc=0, args=[v15, v19], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v21  InlineAsm { template="xor %%ebx, %%ebx\n\txor %%r12d, %%r12d\n\txor %%r13d, %%r13d\n\txor %%r14d, %%r14d\n\txor %%r15d, %%r15d\n\t", ops=0, args=[] } -> -
-    v22  LocalAddr(-14)                                   -> x7
-    v23  Imm(1)                                           -> x6
+    v22  LocalAddr(-14)                                   -> -
+    v23  Imm(1)                                           -> -
     v24  Call { target_pc=0, args=[v22, v23], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v25  LocalAddr(-14)                                   -> x0
     v26  Imm(64)                                          -> x1
@@ -92,13 +92,13 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v9   Intrinsic { kind=Alloca, args=[v1] }             -> x7
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  Imm(6)                                           -> x6
+    v12  Imm(6)                                           -> -
     v13  Imm(0)                                           -> x0
     v14  Copy { value=v9, fp=false }                      -> [spill 0]
     v15  CallExt { binding_idx=25, args=[v9, v12, v1], fp_arg_mask=0x0 } -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
-    v18  Imm(10)                                          -> x6
+    v18  Imm(10)                                          -> -
     v19  Call { target_pc=0, args=[v14, v18], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  Imm(0)                                           -> x0
     v21  InlineAsm { template="xor %%ebx, %%ebx\n\txor %%r12d, %%r12d\n\txor %%r13d, %%r13d\n\txor %%r14d, %%r14d\n\txor %%r15d, %%r15d\n\tmov $77, %0", ops=1, args=[-] } -> x0
@@ -171,25 +171,25 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v0   AllocaInit(-1)                                   -> -
     v1   Imm(10)                                          -> x0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-13)                                   -> x7
-    v4   Imm(3)                                           -> x6
-    v5   Imm(64)                                          -> x2
+    v3   LocalAddr(-13)                                   -> -
+    v4   Imm(3)                                           -> -
+    v5   Imm(64)                                          -> -
     v6   CallExt { binding_idx=25, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(10)                                          -> x2
     v9   Intrinsic { kind=Alloca, args=[v8] }             -> x13
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  Imm(4)                                           -> x6
+    v12  Imm(4)                                           -> -
     v13  Imm(0)                                           -> x0
     v14  CallExt { binding_idx=25, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Imm(10)                                          -> x6
+    v17  Imm(10)                                          -> -
     v18  Call { target_pc=0, args=[v9, v17], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v19  InlineAsm { template="movb $1, %%bh", ops=0, args=[] } -> -
-    v20  LocalAddr(-13)                                   -> x7
-    v21  Imm(3)                                           -> x6
+    v20  LocalAddr(-13)                                   -> -
+    v21  Imm(3)                                           -> -
     v22  Call { target_pc=0, args=[v20, v21], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v23  LocalAddr(-13)                                   -> x0
     v24  Imm(64)                                          -> x1
@@ -224,26 +224,26 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v0   AllocaInit(-1)                                   -> -
     v1   Imm(10)                                          -> x0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-13)                                   -> x7
-    v4   Imm(3)                                           -> x6
-    v5   Imm(64)                                          -> x2
+    v3   LocalAddr(-13)                                   -> -
+    v4   Imm(3)                                           -> -
+    v5   Imm(64)                                          -> -
     v6   CallExt { binding_idx=25, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(10)                                          -> x2
     v9   Intrinsic { kind=Alloca, args=[v8] }             -> x7
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  Imm(4)                                           -> x6
+    v12  Imm(4)                                           -> -
     v13  Imm(0)                                           -> x0
     v14  Copy { value=v9, fp=false }                      -> [spill 0]
     v15  CallExt { binding_idx=25, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
-    v18  Imm(10)                                          -> x6
+    v18  Imm(10)                                          -> -
     v19  Call { target_pc=0, args=[v14, v18], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  InlineAsm { template="movb $1, %%bh\n\txor %%r12d, %%r12d\n\txor %%r13d, %%r13d\n\txor %%r14d, %%r14d\n\txor %%r15d, %%r15d", ops=0, args=[] } -> -
-    v21  LocalAddr(-13)                                   -> x7
-    v22  Imm(3)                                           -> x6
+    v21  LocalAddr(-13)                                   -> -
+    v22  Imm(3)                                           -> -
     v23  Call { target_pc=0, args=[v21, v22], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v24  LocalAddr(-13)                                   -> x0
     v25  Imm(64)                                          -> x1
@@ -278,21 +278,21 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v0   AllocaInit(-1)                                   -> -
     v1   Imm(10)                                          -> x0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-14)                                   -> x7
-    v4   Imm(3)                                           -> x6
-    v5   Imm(64)                                          -> x2
+    v3   LocalAddr(-14)                                   -> -
+    v4   Imm(3)                                           -> -
+    v5   Imm(64)                                          -> -
     v6   CallExt { binding_idx=25, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(10)                                          -> x2
     v9   Intrinsic { kind=Alloca, args=[v8] }             -> x3
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  Imm(4)                                           -> x6
+    v12  Imm(4)                                           -> -
     v13  Imm(0)                                           -> x0
     v14  CallExt { binding_idx=25, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Imm(10)                                          -> x6
+    v17  Imm(10)                                          -> -
     v18  Call { target_pc=0, args=[v9, v17], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
@@ -306,8 +306,8 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v28  InlineAsm { template="add %1, %0", ops=2, args=[v27, v25] } -> x3
     v29  Imm(0)                                           -> x0
     v30  InlineAsm { template="xor %%r12d, %%r12d\n\txor %%r13d, %%r13d\n\txor %%r14d, %%r14d\n\txor %%r15d, %%r15d", ops=0, args=[] } -> -
-    v31  LocalAddr(-14)                                   -> x7
-    v32  Imm(3)                                           -> x6
+    v31  LocalAddr(-14)                                   -> -
+    v32  Imm(3)                                           -> -
     v33  Call { target_pc=0, args=[v31, v32], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v34  LocalAddr(-14)                                   -> x0
     v35  Imm(64)                                          -> x1
@@ -338,7 +338,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(10)                                          -> x7
+    v1   Imm(10)                                          -> -
     v2   Call { target_pc=1, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v3   Extend { value=v2, kind=I32 }                    -> x1
     terminator Bz { cond=v2, target=b2, fall=b1 }   (low word)   (exit_acc=v3)
@@ -346,7 +346,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v4   Imm(1)                                           -> x0
     terminator Return(v4)   (exit_acc=v4)
   block 2  start_pc=0
-    v5   Imm(10)                                          -> x7
+    v5   Imm(10)                                          -> -
     v6   Call { target_pc=2, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   Extend { value=v6, kind=I32 }                    -> x1
     terminator Bz { cond=v6, target=b4, fall=b3 }   (low word)   (exit_acc=v7)
@@ -354,7 +354,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v8   Imm(2)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
   block 4  start_pc=0
-    v9   Imm(10)                                          -> x7
+    v9   Imm(10)                                          -> -
     v10  Call { target_pc=3, args=[v9], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v11  Extend { value=v10, kind=I32 }                   -> x1
     terminator Bz { cond=v10, target=b6, fall=b5 }   (low word)   (exit_acc=v11)
@@ -362,7 +362,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v12  Imm(3)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 6  start_pc=0
-    v13  Imm(10)                                          -> x7
+    v13  Imm(10)                                          -> -
     v14  Call { target_pc=4, args=[v13], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v15  Extend { value=v14, kind=I32 }                   -> x1
     terminator Bz { cond=v14, target=b8, fall=b7 }   (low word)   (exit_acc=v15)
@@ -370,7 +370,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v16  Imm(4)                                           -> x0
     terminator Return(v16)   (exit_acc=v16)
   block 8  start_pc=0
-    v17  Imm(10)                                          -> x7
+    v17  Imm(10)                                          -> -
     v18  Call { target_pc=5, args=[v17], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v19  Extend { value=v18, kind=I32 }                   -> x1
     terminator Bz { cond=v18, target=b10, fall=b9 }   (low word)   (exit_acc=v19)
@@ -426,7 +426,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -485,7 +485,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

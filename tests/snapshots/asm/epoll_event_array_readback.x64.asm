@@ -53,25 +53,25 @@ Disassembly of section .text:
                	movabsq	$0x1122334455667788, %rax # imm = 0x1122334455667788
                	movabsq	$-0x778899aabbccddef, %r10 # imm = 0x8877665544332211
                	movq	%r10, 0x20(%rsp)
-               	leaq	0x48(%rsp), %rcx
                	movl	$0x1, %esi
                	movl	%esi, 0x48(%rsp)
                	movq	%rax, 0x4c(%rsp)
                	movl	0x38(%rsp), %edx
                	movq	%rax, 0x18(%rsp)
                	movq	0x28(%rsp), %rdi
+               	leaq	0x48(%rsp), %rcx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	leaq	0x48(%rsp), %rcx
                	movq	0x20(%rsp), %r10
                	movq	%r10, 0x4c(%rsp)
-               	movl	$0x1, %esi
                	movl	0x40(%rsp), %edx
                	movq	0x28(%rsp), %rdi
+               	movl	$0x1, %esi
+               	leaq	0x48(%rsp), %rcx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -92,10 +92,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	jmp	<addr>
+               	movq	0x28(%rsp), %rdi
                	leaq	0x58(%rsp), %rsi
                	movl	$0x2, %edx
                	movl	$0x3e8, %ecx            # imm = 0x3E8
-               	movq	0x28(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0x2, %rax

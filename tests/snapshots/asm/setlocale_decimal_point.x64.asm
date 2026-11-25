@@ -46,14 +46,14 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x20, %rsp
                	retq
-               	movl	$0x6, %edi
                	leaq	<rip>, %rsi
+               	movl	$0x6, %edi
                	callq	<addr>
                	movq	%rax, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	movl	$0x6, %edi
                	leaq	<rip>, %rsi
+               	movl	$0x6, %edi
                	callq	<addr>
                	movq	%rax, %rdx
                	testq	%rdx, %rdx

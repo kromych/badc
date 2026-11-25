@@ -10,7 +10,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   AllocaInit(0)                                    -> -
-    v7   Imm(61)                                          -> x7
+    v7   Imm(61)                                          -> -
     v8   CallExt { binding_idx=244, args=[v7], fp_arg_mask=0x0 } -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -418,7 +418,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v232 Store { addr=v224, disp=0, value=v2324, kind=I64 pc_rel } -> -
     v233 LifetimeEnd(-685)                                -> -
     v234 Imm(0)                                           -> x0
-    v235 Imm(61)                                          -> x7
+    v235 Imm(61)                                          -> -
     v236 CallExt { binding_idx=245, args=[v235], fp_arg_mask=0x0 } -> x0
     v237 Extend { value=v236, kind=I32 }                  -> x1
     v238 BinopI { op=and, lhs=v236, rhs_imm=1 }           -> x1
@@ -480,7 +480,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v276 Store { addr=v268, disp=0, value=v2336, kind=I64 pc_rel } -> -
     v277 LifetimeEnd(-9)                                  -> -
     v278 Imm(0)                                           -> x0
-    v279 Imm(61)                                          -> x7
+    v279 Imm(61)                                          -> -
     v280 CallExt { binding_idx=244, args=[v279], fp_arg_mask=0x0 } -> x0
     v281 Imm(0)                                           -> x0
     v282 Imm(0)                                           -> x0
@@ -650,7 +650,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v374 Store { addr=v365, disp=8, value=v2384, kind=I64 pc_rel } -> -
     v375 LifetimeEnd(-689)                                -> -
     v376 Imm(0)                                           -> x0
-    v377 Imm(61)                                          -> x7
+    v377 Imm(61)                                          -> -
     v378 CallExt { binding_idx=245, args=[v377], fp_arg_mask=0x0 } -> x0
     v379 Extend { value=v378, kind=I32 }                  -> x1
     v380 BinopI { op=and, lhs=v378, rhs_imm=1 }           -> x1
@@ -713,7 +713,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v419 Store { addr=v410, disp=8, value=v2396, kind=I64 pc_rel } -> -
     v420 LifetimeEnd(-9)                                  -> -
     v421 Imm(0)                                           -> x0
-    v422 Imm(61)                                          -> x7
+    v422 Imm(61)                                          -> -
     v423 CallExt { binding_idx=244, args=[v422], fp_arg_mask=0x0 } -> x0
     v424 Imm(0)                                           -> x0
     v425 Imm(0)                                           -> x0
@@ -1466,7 +1466,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v866 Store { addr=v858, disp=16, value=v2600, kind=I64 pc_rel } -> -
     v867 LifetimeEnd(-706)                                -> -
     v868 Imm(0)                                           -> x0
-    v869 Imm(61)                                          -> x7
+    v869 Imm(61)                                          -> -
     v870 CallExt { binding_idx=245, args=[v869], fp_arg_mask=0x0 } -> x0
     v871 Extend { value=v870, kind=I32 }                  -> x1
     v872 BinopI { op=and, lhs=v870, rhs_imm=1 }           -> x1
@@ -1529,7 +1529,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v911 Store { addr=v902, disp=16, value=v2612, kind=I64 pc_rel } -> -
     v912 LifetimeEnd(-9)                                  -> -
     v913 Imm(0)                                           -> x0
-    v914 Imm(61)                                          -> x7
+    v914 Imm(61)                                          -> -
     v915 CallExt { binding_idx=244, args=[v914], fp_arg_mask=0x0 } -> x0
     v916 Imm(0)                                           -> x0
     v917 Imm(0)                                           -> x0
@@ -1798,7 +1798,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v1023 Store { addr=v2715, disp=24, value=v2725, kind=I64 pc_rel } -> -
     v1024 LifetimeEnd(-9)                                  -> -
     v1025 Imm(0)                                           -> x0
-    v1026 Imm(61)                                          -> x7
+    v1026 Imm(61)                                          -> -
     v1027 CallExt { binding_idx=245, args=[v1026], fp_arg_mask=0x0 } -> x0
     v1028 Extend { value=v1027, kind=I32 }                 -> x1
     v1029 BinopI { op=and, lhs=v1027, rhs_imm=1 }          -> x1
@@ -1861,7 +1861,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v1068 Store { addr=v1059, disp=24, value=v2737, kind=I64 pc_rel } -> -
     v1069 LifetimeEnd(-9)                                  -> -
     v1070 Imm(0)                                           -> x0
-    v1071 Imm(61)                                          -> x7
+    v1071 Imm(61)                                          -> -
     v1072 CallExt { binding_idx=244, args=[v1071], fp_arg_mask=0x0 } -> x0
     v1073 Imm(0)                                           -> x0
     v1074 Imm(0)                                           -> x0
@@ -2103,7 +2103,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v1202 Store { addr=v1193, disp=24, value=v2809, kind=I64 pc_rel } -> -
     v1203 LifetimeEnd(-9)                                  -> -
     v1204 Imm(0)                                           -> x0
-    v1205 Imm(61)                                          -> x7
+    v1205 Imm(61)                                          -> -
     v1206 CallExt { binding_idx=245, args=[v1205], fp_arg_mask=0x0 } -> x0
     v1207 Extend { value=v1206, kind=I32 }                 -> x1
     v1208 BinopI { op=and, lhs=v1206, rhs_imm=1 }          -> x1
@@ -2166,7 +2166,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v1247 Store { addr=v1238, disp=24, value=v2821, kind=I64 pc_rel } -> -
     v1248 LifetimeEnd(-9)                                  -> -
     v1249 Imm(0)                                           -> x0
-    v1250 Imm(61)                                          -> x7
+    v1250 Imm(61)                                          -> -
     v1251 CallExt { binding_idx=244, args=[v1250], fp_arg_mask=0x0 } -> x0
     v1252 Imm(0)                                           -> x0
     v1253 Imm(0)                                           -> x0
@@ -2630,7 +2630,7 @@ fn ent_pc=395 n_params=2 variadic=false locals=9
     v1531 Store { addr=v1522, disp=32, value=v2941, kind=I64 pc_rel } -> -
     v1532 LifetimeEnd(-4)                                  -> -
     v1533 Imm(0)                                           -> x0
-    v1534 Imm(61)                                          -> x7
+    v1534 Imm(61)                                          -> -
     v1535 CallExt { binding_idx=245, args=[v1534], fp_arg_mask=0x0 } -> x0
     v1536 Extend { value=v1535, kind=I32 }                 -> x1
     v1537 BinopI { op=and, lhs=v1535, rhs_imm=1 }          -> x1
@@ -3565,7 +3565,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   AllocaInit(0)                                    -> -
-    v10  Imm(61)                                          -> x7
+    v10  Imm(61)                                          -> -
     v11  CallExt { binding_idx=244, args=[v10], fp_arg_mask=0x0 } -> x0
     v12  Imm(0)                                           -> x0
     v13  Imm(0)                                           -> x0
@@ -4010,7 +4010,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v272 Store { addr=v263, disp=48, value=v2119, kind=I64 pc_rel } -> -
     v273 LifetimeEnd(-672)                                -> -
     v274 Imm(0)                                           -> x0
-    v275 Imm(61)                                          -> x7
+    v275 Imm(61)                                          -> -
     v276 CallExt { binding_idx=245, args=[v275], fp_arg_mask=0x0 } -> x0
     v277 Extend { value=v276, kind=I32 }                  -> x1
     v278 BinopI { op=and, lhs=v276, rhs_imm=1 }           -> x1
@@ -4073,7 +4073,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v317 Store { addr=v308, disp=48, value=v2131, kind=I64 pc_rel } -> -
     v318 LifetimeEnd(-13)                                 -> -
     v319 Imm(0)                                           -> x0
-    v320 Imm(61)                                          -> x7
+    v320 Imm(61)                                          -> -
     v321 CallExt { binding_idx=244, args=[v320], fp_arg_mask=0x0 } -> x0
     v322 Imm(0)                                           -> x0
     v323 Imm(0)                                           -> x0
@@ -4243,7 +4243,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v415 Store { addr=v406, disp=56, value=v2179, kind=I64 pc_rel } -> -
     v416 LifetimeEnd(-676)                                -> -
     v417 Imm(0)                                           -> x0
-    v418 Imm(61)                                          -> x7
+    v418 Imm(61)                                          -> -
     v419 CallExt { binding_idx=245, args=[v418], fp_arg_mask=0x0 } -> x0
     v420 Extend { value=v419, kind=I32 }                  -> x1
     v421 BinopI { op=and, lhs=v419, rhs_imm=1 }           -> x1
@@ -4306,7 +4306,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v460 Store { addr=v451, disp=56, value=v2191, kind=I64 pc_rel } -> -
     v461 LifetimeEnd(-13)                                 -> -
     v462 Imm(0)                                           -> x0
-    v463 Imm(61)                                          -> x7
+    v463 Imm(61)                                          -> -
     v464 CallExt { binding_idx=244, args=[v463], fp_arg_mask=0x0 } -> x0
     v465 Imm(0)                                           -> x0
     v466 Imm(0)                                           -> x0
@@ -5076,7 +5076,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v924 Store { addr=v915, disp=64, value=v2395, kind=I64 pc_rel } -> -
     v925 LifetimeEnd(-693)                                -> -
     v926 Imm(0)                                           -> x0
-    v927 Imm(61)                                          -> x7
+    v927 Imm(61)                                          -> -
     v928 CallExt { binding_idx=245, args=[v927], fp_arg_mask=0x0 } -> x0
     v929 Extend { value=v928, kind=I32 }                  -> x1
     v930 BinopI { op=and, lhs=v928, rhs_imm=1 }           -> x1
@@ -5139,7 +5139,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v969 Store { addr=v960, disp=64, value=v2407, kind=I64 pc_rel } -> -
     v970 LifetimeEnd(-13)                                 -> -
     v971 Imm(0)                                           -> x0
-    v972 Imm(61)                                          -> x7
+    v972 Imm(61)                                          -> -
     v973 CallExt { binding_idx=244, args=[v972], fp_arg_mask=0x0 } -> x0
     v974 Imm(0)                                           -> x0
     v975 Imm(0)                                           -> x0
@@ -5328,7 +5328,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v1037 Store { addr=v2486, disp=72, value=v2496, kind=I64 pc_rel } -> -
     v1038 LifetimeEnd(-13)                                 -> -
     v1039 Imm(0)                                           -> x0
-    v1040 Imm(61)                                          -> x7
+    v1040 Imm(61)                                          -> -
     v1041 CallExt { binding_idx=245, args=[v1040], fp_arg_mask=0x0 } -> x0
     v1042 Extend { value=v1041, kind=I32 }                 -> x1
     v1043 BinopI { op=and, lhs=v1041, rhs_imm=1 }          -> x1
@@ -5391,7 +5391,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v1082 Store { addr=v1073, disp=72, value=v2508, kind=I64 pc_rel } -> -
     v1083 LifetimeEnd(-13)                                 -> -
     v1084 Imm(0)                                           -> x0
-    v1085 Imm(61)                                          -> x7
+    v1085 Imm(61)                                          -> -
     v1086 CallExt { binding_idx=244, args=[v1085], fp_arg_mask=0x0 } -> x0
     v1087 Imm(0)                                           -> x0
     v1088 Imm(0)                                           -> x0
@@ -5553,7 +5553,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v1172 Store { addr=v1163, disp=72, value=v2556, kind=I64 pc_rel } -> -
     v1173 LifetimeEnd(-13)                                 -> -
     v1174 Imm(0)                                           -> x0
-    v1175 Imm(61)                                          -> x7
+    v1175 Imm(61)                                          -> -
     v1176 CallExt { binding_idx=245, args=[v1175], fp_arg_mask=0x0 } -> x0
     v1177 Extend { value=v1176, kind=I32 }                 -> x1
     v1178 BinopI { op=and, lhs=v1176, rhs_imm=1 }          -> x1
@@ -5616,7 +5616,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v1217 Store { addr=v1208, disp=72, value=v2568, kind=I64 pc_rel } -> -
     v1218 LifetimeEnd(-13)                                 -> -
     v1219 Imm(0)                                           -> x0
-    v1220 Imm(61)                                          -> x7
+    v1220 Imm(61)                                          -> -
     v1221 CallExt { binding_idx=244, args=[v1220], fp_arg_mask=0x0 } -> x0
     v1222 Imm(0)                                           -> x0
     v1223 Imm(0)                                           -> x0
@@ -6194,7 +6194,7 @@ fn ent_pc=396 n_params=3 variadic=false locals=13
     v1579 Store { addr=v1570, disp=80, value=v2712, kind=I64 pc_rel } -> -
     v1580 LifetimeEnd(-699)                                -> -
     v1581 Imm(0)                                           -> x0
-    v1582 Imm(61)                                          -> x7
+    v1582 Imm(61)                                          -> -
     v1583 CallExt { binding_idx=245, args=[v1582], fp_arg_mask=0x0 } -> x0
     v1584 Extend { value=v1583, kind=I32 }                 -> x1
     v1585 BinopI { op=and, lhs=v1583, rhs_imm=1 }          -> x1
@@ -7988,7 +7988,7 @@ fn ent_pc=398 n_params=0 variadic=false locals=1
     v146 BinopI { op=lt, lhs=v144, rhs_imm=4 }            -> x0
     terminator Bz { cond=v146, target=b102, fall=b1 }   (exit_acc=v146)
   block 102  start_pc=0
-    v158 Imm(0)                                           -> x7
+    v158 Imm(0)                                           -> -
     v159 CallExt { binding_idx=243, args=[v158], fp_arg_mask=0x0 } -> x0
     v160 Imm(0)                                           -> x0
     v161 Imm(0)                                           -> x1
@@ -8499,7 +8499,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -8558,7 +8558,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

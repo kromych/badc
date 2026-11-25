@@ -118,11 +118,11 @@ Disassembly of section .text:
                	jl	<addr>
                	vmovdqa	%xmm1, %xmm0
                	vinserti128	$0x1, %xmm2, %ymm0, %ymm0
-               	leaq	-0x20(%rbp), %rdi
                	vmovups	%ymm0, -0x20(%rbp)
-               	movl	$0x20, %edx
                	vmovups	%ymm0, -0x40(%rbp)
                	movq	%rbx, %rsi
+               	leaq	-0x20(%rbp), %rdi
+               	movl	$0x20, %edx
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -136,21 +136,21 @@ Disassembly of section .text:
                	leave
                	retq
                	vmovdqa	%xmm0, %xmm1
-               	leaq	(%rsp), %rdi
                	movups	%xmm1, (%rsp)
                	vextracti128	$0x1, %ymm0, %xmm0
                	movups	%xmm0, 0x10(%rsp)
-               	movl	$0x10, %edx
                	movq	%rbx, %rsi
+               	leaq	(%rsp), %rdi
+               	movl	$0x10, %edx
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	(%rsp), %rax
-               	movl	$0x10, %edx
                	leaq	0x10(%rax), %rdi
                	leaq	0x10(%rbx), %rsi
+               	movl	$0x10, %edx
                	vzeroupper
                	callq	<addr>
                	movslq	%eax, %rax
@@ -253,7 +253,6 @@ Disassembly of section .text:
                	leaq	0x1(%r14), %r13
                	movl	$0x8, %eax
                	sarxq	%rbx, %rax, %r12
-               	leaq	0x58(%rsp), %rdi
                	leaq	0x20(%rsp), %rax
                	movq	%rbx, %rcx
                	shlq	$0x4, %rcx
@@ -264,6 +263,7 @@ Disassembly of section .text:
                	shlq	%rax
                	leaq	(%r13,%rax), %rsi
                	movslq	%r12d, %rdx
+               	leaq	0x58(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

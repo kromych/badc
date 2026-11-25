@@ -140,8 +140,8 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	addq	%rax, %rbx
-               	leaq	0x50(%rsp), %rdi
                	movsd	<rip>, %xmm0
+               	leaq	0x50(%rsp), %rdi
                	callq	<addr>
                	movsd	0x50(%rsp), %xmm0
                	ucomisd	<rip>, %xmm0
@@ -156,8 +156,8 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	addq	%rax, %rbx
-               	leaq	0x48(%rsp), %rdi
                	movss	<rip>, %xmm0
+               	leaq	0x48(%rsp), %rdi
                	callq	<addr>
                	movss	0x48(%rsp), %xmm0
                	ucomiss	<rip>, %xmm0

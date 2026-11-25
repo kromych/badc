@@ -70,17 +70,17 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	0x8(%rsp), %rdi
                	movq	0x10(%rsp), %rax
                	cmpq	$0x0, 0x20(%rax)
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x28, %rsp
                	retq
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
-               	leaq	0x8(%rsp), %rsi
                	movq	$0x2, 0x18(%rsp)
                	leaq	<rip>, %rdi
+               	leaq	0x8(%rsp), %rsi
                	movl	$0x1, %edx
                	callq	<addr>
                	movslq	%eax, %rax

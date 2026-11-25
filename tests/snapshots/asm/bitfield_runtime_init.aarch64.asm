@@ -91,9 +91,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	mov	x2, #-0x10              // =-16
-               	mov	x1, x0
-               	mov	x3, x0
+               	mov	x3, #0x0                // =0
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x3                // =3

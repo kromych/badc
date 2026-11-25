@@ -31,16 +31,16 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	movl	$0x29, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x29, %edi
                	callq	*%rax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%r11
                	retq
-               	movl	$0x14, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x14, %edi
                	callq	*%rax
                	cmpl	$0x15, %eax
                	je	<addr>

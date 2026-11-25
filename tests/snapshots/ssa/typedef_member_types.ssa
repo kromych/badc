@@ -281,7 +281,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v180 Imm(0)                                           -> x0
     v181 Imm(0)                                           -> x0
     v182 Imm(0)                                           -> x0
-    v183 Imm(0)                                           -> x7
+    v183 Imm(0)                                           -> -
     v184 Call { target_pc=4, args=[v183], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v185 CallIndirect { target=v184, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v186 Imm(3)                                           -> x1
@@ -301,7 +301,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v196 Imm(0)                                           -> x0
     v197 Imm(0)                                           -> x0
     v198 Imm(0)                                           -> x0
-    v199 Imm(1)                                           -> x7
+    v199 Imm(1)                                           -> -
     v200 Call { target_pc=4, args=[v199], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v201 CallIndirect { target=v200, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v202 Imm(3)                                           -> x1
@@ -389,7 +389,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -448,7 +448,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

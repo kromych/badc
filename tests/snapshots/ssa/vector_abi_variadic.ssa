@@ -500,21 +500,21 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=7
-  spill_count=4 gpr_used=[] fp_used=[]
+  spill_count=3 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2)                                           -> x0
-    v2   Imm(1)                                           -> x7
+    v2   Imm(1)                                           -> -
     v3   Call { target_pc=5, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v4   RetPart(0, kind=V128)                            -> d0
     v5   StoreLocal { off=-81, value=v4, kind=V128 }      -> -
     v6   LocalAddr(-81)                                   -> x0
-    v7   Imm(3)                                           -> x7
+    v7   Imm(3)                                           -> -
     v8   Call { target_pc=5, args=[v7], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v9   RetPart(0, kind=V128)                            -> d0
     v10  StoreLocal { off=-82, value=v9, kind=V128 }      -> -
     v11  LocalAddr(-82)                                   -> x9
-    v12  Imm(2)                                           -> x7
+    v12  Imm(2)                                           -> -
     v13  LocalAddr(-81)                                   -> x0
     v14  Call { target_pc=0, args=[v12, v13, v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v15  Extend { value=v14, kind=I32 }                   -> x1
@@ -684,66 +684,66 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v175 Imm(11)                                          -> x0
     v176 Imm(0)                                           -> x0
     v177 Imm(10)                                          -> x0
-    v178 Imm(1)                                           -> x7
+    v178 Imm(1)                                           -> -
     v179 Call { target_pc=5, args=[v178], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v180 RetPart(0, kind=V128)                            -> d0
     v181 StoreLocal { off=-83, value=v180, kind=V128 }    -> -
     v182 LocalAddr(-83)                                   -> x0
-    v183 Imm(2)                                           -> x7
+    v183 Imm(2)                                           -> -
     v184 Call { target_pc=5, args=[v183], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v185 RetPart(0, kind=V128)                            -> d0
     v186 StoreLocal { off=-84, value=v185, kind=V128 }    -> -
     v187 LocalAddr(-84)                                   -> x0
-    v188 Imm(3)                                           -> x7
+    v188 Imm(3)                                           -> -
     v189 Call { target_pc=5, args=[v188], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v190 RetPart(0, kind=V128)                            -> d0
     v191 StoreLocal { off=-85, value=v190, kind=V128 }    -> -
     v192 LocalAddr(-85)                                   -> x0
-    v193 Imm(4)                                           -> x7
+    v193 Imm(4)                                           -> -
     v194 Call { target_pc=5, args=[v193], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v195 RetPart(0, kind=V128)                            -> d0
     v196 StoreLocal { off=-86, value=v195, kind=V128 }    -> -
     v197 LocalAddr(-86)                                   -> x0
-    v198 Imm(5)                                           -> x7
+    v198 Imm(5)                                           -> -
     v199 Call { target_pc=5, args=[v198], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v200 RetPart(0, kind=V128)                            -> d0
     v201 StoreLocal { off=-87, value=v200, kind=V128 }    -> -
     v202 LocalAddr(-87)                                   -> x0
-    v203 Imm(6)                                           -> x7
+    v203 Imm(6)                                           -> -
     v204 Call { target_pc=5, args=[v203], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v205 RetPart(0, kind=V128)                            -> d0
     v206 StoreLocal { off=-88, value=v205, kind=V128 }    -> -
     v207 LocalAddr(-88)                                   -> x0
-    v208 Imm(7)                                           -> x7
+    v208 Imm(7)                                           -> -
     v209 Call { target_pc=5, args=[v208], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v210 RetPart(0, kind=V128)                            -> d0
     v211 StoreLocal { off=-89, value=v210, kind=V128 }    -> -
     v212 LocalAddr(-89)                                   -> x0
-    v213 Imm(8)                                           -> x7
+    v213 Imm(8)                                           -> -
     v214 Call { target_pc=5, args=[v213], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v215 RetPart(0, kind=V128)                            -> d0
     v216 StoreLocal { off=-90, value=v215, kind=V128 }    -> -
     v217 LocalAddr(-90)                                   -> x0
-    v218 Imm(9)                                           -> x7
+    v218 Imm(9)                                           -> -
     v219 Call { target_pc=5, args=[v218], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v220 RetPart(0, kind=V128)                            -> d0
     v221 StoreLocal { off=-91, value=v220, kind=V128 }    -> -
     v222 LocalAddr(-91)                                   -> x0
-    v223 Imm(10)                                          -> x7
+    v223 Imm(10)                                          -> -
     v224 Call { target_pc=5, args=[v223], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v225 RetPart(0, kind=V128)                            -> d0
     v226 StoreLocal { off=-92, value=v225, kind=V128 }    -> -
     v227 LocalAddr(-92)                                   -> x9
-    v228 Imm(10)                                          -> x7
+    v228 Imm(10)                                          -> -
     v229 LocalAddr(-83)                                   -> x0
     v230 LocalAddr(-84)                                   -> x1
     v231 LocalAddr(-85)                                   -> x2
     v232 LocalAddr(-86)                                   -> x6
-    v233 LocalAddr(-87)                                   -> x8
-    v234 LocalAddr(-88)                                   -> [spill 0]
-    v235 LocalAddr(-89)                                   -> [spill 1]
-    v236 LocalAddr(-90)                                   -> [spill 2]
-    v237 LocalAddr(-91)                                   -> [spill 3]
+    v233 LocalAddr(-87)                                   -> x7
+    v234 LocalAddr(-88)                                   -> x8
+    v235 LocalAddr(-89)                                   -> [spill 0]
+    v236 LocalAddr(-90)                                   -> [spill 1]
+    v237 LocalAddr(-91)                                   -> [spill 2]
     v238 Call { target_pc=0, args=[v228, v229, v230, v231, v232, v233, v234, v235, v236, v237, v227], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v239 Extend { value=v238, kind=I32 }                  -> x1
     v240 Imm(260)                                         -> x1
@@ -854,7 +854,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v341 Imm(8)                                           -> x0
     v342 Imm(8)                                           -> x0
     v343 Imm(0)                                           -> x0
-    v344 Imm(1)                                           -> x7
+    v344 Imm(1)                                           -> -
     v345 LocalAddr(-1)                                    -> x0
     v346 Call { target_pc=1, args=[v344, v248], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v347 Extend { value=v346, kind=I32 }                  -> x1
@@ -869,23 +869,23 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v352 Imm(2)                                           -> x0
     v353 Imm(7)                                           -> x0
     v354 Imm(4602678819172646912)                         -> x0
-    v355 Imm(10)                                          -> x7
+    v355 Imm(10)                                          -> -
     v356 Call { target_pc=5, args=[v355], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v357 RetPart(0, kind=V128)                            -> d0
     v358 StoreLocal { off=-93, value=v357, kind=V128 }    -> -
     v359 LocalAddr(-93)                                   -> x0
     v360 Imm(9)                                           -> x0
     v361 Imm(4598175219545276416)                         -> x0
-    v362 Imm(20)                                          -> x7
+    v362 Imm(20)                                          -> -
     v363 Call { target_pc=5, args=[v362], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v364 RetPart(0, kind=V128)                            -> d0
     v365 StoreLocal { off=-94, value=v364, kind=V128 }    -> -
     v366 LocalAddr(-94)                                   -> x9
-    v367 Imm(2)                                           -> x7
-    v368 Imm(7)                                           -> x6
+    v367 Imm(2)                                           -> -
+    v368 Imm(7)                                           -> -
     v369 Imm(4602678819172646912)                         -> d0
     v370 LocalAddr(-93)                                   -> x0
-    v371 Imm(9)                                           -> x2
+    v371 Imm(9)                                           -> -
     v372 Imm(4598175219545276416)                         -> d2
     v373 Call { target_pc=2, args=[v367, v368, v369, v370, v371, v372, v366], fixed_args=1, fp_return=true, fp_arg_mask=0x24 } -> d0
     v374 Imm(4632620719820242944)                         -> d1
@@ -1022,7 +1022,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v501 Imm(7)                                           -> x0
     v502 Imm(7)                                           -> x0
     v503 Imm(0)                                           -> x0
-    v504 Imm(6)                                           -> x7
+    v504 Imm(6)                                           -> -
     v505 Imm(4598175219545276416)                         -> d0
     v506 Imm(1)                                           -> x0
     v507 Imm(0)                                           -> x0
@@ -1429,86 +1429,86 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v908 LifetimeEnd(0)                                   -> -
     v909 LocalAddr(-3)                                    -> x6
     v910 Imm(4609434218613702656)                         -> d3
-    v911 Imm(6)                                           -> x8
-    v912 Imm(0)                                           -> x8
-    v913 Imm(0)                                           -> x8
-    v914 Imm(6)                                           -> x8
-    v915 Imm(6)                                           -> x8
-    v916 Imm(6)                                           -> x8
-    v917 Undef                                            -> x8
+    v911 Imm(6)                                           -> x7
+    v912 Imm(0)                                           -> x7
+    v913 Imm(0)                                           -> x7
+    v914 Imm(6)                                           -> x7
+    v915 Imm(6)                                           -> x7
+    v916 Imm(6)                                           -> x7
+    v917 Undef                                            -> x7
     v918 VecConst { imm=6, kind=I64, bytes=8 }            -> d5
-    v919 Imm(0)                                           -> x8
-    v920 Imm(0)                                           -> x8
-    v921 Imm(1)                                           -> x8
-    v922 Imm(6)                                           -> x8
-    v923 Imm(7)                                           -> x8
-    v924 Imm(7)                                           -> x8
-    v925 Imm(7)                                           -> x8
-    v926 Imm(0)                                           -> x8
+    v919 Imm(0)                                           -> x7
+    v920 Imm(0)                                           -> x7
+    v921 Imm(1)                                           -> x7
+    v922 Imm(6)                                           -> x7
+    v923 Imm(7)                                           -> x7
+    v924 Imm(7)                                           -> x7
+    v925 Imm(7)                                           -> x7
+    v926 Imm(0)                                           -> x7
     v927 VecConst { imm=1798, kind=I64, bytes=8 }         -> d5
-    v928 Imm(0)                                           -> x8
-    v929 Imm(0)                                           -> x8
-    v930 Imm(2)                                           -> x8
-    v931 Imm(6)                                           -> x8
-    v932 Imm(8)                                           -> x8
-    v933 Imm(8)                                           -> x8
-    v934 Imm(8)                                           -> x8
-    v935 Imm(0)                                           -> x8
+    v928 Imm(0)                                           -> x7
+    v929 Imm(0)                                           -> x7
+    v930 Imm(2)                                           -> x7
+    v931 Imm(6)                                           -> x7
+    v932 Imm(8)                                           -> x7
+    v933 Imm(8)                                           -> x7
+    v934 Imm(8)                                           -> x7
+    v935 Imm(0)                                           -> x7
     v936 VecConst { imm=526086, kind=I64, bytes=8 }       -> d5
-    v937 Imm(0)                                           -> x8
-    v938 Imm(0)                                           -> x8
-    v939 Imm(3)                                           -> x8
-    v940 Imm(6)                                           -> x8
-    v941 Imm(9)                                           -> x8
-    v942 Imm(9)                                           -> x8
-    v943 Imm(9)                                           -> x8
-    v944 Imm(0)                                           -> x8
+    v937 Imm(0)                                           -> x7
+    v938 Imm(0)                                           -> x7
+    v939 Imm(3)                                           -> x7
+    v940 Imm(6)                                           -> x7
+    v941 Imm(9)                                           -> x7
+    v942 Imm(9)                                           -> x7
+    v943 Imm(9)                                           -> x7
+    v944 Imm(0)                                           -> x7
     v945 VecConst { imm=151521030, kind=I64, bytes=8 }    -> d5
-    v946 Imm(0)                                           -> x8
-    v947 Imm(0)                                           -> x8
-    v948 Imm(4)                                           -> x8
-    v949 Imm(6)                                           -> x8
-    v950 Imm(10)                                          -> x8
-    v951 Imm(10)                                          -> x8
-    v952 Imm(10)                                          -> x8
-    v953 Imm(0)                                           -> x8
+    v946 Imm(0)                                           -> x7
+    v947 Imm(0)                                           -> x7
+    v948 Imm(4)                                           -> x7
+    v949 Imm(6)                                           -> x7
+    v950 Imm(10)                                          -> x7
+    v951 Imm(10)                                          -> x7
+    v952 Imm(10)                                          -> x7
+    v953 Imm(0)                                           -> x7
     v954 VecConst { imm=43101193990, kind=I64, bytes=8 }  -> d5
-    v955 Imm(0)                                           -> x8
-    v956 Imm(0)                                           -> x8
-    v957 Imm(5)                                           -> x8
-    v958 Imm(6)                                           -> x8
-    v959 Imm(11)                                          -> x8
-    v960 Imm(11)                                          -> x8
-    v961 Imm(11)                                          -> x8
-    v962 Imm(0)                                           -> x8
+    v955 Imm(0)                                           -> x7
+    v956 Imm(0)                                           -> x7
+    v957 Imm(5)                                           -> x7
+    v958 Imm(6)                                           -> x7
+    v959 Imm(11)                                          -> x7
+    v960 Imm(11)                                          -> x7
+    v961 Imm(11)                                          -> x7
+    v962 Imm(0)                                           -> x7
     v963 VecConst { imm=12137729099526, kind=I64, bytes=8 } -> d5
-    v964 Imm(0)                                           -> x8
-    v965 Imm(0)                                           -> x8
-    v966 Imm(6)                                           -> x8
-    v967 Imm(6)                                           -> x8
-    v968 Imm(12)                                          -> x8
-    v969 Imm(12)                                          -> x8
-    v970 Imm(12)                                          -> x8
-    v971 Imm(0)                                           -> x8
+    v964 Imm(0)                                           -> x7
+    v965 Imm(0)                                           -> x7
+    v966 Imm(6)                                           -> x7
+    v967 Imm(6)                                           -> x7
+    v968 Imm(12)                                          -> x7
+    v969 Imm(12)                                          -> x7
+    v970 Imm(12)                                          -> x7
+    v971 Imm(0)                                           -> x7
     v972 VecConst { imm=3389837449627398, kind=I64, bytes=8 } -> d5
-    v973 Imm(0)                                           -> x8
-    v974 Imm(0)                                           -> x8
-    v975 Imm(7)                                           -> x8
-    v976 Imm(6)                                           -> x8
-    v977 Imm(13)                                          -> x8
-    v978 Imm(13)                                          -> x8
-    v979 Imm(13)                                          -> x8
-    v980 Imm(0)                                           -> x8
+    v973 Imm(0)                                           -> x7
+    v974 Imm(0)                                           -> x7
+    v975 Imm(7)                                           -> x7
+    v976 Imm(6)                                           -> x7
+    v977 Imm(13)                                          -> x7
+    v978 Imm(13)                                          -> x7
+    v979 Imm(13)                                          -> x7
+    v980 Imm(0)                                           -> x7
     v981 VecConst { imm=940138559942690566, kind=I64, bytes=8 } -> d5
-    v982 Imm(0)                                           -> x8
-    v983 Imm(0)                                           -> x8
-    v984 Imm(0)                                           -> x8
-    v985 LocalAddr(-1)                                    -> x8
-    v986 Imm(0)                                           -> x8
-    v987 Imm(940138559942690566)                          -> x8
+    v982 Imm(0)                                           -> x7
+    v983 Imm(0)                                           -> x7
+    v984 Imm(0)                                           -> x7
+    v985 LocalAddr(-1)                                    -> x7
+    v986 Imm(0)                                           -> x7
+    v987 Imm(940138559942690566)                          -> x7
     v988 StoreLocal { off=-1, value=v987, kind=I64 }      -> -
     v989 LifetimeEnd(0)                                   -> -
-    v990 LocalAddr(-1)                                    -> x8
+    v990 LocalAddr(-1)                                    -> x7
     v991 Call { target_pc=3, args=[v504, v505, v580, v586, v661, v667, v742, v748, v828, v829, v909, v910, v990], fixed_args=1, fp_return=true, fp_arg_mask=0xaaa } -> d0
     v992 Imm(0)                                           -> x0
     v993 Imm(4635980827354726400)                         -> d1
@@ -1568,7 +1568,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -1627,7 +1627,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

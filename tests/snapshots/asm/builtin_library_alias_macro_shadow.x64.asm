@@ -71,8 +71,8 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	leaq	<rip>, %rdi # <addr>
-               	movl	$0x5, %edx
                	movq	%rcx, %rsi
+               	movl	$0x5, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -80,9 +80,9 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	popq	%r11
                	retq
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x65, %esi
                	movl	$0x5, %edx
-               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	leaq	0x1(%rdi), %rcx
@@ -100,8 +100,8 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	leaq	<rip>, %rdi # <addr>
-               	movl	$0x5, %edx
                	leaq	<rip>, %rsi # <addr>
+               	movl	$0x5, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -109,8 +109,8 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	popq	%r11
                	retq
-               	movl	$0x6c, %esi
                	leaq	<rip>, %rdi # <addr>
+               	movl	$0x6c, %esi
                	callq	<addr>
                	leaq	<rip>, %rcx # <addr>
                	addq	$0x2, %rcx
@@ -119,8 +119,8 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	popq	%r11
                	retq
-               	movl	$0x6c, %esi
                	leaq	<rip>, %rdi # <addr>
+               	movl	$0x6c, %esi
                	callq	<addr>
                	leaq	<rip>, %rcx # <addr>
                	addq	$0x3, %rcx
@@ -178,8 +178,8 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	movb	$0x0, <rip> # <addr>
-               	movl	$0x3, %edx
                	leaq	<rip>, %rsi # <addr>
+               	movl	$0x3, %edx
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	cmpq	%rdi, %rax

@@ -51,8 +51,8 @@ Disassembly of section .text:
 <main>:
                	subq	$0x28, %rsp
                	movslq	<rip>, %rdi # <addr>
-               	xorl	%esi, %esi
                	movq	%rdi, 0x8(%rsp)
+               	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>
@@ -95,8 +95,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	xorl	%esi, %esi
                	movq	0x8(%rsp), %rdi
+               	xorl	%esi, %esi
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	0x18(%rsp,%rax,4), %eax

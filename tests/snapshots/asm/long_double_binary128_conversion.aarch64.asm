@@ -205,8 +205,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, x0
-               	sub	x0, x29, #0x10
                	fmov	d0, x20
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	ldur	x4, [x29, #-0x10]
                	ldur	x5, [x29, #-0x8]
@@ -278,9 +278,9 @@ Disassembly of section .text:
                	ldr	x1, [x1, x23, lsl #3]
                	orr	x1, x24, x1, lsl #48
                	orr	x22, x1, x0
-               	sub	x0, x29, #0x10
                	stur	x21, [x29, #-0x10]
                	stur	x22, [x29, #-0x8]
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	fmov	x25, d0
                	and	x0, x22, #0x8000000000000000
@@ -345,9 +345,9 @@ Disassembly of section .text:
                	eor	x1, x1, x1, lsr #7
                	eor	x22, x1, x1, lsl #17
                	str	x22, [x0, #0x10]
-               	sub	x0, x29, #0x10
                	stur	x22, [x29, #-0x10]
                	stur	x20, [x29, #-0x8]
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	fmov	x23, d0
                	and	x0, x20, #0x8000000000000000

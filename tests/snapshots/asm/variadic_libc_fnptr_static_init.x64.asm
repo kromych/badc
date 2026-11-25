@@ -27,20 +27,20 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x58, %rsp
-               	leaq	0x10(%rsp), %rdi
                	movb	$0x0, 0x10(%rsp)
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x8(%rsp)
-               	movl	$0x40, %esi
                	leaq	<rip>, %rdx
-               	movl	$0x2a, %ecx
                	leaq	<rip>, %r8
+               	leaq	0x10(%rsp), %rdi
+               	movl	$0x40, %esi
+               	movl	$0x2a, %ecx
                	movl	$0x63, %r9d
                	movq	0x8(%rsp), %r10
                	movb	$0x0, %al
                	callq	*%r10
-               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	0x10(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

@@ -30,24 +30,24 @@ Disassembly of section .text:
                	movl	$0x1e, %edi
                	callq	<addr>
                	movq	%rax, %r9
-               	xorl	%edi, %edi
                	movq	%r9, %rsi
                	shlq	%rsi
+               	movq	%r9, 0x8(%rsp)
+               	xorl	%edi, %edi
                	movl	$0x3, %edx
                	movl	$0x22, %ecx
                	movq	$-0x1, %r8
-               	movq	%r9, 0x8(%rsp)
-               	movq	%rdi, %r9
+               	xorl	%r9d, %r9d
                	callq	<addr>
                	movq	%rax, %rcx
                	movq	0x8(%rsp), %r9
                	cmpq	$-0x1, %rcx
                	je	<addr>
                	leaq	(%rcx,%r9), %rdi
-               	xorl	%edx, %edx
                	movq	%r9, 0x8(%rsp)
                	movq	%rcx, (%rsp)
                	movq	%r9, %rsi
+               	xorl	%edx, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x8(%rsp), %r9

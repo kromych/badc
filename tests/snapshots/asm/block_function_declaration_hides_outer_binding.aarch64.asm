@@ -52,10 +52,10 @@ Disassembly of section .text:
 <hides_with_variadic>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0x3                // =3
                	fmov	d0, #1.50000000
                	fmov	d1, #2.25000000
                	fmov	d2, #4.00000000
+               	mov	x0, #0x3                // =3
                	bl	<addr>
                	fmov	d1, #7.00000000
                	fadd	d0, d0, d1

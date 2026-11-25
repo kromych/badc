@@ -122,12 +122,6 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%r11
                	retq
-               	movl	$0x1, %edi
-               	movq	$-0x2, %rsi
-               	movabsq	$0x1122334455667788, %rdx # imm = 0x1122334455667788
-               	movl	$0xf0000003, %ecx       # imm = 0xF0000003
-               	movq	$-0x5, %r8
-               	movl	$0xfa, %r9d
                	movq	<rip>, %rax # <addr>
                	movq	$-0x7, (%rsp)
                	movabsq	$0x11111111ea60, %r10   # imm = 0x11111111EA60
@@ -136,6 +130,12 @@ Disassembly of section .text:
                	movq	$-0xa, 0x18(%rsp)
                	movabsq	$0x123456789abcdef0, %r10 # imm = 0x123456789ABCDEF0
                	movq	%r10, 0x20(%rsp)
+               	movl	$0x1, %edi
+               	movq	$-0x2, %rsi
+               	movabsq	$0x1122334455667788, %rdx # imm = 0x1122334455667788
+               	movl	$0xf0000003, %ecx       # imm = 0xF0000003
+               	movq	$-0x5, %r8
+               	movl	$0xfa, %r9d
                	callq	*%rax
                	testl	%eax, %eax
                	je	<addr>

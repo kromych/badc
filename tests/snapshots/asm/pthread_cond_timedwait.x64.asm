@@ -60,11 +60,11 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	0x20(%rsp), %rdi
                	callq	<addr>
-               	leaq	0x10(%rsp), %rdx
                	movq	$0x1, 0x10(%rsp)
                	movq	$0x0, 0x18(%rsp)
                	leaq	0x48(%rsp), %rdi
                	leaq	0x20(%rsp), %rsi
+               	leaq	0x10(%rsp), %rdx
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x8(%rsp)

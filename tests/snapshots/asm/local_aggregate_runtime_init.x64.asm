@@ -42,10 +42,10 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	movl	%ecx, 0x18(%rsp)
                	movl	$0x616c6f68, 0x1c(%rsp) # imm = 0x616C6F68
-               	leaq	0x18(%rsp), %rdi
                	movl	$0x0, 0x20(%rsp)
                	movw	$0x0, 0x24(%rsp)
                	movq	%rax, 0x28(%rsp)
+               	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movl	(%rax), %ecx
                	cmpl	$0x3, %ecx
@@ -83,11 +83,11 @@ Disassembly of section .text:
                	addq	$0x38, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
-               	leaq	0x8(%rsp), %rdi
                	movl	%eax, 0x8(%rsp)
                	movl	<rip>, %eax # <addr>
                	movl	%eax, 0xc(%rsp)
                	movl	$0x5, 0x10(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movl	(%rax), %ecx
                	cmpl	$0x3, %ecx

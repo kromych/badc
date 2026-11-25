@@ -143,36 +143,36 @@ Disassembly of section .text:
                	mov	x1, #0x32               // =50
                	bl	<addr>
                	mov	x20, x0
+               	mov	x0, x20
                	mov	x1, #0x1e               // =30
-               	mov	x0, x20
                	bl	<addr>
+               	mov	x0, x20
                	mov	x1, #0x46               // =70
-               	mov	x0, x20
                	bl	<addr>
+               	mov	x0, x20
                	mov	x1, #0x14               // =20
-               	mov	x0, x20
                	bl	<addr>
+               	mov	x0, x20
                	mov	x1, #0x28               // =40
-               	mov	x0, x20
                	bl	<addr>
-               	mov	x1, #0x14               // =20
                	mov	x0, x20
+               	mov	x1, #0x14               // =20
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x1, #0x28               // =40
                	mov	x0, x20
+               	mov	x1, #0x28               // =40
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x1, #0x63               // =99
                	mov	x0, x20
+               	mov	x1, #0x63               // =99
                	bl	<addr>
                	cmp	w0, #0x1
                	b.ne	<addr>

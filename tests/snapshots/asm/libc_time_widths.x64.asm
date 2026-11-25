@@ -40,8 +40,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rcx
                	movq	$0x0, 0x18(%rsp)
-               	leaq	0x18(%rsp), %rdi
                	movq	%rcx, 0x8(%rsp)
+               	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
                	cmpq	$0x63b0cd00, %rcx       # imm = 0x63B0CD00

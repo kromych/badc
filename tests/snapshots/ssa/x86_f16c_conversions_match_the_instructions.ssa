@@ -553,7 +553,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=23
     v1594 BinopI { op=and, lhs=v1592, rhs_imm=4294967295 } -> x0
     v1595 BinopI { op=and, lhs=v1372, rhs_imm=4294967295 } -> x0
     v1596 BinopI { op=and, lhs=v1364, rhs_imm=4294967295 } -> x0
-    v1597 LocalAddr(-11)                                   -> x1
+    v1597 LocalAddr(-11)                                   -> -
     v1598 Call { target_pc=875, args=[v1592, v1372, v1364, v1597], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1599 BinopI { op=and, lhs=v1598, rhs_imm=65535 }      -> x0
     v1600 StoreLocal { off=-12, value=v1599, kind=I16 }    -> -
@@ -658,9 +658,9 @@ fn ent_pc=1338 n_params=0 variadic=false locals=23
     v1554 LoadLocal { off=-7, kind=U32 }                   -> x7
     v1555 LifetimeEnd(-7)                                  -> -
     v1556 BinopI { op=and, lhs=v1554, rhs_imm=4294967295 } -> x0
-    v1557 Imm(3)                                           -> x6
+    v1557 Imm(3)                                           -> -
     v1558 BinopI { op=and, lhs=v1345, rhs_imm=4294967295 } -> x0
-    v1559 LocalAddr(-11)                                   -> x1
+    v1559 LocalAddr(-11)                                   -> -
     v1560 Call { target_pc=875, args=[v1554, v1557, v1345, v1559], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1561 BinopI { op=and, lhs=v1560, rhs_imm=65535 }      -> x0
     v1562 StoreLocal { off=-14, value=v1561, kind=I16 }    -> -
@@ -727,9 +727,9 @@ fn ent_pc=1338 n_params=0 variadic=false locals=23
     v1514 LoadLocal { off=-8, kind=U32 }                   -> x7
     v1515 LifetimeEnd(-8)                                  -> -
     v1516 BinopI { op=and, lhs=v1514, rhs_imm=4294967295 } -> x0
-    v1517 Imm(2)                                           -> x6
+    v1517 Imm(2)                                           -> -
     v1518 BinopI { op=and, lhs=v1409, rhs_imm=4294967295 } -> x0
-    v1519 LocalAddr(-11)                                   -> x1
+    v1519 LocalAddr(-11)                                   -> -
     v1520 Call { target_pc=875, args=[v1514, v1517, v1409, v1519], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1521 BinopI { op=and, lhs=v1520, rhs_imm=65535 }      -> x0
     v1522 StoreLocal { off=-16, value=v1521, kind=I16 }    -> -
@@ -799,9 +799,9 @@ fn ent_pc=1338 n_params=0 variadic=false locals=23
     v1474 LoadLocal { off=-9, kind=U32 }                   -> x7
     v1475 LifetimeEnd(-9)                                  -> -
     v1476 BinopI { op=and, lhs=v1474, rhs_imm=4294967295 } -> x0
-    v1477 Imm(1)                                           -> x6
+    v1477 Imm(1)                                           -> -
     v1478 BinopI { op=and, lhs=v1389, rhs_imm=4294967295 } -> x0
-    v1479 LocalAddr(-11)                                   -> x1
+    v1479 LocalAddr(-11)                                   -> -
     v1480 Call { target_pc=875, args=[v1474, v1477, v1389, v1479], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1481 BinopI { op=and, lhs=v1480, rhs_imm=65535 }      -> x0
     v1482 StoreLocal { off=-18, value=v1481, kind=I16 }    -> -
@@ -870,9 +870,9 @@ fn ent_pc=1338 n_params=0 variadic=false locals=23
     v1434 LoadLocal { off=-10, kind=U32 }                  -> x7
     v1435 LifetimeEnd(-10)                                 -> -
     v1436 BinopI { op=and, lhs=v1434, rhs_imm=4294967295 } -> x0
-    v1437 Imm(0)                                           -> x6
+    v1437 Imm(0)                                           -> -
     v1438 BinopI { op=and, lhs=v1326, rhs_imm=4294967295 } -> x0
-    v1439 LocalAddr(-11)                                   -> x1
+    v1439 LocalAddr(-11)                                   -> -
     v1440 Call { target_pc=875, args=[v1434, v1437, v1326, v1439], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1441 BinopI { op=and, lhs=v1440, rhs_imm=65535 }      -> x0
     v1442 StoreLocal { off=-20, value=v1441, kind=I16 }    -> -
@@ -1592,9 +1592,9 @@ fn ent_pc=1338 n_params=0 variadic=false locals=23
     v1138 LoadLocal { off=-7, kind=U32 }                   -> x7
     v1139 LifetimeEnd(-7)                                  -> -
     v1140 BinopI { op=and, lhs=v1138, rhs_imm=4294967295 } -> x0
-    v1141 Imm(0)                                           -> x6
+    v1141 Imm(0)                                           -> -
     v1142 BinopI { op=and, lhs=v683, rhs_imm=4294967295 }  -> x0
-    v1143 LocalAddr(-8)                                    -> x1
+    v1143 LocalAddr(-8)                                    -> -
     v1144 Call { target_pc=875, args=[v1138, v1141, v683, v1143], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1145 BinopI { op=and, lhs=v1144, rhs_imm=65535 }      -> x0
     v1146 StoreIndexed { base=v677, index=v1126, scale=2, value=v1145, kind=I16 } -> -
@@ -1727,9 +1727,9 @@ fn ent_pc=1338 n_params=0 variadic=false locals=23
     v1266 LoadLocal { off=-7, kind=U32 }                   -> x7
     v1267 LifetimeEnd(-7)                                  -> -
     v1268 BinopI { op=and, lhs=v1266, rhs_imm=4294967295 } -> x0
-    v1269 Imm(0)                                           -> x6
+    v1269 Imm(0)                                           -> -
     v1270 BinopI { op=and, lhs=v1242, rhs_imm=4294967295 } -> x0
-    v1271 LocalAddr(-8)                                    -> x1
+    v1271 LocalAddr(-8)                                    -> -
     v1272 Call { target_pc=875, args=[v1266, v1269, v1242, v1271], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1273 BinopI { op=and, lhs=v1272, rhs_imm=65535 }      -> x0
     v1274 StoreIndexed { base=v1234, index=v1254, scale=2, value=v1273, kind=I16 } -> -
@@ -3138,7 +3138,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -3197,7 +3197,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

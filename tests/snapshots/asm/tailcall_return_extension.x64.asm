@@ -62,9 +62,9 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x18, %rsp
+               	movl	$0xfebf1000, 0x8(%rsp)  # imm = 0xFEBF1000
                	leaq	0x8(%rsp), %rdi
                	xorl	%esi, %esi
-               	movl	$0xfebf1000, 0x8(%rsp)  # imm = 0xFEBF1000
                	callq	<addr>
                	cmpl	$0xfebf1000, %eax       # imm = 0xFEBF1000
                	je	<addr>
@@ -79,8 +79,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x18, %rsp
                	retq
-               	leaq	0x8(%rsp), %rdi
                	movb	$0x7f, 0xb(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0x7fbf1000, %eax       # imm = 0x7FBF1000

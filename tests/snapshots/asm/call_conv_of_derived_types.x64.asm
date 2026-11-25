@@ -170,9 +170,9 @@ Disassembly of section .text:
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rax
                	movq	(%rax), %rax
+               	subq	$0x20, %rsp
                	movl	$0x4, %ecx
                	movl	$0x3, %edx
-               	subq	$0x20, %rsp
                	callq	*%rax
                	addq	$0x20, %rsp
                	imulq	$0x64, %rax, %rbx
@@ -355,9 +355,9 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x2, %edi
                	movq	<rip>, %rsi # <addr>
                	movq	<rip>, %rdx # <addr>
+               	movl	$0x2, %edi
                	movb	$0x0, %al
                	callq	<addr>
                	cmpq	$0x905, %rax            # imm = 0x905

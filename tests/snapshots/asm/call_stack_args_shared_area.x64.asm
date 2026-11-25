@@ -63,31 +63,31 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	pushq	%rbx
                	subq	$0x30, %rsp
+               	movq	<rip>, %rax # <addr>
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	movq	$0x9, 0x10(%rsp)
+               	movq	$0xa, 0x18(%rsp)
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	movq	<rip>, %rax # <addr>
-               	movq	$0x7, (%rsp)
-               	movq	$0x8, 0x8(%rsp)
-               	movq	$0x9, 0x10(%rsp)
-               	movq	$0xa, 0x18(%rsp)
                	callq	*%rax
                	movq	%rax, %rbx
-               	movl	$0xa, %edi
-               	movl	$0x9, %esi
-               	movl	$0x8, %edx
-               	movl	$0x7, %ecx
-               	movl	$0x6, %r8d
-               	movl	$0x5, %r9d
                	movq	<rip>, %rax # <addr>
                	movq	$0x4, (%rsp)
                	movq	$0x3, 0x8(%rsp)
                	movq	$0x2, 0x10(%rsp)
                	movq	$0x1, 0x18(%rsp)
                	movq	$0x0, 0x20(%rsp)
+               	movl	$0xa, %edi
+               	movl	$0x9, %esi
+               	movl	$0x8, %edx
+               	movl	$0x7, %ecx
+               	movl	$0x6, %r8d
+               	movl	$0x5, %r9d
                	callq	*%rax
                	addq	%rbx, %rax
                	subq	$0x6e, %rax

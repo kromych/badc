@@ -561,7 +561,7 @@ fn ent_pc=492 n_params=0 variadic=false locals=2
     v380 InlineAsm { template="crc32q %1, %0", ops=2, args=[v370, v376] } -> x14
     v381 BinopI { op=and, lhs=v370, rhs_imm=4294967295 }  -> x0
     v382 Imm(0)                                           -> x0
-    v383 Imm(8)                                           -> x2
+    v383 Imm(8)                                           -> -
     v384 Call { target_pc=491, args=[v370, v376, v383], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v385 BinopI { op=and, lhs=v384, rhs_imm=4294967295 }  -> x0
     v386 Binop { op=eq, lhs=v380, rhs=v385 }              -> x0
@@ -579,7 +579,7 @@ fn ent_pc=492 n_params=0 variadic=false locals=2
     v400 BinopI { op=and, lhs=v398, rhs_imm=4294967295 }  -> x0
     v401 BinopI { op=and, lhs=v370, rhs_imm=4294967295 }  -> x0
     v402 Imm(0)                                           -> x0
-    v403 Imm(4)                                           -> x2
+    v403 Imm(4)                                           -> -
     v404 Call { target_pc=491, args=[v370, v376, v403], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v405 BinopI { op=and, lhs=v404, rhs_imm=4294967295 }  -> x1
     v406 Binop { op=eq, lhs=v398, rhs=v404 }              -> x0
@@ -597,7 +597,7 @@ fn ent_pc=492 n_params=0 variadic=false locals=2
     v420 BinopI { op=and, lhs=v418, rhs_imm=4294967295 }  -> x0
     v421 BinopI { op=and, lhs=v370, rhs_imm=4294967295 }  -> x0
     v422 Imm(0)                                           -> x0
-    v423 Imm(2)                                           -> x2
+    v423 Imm(2)                                           -> -
     v424 Call { target_pc=491, args=[v370, v376, v423], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v425 BinopI { op=and, lhs=v424, rhs_imm=4294967295 }  -> x1
     v426 Binop { op=eq, lhs=v418, rhs=v424 }              -> x0
@@ -615,7 +615,7 @@ fn ent_pc=492 n_params=0 variadic=false locals=2
     v440 BinopI { op=and, lhs=v438, rhs_imm=4294967295 }  -> x0
     v441 BinopI { op=and, lhs=v370, rhs_imm=4294967295 }  -> x0
     v442 Imm(0)                                           -> x0
-    v443 Imm(1)                                           -> x2
+    v443 Imm(1)                                           -> -
     v444 Call { target_pc=491, args=[v370, v376, v443], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v445 BinopI { op=and, lhs=v444, rhs_imm=4294967295 }  -> x1
     v446 Binop { op=eq, lhs=v438, rhs=v444 }              -> x0
@@ -714,7 +714,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -773,7 +773,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

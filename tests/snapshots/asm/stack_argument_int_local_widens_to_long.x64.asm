@@ -56,16 +56,16 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	imulq	$-0x4, %rbx, %rsi
                	movslq	%esi, %rsi
-               	xorl	%edi, %edi
                	movq	%rax, (%rsp)
                	movq	%rcx, 0x8(%rsp)
                	movq	%rdx, 0x10(%rsp)
                	movq	%rsi, 0x18(%rsp)
-               	movq	%rdi, %rsi
-               	movq	%rdi, %r9
-               	movq	%rdi, %r8
-               	movq	%rdi, %rcx
-               	movq	%rdi, %rdx
+               	xorl	%edi, %edi
+               	xorl	%esi, %esi
+               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
+               	xorl	%r8d, %r8d
+               	xorl	%r9d, %r9d
                	callq	<addr>
                	imulq	$-0x4d2, %rbx, %rcx     # imm = 0xFB2E
                	cmpq	%rcx, %rax
@@ -80,16 +80,16 @@ Disassembly of section .text:
                	setg	%cl
                	movzbq	%cl, %rcx
                	subq	%rcx, %rax
-               	xorl	%edi, %edi
-               	movq	%rdi, (%rsp)
-               	movq	%rdi, 0x8(%rsp)
-               	movq	%rdi, 0x10(%rsp)
+               	movq	$0x0, (%rsp)
+               	movq	$0x0, 0x8(%rsp)
+               	movq	$0x0, 0x10(%rsp)
                	movq	%rax, 0x18(%rsp)
-               	movq	%rdi, %rsi
-               	movq	%rdi, %r9
-               	movq	%rdi, %r8
-               	movq	%rdi, %rcx
-               	movq	%rdi, %rdx
+               	xorl	%edi, %edi
+               	xorl	%esi, %esi
+               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
+               	xorl	%r8d, %r8d
+               	xorl	%r9d, %r9d
                	callq	<addr>
                	cmpq	$-0x80000000, %rax      # imm = 0x80000000
                	je	<addr>

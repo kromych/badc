@@ -97,9 +97,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	mov	x0, #0x0                // =0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
+               	mov	x0, #0x0                // =0
                	mov	x4, #0x63               // =99
                	ldr	x2, [x1, #0x8]
                	ldr	x1, [x1]

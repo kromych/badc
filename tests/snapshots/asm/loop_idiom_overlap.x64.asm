@@ -39,13 +39,13 @@ Disassembly of section .text:
                	movw	%r10w, (%rcx)
                	movzbq	0x2(%rdx), %r10
                	movb	%r10b, 0x2(%rcx)
-               	movl	$0x9, %edx
-               	movq	%rsi, %rdi
-               	subq	%rcx, %rdi
-               	cmpq	$0x9, %rdi
+               	movq	%rsi, %rdx
+               	subq	%rcx, %rdx
+               	cmpq	$0x9, %rdx
                	jb	<addr>
                	movq	%rsi, %rdi
                	movq	%rcx, %rsi
+               	movl	$0x9, %edx
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi
@@ -69,12 +69,12 @@ Disassembly of section .text:
                	movq	%r10, (%rcx)
                	movzwq	0x8(%rdx), %r10
                	movw	%r10w, 0x8(%rcx)
-               	movl	$0x7, %edx
-               	movq	%rcx, %rdi
-               	subq	%rsi, %rdi
-               	cmpq	$0x7, %rdi
+               	movq	%rcx, %rdx
+               	subq	%rsi, %rdx
+               	cmpq	$0x7, %rdx
                	jb	<addr>
                	movq	%rcx, %rdi
+               	movl	$0x7, %edx
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi

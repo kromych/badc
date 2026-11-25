@@ -101,11 +101,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	<rip>, %rax # <addr>
-               	xorl	%edi, %edi
                	movups	(%rax), %xmm14
                	movups	%xmm14, 0x10(%rsp)
                	movups	0x10(%rax), %xmm14
                	movups	%xmm14, (%rsp)
+               	xorl	%edi, %edi
                	callq	<addr>
                	movups	(%rsp), %xmm14
                	movups	0x10(%rsp), %xmm0

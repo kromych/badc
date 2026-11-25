@@ -200,17 +200,17 @@ Disassembly of section .text:
                	movq	%r10, 0x100(%rsp)
                	leaq	0xf0(%rax), %r10
                	movq	%r10, 0xf8(%rsp)
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	<rip>, %rdx # <addr>
-               	movq	<rip>, %rsi # <addr>
                	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %r8 # <addr>
                	movq	<rip>, %r9 # <addr>
+               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rbx # <addr>
                	movq	<rip>, %r12 # <addr>
                	movq	<rip>, %r13 # <addr>
-               	movq	%r9, (%rsp)
+               	movq	%rax, (%rsp)
                	movq	%rbx, 0x8(%rsp)
                	movq	%r12, 0x10(%rsp)
                	movq	%r13, 0x18(%rsp)
@@ -269,10 +269,6 @@ Disassembly of section .text:
                	movq	%r11, 0xc0(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0xc8(%rsp)
-               	movq	%r8, %r9
-               	movq	%rdi, %r8
-               	movq	%rax, %rdi
-               	xchgq	%rsi, %rcx
                	callq	<addr>
                	cmpq	$0x168, %rax            # imm = 0x168
                	je	<addr>

@@ -27,15 +27,15 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x48, %rsp
-               	leaq	(%rsp), %rdi
-               	movl	$0x40, %esi
                	leaq	<rip>, %rdx
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
+               	leaq	(%rsp), %rdi
+               	movl	$0x40, %esi
                	movb	$0x2, %al
                	callq	<addr>
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

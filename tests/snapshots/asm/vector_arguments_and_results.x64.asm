@@ -184,7 +184,6 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	addq	$0x68, %rsp
                	retq
-               	leaq	0x40(%rsp), %rdi
                	leaq	0x20(%rsp), %r9
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
@@ -200,6 +199,7 @@ Disassembly of section .text:
                	movq	%r11, 0x10(%rsp)
                	movq	0x18(%r10), %r11
                	movq	%r11, 0x18(%rsp)
+               	leaq	0x40(%rsp), %rdi
                	callq	<addr>
                	leaq	0x40(%rsp), %rax
                	leaq	0x20(%rsp), %rcx
@@ -227,11 +227,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movl	$0x5, %edi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
+               	movl	$0x5, %edi
                	callq	<addr>
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax

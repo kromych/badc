@@ -74,8 +74,8 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	xorl	%edi, %edi
                	leaq	<rip>, %rsi # <addr>
+               	xorl	%edi, %edi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	<rip>, %eax # <addr>

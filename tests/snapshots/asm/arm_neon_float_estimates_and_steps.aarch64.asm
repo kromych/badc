@@ -186,9 +186,9 @@ Disassembly of section .text:
                	ldr	s0, [x0, x20, lsl #2]
                	bl	<addr>
                	mov	w24, w0
-               	mov	x0, #0x20               // =32
                	mov	x1, x21
                	mov	x2, x23
+               	mov	x0, #0x20               // =32
                	bl	<addr>
                	cmp	x24, x0
                	b.eq	<addr>
@@ -234,9 +234,9 @@ Disassembly of section .text:
                	ldr	s0, [x0, x20, lsl #2]
                	bl	<addr>
                	mov	w24, w0
-               	mov	x0, #0x20               // =32
                	mov	x1, x21
                	mov	x2, x23
+               	mov	x0, #0x20               // =32
                	bl	<addr>
                	cmp	x24, x0
                	b.eq	<addr>
@@ -272,9 +272,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x60
                	ldr	d0, [x0, x20, lsl #3]
                	fmov	x23, d0
-               	mov	x0, #0x40               // =64
                	mov	x2, x1
                	mov	x1, x22
+               	mov	x0, #0x40               // =64
                	bl	<addr>
                	cmp	x23, x0
                	b.eq	<addr>
@@ -306,9 +306,9 @@ Disassembly of section .text:
                	orr	x2, x2, #0x1
                	str	w2, [x0, #0x20]
                	fmov	x20, d9
-               	mov	x0, #0x40               // =64
                	mov	x2, x1
                	mov	x1, x22
+               	mov	x0, #0x40               // =64
                	bl	<addr>
                	cmp	x20, x0
                	b.eq	<addr>

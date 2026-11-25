@@ -50,12 +50,12 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0xa0
                	bl	<addr>
-               	sub	x2, x29, #0xb0
                	mov	x0, #0x1                // =1
                	stur	x0, [x29, #-0xb0]
                	stur	xzr, [x29, #-0xa8]
                	sub	x0, x29, #0x70
                	sub	x1, x29, #0xa0
+               	sub	x2, x29, #0xb0
                	bl	<addr>
                	str	x0, [sp, #0x8]
                	sub	x0, x29, #0xa0

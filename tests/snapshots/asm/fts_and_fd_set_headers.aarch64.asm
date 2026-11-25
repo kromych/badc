@@ -23,9 +23,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrh	w16, [x0]
                	strh	w16, [x1]
-               	sub	x0, x29, #0x10
                	stur	x1, [x29, #-0x10]
                	stur	x2, [x29, #-0x8]
+               	sub	x0, x29, #0x10
                	mov	x1, #0x14               // =20
                	bl	<addr>
                	mov	x20, x0

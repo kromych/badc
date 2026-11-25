@@ -90,6 +90,11 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	mov	x22, x0
+               	str	x21, [sp]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp, #0x8]
+               	str	x20, [sp, #0x10]
+               	fmov	d0, d8
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
@@ -98,11 +103,6 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	str	x21, [sp]
-               	mov	x16, #0x9               // =9
-               	str	x16, [sp, #0x8]
-               	str	x20, [sp, #0x10]
-               	fmov	d0, d8
                	bl	<addr>
                	add	x22, x22, x0
                	fmov	d0, #1.00000000

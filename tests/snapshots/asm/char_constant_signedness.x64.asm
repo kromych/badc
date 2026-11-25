@@ -65,10 +65,10 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	movl	$0x80, 0x8(%rsp)
-               	leaq	(%rsp), %rdi
                	movl	0x8(%rsp), %eax
                	movb	%al, (%rsp)
                	movq	<rip>, %rax # <addr>
+               	leaq	(%rsp), %rdi
                	callq	*%rax
                	cmpl	$0x1, %eax
                	je	<addr>
@@ -76,10 +76,10 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	movl	$0xff, 0x8(%rsp)
-               	leaq	(%rsp), %rdi
                	movl	0x8(%rsp), %eax
                	movb	%al, (%rsp)
                	movq	<rip>, %rax # <addr>
+               	leaq	(%rsp), %rdi
                	callq	*%rax
                	cmpl	$0x2, %eax
                	je	<addr>

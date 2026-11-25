@@ -48,8 +48,8 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	callq	<addr>
                	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	leaq	-0x80(%rbp), %rdx
-               	movq	%rdi, %rsi
                	callq	<addr>
                	leaq	-0x80(%rbp), %rdi
                	movl	$0xa, %esi
@@ -57,8 +57,8 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	leaq	-0x80(%rbp), %rdx
-               	movq	%rdi, %rsi
                	callq	<addr>
                	leaq	-0x80(%rbp), %rdi
                	movl	$0xc, %esi
@@ -81,11 +81,11 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%edi, %edi
                	leaq	-0x80(%rbp), %rsi
-               	movq	%rdi, %rdx
+               	xorl	%edx, %edx
                	callq	<addr>
                	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	leaq	-0x80(%rbp), %rdx
-               	movq	%rdi, %rsi
                	callq	<addr>
                	leaq	-0x80(%rbp), %rdi
                	movl	$0xa, %esi
@@ -96,8 +96,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	leaq	-0x80(%rbp), %rdx
-               	movq	%rdi, %rsi
                	callq	<addr>
                	leaq	-0x80(%rbp), %rdi
                	movl	$0xa, %esi
@@ -114,8 +114,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	leaq	-0x80(%rbp), %rdx
-               	movq	%rdi, %rsi
                	callq	<addr>
                	leaq	-0x80(%rbp), %rdi
                	movl	$0xc, %esi
@@ -149,7 +149,7 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%edi, %edi
                	leaq	-0x80(%rbp), %rsi
-               	movq	%rdi, %rdx
+               	xorl	%edx, %edx
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi

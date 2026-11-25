@@ -70,9 +70,9 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	addq	$0xf8, %rsp
                	retq
-               	leaq	0x80(%rsp), %rsi
                	movq	%rax, (%rsp)
                	movq	%rax, %rdi
+               	leaq	0x80(%rsp), %rsi
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x8(%rsp)

@@ -27,13 +27,13 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x68, %rsp
-               	leaq	(%rsp), %rdi
-               	movl	$0x60, %esi
                	leaq	<rip>, %rdx
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
                	movsd	<rip>, %xmm3
+               	leaq	(%rsp), %rdi
+               	movl	$0x60, %esi
                	movb	$0x4, %al
                	callq	<addr>
                	cmpq	$0x2a, %rax
@@ -41,8 +41,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x68, %rsp
                	retq
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -50,10 +50,10 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x68, %rsp
                	retq
-               	leaq	(%rsp), %rdi
-               	movl	$0x4, %esi
                	leaq	<rip>, %rdx
                	movsd	<rip>, %xmm0
+               	leaq	(%rsp), %rdi
+               	movl	$0x4, %esi
                	movb	$0x1, %al
                	callq	<addr>
                	cmpq	$-0x1, %rax

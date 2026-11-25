@@ -50,8 +50,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
-               	sub	x0, x29, #0x200
                	mov	x1, x2
+               	sub	x0, x29, #0x200
                	bl	<addr>
                	add	sp, sp, #0x200
                	ldp	x29, x30, [sp], #0x10
@@ -143,29 +143,29 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldrsw	x21, [x0, #0xc]
                	mov	x20, #0x3e8             // =1000
-               	mov	x0, #0x0                // =0
                	mov	x1, x20
                	mov	x2, x21
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	mov	x22, x0
+               	mov	x1, x20
+               	mov	x2, x21
                	mov	x0, #0x1                // =1
-               	mov	x1, x20
-               	mov	x2, x21
                	bl	<addr>
                	add	x22, x22, x0
+               	mov	x1, x20
+               	mov	x2, x21
                	mov	x0, #0x2                // =2
-               	mov	x1, x20
-               	mov	x2, x21
                	bl	<addr>
                	add	x22, x22, x0
+               	mov	x1, x20
+               	mov	x2, x21
                	mov	x0, #0x3                // =3
-               	mov	x1, x20
-               	mov	x2, x21
                	bl	<addr>
                	add	x22, x22, x0
-               	mov	x0, #0x4                // =4
                	mov	x1, x20
                	mov	x2, x21
+               	mov	x0, #0x4                // =4
                	bl	<addr>
                	add	x4, x22, x0
                	mov	x0, #0x0                // =0

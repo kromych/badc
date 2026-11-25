@@ -47,11 +47,11 @@ Disassembly of section .text:
                	movw	%r10w, (%r8)
                	movzbq	0x2(%rax), %r10
                	movb	%r10b, 0x2(%r8)
-               	leaq	0x28(%rsp), %rdx
-               	movl	$0x3, %edi
-               	movl	$0x5, %ecx
                	movq	%r8, 0x8(%rsp)
                	movq	%r8, %rsi
+               	movl	$0x3, %edi
+               	leaq	0x28(%rsp), %rdx
+               	movl	$0x5, %ecx
                	callq	<addr>
                	movq	0x8(%rsp), %r8
                	movzbq	0x28(%rsp), %rax
@@ -71,9 +71,9 @@ Disassembly of section .text:
                	movw	%r10w, (%rsi)
                	movzbq	0x2(%rdx), %r10
                	movb	%r10b, 0x2(%rsi)
+               	movq	%r8, 0x8(%rsp)
                	movl	$0x3, %edi
                	movl	$0x5, %ecx
-               	movq	%r8, 0x8(%rsp)
                	callq	<addr>
                	movq	0x8(%rsp), %r8
                	movzbq	0x21(%rsp), %rax

@@ -247,7 +247,7 @@ Disassembly of section .text:
                	retq
                	movl	0x20(%rsp), %edi
                	movl	$0x2, %esi
-               	movq	%rsi, %rdx
+               	movl	$0x2, %edx
                	callq	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>

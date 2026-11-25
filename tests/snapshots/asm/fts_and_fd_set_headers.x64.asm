@@ -32,9 +32,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movzwq	(%rcx), %r10
                	movw	%r10w, (%rax)
-               	leaq	0x20(%rsp), %rdi
                	movq	%rax, 0x20(%rsp)
                	movq	%rdx, 0x28(%rsp)
+               	leaq	0x20(%rsp), %rdi
                	movl	$0x14, %esi
                	callq	<addr>
                	movq	%rax, %rcx

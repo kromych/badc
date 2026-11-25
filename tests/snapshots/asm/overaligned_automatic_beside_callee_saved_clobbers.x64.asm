@@ -62,11 +62,11 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rdi, %rsp
-               	movl	$0x4, %esi
                	movq	%rdi, -0x18(%rbp)
+               	movl	$0x4, %esi
                	callq	<addr>
-               	movl	$0xa, %esi
                	movq	-0x18(%rbp), %rdi
+               	movl	$0xa, %esi
                	callq	<addr>
                	movq	%rbx, -0x30(%rbp)
                	xorl	%ebx, %ebx
@@ -138,11 +138,11 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rdi, %rsp
-               	movl	$0x6, %esi
                	movq	%rdi, -0x18(%rbp)
+               	movl	$0x6, %esi
                	callq	<addr>
-               	movl	$0xa, %esi
                	movq	-0x18(%rbp), %rdi
+               	movl	$0xa, %esi
                	callq	<addr>
                	movq	%rbx, -0x30(%rbp)
                	xorl	%ebx, %ebx
@@ -236,11 +236,11 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%r13, %rsp
+               	movq	%r13, %rdi
                	movl	$0x4, %esi
-               	movq	%r13, %rdi
                	callq	<addr>
-               	movl	$0xa, %esi
                	movq	%r13, %rdi
+               	movl	$0xa, %esi
                	callq	<addr>
                	movb	$0x1, %bh
                	leaq	(%r12), %rdi
@@ -300,11 +300,11 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rdi, %rsp
-               	movl	$0x4, %esi
                	movq	%rdi, -0x18(%rbp)
+               	movl	$0x4, %esi
                	callq	<addr>
-               	movl	$0xa, %esi
                	movq	-0x18(%rbp), %rdi
+               	movl	$0xa, %esi
                	callq	<addr>
                	movq	%rbx, -0x30(%rbp)
                	movb	$0x1, %bh
@@ -373,11 +373,11 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rbx, %rsp
+               	movq	%rbx, %rdi
                	movl	$0x4, %esi
-               	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	$0xa, %esi
                	movq	%rbx, %rdi
+               	movl	$0xa, %esi
                	callq	<addr>
                	movsbq	0x3f(%r12), %rax
                	movl	$0xa, %ecx

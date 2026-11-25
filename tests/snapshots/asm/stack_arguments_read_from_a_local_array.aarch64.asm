@@ -105,7 +105,6 @@ Disassembly of section .text:
                	ldur	x8, [x29, #-0xa0]
                	mov	x0, #0x3e8              // =1000
                	stur	x0, [x29, #-0xa0]
-               	mov	x0, #0x15               // =21
                	ldur	x1, [x29, #-0x98]
                	ldur	x2, [x29, #-0x90]
                	ldur	x3, [x29, #-0x88]
@@ -140,6 +139,7 @@ Disassembly of section .text:
                	str	x8, [sp, #0x60]
                	ldur	x16, [x29, #-0xa0]
                	str	x16, [sp, #0x68]
+               	mov	x0, #0x15               // =21
                	bl	<addr>
                	mov	x2, #0x0                // =0
                	mov	x1, #0x1                // =1

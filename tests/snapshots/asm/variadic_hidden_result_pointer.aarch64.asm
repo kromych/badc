@@ -259,17 +259,17 @@ Disassembly of section .text:
                	mov	x7, #0x6                // =6
                	mov	x8, #0x7                // =7
                	mov	x9, #0x8                // =8
-               	mov	x1, #0x9                // =9
-               	sub	x0, x29, #0x40
                	stur	x2, [x29, #-0x40]
                	stur	x3, [x29, #-0x38]
                	stur	x4, [x29, #-0x30]
                	stur	x5, [x29, #-0x28]
-               	sub	x2, x29, #0x20
                	stur	x6, [x29, #-0x20]
                	stur	x7, [x29, #-0x18]
                	stur	x8, [x29, #-0x10]
                	stur	x9, [x29, #-0x8]
+               	sub	x0, x29, #0x40
+               	mov	x1, #0x9                // =9
+               	sub	x2, x29, #0x20
                	sub	x8, x29, #0x60
                	bl	<addr>
                	ldur	x0, [x29, #-0x60]

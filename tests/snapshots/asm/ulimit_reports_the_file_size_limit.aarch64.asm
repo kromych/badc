@@ -43,8 +43,8 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x10]
                	cmn	x0, #0x1
                	b.eq	<addr>
-               	mov	x0, #0x2                // =2
                	str	x1, [sp, #0x18]
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	ldr	x1, [sp, #0x18]
                	cmp	x0, x1

@@ -88,11 +88,11 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	mov	x0, #0x2                // =2
                	mov	x1, #0x3                // =3
                	movk	x1, #0x4, lsl #32
                	mov	x2, #0x5                // =5
                	movk	x2, #0x6, lsl #32
-               	mov	x0, #0x2                // =2
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ret

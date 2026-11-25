@@ -62,27 +62,27 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	w16, [x1]
                	str	w16, [x4]
-               	mov	x1, #0x3e8              // =1000
-               	mov	x7, #0x7d0              // =2000
-               	sub	x6, x29, #0x18
-               	mov	x2, #0x64               // =100
-               	movk	x2, #0x65, lsl #32
-               	stur	x2, [x29, #-0x18]
-               	mov	x2, #0x66               // =102
-               	movk	x2, #0x67, lsl #32
-               	stur	x2, [x29, #-0x10]
-               	mov	x2, #0x68               // =104
-               	movk	x2, #0x69, lsl #32
-               	stur	x2, [x29, #-0x8]
+               	mov	x1, #0x64               // =100
+               	movk	x1, #0x65, lsl #32
+               	stur	x1, [x29, #-0x18]
+               	mov	x1, #0x66               // =102
+               	movk	x1, #0x67, lsl #32
+               	stur	x1, [x29, #-0x10]
+               	mov	x1, #0x68               // =104
+               	movk	x1, #0x69, lsl #32
+               	stur	x1, [x29, #-0x8]
                	mov	x2, #0x3                // =3
                	movk	x2, #0x4, lsl #32
                	mov	x3, #0x5                // =5
                	mov	x5, #0x1                // =1
                	movk	x5, #0x2, lsl #32
-               	str	x6, [sp]
+               	sub	x16, x29, #0x18
+               	str	x16, [sp]
                	mov	x16, #0xbb8             // =3000
                	str	x16, [sp, #0x8]
                	mov	x6, x2
+               	mov	x1, #0x3e8              // =1000
+               	mov	x7, #0x7d0              // =2000
                	ldr	x0, [x0]
                	ldr	w4, [x4]
                	bl	<addr>

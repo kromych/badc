@@ -70,12 +70,12 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
+               	movq	<rip>, %rax # <addr>
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	xorl	%edx, %edx
                	movl	$0x7, %ecx
                	movl	$0x3, %r8d
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	movl	<rip>, %ecx # <addr>
                	cmpl	$0x1, %ecx

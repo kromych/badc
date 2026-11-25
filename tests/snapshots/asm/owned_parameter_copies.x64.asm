@@ -41,8 +41,8 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rsp)
                	movq	0x40(%rsp), %r10
                	movq	%r10, 0x18(%rsp)
-               	leaq	0x8(%rsp), %rdi
                	movq	$0x5, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movq	0x10(%rsp), %rcx
                	addq	%rcx, %rax

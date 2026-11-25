@@ -57,8 +57,8 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	subq	$0x20, %rsp
-               	leaq	0x1(%rcx), %rax
-               	movl	$0x2, %edi
+               	leaq	0x1(%rcx), %rdi
+               	movl	$0x2, %eax
                	movq	0x48(%rsp), %rdx
                	leaq	(%r8,%r8,8), %rcx
                	leaq	0x2(%rcx), %r12
@@ -73,9 +73,8 @@ Disassembly of section .text:
                	movq	%rbx, 0x8(%rsp)
                	movq	%rsi, 0x10(%rsp)
                	movq	$0x134ac, 0x18(%rsp)    # imm = 0x134AC
-               	movq	%rdi, %rsi
+               	movq	%rax, %rsi
                	movq	%r12, %rcx
-               	movq	%rax, %rdi
                	callq	*%rdx
                	addq	$0x20, %rsp
                	popq	%rbx

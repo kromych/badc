@@ -257,24 +257,24 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0xff, %esi
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movabsq	$-0xf0f0f0f0f0f0f10, %rsi # imm = 0xF0F0F0F0F0F0F0F0
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movabsq	$-0x8000000000000000, %rsi # imm = 0x8000000000000000
-               	movq	%rbx, %rdi
                	callq	<addr>
                	nopl	(%rax,%rax)
                	cmpq	%rax, %r13
@@ -282,40 +282,40 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movq	$-0x10, %rsi
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movabsq	$-0xffffffffffff01, %rsi # imm = 0xFF000000000000FF
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movabsq	$0x5555555555555555, %rsi # imm = 0x5555555555555555
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movabsq	$0x7777777777777777, %rsi # imm = 0x7777777777777777
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	movabsq	$0xff00ff00ff00ff, %rsi # imm = 0xFF00FF00FF00FF
                	movq	%rbx, %rdi
+               	movabsq	$0xff00ff00ff00ff, %rsi # imm = 0xFF00FF00FF00FF
                	callq	<addr>
                	nopl	(%rax,%rax)
                	cmpq	%rax, %r13
@@ -323,88 +323,88 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movabsq	$0xffff0000ffff, %rsi   # imm = 0xFFFF0000FFFF
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movabsq	$0xffffff00000, %rsi    # imm = 0xFFFFFF00000
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0xf0f0f0f, %esi        # imm = 0xF0F0F0F
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0x80000000, %esi       # imm = 0x80000000
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0xff00ff, %esi         # imm = 0xFF00FF
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0xffffff00, %esi       # imm = 0xFFFFFF00
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0x55555555, %esi       # imm = 0x55555555
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0x33333333, %esi       # imm = 0x33333333
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0x1234, %esi           # imm = 0x1234
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rdi
                	movl	$0x12345678, %esi       # imm = 0x12345678
-               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	$0x5, %esi
                	movq	%rbx, %rdi
+               	movl	$0x5, %esi
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>

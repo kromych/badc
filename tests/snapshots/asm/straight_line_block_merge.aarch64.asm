@@ -566,7 +566,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x7                // =7
                	mov	x2, #0x3                // =3
-               	mov	x3, x1
+               	mov	x3, #0x7                // =7
                	bl	<addr>
                	cmp	w0, #0xcb
                	b.eq	<addr>
@@ -587,8 +587,8 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	mov	x3, #0x64               // =100
-               	mov	x2, x1
                	bl	<addr>
                	cbz	w0, <addr>
                	mov	x20, #0x11              // =17

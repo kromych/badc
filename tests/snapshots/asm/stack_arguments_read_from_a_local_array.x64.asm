@@ -101,7 +101,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	0x80(%rsp), %rax
                	movq	$0x3e8, 0x80(%rsp)      # imm = 0x3E8
-               	movl	$0x15, %edi
                	movq	0x88(%rsp), %rsi
                	movq	0x90(%rsp), %rdx
                	movq	0x98(%rsp), %rcx
@@ -138,6 +137,7 @@ Disassembly of section .text:
                	movq	%rax, 0x70(%rsp)
                	movq	0x80(%rsp), %r10
                	movq	%r10, 0x78(%rsp)
+               	movl	$0x15, %edi
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%edx, %edx

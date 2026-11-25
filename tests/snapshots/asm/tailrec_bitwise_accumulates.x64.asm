@@ -111,8 +111,8 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x64, %eax
                	jbe	<addr>
-               	movl	$0x64, %edi
                	movq	%rcx, 0x8(%rsp)
+               	movl	$0x64, %edi
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
                	cmpl	%ecx, %eax
@@ -133,8 +133,8 @@ Disassembly of section .text:
                	nopl	(%rax,%rax)
                	cmpl	$0x14, %eax
                	jbe	<addr>
-               	movl	$0x14, %edi
                	movq	%rcx, 0x8(%rsp)
+               	movl	$0x14, %edi
                	callq	<addr>
                	movq	0x8(%rsp), %rcx
                	andq	$0xffff, %rax           # imm = 0xFFFF

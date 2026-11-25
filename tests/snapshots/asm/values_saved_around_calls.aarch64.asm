@@ -448,12 +448,12 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x80]
                	mov	x0, #0x64               // =100
                	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x78
                	ldursw	x1, [x29, #-0x8]
+               	sub	x0, x29, #0x78
                	bl	<addr>
                	mov	x20, x0
-               	sub	x0, x29, #0x78
                	ldursw	x1, [x29, #-0x8]
+               	sub	x0, x29, #0x78
                	bl	<addr>
                	cmp	x20, x0
                	b.eq	<addr>
@@ -463,12 +463,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0xd8
                	ldursw	x1, [x29, #-0x8]
+               	sub	x0, x29, #0xd8
                	bl	<addr>
                	fmov	d8, d0
-               	sub	x0, x29, #0xd8
                	ldursw	x1, [x29, #-0x8]
+               	sub	x0, x29, #0xd8
                	bl	<addr>
                	fcmp	d8, d0
                	b.eq	<addr>

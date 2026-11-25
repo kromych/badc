@@ -126,9 +126,9 @@ Disassembly of section .text:
                	vpxor	%xmm1, %xmm0, %xmm0
                	leaq	0x20(%rsp), %r9
                	movups	%xmm0, 0x20(%rsp)
-               	leaq	0x40(%rsp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	0x40(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -140,9 +140,9 @@ Disassembly of section .text:
                	vpand	%xmm1, %xmm0, %xmm0
                	leaq	0x20(%rsp), %r9
                	movups	%xmm0, 0x20(%rsp)
-               	leaq	0x50(%rsp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	0x50(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -154,9 +154,9 @@ Disassembly of section .text:
                	vpor	%xmm1, %xmm0, %xmm0
                	leaq	0x20(%rsp), %r9
                	movups	%xmm0, 0x20(%rsp)
-               	leaq	0x60(%rsp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	0x60(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -169,9 +169,9 @@ Disassembly of section .text:
                	vpxor	%xmm0, %xmm1, %xmm0
                	leaq	0x20(%rsp), %r9
                	movups	%xmm0, 0x20(%rsp)
-               	leaq	(%rsp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -186,9 +186,9 @@ Disassembly of section .text:
                	movups	0x10(%rsp), %xmm1
                	vpxor	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, 0x20(%rsp)
-               	leaq	0x40(%rsp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	0x40(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -203,9 +203,9 @@ Disassembly of section .text:
                	movups	0x10(%rsp), %xmm1
                	vpand	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, 0x20(%rsp)
-               	leaq	0x50(%rsp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	0x50(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -220,9 +220,9 @@ Disassembly of section .text:
                	movups	0x10(%rsp), %xmm1
                	vpor	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, 0x20(%rsp)
-               	leaq	0x60(%rsp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	0x60(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -234,9 +234,9 @@ Disassembly of section .text:
                	vpxor	%xmm1, %xmm0, %xmm0
                	leaq	0x20(%rsp), %r9
                	movups	%xmm0, 0x20(%rsp)
-               	leaq	0x40(%rsp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	0x40(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>

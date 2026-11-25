@@ -32,14 +32,14 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x1, #0x1                // =1
                	strb	w1, [sp, #0x20]
-               	mov	x0, sp
                	str	x1, [sp]
-               	mov	x1, #0x2                // =2
-               	str	x1, [sp, #0x8]
-               	mov	x1, #0x3                // =3
-               	str	x1, [sp, #0x10]
-               	mov	x1, #0x4                // =4
-               	str	x1, [sp, #0x18]
+               	mov	x0, #0x2                // =2
+               	str	x0, [sp, #0x8]
+               	mov	x0, #0x3                // =3
+               	str	x0, [sp, #0x10]
+               	mov	x0, #0x4                // =4
+               	str	x0, [sp, #0x18]
+               	mov	x0, sp
                	mov	x1, #0xa                // =10
                	bl	<addr>
                	ldr	x0, [sp]

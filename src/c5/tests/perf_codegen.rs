@@ -6022,13 +6022,13 @@ fn constant_stack_arguments_take_no_register() {
         .find(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
         .map_or(0, |i| i.imm);
     assert!(frame <= 16, "x86-64 frame of {frame} bytes");
-    // Each fits `mov m64, imm32`: of the 125 stack slots, all but the five
-    // whose constant (0, 1, 2, 45) a register argument also takes.
+    // Each of the 124 stack slots takes `mov m64, imm32`, the four whose
+    // constant (0 to 3) a register argument also reads included.
     let stores = insns
         .iter()
         .filter(|i| i.op == 0xC7 && i.rex & 0x08 != 0)
         .count();
-    assert_eq!(stores, 120, "immediate stores");
+    assert_eq!(stores, 124, "immediate stores");
     // AArch64: the outgoing area of 123 stack slots, nothing past it.
     let sub_sp = |w: u32| {
         (w & 0xFF80_03FF == 0xD100_03FF)
@@ -6045,6 +6045,76 @@ fn constant_stack_arguments_take_no_register() {
         .filter(|&&w| w & 0xBFC0_03FF == 0xB900_03FF)
         .count();
     assert_eq!(zr_stores, 3, "{zr:08x?}");
+}
+
+/// A constant or a local's address read only as a register argument is set
+/// by the call's marshaling into its argument register. With two registers
+/// per bank and the parameters live across the call, they took spill slots,
+/// a store each and a reload into the argument register; now none is
+/// loaded ahead of the call.
+#[test]
+fn register_arguments_the_call_sets_take_no_slot() {
+    const SRC: &str = "void sink(char *p, char *q, char *r, long k, long j, long v);\n\
+        long f(long a, long b, long c, long d) {\n\
+            char p[16], q[16], r[16];\n\
+            sink(p, q, r, 7, 9, a + 3);\n\
+            return a + b + c + d + p[0] + q[0] + r[0];\n\
+        }\n";
+    let caps = (2, 2);
+    // x86-64: rdi, rsi, rdx by `lea` off rsp, rcx and r8 by `mov r32, imm32`.
+    let insns = x64_insns(&function_bytes(
+        &object_with_pool(SRC, Target::LinuxX64, caps),
+        "f",
+    ));
+    let call = insns.iter().position(|i| i.op == 0xE8).expect("call");
+    let before = &insns[..call];
+    for (reg, k) in [(1u8, 7i64), (8, 9)] {
+        assert!(
+            before
+                .iter()
+                .any(|i| i.op == 0xB8 + u16::from(reg & 7) && i.rex & 1 == reg >> 3 && i.imm == k),
+            "x86-64: {k} set into register {reg}: {before:x?}"
+        );
+    }
+    for reg in [7u8, 6, 2] {
+        assert!(
+            before
+                .iter()
+                .any(|i| i.op == 0x8D && i.regs().0 == reg && i.mem_base() == Some(4)),
+            "x86-64: address set into register {reg}: {before:x?}"
+        );
+        assert!(
+            !before
+                .iter()
+                .any(|i| i.op == 0x8B && !i.reg_form() && i.regs().0 == reg),
+            "x86-64: register {reg} loaded ahead of the call: {before:x?}"
+        );
+    }
+    // AArch64: x0-x2 by `sub xN, x29, #imm`, x3 and x4 by `movz`, and no
+    // `ldr` into x0-x4 ahead of the call.
+    let words = function_words(&object_with_pool(SRC, Target::LinuxAarch64, caps), "f");
+    let call = words
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .expect("bl");
+    let before = &words[..call];
+    for rd in 0..3u32 {
+        assert!(
+            before.iter().any(|&w| w & 0xFF80_03FF == 0xD100_03A0 | rd),
+            "aarch64: address set into x{rd}: {before:08x?}"
+        );
+    }
+    for (rd, k) in [(3u32, 7u32), (4, 9)] {
+        assert!(
+            before.contains(&(0xD280_0000 | k << 5 | rd)),
+            "aarch64: {k} set into x{rd}: {before:08x?}"
+        );
+    }
+    let ldr_x = |w: u32| w & 0xFFC0_0000 == 0xF940_0000 && w & 0x1F < 5;
+    assert!(
+        !before.iter().any(|&w| ldr_x(w)),
+        "aarch64: an argument register loaded ahead of the call: {before:08x?}"
+    );
 }
 
 /// A stack argument read from a local array, with nothing between the read

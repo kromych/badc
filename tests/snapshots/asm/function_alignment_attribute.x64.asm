@@ -157,8 +157,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x38, %rsp
                	retq
-               	movl	$0x1, %edi
                	movq	0x18(%rsp), %rax
+               	movl	$0x1, %edi
                	callq	*%rax
                	movq	%rax, 0x8(%rsp)
                	movq	0x20(%rsp), %rax

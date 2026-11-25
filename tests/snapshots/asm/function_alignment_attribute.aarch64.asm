@@ -79,8 +79,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
                	ldur	x1, [x29, #-0x18]
+               	mov	x0, #0x1                // =1
                	blr	x1
                	str	x0, [sp, #0x8]
                	ldur	x0, [x29, #-0x10]

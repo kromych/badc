@@ -107,24 +107,24 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movl	$0x3, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x3, %edi
                	callq	*%rax
                	movq	%rax, %rbx
-               	movl	$0x5, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x5, %edi
                	callq	*%rax
                	movq	%rax, %r12
-               	movl	$0x7, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x7, %edi
                	callq	*%rax
                	movq	%rax, %r13
-               	movl	$0xb, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0xb, %edi
                	callq	*%rax
                	movq	%rax, %r14
-               	movl	$0xd, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0xd, %edi
                	callq	*%rax
                	movq	%rax, %r15
                	movl	$0x3e8, %eax            # imm = 0x3E8

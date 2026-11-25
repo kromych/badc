@@ -34,10 +34,10 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x18]
                	ldursw	x20, [x29, #-0x20]
                	ldur	x21, [x29, #-0x18]
-               	sub	x0, x29, #0x10
-               	mov	w1, w20
-               	stur	x1, [x29, #-0x10]
+               	mov	w0, w20
+               	stur	x0, [x29, #-0x10]
                	stur	x21, [x29, #-0x8]
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, w20
@@ -47,10 +47,10 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x50
-               	mov	x2, #0x1                // =1
-               	stur	x2, [x29, #-0x50]
+               	mov	x0, #0x1                // =1
+               	stur	x0, [x29, #-0x50]
                	stur	x1, [x29, #-0x48]
+               	sub	x0, x29, #0x50
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x1
@@ -85,10 +85,10 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x0, x29, #0x30
-               	mov	x2, #0x5                // =5
-               	stur	x2, [x29, #-0x30]
+               	mov	x0, #0x5                // =5
+               	stur	x0, [x29, #-0x30]
                	stur	x1, [x29, #-0x28]
+               	sub	x0, x29, #0x30
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x5

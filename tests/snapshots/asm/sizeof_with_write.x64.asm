@@ -30,11 +30,11 @@ Disassembly of section .text:
                	movl	$0x10, %edi
                	callq	<addr>
                	movq	%rax, %rsi
-               	movl	$0x1, %edi
                	movabsq	$0x200000001, %rax      # imm = 0x200000001
                	movq	%rax, (%rsi)
                	leaq	<rip>, %rax
                	movq	%rax, 0x8(%rsi)
+               	movl	$0x1, %edi
                	movl	$0x10, %edx
                	callq	<addr>
                	movl	$0x10, %eax

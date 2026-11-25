@@ -51,23 +51,23 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
+               	mov	x0, #0x7                // =7
+               	stur	x0, [x29, #-0x40]
+               	mov	x0, #0x1118             // =4376
+               	stur	x0, [x29, #-0x38]
+               	mov	x0, #0x2229             // =8745
+               	stur	x0, [x29, #-0x30]
+               	mov	x0, #0x333a             // =13114
+               	stur	x0, [x29, #-0x28]
+               	mov	x0, #0x444b             // =17483
+               	stur	x0, [x29, #-0x20]
+               	mov	x0, #0x555c             // =21852
+               	stur	x0, [x29, #-0x18]
+               	mov	x0, #0x666d             // =26221
+               	stur	x0, [x29, #-0x10]
+               	mov	x0, #0x777e             // =30590
+               	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x40
-               	mov	x1, #0x7                // =7
-               	stur	x1, [x29, #-0x40]
-               	mov	x1, #0x1118             // =4376
-               	stur	x1, [x29, #-0x38]
-               	mov	x1, #0x2229             // =8745
-               	stur	x1, [x29, #-0x30]
-               	mov	x1, #0x333a             // =13114
-               	stur	x1, [x29, #-0x28]
-               	mov	x1, #0x444b             // =17483
-               	stur	x1, [x29, #-0x20]
-               	mov	x1, #0x555c             // =21852
-               	stur	x1, [x29, #-0x18]
-               	mov	x1, #0x666d             // =26221
-               	stur	x1, [x29, #-0x10]
-               	mov	x1, #0x777e             // =30590
-               	stur	x1, [x29, #-0x8]
                	mov	x1, #0x5                // =5
                	bl	<addr>
                	mov	x17, #0xbf84            // =49028

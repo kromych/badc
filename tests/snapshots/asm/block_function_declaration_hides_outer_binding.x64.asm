@@ -62,10 +62,10 @@ Disassembly of section .text:
 
 <hides_with_variadic>:
                	pushq	%rax
-               	movl	$0x3, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
+               	movl	$0x3, %edi
                	movb	$0x3, %al
                	callq	<addr>
                	vaddsd	<rip>, %xmm0, %xmm0

@@ -75,7 +75,7 @@ Disassembly of section .text:
                	subq	$0x28, %rsp
                	movl	$0x0, (%rsp)
                	leaq	(%rsp), %rdi
-               	movq	%rdi, %rsi
+               	leaq	(%rsp), %rsi
                	callq	<addr>
                	cmpl	$0x1, %eax
                	jne	<addr>

@@ -103,7 +103,7 @@ Disassembly of section .text:
                	movl	$0x3, %esi
                	movl	$0x32, %edx
                	movl	$0x46, %ecx
-               	movq	%rsi, %r8
+               	movl	$0x3, %r8d
                	movb	$0x0, %al
                	callq	<addr>
                	movl	0x8(%rsp), %eax

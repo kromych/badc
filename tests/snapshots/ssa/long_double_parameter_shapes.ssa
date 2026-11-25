@@ -198,7 +198,7 @@ fn ent_pc=7 n_params=1 variadic=true locals=3
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=0
-  spill_count=5 gpr_used=[] fp_used=[]
+  spill_count=4 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4613937818241073152)                         -> x0
@@ -257,7 +257,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v44  Imm(3)                                           -> x0
     terminator Return(v44)   (exit_acc=v44)
   block 6  start_pc=0
-    v45  Imm(1)                                           -> x7
+    v45  Imm(1)                                           -> -
     v46  Imm(4611686018427387904)                         -> x0
     v47  Imm(4613937818241073152)                         -> d0
     v48  Imm(4616189618054758400)                         -> x1
@@ -297,7 +297,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v72  Imm(6)                                           -> x0
     terminator Return(v72)   (exit_acc=v72)
   block 12  start_pc=0
-    v73  Imm(3)                                           -> x7
+    v73  Imm(3)                                           -> -
     v74  Imm(4607182418800017408)                         -> x1
     v75  Imm(4612811918334230528)                         -> x2
     v76  Imm(4616189618054758400)                         -> x2
@@ -315,10 +315,10 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v86  Imm(7)                                           -> x0
     terminator Return(v86)   (exit_acc=v86)
   block 14  start_pc=0
-    v87  Imm(1)                                           -> x7
+    v87  Imm(1)                                           -> -
     v88  Imm(4602678819172646912)                         -> d0
     v89  Imm(4611686018427387904)                         -> x0
-    v90  Imm(3)                                           -> x6
+    v90  Imm(3)                                           -> -
     v91  Imm(4616189618054758400)                         -> x1
     v92  LocalAddr(-78)                                   -> x9
     v93  StoreLocal { off=-78, value=v89, kind=F80 }      -> -
@@ -332,7 +332,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v99  Imm(8)                                           -> x0
     terminator Return(v99)   (exit_acc=v99)
   block 16  start_pc=0
-    v100 Imm(10)                                          -> x7
+    v100 Imm(10)                                          -> -
     v101 Imm(1)                                           -> x0
     v102 Imm(4607182418800017408)                         -> x0
     v103 Imm(2)                                           -> x1
@@ -341,18 +341,18 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v106 Imm(4613937818241073152)                         -> x2
     v107 Imm(4)                                           -> x6
     v108 Imm(4616189618054758400)                         -> x6
-    v109 Imm(5)                                           -> x8
-    v110 Imm(4617315517961601024)                         -> x8
-    v111 Imm(6)                                           -> x9
-    v112 Imm(4618441417868443648)                         -> x10
+    v109 Imm(5)                                           -> x7
+    v110 Imm(4617315517961601024)                         -> x7
+    v111 Imm(6)                                           -> x8
+    v112 Imm(4618441417868443648)                         -> x8
     v113 Imm(7)                                           -> x9
-    v114 Imm(4619567317775286272)                         -> x11
+    v114 Imm(4619567317775286272)                         -> x10
     v115 Imm(8)                                           -> x9
-    v116 Imm(4620693217682128896)                         -> x9
-    v117 Imm(9)                                           -> [spill 0]
-    v118 Imm(4621256167635550208)                         -> [spill 0]
-    v119 Imm(4621819117588971520)                         -> [spill 1]
-    v120 LocalAddr(-80)                                   -> [spill 2]
+    v116 Imm(4620693217682128896)                         -> x11
+    v117 Imm(9)                                           -> x9
+    v118 Imm(4621256167635550208)                         -> x9
+    v119 Imm(4621819117588971520)                         -> [spill 0]
+    v120 LocalAddr(-80)                                   -> [spill 1]
     v121 StoreLocal { off=-80, value=v102, kind=F80 }     -> -
     v122 LocalAddr(-81)                                   -> x0
     v123 StoreLocal { off=-81, value=v104, kind=F80 }     -> -
@@ -362,15 +362,15 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v127 StoreLocal { off=-83, value=v108, kind=F80 }     -> -
     v128 LocalAddr(-84)                                   -> x6
     v129 StoreLocal { off=-84, value=v110, kind=F80 }     -> -
-    v130 LocalAddr(-85)                                   -> x8
+    v130 LocalAddr(-85)                                   -> x7
     v131 StoreLocal { off=-85, value=v112, kind=F80 }     -> -
-    v132 LocalAddr(-86)                                   -> [spill 3]
+    v132 LocalAddr(-86)                                   -> x8
     v133 StoreLocal { off=-86, value=v114, kind=F80 }     -> -
-    v134 LocalAddr(-87)                                   -> [spill 4]
+    v134 LocalAddr(-87)                                   -> [spill 2]
     v135 StoreLocal { off=-87, value=v116, kind=F80 }     -> -
-    v136 LocalAddr(-88)                                   -> x9
+    v136 LocalAddr(-88)                                   -> [spill 3]
     v137 StoreLocal { off=-88, value=v118, kind=F80 }     -> -
-    v138 LocalAddr(-89)                                   -> [spill 0]
+    v138 LocalAddr(-89)                                   -> x9
     v139 StoreLocal { off=-89, value=v119, kind=F80 }     -> -
     v140 Call { target_pc=6, args=[v100, v120, v122, v124, v126, v128, v130, v132, v134, v136, v138], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v141 Imm(4632937379169042432)                         -> d1
@@ -428,7 +428,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -487,7 +487,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

@@ -48,10 +48,10 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x20, %eax
                	jl	<addr>
+               	leaq	<rip>, %rcx # <addr>
                	leaq	0x8(%rsp), %rdi
                	leaq	0x10(%rsp), %rsi
                	leaq	0x20(%rsp), %rdx
-               	leaq	<rip>, %rcx # <addr>
                	callq	<addr>
                	movzbq	0x8(%rsp), %rax
                	addq	$0x48, %rsp

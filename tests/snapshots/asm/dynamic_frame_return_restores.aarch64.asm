@@ -35,15 +35,15 @@ Disassembly of section .text:
                	mov	sp, x2
                	cmp	x0, #0x9
                	b.le	<addr>
-               	mov	x1, #0x1                // =1
                	mov	x0, x2
+               	mov	x1, #0x1                // =1
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x2                // =2
                	mov	x0, x2
+               	mov	x1, #0x2                // =2
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	mov	sp, x29
@@ -87,8 +87,8 @@ Disassembly of section .text:
                	mov	sp, x21
                	add	x22, x20, x20, lsl #1
                	add	x23, x20, x20, lsl #2
-               	mov	x1, #0x4                // =4
                	mov	x0, x21
+               	mov	x1, #0x4                // =4
                	bl	<addr>
                	cmp	x20, #0x7
                	b.ne	<addr>
@@ -99,8 +99,8 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	mov	x1, #0x5                // =5
                	mov	x0, x21
+               	mov	x1, #0x5                // =5
                	bl	<addr>
                	ldrb	w0, [x21]
                	madd	x0, x22, x23, x0
@@ -187,8 +187,8 @@ Disassembly of section .text:
                	str	x16, [x19, #0x68]
                	mov	x0, #0x1                // =1
                	strb	w0, [x19, #0x90]
-               	mov	x1, #0x7                // =7
                	mov	x0, x21
+               	mov	x1, #0x7                // =7
                	bl	<addr>
                	cmp	x20, #0x5
                	b.ne	<addr>
@@ -259,8 +259,8 @@ Disassembly of section .text:
                	strb	w0, [x19, #0x40]
                	mov	x0, #0x2                // =2
                	strb	w0, [x19, #0x41]
-               	mov	x1, #0x7                // =7
                	mov	x0, x21
+               	mov	x1, #0x7                // =7
                	bl	<addr>
                	sub	x0, x29, #0x130
                	mov	x1, #0x9                // =9

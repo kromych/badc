@@ -185,9 +185,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	mov	x0, #0x5                // =5
                	ldr	q0, [x7]
                	ldr	q1, [x1]
+               	mov	x0, #0x5                // =5
                	bl	<addr>
                	smov	x0, v0.s[0]
                	cmp	x0, #0x5

@@ -98,8 +98,8 @@ Disassembly of section .text:
                	pushq	%rax
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movl	$0x2a, %edx
                	movsd	<rip>, %xmm0
+               	movl	$0x2a, %edx
                	movb	$0x1, %al
                	callq	<addr>
                	movl	<rip>, %eax # <addr>

@@ -3152,20 +3152,20 @@ Disassembly of section .text:
                	movq	%r10, 0x38(%rsp)
                	leaq	0x1040(%rax), %r10
                	movq	%r10, 0x30(%rsp)
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	<rip>, %rdx # <addr>
-               	movq	<rip>, %rsi # <addr>
                	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %r8 # <addr>
                	movq	<rip>, %r9 # <addr>
+               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rbx # <addr>
                	movq	<rip>, %r12 # <addr>
                	movq	<rip>, %r13 # <addr>
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	subq	$0x20, %rsp
-               	movq	%r9, (%rsp)
+               	movq	%rax, (%rsp)
                	movq	%rbx, 0x8(%rsp)
                	movq	%r12, 0x10(%rsp)
                	movq	%r13, 0x18(%rsp)
@@ -4449,10 +4449,6 @@ Disassembly of section .text:
                	movq	%r11, 0x1010(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x1018(%rsp)
-               	movq	%r8, %r9
-               	movq	%rdi, %r8
-               	movq	%rax, %rdi
-               	xchgq	%rsi, %rcx
                	callq	<addr>
                	addq	$0x1020, %rsp           # imm = 0x1020
                	cmpq	$0x18d9e, %rax          # imm = 0x18D9E
@@ -4465,12 +4461,6 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
-               	movl	$0x3, %edx
-               	movl	$0x4, %ecx
-               	movl	$0x5, %r8d
-               	movl	$0x6, %r9d
                	subq	$0x7f0, %rsp            # imm = 0x7F0
                	movq	$0x7, (%rsp)
                	movq	$0x8, 0x8(%rsp)
@@ -4726,6 +4716,12 @@ Disassembly of section .text:
                	movq	$0x102, 0x7d8(%rsp)     # imm = 0x102
                	movq	$0x103, 0x7e0(%rsp)     # imm = 0x103
                	movq	$0x104, 0x7e8(%rsp)     # imm = 0x104
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
+               	movl	$0x3, %edx
+               	movl	$0x4, %ecx
+               	movl	$0x5, %r8d
+               	movl	$0x6, %r9d
                	callq	<addr>
                	addq	$0x7f0, %rsp            # imm = 0x7F0
                	cmpq	$0x848a, %rax           # imm = 0x848A
@@ -5249,20 +5245,20 @@ Disassembly of section .text:
                	movq	%r10, 0x38(%rsp)
                	leaq	0x1040(%rax), %r10
                	movq	%r10, 0x30(%rsp)
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	<rip>, %rdx # <addr>
-               	movq	<rip>, %rsi # <addr>
                	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %r8 # <addr>
                	movq	<rip>, %r9 # <addr>
+               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rbx # <addr>
                	movq	<rip>, %r12 # <addr>
                	movq	<rip>, %r13 # <addr>
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	subq	$0x20, %rsp
-               	movq	%r9, (%rsp)
+               	movq	%rax, (%rsp)
                	movq	%rbx, 0x8(%rsp)
                	movq	%r12, 0x10(%rsp)
                	movq	%r13, 0x18(%rsp)
@@ -6546,10 +6542,6 @@ Disassembly of section .text:
                	movq	%r11, 0x1010(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x1018(%rsp)
-               	movq	%r8, %r9
-               	movq	%rdi, %r8
-               	movq	%rax, %rdi
-               	xchgq	%rsi, %rcx
                	callq	<addr>
                	addq	$0x1020, %rsp           # imm = 0x1020
                	cmpq	$0x18d9e, %rax          # imm = 0x18D9E

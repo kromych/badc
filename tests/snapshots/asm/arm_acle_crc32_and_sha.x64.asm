@@ -103,8 +103,8 @@ Disassembly of section .text:
                	nop
                	cmpl	$0x3d, %eax
                	jl	<addr>
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	leaq	<rip>, %rsi
+               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	movl	$0x9, %edx
                	movl	$0xedb88320, %ecx       # imm = 0xEDB88320
                	callq	<addr>
@@ -113,8 +113,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x48, %rsp
                	retq
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	leaq	<rip>, %rsi
+               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	movl	$0x9, %edx
                	movl	$0x82f63b78, %ecx       # imm = 0x82F63B78
                	callq	<addr>

@@ -42,11 +42,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	movi	d0, #0000000000000000
                	adrp	x16, <page>
-               	ldr	d1, [x16]
+               	ldr	d2, [x16]
                	adrp	x16, <page>
-               	ldr	d2, [x16, #0x8]
-               	fmov	d3, d2
-               	fmov	d2, d1
+               	ldr	d3, [x16, #0x8]
                	fmov	d1, d0
                	bl	<addr>
                	cbnz	w0, <addr>
@@ -55,11 +53,9 @@ Disassembly of section .text:
                	ret
                	movi	d0, #0000000000000000
                	adrp	x16, <page>
-               	ldr	d1, [x16]
+               	ldr	d2, [x16]
                	adrp	x16, <page>
-               	ldr	d2, [x16, #0x8]
-               	fmov	d3, d2
-               	fmov	d2, d1
+               	ldr	d3, [x16, #0x8]
                	fmov	d1, d0
                	bl	<addr>
                	cbnz	w0, <addr>

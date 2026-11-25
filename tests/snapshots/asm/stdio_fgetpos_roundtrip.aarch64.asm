@@ -35,8 +35,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	sub	x1, x29, #0x10
                	mov	x0, x20
+               	sub	x1, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -55,8 +55,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	sub	x1, x29, #0x10
                	mov	x0, x20
+               	sub	x1, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

@@ -4949,8 +4949,8 @@ fn ent_pc=31 n_params=0 variadic=false locals=3
     v120 Binop { op=add, lhs=v117, rhs=v119 }             -> x1
     v121 LoadIndexed { base=v117, index=v114, scale=8, kind=I64 } -> x7
     v122 Extend { value=v121, kind=I32 }                  -> x13
-    v123 Imm(7)                                           -> x6
-    v124 Imm(1000)                                        -> x2
+    v123 Imm(7)                                           -> -
+    v124 Imm(1000)                                        -> -
     v125 Call { target_pc=28, args=[v121, v123, v124], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x1
     v126 Extend { value=v125, kind=I32 }                  -> x0
     v127 LoadLocal { off=-2, kind=I32, volatile }         -> x6
@@ -5048,7 +5048,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -5107,7 +5107,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

@@ -33,9 +33,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x2                // =2
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cmp	w0, #0x12
                	b.eq	<addr>
@@ -45,9 +45,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x3                // =3
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cmp	w0, #0x345
                	b.eq	<addr>
@@ -57,9 +57,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x2                // =2
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cmp	w0, #0x67
                	b.eq	<addr>
@@ -69,9 +69,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x1                // =1
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cmp	w0, #0x8
                	b.eq	<addr>
@@ -81,9 +81,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x1                // =1
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cmp	w0, #0x9
                	b.eq	<addr>
@@ -93,17 +93,17 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x3                // =3
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	str	x0, [sp, #0x8]
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x1
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x2                // =2
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	ldr	x16, [sp, #0x8]
                	add	x16, x16, x0
@@ -111,27 +111,27 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x8]
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x1                // =1
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	ldr	x16, [sp, #0x8]
                	add	x16, x16, x0
                	str	x16, [sp, #0x8]
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x1                // =1
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	ldr	x16, [sp, #0x8]
                	add	x16, x16, x0
                	str	x16, [sp, #0x8]
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
+               	adrp	x1, <page>
+               	ldr	x2, [x1, #0x10]
                	mov	x1, #0x1                // =1
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	ldr	x16, [sp, #0x8]
                	add	x0, x16, x0

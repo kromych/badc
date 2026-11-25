@@ -228,7 +228,7 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	movq	$-0x80000000, %rdi      # imm = 0x80000000
-               	movq	%rdi, %rsi
+               	movq	$-0x80000000, %rsi      # imm = 0x80000000
                	callq	<addr>
                	cmpq	$-0x1, %rax
                	je	<addr>

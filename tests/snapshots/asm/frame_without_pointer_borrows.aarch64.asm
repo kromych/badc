@@ -750,11 +750,11 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0x1111111111111111 // =1229782938247303441
                	mul	x1, x21, x17
+               	mov	x0, x20
                	mov	x2, #0x3211             // =12817
                	movk	x2, #0x7654, lsl #16
                	movk	x2, #0xba98, lsl #32
                	movk	x2, #0xfedc, lsl #48
-               	mov	x0, x20
                	bl	<addr>
                	mov	x17, #0xe147            // =57671
                	movk	x17, #0x147a, lsl #16
@@ -807,10 +807,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x2, #0x3                // =3
                	mov	x3, x20
                	mov	x5, x22
                	mov	x4, x21
+               	mov	x2, #0x3                // =3
                	bl	<addr>
                	cmp	x0, #0x13b
                	b.ne	<addr>

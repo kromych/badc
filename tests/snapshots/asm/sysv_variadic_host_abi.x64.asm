@@ -154,18 +154,18 @@ Disassembly of section .text:
 <main>:
                	pushq	%rax
                	subq	$0x10, %rsp
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
                	movsd	<rip>, %xmm0
-               	movl	$0x3, %ecx
                	movsd	<rip>, %xmm1
-               	movl	$0x5, %r8d
                	movsd	<rip>, %xmm2
-               	movl	$0x7, %r9d
                	movsd	<rip>, %xmm3
                	movsd	<rip>, %xmm4
                	movq	$0x9, (%rsp)
-               	movq	%rdi, %rdx
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
+               	movl	$0x1, %edx
+               	movl	$0x3, %ecx
+               	movl	$0x5, %r8d
+               	movl	$0x7, %r9d
                	movb	$0x5, %al
                	callq	<addr>
                	cmpq	$0x3a, %rax
@@ -174,7 +174,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%r11
                	retq
-               	movl	$0x9, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
@@ -186,6 +185,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm8
                	movq	%xmm8, %r10
                	movq	%r10, (%rsp)
+               	movl	$0x9, %edi
                	movb	$0x8, %al
                	callq	<addr>
                	ucomisd	<rip>, %xmm0

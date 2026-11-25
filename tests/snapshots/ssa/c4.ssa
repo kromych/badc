@@ -1126,7 +1126,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v708 Load { addr=v692, disp=0, kind=I64 pc_rel }      -> x0
     v709 Imm(13)                                          -> x1
     v710 Store { addr=v708, disp=0, value=v709, kind=I64 } -> -
-    v711 Imm(142)                                         -> x7
+    v711 Imm(142)                                         -> -
     v712 Call { target_pc=7, args=[v711], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v713 ImmData(1768)                                    -> x0
     v714 Load { addr=v713, disp=0, kind=I64 pc_rel }      -> x0
@@ -1163,7 +1163,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v746 BinopI { op=add, lhs=v745, rhs_imm=8 }           -> x3
     v747 Store { addr=v739, disp=0, value=v746, kind=I64 pc_rel } -> -
     v748 Imm(0)                                           -> x0
-    v749 Imm(142)                                         -> x7
+    v749 Imm(142)                                         -> -
     v750 Call { target_pc=7, args=[v749], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v751 ImmData(1800)                                    -> x0
     v752 Load { addr=v751, disp=0, kind=I64 pc_rel }      -> x0
@@ -1186,7 +1186,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v770 BinopI { op=add, lhs=v769, rhs_imm=8 }           -> x3
     v771 Store { addr=v759, disp=0, value=v770, kind=I64 pc_rel } -> -
     v772 Imm(0)                                           -> x0
-    v773 Imm(143)                                         -> x7
+    v773 Imm(143)                                         -> -
     v774 Call { target_pc=7, args=[v773], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v775 Imm(0)                                           -> x0
     v776 ImmData(1768)                                    -> x0
@@ -1212,7 +1212,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v795 BinopI { op=add, lhs=v794, rhs_imm=8 }           -> x3
     v796 Store { addr=v788, disp=0, value=v795, kind=I64 pc_rel } -> -
     v797 Imm(0)                                           -> x0
-    v798 Imm(145)                                         -> x7
+    v798 Imm(145)                                         -> -
     v799 Call { target_pc=7, args=[v798], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v800 Imm(0)                                           -> x0
     v801 ImmData(1768)                                    -> x0
@@ -1241,7 +1241,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v820 BinopI { op=add, lhs=v819, rhs_imm=8 }           -> x3
     v821 Store { addr=v813, disp=0, value=v820, kind=I64 pc_rel } -> -
     v822 Imm(0)                                           -> x0
-    v823 Imm(146)                                         -> x7
+    v823 Imm(146)                                         -> -
     v824 Call { target_pc=7, args=[v823], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v825 Imm(0)                                           -> x0
     v826 ImmData(1768)                                    -> x0
@@ -1266,7 +1266,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v841 Store { addr=v838, disp=0, value=v840, kind=I64 pc_rel } -> -
     v842 Imm(13)                                          -> x1
     v843 Store { addr=v840, disp=0, value=v842, kind=I64 } -> -
-    v844 Imm(147)                                         -> x7
+    v844 Imm(147)                                         -> -
     v845 Call { target_pc=7, args=[v844], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v846 ImmData(1768)                                    -> x0
     v847 Load { addr=v846, disp=0, kind=I64 pc_rel }      -> x0
@@ -1291,7 +1291,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v862 Store { addr=v859, disp=0, value=v861, kind=I64 pc_rel } -> -
     v863 Imm(13)                                          -> x1
     v864 Store { addr=v861, disp=0, value=v863, kind=I64 } -> -
-    v865 Imm(148)                                         -> x7
+    v865 Imm(148)                                         -> -
     v866 Call { target_pc=7, args=[v865], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v867 ImmData(1768)                                    -> x0
     v868 Load { addr=v867, disp=0, kind=I64 pc_rel }      -> x0
@@ -1316,7 +1316,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v883 Store { addr=v880, disp=0, value=v882, kind=I64 pc_rel } -> -
     v884 Imm(13)                                          -> x1
     v885 Store { addr=v882, disp=0, value=v884, kind=I64 } -> -
-    v886 Imm(149)                                         -> x7
+    v886 Imm(149)                                         -> -
     v887 Call { target_pc=7, args=[v886], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v888 ImmData(1768)                                    -> x0
     v889 Load { addr=v888, disp=0, kind=I64 pc_rel }      -> x0
@@ -1341,7 +1341,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v904 Store { addr=v901, disp=0, value=v903, kind=I64 pc_rel } -> -
     v905 Imm(13)                                          -> x1
     v906 Store { addr=v903, disp=0, value=v905, kind=I64 } -> -
-    v907 Imm(151)                                         -> x7
+    v907 Imm(151)                                         -> -
     v908 Call { target_pc=7, args=[v907], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v909 ImmData(1768)                                    -> x0
     v910 Load { addr=v909, disp=0, kind=I64 pc_rel }      -> x0
@@ -1366,7 +1366,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v925 Store { addr=v922, disp=0, value=v924, kind=I64 pc_rel } -> -
     v926 Imm(13)                                          -> x1
     v927 Store { addr=v924, disp=0, value=v926, kind=I64 } -> -
-    v928 Imm(151)                                         -> x7
+    v928 Imm(151)                                         -> -
     v929 Call { target_pc=7, args=[v928], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v930 ImmData(1768)                                    -> x0
     v931 Load { addr=v930, disp=0, kind=I64 pc_rel }      -> x0
@@ -1391,7 +1391,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v946 Store { addr=v943, disp=0, value=v945, kind=I64 pc_rel } -> -
     v947 Imm(13)                                          -> x1
     v948 Store { addr=v945, disp=0, value=v947, kind=I64 } -> -
-    v949 Imm(155)                                         -> x7
+    v949 Imm(155)                                         -> -
     v950 Call { target_pc=7, args=[v949], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v951 ImmData(1768)                                    -> x0
     v952 Load { addr=v951, disp=0, kind=I64 pc_rel }      -> x0
@@ -1416,7 +1416,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v967 Store { addr=v964, disp=0, value=v966, kind=I64 pc_rel } -> -
     v968 Imm(13)                                          -> x1
     v969 Store { addr=v966, disp=0, value=v968, kind=I64 } -> -
-    v970 Imm(155)                                         -> x7
+    v970 Imm(155)                                         -> -
     v971 Call { target_pc=7, args=[v970], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v972 ImmData(1768)                                    -> x0
     v973 Load { addr=v972, disp=0, kind=I64 pc_rel }      -> x0
@@ -1441,7 +1441,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v988 Store { addr=v985, disp=0, value=v987, kind=I64 pc_rel } -> -
     v989 Imm(13)                                          -> x1
     v990 Store { addr=v987, disp=0, value=v989, kind=I64 } -> -
-    v991 Imm(155)                                         -> x7
+    v991 Imm(155)                                         -> -
     v992 Call { target_pc=7, args=[v991], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v993 ImmData(1768)                                    -> x0
     v994 Load { addr=v993, disp=0, kind=I64 pc_rel }      -> x0
@@ -1466,7 +1466,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1009 Store { addr=v1006, disp=0, value=v1008, kind=I64 pc_rel } -> -
     v1010 Imm(13)                                          -> x1
     v1011 Store { addr=v1008, disp=0, value=v1010, kind=I64 } -> -
-    v1012 Imm(155)                                         -> x7
+    v1012 Imm(155)                                         -> -
     v1013 Call { target_pc=7, args=[v1012], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1014 ImmData(1768)                                    -> x0
     v1015 Load { addr=v1014, disp=0, kind=I64 pc_rel }     -> x0
@@ -1491,7 +1491,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1030 Store { addr=v1027, disp=0, value=v1029, kind=I64 pc_rel } -> -
     v1031 Imm(13)                                          -> x1
     v1032 Store { addr=v1029, disp=0, value=v1031, kind=I64 } -> -
-    v1033 Imm(157)                                         -> x7
+    v1033 Imm(157)                                         -> -
     v1034 Call { target_pc=7, args=[v1033], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1035 ImmData(1768)                                    -> x0
     v1036 Load { addr=v1035, disp=0, kind=I64 pc_rel }     -> x0
@@ -1516,7 +1516,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1051 Store { addr=v1048, disp=0, value=v1050, kind=I64 pc_rel } -> -
     v1052 Imm(13)                                          -> x1
     v1053 Store { addr=v1050, disp=0, value=v1052, kind=I64 } -> -
-    v1054 Imm(157)                                         -> x7
+    v1054 Imm(157)                                         -> -
     v1055 Call { target_pc=7, args=[v1054], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1056 ImmData(1768)                                    -> x0
     v1057 Load { addr=v1056, disp=0, kind=I64 pc_rel }     -> x0
@@ -1541,7 +1541,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1072 Store { addr=v1069, disp=0, value=v1071, kind=I64 pc_rel } -> -
     v1073 Imm(13)                                          -> x1
     v1074 Store { addr=v1071, disp=0, value=v1073, kind=I64 } -> -
-    v1075 Imm(159)                                         -> x7
+    v1075 Imm(159)                                         -> -
     v1076 Call { target_pc=7, args=[v1075], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1077 ImmData(1816)                                    -> x0
     v1078 Imm(0)                                           -> x0
@@ -1592,7 +1592,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1115 Store { addr=v1112, disp=0, value=v1114, kind=I64 pc_rel } -> -
     v1116 Imm(13)                                          -> x1
     v1117 Store { addr=v1114, disp=0, value=v1116, kind=I64 } -> -
-    v1118 Imm(159)                                         -> x7
+    v1118 Imm(159)                                         -> -
     v1119 Call { target_pc=7, args=[v1118], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1120 Imm(0)                                           -> x0
     v1121 BinopI { op=gt, lhs=v686, rhs_imm=2 }            -> x0
@@ -1692,7 +1692,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1201 Store { addr=v1198, disp=0, value=v1200, kind=I64 pc_rel } -> -
     v1202 Imm(13)                                          -> x1
     v1203 Store { addr=v1200, disp=0, value=v1202, kind=I64 } -> -
-    v1204 Imm(162)                                         -> x7
+    v1204 Imm(162)                                         -> -
     v1205 Call { target_pc=7, args=[v1204], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1206 ImmData(1768)                                    -> x0
     v1207 Load { addr=v1206, disp=0, kind=I64 pc_rel }     -> x0
@@ -1717,7 +1717,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1222 Store { addr=v1219, disp=0, value=v1221, kind=I64 pc_rel } -> -
     v1223 Imm(13)                                          -> x1
     v1224 Store { addr=v1221, disp=0, value=v1223, kind=I64 } -> -
-    v1225 Imm(162)                                         -> x7
+    v1225 Imm(162)                                         -> -
     v1226 Call { target_pc=7, args=[v1225], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1227 ImmData(1768)                                    -> x0
     v1228 Load { addr=v1227, disp=0, kind=I64 pc_rel }     -> x0
@@ -1742,7 +1742,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1243 Store { addr=v1240, disp=0, value=v1242, kind=I64 pc_rel } -> -
     v1244 Imm(13)                                          -> x1
     v1245 Store { addr=v1242, disp=0, value=v1244, kind=I64 } -> -
-    v1246 Imm(162)                                         -> x7
+    v1246 Imm(162)                                         -> -
     v1247 Call { target_pc=7, args=[v1246], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1248 ImmData(1768)                                    -> x0
     v1249 Load { addr=v1248, disp=0, kind=I64 pc_rel }     -> x0
@@ -1922,7 +1922,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1421 Store { addr=v1418, disp=0, value=v1420, kind=I64 pc_rel } -> -
     v1422 Imm(13)                                          -> x1
     v1423 Store { addr=v1420, disp=0, value=v1422, kind=I64 } -> -
-    v1424 Imm(142)                                         -> x7
+    v1424 Imm(142)                                         -> -
     v1425 Call { target_pc=7, args=[v1424], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1426 ImmData(1800)                                    -> x0
     v1427 Load { addr=v1426, disp=0, kind=I64 pc_rel }     -> x0
@@ -2139,7 +2139,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v161 BinopI { op=ne, lhs=v160, rhs_imm=41 }           -> x0
     terminator Bz { cond=v161, target=b98, fall=b96 }   (exit_acc=v161)
   block 96  start_pc=0
-    v162 Imm(142)                                         -> x7
+    v162 Imm(142)                                         -> -
     v163 Call { target_pc=7, args=[v162], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v164 ImmData(1768)                                    -> x0
     v165 Load { addr=v164, disp=0, kind=I64 pc_rel }      -> x0
@@ -2374,14 +2374,14 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     terminator Bz { cond=v365, target=b164, fall=b121 }   (exit_acc=v365)
   block 121  start_pc=0
     v366 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v367 Imm(162)                                         -> x7
+    v367 Imm(162)                                         -> -
     v368 Call { target_pc=7, args=[v367], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v369 ImmData(1816)                                    -> x0
     v370 Imm(0)                                           -> x0
     v371 Store { addr=v369, disp=0, value=v355, kind=I64 pc_rel } -> -
     terminator Jmp(b73)   (exit_acc=v371)
   block 122  start_pc=0
-    v342 Imm(142)                                         -> x7
+    v342 Imm(142)                                         -> -
     v343 Call { target_pc=7, args=[v342], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v344 ImmData(1800)                                    -> x0
     v345 Load { addr=v344, disp=0, kind=I64 pc_rel }      -> x0
@@ -2397,7 +2397,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     terminator Bz { cond=v327, target=b128, fall=b125 }   (exit_acc=v327)
   block 125  start_pc=0
     v385 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v386 Imm(162)                                         -> x7
+    v386 Imm(162)                                         -> -
     v387 Call { target_pc=7, args=[v386], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v388 ImmData(1816)                                    -> x0
     v389 Load { addr=v388, disp=0, kind=I64 pc_rel }      -> x0
@@ -2433,7 +2433,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     terminator Bz { cond=v393, target=b132, fall=b129 }   (exit_acc=v393)
   block 129  start_pc=0
     v423 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v424 Imm(162)                                         -> x7
+    v424 Imm(162)                                         -> -
     v425 Call { target_pc=7, args=[v424], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v426 ImmData(1768)                                    -> x0
     v427 Load { addr=v426, disp=0, kind=I64 pc_rel }      -> x0
@@ -2467,7 +2467,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     terminator Bz { cond=v433, target=b134, fall=b133 }   (exit_acc=v433)
   block 133  start_pc=0
     v455 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v456 Imm(162)                                         -> x7
+    v456 Imm(162)                                         -> -
     v457 Call { target_pc=7, args=[v456], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v458 ImmData(1768)                                    -> x0
     v459 Load { addr=v458, disp=0, kind=I64 pc_rel }      -> x0
@@ -2500,7 +2500,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     terminator Bz { cond=v483, target=b136, fall=b135 }   (exit_acc=v483)
   block 135  start_pc=0
     v484 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v485 Imm(162)                                         -> x7
+    v485 Imm(162)                                         -> -
     v486 Call { target_pc=7, args=[v485], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v487 ImmData(1768)                                    -> x0
     v488 Load { addr=v487, disp=0, kind=I64 pc_rel }      -> x0
@@ -2533,7 +2533,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     terminator Bz { cond=v512, target=b138, fall=b137 }   (exit_acc=v512)
   block 137  start_pc=0
     v513 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v514 Imm(162)                                         -> x7
+    v514 Imm(162)                                         -> -
     v515 Call { target_pc=7, args=[v514], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v516 ImmData(1816)                                    -> x0
     v517 Imm(1)                                           -> x0
@@ -2584,7 +2584,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v556 Store { addr=v523, disp=0, value=v555, kind=I64 pc_rel } -> -
     v557 Imm(13)                                          -> x1
     v558 Store { addr=v555, disp=0, value=v557, kind=I64 } -> -
-    v559 Imm(162)                                         -> x7
+    v559 Imm(162)                                         -> -
     v560 Call { target_pc=7, args=[v559], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v561 ImmData(1768)                                    -> x0
     v562 Load { addr=v561, disp=0, kind=I64 pc_rel }      -> x0
@@ -2612,7 +2612,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v574 Load { addr=v481, disp=0, kind=I64 pc_rel }      -> x3
     v575 Imm(0)                                           -> x0
     v576 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v577 Imm(162)                                         -> x7
+    v577 Imm(162)                                         -> -
     v578 Call { target_pc=7, args=[v577], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v579 ImmData(1768)                                    -> x0
     v580 Load { addr=v579, disp=0, kind=I64 pc_rel }      -> x0
@@ -2712,7 +2712,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v11  ImmData(1832)                                    -> x0
     v12  Load { addr=v11, disp=0, kind=I64 pc_rel }       -> x6
     v13  CallExt { binding_idx=25, args=[v10, v12], fp_arg_mask=0x0 } -> x0
-    v14  Imm(-1)                                          -> x7
+    v14  Imm(-1)                                          -> -
     v15  CallExt { binding_idx=129, args=[v14], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 154  start_pc=0
@@ -2720,7 +2720,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v726 ImmData(1832)                                    -> x0
     v727 Load { addr=v726, disp=0, kind=I64 pc_rel }      -> x6
     v728 CallExt { binding_idx=25, args=[v725, v727], fp_arg_mask=0x0 } -> x0
-    v729 Imm(-1)                                          -> x7
+    v729 Imm(-1)                                          -> -
     v730 CallExt { binding_idx=129, args=[v729], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 155  start_pc=0
@@ -2728,7 +2728,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v782 ImmData(1832)                                    -> x0
     v783 Load { addr=v782, disp=0, kind=I64 pc_rel }      -> x6
     v784 CallExt { binding_idx=25, args=[v781, v783], fp_arg_mask=0x0 } -> x0
-    v785 Imm(-1)                                          -> x7
+    v785 Imm(-1)                                          -> -
     v786 CallExt { binding_idx=129, args=[v785], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 156  start_pc=0
@@ -2736,7 +2736,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1318 ImmData(1832)                                    -> x0
     v1319 Load { addr=v1318, disp=0, kind=I64 pc_rel }     -> x6
     v1320 CallExt { binding_idx=25, args=[v1317, v1319], fp_arg_mask=0x0 } -> x0
-    v1321 Imm(-1)                                          -> x7
+    v1321 Imm(-1)                                          -> -
     v1322 CallExt { binding_idx=129, args=[v1321], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 157  start_pc=0
@@ -2746,7 +2746,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1432 ImmData(1800)                                    -> x0
     v1433 Load { addr=v1432, disp=0, kind=I64 pc_rel }     -> x2
     v1434 CallExt { binding_idx=25, args=[v1429, v1431, v1433], fp_arg_mask=0x0 } -> x0
-    v1435 Imm(-1)                                          -> x7
+    v1435 Imm(-1)                                          -> -
     v1436 CallExt { binding_idx=129, args=[v1435], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 158  start_pc=0
@@ -2754,7 +2754,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1441 ImmData(1832)                                    -> x0
     v1442 Load { addr=v1441, disp=0, kind=I64 pc_rel }     -> x6
     v1443 CallExt { binding_idx=25, args=[v1440, v1442], fp_arg_mask=0x0 } -> x0
-    v1444 Imm(-1)                                          -> x7
+    v1444 Imm(-1)                                          -> -
     v1445 CallExt { binding_idx=129, args=[v1444], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 159  start_pc=0
@@ -2762,7 +2762,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1488 ImmData(1832)                                    -> x0
     v1489 Load { addr=v1488, disp=0, kind=I64 pc_rel }     -> x6
     v1490 CallExt { binding_idx=25, args=[v1487, v1489], fp_arg_mask=0x0 } -> x0
-    v1491 Imm(-1)                                          -> x7
+    v1491 Imm(-1)                                          -> -
     v1492 CallExt { binding_idx=129, args=[v1491], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 160  start_pc=0
@@ -2770,7 +2770,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v83  ImmData(1832)                                    -> x0
     v84  Load { addr=v83, disp=0, kind=I64 pc_rel }       -> x6
     v85  CallExt { binding_idx=25, args=[v82, v84], fp_arg_mask=0x0 } -> x0
-    v86  Imm(-1)                                          -> x7
+    v86  Imm(-1)                                          -> -
     v87  CallExt { binding_idx=129, args=[v86], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 161  start_pc=0
@@ -2778,7 +2778,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v125 ImmData(1832)                                    -> x0
     v126 Load { addr=v125, disp=0, kind=I64 pc_rel }      -> x6
     v127 CallExt { binding_idx=25, args=[v124, v126], fp_arg_mask=0x0 } -> x0
-    v128 Imm(-1)                                          -> x7
+    v128 Imm(-1)                                          -> -
     v129 CallExt { binding_idx=129, args=[v128], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 162  start_pc=0
@@ -2786,7 +2786,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v213 ImmData(1832)                                    -> x0
     v214 Load { addr=v213, disp=0, kind=I64 pc_rel }      -> x6
     v215 CallExt { binding_idx=25, args=[v212, v214], fp_arg_mask=0x0 } -> x0
-    v216 Imm(-1)                                          -> x7
+    v216 Imm(-1)                                          -> -
     v217 CallExt { binding_idx=129, args=[v216], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 163  start_pc=0
@@ -2794,7 +2794,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v308 ImmData(1832)                                    -> x0
     v309 Load { addr=v308, disp=0, kind=I64 pc_rel }      -> x6
     v310 CallExt { binding_idx=25, args=[v307, v309], fp_arg_mask=0x0 } -> x0
-    v311 Imm(-1)                                          -> x7
+    v311 Imm(-1)                                          -> -
     v312 CallExt { binding_idx=129, args=[v311], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 164  start_pc=0
@@ -2802,7 +2802,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v373 ImmData(1832)                                    -> x0
     v374 Load { addr=v373, disp=0, kind=I64 pc_rel }      -> x6
     v375 CallExt { binding_idx=25, args=[v372, v374], fp_arg_mask=0x0 } -> x0
-    v376 Imm(-1)                                          -> x7
+    v376 Imm(-1)                                          -> -
     v377 CallExt { binding_idx=129, args=[v376], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 165  start_pc=0
@@ -2810,7 +2810,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v380 ImmData(1832)                                    -> x0
     v381 Load { addr=v380, disp=0, kind=I64 pc_rel }      -> x6
     v382 CallExt { binding_idx=25, args=[v379, v381], fp_arg_mask=0x0 } -> x0
-    v383 Imm(-1)                                          -> x7
+    v383 Imm(-1)                                          -> -
     v384 CallExt { binding_idx=129, args=[v383], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 166  start_pc=0
@@ -2818,7 +2818,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v411 ImmData(1832)                                    -> x0
     v412 Load { addr=v411, disp=0, kind=I64 pc_rel }      -> x6
     v413 CallExt { binding_idx=25, args=[v410, v412], fp_arg_mask=0x0 } -> x0
-    v414 Imm(-1)                                          -> x7
+    v414 Imm(-1)                                          -> -
     v415 CallExt { binding_idx=129, args=[v414], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 167  start_pc=0
@@ -2826,7 +2826,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v450 ImmData(1832)                                    -> x0
     v451 Load { addr=v450, disp=0, kind=I64 pc_rel }      -> x6
     v452 CallExt { binding_idx=25, args=[v449, v451], fp_arg_mask=0x0 } -> x0
-    v453 Imm(-1)                                          -> x7
+    v453 Imm(-1)                                          -> -
     v454 CallExt { binding_idx=129, args=[v453], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 168  start_pc=0
@@ -2834,7 +2834,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v584 ImmData(1832)                                    -> x0
     v585 Load { addr=v584, disp=0, kind=I64 pc_rel }      -> x6
     v586 CallExt { binding_idx=25, args=[v583, v585], fp_arg_mask=0x0 } -> x0
-    v587 Imm(-1)                                          -> x7
+    v587 Imm(-1)                                          -> -
     v588 CallExt { binding_idx=129, args=[v587], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 169  start_pc=0
@@ -2842,7 +2842,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v633 ImmData(1832)                                    -> x0
     v634 Load { addr=v633, disp=0, kind=I64 pc_rel }      -> x6
     v635 CallExt { binding_idx=25, args=[v632, v634], fp_arg_mask=0x0 } -> x0
-    v636 Imm(-1)                                          -> x7
+    v636 Imm(-1)                                          -> -
     v637 CallExt { binding_idx=129, args=[v636], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=8 ---
@@ -2867,7 +2867,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     terminator Bz { cond=v11, target=b26, fall=b2 }   (exit_acc=v11)
   block 2  start_pc=0
     v15  Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v16  Imm(142)                                         -> x7
+    v16  Imm(142)                                         -> -
     v17  Call { target_pc=7, args=[v16], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v18  ImmData(1800)                                    -> x0
     v19  Load { addr=v18, disp=0, kind=I64 pc_rel }       -> x0
@@ -2940,7 +2940,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     terminator Bz { cond=v80, target=b28, fall=b10 }   (exit_acc=v80)
   block 10  start_pc=0
     v84  Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v85  Imm(142)                                         -> x7
+    v85  Imm(142)                                         -> -
     v86  Call { target_pc=7, args=[v85], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v87  ImmData(1800)                                    -> x0
     v88  Load { addr=v87, disp=0, kind=I64 pc_rel }       -> x0
@@ -2988,7 +2988,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v133 BinopI { op=ne, lhs=v132, rhs_imm=59 }           -> x0
     terminator Bz { cond=v133, target=b15, fall=b14 }   (exit_acc=v133)
   block 14  start_pc=0
-    v137 Imm(142)                                         -> x7
+    v137 Imm(142)                                         -> -
     v138 Call { target_pc=7, args=[v137], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Jmp(b15)   (exit_acc=v138)
   block 15  start_pc=0
@@ -3033,7 +3033,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v164 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Jmp(b6)   (exit_acc=v164)
   block 24  start_pc=0
-    v165 Imm(142)                                         -> x7
+    v165 Imm(142)                                         -> -
     v166 Call { target_pc=7, args=[v165], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v167 ImmData(1800)                                    -> x0
     v168 Load { addr=v167, disp=0, kind=I64 pc_rel }      -> x0
@@ -3047,7 +3047,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v22  ImmData(1832)                                    -> x0
     v23  Load { addr=v22, disp=0, kind=I64 pc_rel }       -> x6
     v24  CallExt { binding_idx=25, args=[v21, v23], fp_arg_mask=0x0 } -> x0
-    v25  Imm(-1)                                          -> x7
+    v25  Imm(-1)                                          -> -
     v26  CallExt { binding_idx=129, args=[v25], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 27  start_pc=0
@@ -3055,7 +3055,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v43  ImmData(1832)                                    -> x0
     v44  Load { addr=v43, disp=0, kind=I64 pc_rel }       -> x6
     v45  CallExt { binding_idx=25, args=[v42, v44], fp_arg_mask=0x0 } -> x0
-    v46  Imm(-1)                                          -> x7
+    v46  Imm(-1)                                          -> -
     v47  CallExt { binding_idx=129, args=[v46], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 28  start_pc=0
@@ -3063,7 +3063,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v91  ImmData(1832)                                    -> x0
     v92  Load { addr=v91, disp=0, kind=I64 pc_rel }       -> x6
     v93  CallExt { binding_idx=25, args=[v90, v92], fp_arg_mask=0x0 } -> x0
-    v94  Imm(-1)                                          -> x7
+    v94  Imm(-1)                                          -> -
     v95  CallExt { binding_idx=129, args=[v94], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 29  start_pc=0
@@ -3071,7 +3071,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v125 ImmData(1832)                                    -> x0
     v126 Load { addr=v125, disp=0, kind=I64 pc_rel }      -> x6
     v127 CallExt { binding_idx=25, args=[v124, v126], fp_arg_mask=0x0 } -> x0
-    v128 Imm(-1)                                          -> x7
+    v128 Imm(-1)                                          -> -
     v129 CallExt { binding_idx=129, args=[v128], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 30  start_pc=0
@@ -3079,7 +3079,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v150 ImmData(1832)                                    -> x0
     v151 Load { addr=v150, disp=0, kind=I64 pc_rel }      -> x6
     v152 CallExt { binding_idx=25, args=[v149, v151], fp_arg_mask=0x0 } -> x0
-    v153 Imm(-1)                                          -> x7
+    v153 Imm(-1)                                          -> -
     v154 CallExt { binding_idx=129, args=[v153], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 31  start_pc=0
@@ -3087,7 +3087,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v172 ImmData(1832)                                    -> x0
     v173 Load { addr=v172, disp=0, kind=I64 pc_rel }      -> x6
     v174 CallExt { binding_idx=25, args=[v171, v173], fp_arg_mask=0x0 } -> x0
-    v175 Imm(-1)                                          -> x7
+    v175 Imm(-1)                                          -> -
     v176 CallExt { binding_idx=129, args=[v175], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=9 ---
@@ -3223,7 +3223,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
   block 10  start_pc=0
     v106 Imm(0)                                           -> x0
     v107 Load { addr=v100, disp=0, kind=I64 }             -> x7
-    v108 Imm(0)                                           -> x6
+    v108 Imm(0)                                           -> -
     v109 CallExt { binding_idx=307, args=[v107, v108], fp_arg_mask=0x0 } -> x3
     v110 Imm(0)                                           -> x0
     v111 BinopI { op=lt, lhs=v109, rhs_imm=0 }            -> x0
@@ -3236,7 +3236,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
     v116 Imm(-1)                                          -> x0
     terminator Return(v116)   (exit_acc=v116)
   block 12  start_pc=0
-    v117 Imm(262144)                                      -> x7
+    v117 Imm(262144)                                      -> -
     v118 Imm(0)                                           -> x0
     v119 ImmData(1792)                                    -> x0
     v120 Imm(0)                                           -> x0
@@ -3247,7 +3247,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
   block 13  start_pc=0
     v124 ImmData(881)                                     -> x7
     v125 Imm(0)                                           -> x0
-    v126 Imm(262144)                                      -> x6
+    v126 Imm(262144)                                      -> -
     v127 CallExt { binding_idx=25, args=[v124, v126], fp_arg_mask=0x0 } -> x0
     v128 Imm(-1)                                          -> x0
     terminator Return(v128)   (exit_acc=v128)
@@ -3255,7 +3255,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
     v129 ImmData(1776)                                    -> x0
     v130 ImmData(1768)                                    -> x0
     v131 Imm(0)                                           -> x0
-    v132 Imm(262144)                                      -> x7
+    v132 Imm(262144)                                      -> -
     v133 CallExt { binding_idx=110, args=[v132], fp_arg_mask=0x0 } -> x0
     v134 Store { addr=v130, disp=0, value=v133, kind=I64 pc_rel } -> -
     v135 Store { addr=v129, disp=0, value=v133, kind=I64 pc_rel } -> -
@@ -3264,14 +3264,14 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
   block 15  start_pc=0
     v137 ImmData(915)                                     -> x7
     v138 Imm(0)                                           -> x0
-    v139 Imm(262144)                                      -> x6
+    v139 Imm(262144)                                      -> -
     v140 CallExt { binding_idx=25, args=[v137, v139], fp_arg_mask=0x0 } -> x0
     v141 Imm(-1)                                          -> x0
     terminator Return(v141)   (exit_acc=v141)
   block 16  start_pc=0
     v142 ImmData(1760)                                    -> x0
     v143 Imm(0)                                           -> x0
-    v144 Imm(262144)                                      -> x7
+    v144 Imm(262144)                                      -> -
     v145 CallExt { binding_idx=110, args=[v144], fp_arg_mask=0x0 } -> x0
     v146 Store { addr=v142, disp=0, value=v145, kind=I64 pc_rel } -> -
     v147 BinopI { op=eq, lhs=v145, rhs_imm=0 }            -> x1
@@ -3279,13 +3279,13 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
   block 17  start_pc=0
     v148 ImmData(947)                                     -> x7
     v149 Imm(0)                                           -> x0
-    v150 Imm(262144)                                      -> x6
+    v150 Imm(262144)                                      -> -
     v151 CallExt { binding_idx=25, args=[v148, v150], fp_arg_mask=0x0 } -> x0
     v152 Imm(-1)                                          -> x0
     terminator Return(v152)   (exit_acc=v152)
   block 18  start_pc=0
     v153 Imm(0)                                           -> x0
-    v154 Imm(262144)                                      -> x7
+    v154 Imm(262144)                                      -> -
     v155 CallExt { binding_idx=110, args=[v154], fp_arg_mask=0x0 } -> x5
     v156 Imm(0)                                           -> x0
     v157 BinopI { op=eq, lhs=v155, rhs_imm=0 }            -> x0
@@ -3293,28 +3293,28 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
   block 19  start_pc=0
     v158 ImmData(979)                                     -> x7
     v159 Imm(0)                                           -> x0
-    v160 Imm(262144)                                      -> x6
+    v160 Imm(262144)                                      -> -
     v161 CallExt { binding_idx=25, args=[v158, v160], fp_arg_mask=0x0 } -> x0
     v162 Imm(-1)                                          -> x0
     terminator Return(v162)   (exit_acc=v162)
   block 20  start_pc=0
     v163 ImmData(1792)                                    -> x0
     v164 Load { addr=v163, disp=0, kind=I64 pc_rel }      -> x7
-    v165 Imm(0)                                           -> x6
+    v165 Imm(0)                                           -> -
     v166 Imm(0)                                           -> x0
-    v167 Imm(262144)                                      -> x2
+    v167 Imm(262144)                                      -> -
     v168 CallExt { binding_idx=202, args=[v164, v165, v167], fp_arg_mask=0x0 } -> x0
     v169 ImmData(1768)                                    -> x0
     v170 Load { addr=v169, disp=0, kind=I64 pc_rel }      -> x7
-    v171 Imm(0)                                           -> x6
+    v171 Imm(0)                                           -> -
     v172 Imm(0)                                           -> x0
-    v173 Imm(262144)                                      -> x2
+    v173 Imm(262144)                                      -> -
     v174 CallExt { binding_idx=202, args=[v170, v171, v173], fp_arg_mask=0x0 } -> x0
     v175 ImmData(1760)                                    -> x0
     v176 Load { addr=v175, disp=0, kind=I64 pc_rel }      -> x7
-    v177 Imm(0)                                           -> x6
+    v177 Imm(0)                                           -> -
     v178 Imm(0)                                           -> x0
-    v179 Imm(262144)                                      -> x2
+    v179 Imm(262144)                                      -> -
     v180 CallExt { binding_idx=202, args=[v176, v177, v179], fp_arg_mask=0x0 } -> x0
     v181 ImmData(1744)                                    -> x0
     v182 ImmData(1012)                                    -> x0
@@ -3626,7 +3626,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
     v488 ImmData(1752)                                    -> x0
     v489 ImmData(1744)                                    -> x0
     v490 Imm(0)                                           -> x0
-    v491 Imm(262144)                                      -> x7
+    v491 Imm(262144)                                      -> -
     v492 CallExt { binding_idx=110, args=[v491], fp_arg_mask=0x0 } -> x0
     v493 Store { addr=v489, disp=0, value=v492, kind=I64 pc_rel } -> -
     v494 Store { addr=v488, disp=0, value=v492, kind=I64 pc_rel } -> -
@@ -3635,7 +3635,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
   block 21  start_pc=0
     v496 ImmData(1118)                                    -> x7
     v497 Imm(0)                                           -> x0
-    v498 Imm(262144)                                      -> x6
+    v498 Imm(262144)                                      -> -
     v499 CallExt { binding_idx=25, args=[v496, v498], fp_arg_mask=0x0 } -> x0
     v500 Imm(-1)                                          -> x0
     terminator Return(v500)   (exit_acc=v500)
@@ -3645,7 +3645,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
     v503 ImmData(1744)                                    -> x0
     v504 Load { addr=v503, disp=0, kind=I64 pc_rel }      -> x6
     v505 Imm(0)                                           -> x0
-    v506 Imm(262143)                                      -> x2
+    v506 Imm(262143)                                      -> -
     v507 CallExt { binding_idx=308, args=[v109, v504, v506], fp_arg_mask=0x0 } -> x0
     v508 Imm(0)                                           -> x1
     v509 BinopI { op=le, lhs=v507, rhs_imm=0 }            -> x1
@@ -5163,7 +5163,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -5222,7 +5222,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

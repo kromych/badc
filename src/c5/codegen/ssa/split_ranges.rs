@@ -602,7 +602,7 @@ mod tests {
             select_inc: vec![false; n],
             imm_held: vec![false; n],
             imm_store: vec![false; n],
-            stack_imm: alloc::collections::BTreeMap::new(),
+            call_set: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),
             fp_const: vec![false; n],
             fp_mem_operand: alloc::collections::BTreeSet::new(),

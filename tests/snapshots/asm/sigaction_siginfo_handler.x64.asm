@@ -79,7 +79,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x138, %rsp            # imm = 0x138
                	retq
-               	leaq	0x98(%rsp), %rdx
                	xorl	%esi, %esi
                	movq	%rsi, 0x98(%rsp)
                	movq	%rsi, 0xa0(%rsp)
@@ -101,6 +100,7 @@ Disassembly of section .text:
                	movq	%rsi, 0x120(%rsp)
                	movq	%rsi, 0x128(%rsp)
                	movl	$0xa, %edi
+               	leaq	0x98(%rsp), %rdx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

@@ -38,7 +38,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=516
     v2   Imm(0)                                           -> x0
     v3   Imm(1)                                           -> x0
     v4   StoreLocal { off=-512, value=v3, kind=I8, volatile } -> -
-    v5   LocalAddr(-516)                                  -> x7
+    v5   LocalAddr(-516)                                  -> -
     v6   StoreLocal { off=-516, value=v3, kind=I64 }      -> -
     v7   LocalAddr(-516)                                  -> x0
     v8   BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x0
@@ -63,7 +63,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=516
     v27  Imm(6)                                           -> x0
     v28  BinopI { op=add, lhs=v5, rhs_imm=24 }            -> x0
     v29  LoadLocal { off=-516, disp=24, kind=I64 }        -> x0
-    v30  Imm(10)                                          -> x6
+    v30  Imm(10)                                          -> -
     v31  Call { target_pc=1, args=[v5, v30], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v32  LocalAddr(-516)                                  -> x0
     v33  LoadLocal { off=-516, kind=I64 }                 -> x0
@@ -141,7 +141,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -200,7 +200,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

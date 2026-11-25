@@ -36,10 +36,10 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x28, %rsp
                	retq
-               	xorl	%esi, %esi
                	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
-               	movq	%rsi, %rdx
+               	xorl	%esi, %esi
+               	xorl	%edx, %edx
                	callq	*%rax
                	testl	%eax, %eax
                	jge	<addr>
@@ -47,10 +47,10 @@ Disassembly of section .text:
                	addq	$0x28, %rsp
                	retq
                	movq	<rip>, %rcx # <addr>
-               	leaq	0x18(%rsp), %rsi
-               	movl	$0x4, %edx
                	movq	%rax, (%rsp)
                	movq	%rax, %rdi
+               	leaq	0x18(%rsp), %rsi
+               	movl	$0x4, %edx
                	callq	*%rcx
                	movq	%rax, 0x8(%rsp)
                	movq	(%rsp), %rax

@@ -65,8 +65,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%r11
                	retq
-               	movl	$0x7, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x7, %edi
                	callq	*%rax
                	cmpl	$0x16, %eax
                	je	<addr>

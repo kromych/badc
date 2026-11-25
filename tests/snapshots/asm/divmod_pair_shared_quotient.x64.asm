@@ -144,15 +144,15 @@ Disassembly of section .text:
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	movl	$0xfffffffe, %esi       # imm = 0xFFFFFFFE
                	movl	$0x1, %edx
-               	movq	%rdx, %rcx
+               	movl	$0x1, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	xorl	%edi, %edi
                	movl	$0x3, %esi
-               	movq	%rdi, %rdx
-               	movq	%rdi, %rcx
+               	xorl	%edx, %edx
+               	xorl	%ecx, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

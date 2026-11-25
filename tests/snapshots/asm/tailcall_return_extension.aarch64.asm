@@ -54,11 +54,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
+               	mov	x0, #0x1000             // =4096
+               	movk	x0, #0xfebf, lsl #16
+               	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	mov	x1, #0x0                // =0
-               	mov	x2, #0x1000             // =4096
-               	movk	x2, #0xfebf, lsl #16
-               	stur	w2, [x29, #-0x8]
                	bl	<addr>
                	mov	x17, #0x1000            // =4096
                	movk	x17, #0xfebf, lsl #16
@@ -79,9 +79,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x7f               // =127
+               	sturb	w0, [x29, #-0x5]
                	sub	x0, x29, #0x8
-               	mov	x1, #0x7f               // =127
-               	sturb	w1, [x29, #-0x5]
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	mov	x17, #0x1000            // =4096

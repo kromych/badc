@@ -30,11 +30,11 @@ Disassembly of section .text:
                	strh	w16, [x1]
                	ldrb	w16, [x2, #0x2]
                	strb	w16, [x1, #0x2]
-               	mov	x2, #0x9                // =9
-               	sub	x4, x3, x1
-               	cmp	x4, #0x9
+               	sub	x2, x3, x1
+               	cmp	x2, #0x9
                	b.lo	<addr>
                	mov	x0, x3
+               	mov	x2, #0x9                // =9
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -61,12 +61,12 @@ Disassembly of section .text:
                	str	x16, [x1]
                	ldrh	w16, [x2, #0x8]
                	strh	w16, [x1, #0x8]
-               	mov	x2, #0x7                // =7
-               	sub	x4, x1, x3
-               	cmp	x4, #0x7
+               	sub	x2, x1, x3
+               	cmp	x2, #0x7
                	b.lo	<addr>
                	mov	x0, x1
                	mov	x1, x3
+               	mov	x2, #0x7                // =7
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

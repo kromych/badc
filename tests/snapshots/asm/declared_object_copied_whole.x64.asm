@@ -122,10 +122,10 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	addq	$0x68, %rsp
                	retq
-               	leaq	0x8(%rsp), %rdi
                	movq	$0x63, 0x18(%rsp)
                	movl	$0x63, 0x5c(%rsp)
                	movl	<rip>, %esi # <addr>
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	cmpq	$0x0, 0x18(%rsp)
                	je	<addr>

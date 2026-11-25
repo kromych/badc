@@ -98,12 +98,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	movl	$0x3, %edi
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
+               	movl	$0x3, %edi
                	movq	0x8(%rsi), %rdx
                	movq	(%rsi), %rsi
                	movq	0x8(%rcx), %r8

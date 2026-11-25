@@ -173,10 +173,10 @@ Disassembly of section .text:
                	je	<addr>
                	addq	$0x18, %rsp
                	retq
+               	leaq	-<rip>, %rdx # <addr>
                	leaq	(%rsp), %rdi
                	xorl	%esi, %esi
-               	leaq	-<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

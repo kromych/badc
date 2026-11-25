@@ -160,9 +160,9 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
+               	mov	x1, x20
                	mov	x0, #0x0                // =0
                	mov	x2, #0x3                // =3
-               	mov	x1, x20
                	bl	<addr>
                	mov	x17, #0x10b0            // =4272
                	movk	x17, #0xd21c, lsl #16
@@ -175,9 +175,9 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
+               	mov	x0, x21
                	mov	x1, #0x0                // =0
                	mov	x2, #0x1                // =1
-               	mov	x0, x21
                	bl	<addr>
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4

@@ -549,10 +549,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x4                // =4
                	bl	<addr>
-               	sub	x2, x29, #0x10
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
-               	mov	x0, x2
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	cmp	x0, #0x54
                	cset	x0, eq

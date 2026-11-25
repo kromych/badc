@@ -172,7 +172,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	mov	x1, #0x0                // =0
                	sub	x2, x29, #0x80
-               	mov	x3, x1
+               	mov	x3, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -198,8 +198,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	stur	x0, [x29, #-0xa0]
                	mov	x0, #0x1                // =1
+               	mov	x1, #0x1                // =1
                	mov	x3, #0x0                // =0
-               	mov	x1, x0
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -239,7 +239,7 @@ Disassembly of section .text:
                	mov	x0, #-0x1               // =-1
                	mov	x1, #0x0                // =0
                	sub	x2, x29, #0x80
-               	mov	x3, x1
+               	mov	x3, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x16

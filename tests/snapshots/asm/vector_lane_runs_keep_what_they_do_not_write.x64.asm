@@ -142,9 +142,9 @@ Disassembly of section .text:
                	movl	$0x0, 0x18(%rsp)
                	leaq	(%rsp), %r9
                	movl	0x48(%rsp), %edi
-               	leaq	0x18(%rsp), %rsi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	leaq	0x18(%rsp), %rsi
                	callq	<addr>
                	movl	0x18(%rsp), %eax
                	cmpl	$0x1e, %eax

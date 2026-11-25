@@ -445,14 +445,14 @@ Disassembly of section .text:
                	movups	0x20(%rcx), %xmm14
                	movups	%xmm14, 0x20(%rax)
                	xorl	%ebx, %ebx
+               	movq	0x10(%rsp,%rbx,8), %rdx
                	leaq	0x40(%rsp), %rdi
                	leaq	0xc0(%rsp), %rsi
-               	movq	0x10(%rsp,%rbx,8), %rdx
                	callq	<addr>
                	movq	%rax, %r12
+               	movq	0x10(%rsp,%rbx,8), %rdx
                	leaq	0x80(%rsp), %rdi
                	leaq	0xc0(%rsp), %rsi
-               	movq	0x10(%rsp,%rbx,8), %rdx
                	callq	<addr>
                	nopl	(%rax,%rax)
                	cmpq	%rax, %r12

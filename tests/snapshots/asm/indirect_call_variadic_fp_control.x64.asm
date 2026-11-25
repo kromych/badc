@@ -98,11 +98,11 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x18, %rsp
+               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm1
                	movl	$0x4, %edi
                	movl	$0x1, %esi
-               	movsd	<rip>, %xmm0
                	movl	$0x3, %edx
-               	movsd	<rip>, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	movapd	%xmm0, %xmm2
@@ -112,12 +112,12 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x4, %edi
-               	movl	$0x1, %esi
                	movsd	<rip>, %xmm0
-               	movl	$0x3, %edx
                	movsd	<rip>, %xmm1
                	movsd	%xmm2, 0x8(%rsp)
+               	movl	$0x4, %edi
+               	movl	$0x1, %esi
+               	movl	$0x3, %edx
                	movb	$0x2, %al
                	callq	<addr>
                	movsd	0x8(%rsp), %xmm2

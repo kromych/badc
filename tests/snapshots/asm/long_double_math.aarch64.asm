@@ -74,12 +74,12 @@ Disassembly of section .text:
                	add	x16, sp, #0x50
                	bl	<addr>
                	fmov	d0, x16
-               	mov	x0, #0x4                // =4
                	sub	x7, x29, #0x50
                	add	x16, sp, #0x80
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
+               	mov	x0, #0x4                // =4
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	add	x16, sp, #0x90
@@ -97,12 +97,12 @@ Disassembly of section .text:
                	fmov	d0, x16
                	fmov	d1, #3.00000000
                	fmul	d0, d0, d1
-               	sub	x0, x29, #0x8
                	sub	x7, x29, #0x50
                	add	x16, sp, #0x80
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x8
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	add	x16, sp, #0x90
@@ -121,12 +121,12 @@ Disassembly of section .text:
                	add	x16, sp, #0x60
                	bl	<addr>
                	fmov	d0, x16
-               	sub	x0, x29, #0x60
                	sub	x7, x29, #0x50
                	add	x16, sp, #0x80
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x60
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	add	x16, sp, #0x90
@@ -710,12 +710,12 @@ Disassembly of section .text:
                	add	x16, sp, #0x50
                	bl	<addr>
                	fmov	d0, x16
-               	mov	x0, #0x3                // =3
                	sub	x7, x29, #0x50
                	add	x16, sp, #0x80
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
+               	mov	x0, #0x3                // =3
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	add	x16, sp, #0x90
@@ -727,12 +727,12 @@ Disassembly of section .text:
                	add	x16, sp, #0x50
                	bl	<addr>
                	fmov	d0, x16
-               	mov	x0, #0x2                // =2
                	sub	x7, x29, #0x50
                	add	x16, sp, #0x80
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	add	x16, sp, #0x90

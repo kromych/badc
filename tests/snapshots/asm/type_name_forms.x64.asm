@@ -140,13 +140,13 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%r11
                	retq
-               	movl	$0x2, %edi
                	leaq	<rip>, %rsi
                	leaq	-<rip>, %rdx # <addr>
                	leaq	<rip>, %r8
                	leaq	0xc(%rcx), %rax
                	movq	%rax, (%rsp)
                	movq	%rdx, %r9
+               	movl	$0x2, %edi
                	movb	$0x0, %al
                	callq	<addr>
                	cmpq	$0xcc, %rax

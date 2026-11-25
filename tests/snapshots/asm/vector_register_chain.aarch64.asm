@@ -198,15 +198,15 @@ Disassembly of section .text:
                	ldurb	w1, [x29, #-0x10]
                	add	x0, x0, x1
                	add	x23, x20, x0
-               	mov	x0, #0x4                // =4
-               	mov	x1, #0x30               // =48
-               	sub	x2, x29, #0x80
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
                	mov	x3, x20
                	mov	x4, x21
+               	mov	x0, #0x4                // =4
+               	mov	x1, #0x30               // =48
+               	sub	x2, x29, #0x80
                	bl	<addr>
                	mov	x1, #0x0                // =0
                	ldrb	w2, [x20, x1]

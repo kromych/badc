@@ -476,9 +476,9 @@ Disassembly of section .text:
                	je	<addr>
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x64, %edx
-               	movl	$0x40, %esi
                	leaq	0x8(%rsp), %rdi
+               	movl	$0x40, %esi
+               	movl	$0x64, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -498,9 +498,9 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%rcx, %rdi
                	callq	<addr>
-               	movl	$0x10, %edx
-               	movl	$0x8, %esi
                	leaq	0x8(%rsp), %rdi
+               	movl	$0x8, %esi
+               	movl	$0x10, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

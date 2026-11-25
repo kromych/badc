@@ -544,7 +544,7 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	xorl	%edi, %edi
-               	movq	%rdi, %rsi
+               	xorl	%esi, %esi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

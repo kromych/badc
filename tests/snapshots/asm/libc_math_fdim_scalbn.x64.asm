@@ -54,8 +54,8 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%r11
                	retq
-               	movl	$0x2, %edi
                	movsd	<rip>, %xmm0
+               	movl	$0x2, %edi
                	callq	<addr>
                	cvtsd2ss	%xmm0, %xmm0
                	ucomiss	<rip>, %xmm0

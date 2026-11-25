@@ -111,7 +111,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v105 SimdVal { op=__builtin_ia32_paddw128, imm=None, args=[v3, v11] } -> d4
     v106 Imm(0)                                           -> x0
     v107 Imm(0)                                           -> x0
-    v108 LocalAddr(-535)                                  -> x7
+    v108 LocalAddr(-535)                                  -> -
     v109 Imm(0)                                           -> x0
     v110 StoreLocal { off=-535, value=v105, kind=V128 }   -> -
     v111 LifetimeEnd(0)                                   -> -
@@ -123,13 +123,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v117 SimdVal { op=__builtin_ia32_paddw128, imm=None, args=[v40, v94] } -> d4
     v118 Imm(0)                                           -> x0
     v119 Imm(0)                                           -> x0
-    v120 LocalAddr(-536)                                  -> x6
+    v120 LocalAddr(-536)                                  -> -
     v121 Imm(0)                                           -> x0
     v122 StoreLocal { off=-536, value=v117, kind=V128 }   -> -
     v123 LifetimeEnd(0)                                   -> -
     v124 LocalAddr(-535)                                  -> x0
     v125 LocalAddr(-536)                                  -> x0
-    v126 Imm(16)                                          -> x2
+    v126 Imm(16)                                          -> -
     v127 Copy { value=v3, fp=true }                       -> [spill 6]
     v128 Copy { value=v11, fp=true }                      -> [spill 4]
     v129 Copy { value=v40, fp=true }                      -> [spill 2]
@@ -273,7 +273,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v253 SimdVal { op=__builtin_ia32_packssdw128, imm=None, args=[v127, v128] } -> d0
     v254 Imm(0)                                           -> x0
     v255 Imm(0)                                           -> x0
-    v256 LocalAddr(-537)                                  -> x7
+    v256 LocalAddr(-537)                                  -> -
     v257 Imm(0)                                           -> x0
     v258 StoreLocal { off=-537, value=v253, kind=V128 }   -> -
     v259 LifetimeEnd(0)                                   -> -
@@ -285,13 +285,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v265 SimdVal { op=__builtin_ia32_packssdw128, imm=None, args=[v129, v130] } -> d0
     v266 Imm(0)                                           -> x0
     v267 Imm(0)                                           -> x0
-    v268 LocalAddr(-538)                                  -> x6
+    v268 LocalAddr(-538)                                  -> -
     v269 Imm(0)                                           -> x0
     v270 StoreLocal { off=-538, value=v265, kind=V128 }   -> -
     v271 LifetimeEnd(0)                                   -> -
     v272 LocalAddr(-537)                                  -> x0
     v273 LocalAddr(-538)                                  -> x0
-    v274 Imm(16)                                          -> x2
+    v274 Imm(16)                                          -> -
     v275 CallExt { binding_idx=26, args=[v256, v268, v274], fp_arg_mask=0x0 } -> x0
     v276 BinopI { op=eq, lhs=v275, rhs_imm=0 }            -> x1
     v277 Extend { value=v276, kind=I32 }                  -> x1
@@ -431,7 +431,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v397 SimdVal { op=__builtin_ia32_packuswb128, imm=None, args=[v127, v128] } -> d0
     v398 Imm(0)                                           -> x0
     v399 Imm(0)                                           -> x0
-    v400 LocalAddr(-539)                                  -> x7
+    v400 LocalAddr(-539)                                  -> -
     v401 Imm(0)                                           -> x0
     v402 StoreLocal { off=-539, value=v397, kind=V128 }   -> -
     v403 LifetimeEnd(0)                                   -> -
@@ -443,13 +443,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v409 SimdVal { op=__builtin_ia32_packuswb128, imm=None, args=[v129, v130] } -> d0
     v410 Imm(0)                                           -> x0
     v411 Imm(0)                                           -> x0
-    v412 LocalAddr(-540)                                  -> x6
+    v412 LocalAddr(-540)                                  -> -
     v413 Imm(0)                                           -> x0
     v414 StoreLocal { off=-540, value=v409, kind=V128 }   -> -
     v415 LifetimeEnd(0)                                   -> -
     v416 LocalAddr(-539)                                  -> x0
     v417 LocalAddr(-540)                                  -> x0
-    v418 Imm(16)                                          -> x2
+    v418 Imm(16)                                          -> -
     v419 CallExt { binding_idx=26, args=[v400, v412, v418], fp_arg_mask=0x0 } -> x0
     v420 BinopI { op=eq, lhs=v419, rhs_imm=0 }            -> x1
     v421 Extend { value=v420, kind=I32 }                  -> x1
@@ -589,7 +589,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v541 SimdVal { op=__builtin_ia32_pmulhw128, imm=None, args=[v127, v128] } -> d0
     v542 Imm(0)                                           -> x0
     v543 Imm(0)                                           -> x0
-    v544 LocalAddr(-541)                                  -> x7
+    v544 LocalAddr(-541)                                  -> -
     v545 Imm(0)                                           -> x0
     v546 StoreLocal { off=-541, value=v541, kind=V128 }   -> -
     v547 LifetimeEnd(0)                                   -> -
@@ -601,13 +601,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v553 SimdVal { op=__builtin_ia32_pmulhw128, imm=None, args=[v129, v130] } -> d0
     v554 Imm(0)                                           -> x0
     v555 Imm(0)                                           -> x0
-    v556 LocalAddr(-542)                                  -> x6
+    v556 LocalAddr(-542)                                  -> -
     v557 Imm(0)                                           -> x0
     v558 StoreLocal { off=-542, value=v553, kind=V128 }   -> -
     v559 LifetimeEnd(0)                                   -> -
     v560 LocalAddr(-541)                                  -> x0
     v561 LocalAddr(-542)                                  -> x0
-    v562 Imm(16)                                          -> x2
+    v562 Imm(16)                                          -> -
     v563 CallExt { binding_idx=26, args=[v544, v556, v562], fp_arg_mask=0x0 } -> x0
     v564 BinopI { op=eq, lhs=v563, rhs_imm=0 }            -> x1
     v565 Extend { value=v564, kind=I32 }                  -> x1
@@ -744,7 +744,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v682 Imm(0)                                           -> x0
     v683 SimdVal { op=__builtin_ia32_pshufd, imm=Some(27), args=[v127] } -> d0
     v684 Imm(0)                                           -> x0
-    v685 LocalAddr(-543)                                  -> x7
+    v685 LocalAddr(-543)                                  -> -
     v686 Imm(0)                                           -> x0
     v687 StoreLocal { off=-543, value=v683, kind=V128 }   -> -
     v688 Imm(0)                                           -> x0
@@ -752,12 +752,12 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v690 Imm(0)                                           -> x0
     v691 SimdVal { op=__builtin_ia32_pshufd, imm=Some(27), args=[v129] } -> d0
     v692 Imm(0)                                           -> x0
-    v693 LocalAddr(-544)                                  -> x6
+    v693 LocalAddr(-544)                                  -> -
     v694 Imm(0)                                           -> x0
     v695 StoreLocal { off=-544, value=v691, kind=V128 }   -> -
     v696 LocalAddr(-543)                                  -> x0
     v697 LocalAddr(-544)                                  -> x0
-    v698 Imm(16)                                          -> x2
+    v698 Imm(16)                                          -> -
     v699 CallExt { binding_idx=26, args=[v685, v693, v698], fp_arg_mask=0x0 } -> x0
     v700 BinopI { op=eq, lhs=v699, rhs_imm=0 }            -> x1
     v701 Extend { value=v700, kind=I32 }                  -> x1
@@ -882,7 +882,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v806 Imm(0)                                           -> x0
     v807 SimdVal { op=__builtin_ia32_pslldi128, imm=Some(7), args=[v127] } -> d0
     v808 Imm(0)                                           -> x0
-    v809 LocalAddr(-545)                                  -> x7
+    v809 LocalAddr(-545)                                  -> -
     v810 Imm(0)                                           -> x0
     v811 StoreLocal { off=-545, value=v807, kind=V128 }   -> -
     v812 Imm(0)                                           -> x0
@@ -890,12 +890,12 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v814 Imm(0)                                           -> x0
     v815 SimdVal { op=__builtin_ia32_pslldi128, imm=Some(7), args=[v129] } -> d0
     v816 Imm(0)                                           -> x0
-    v817 LocalAddr(-546)                                  -> x6
+    v817 LocalAddr(-546)                                  -> -
     v818 Imm(0)                                           -> x0
     v819 StoreLocal { off=-546, value=v815, kind=V128 }   -> -
     v820 LocalAddr(-545)                                  -> x0
     v821 LocalAddr(-546)                                  -> x0
-    v822 Imm(16)                                          -> x2
+    v822 Imm(16)                                          -> -
     v823 CallExt { binding_idx=26, args=[v809, v817, v822], fp_arg_mask=0x0 } -> x0
     v824 BinopI { op=eq, lhs=v823, rhs_imm=0 }            -> x1
     v825 Extend { value=v824, kind=I32 }                  -> x1
@@ -1020,7 +1020,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v930 Imm(0)                                           -> x0
     v931 SimdVal { op=__builtin_ia32_psrawi128, imm=Some(3), args=[v128] } -> d0
     v932 Imm(0)                                           -> x0
-    v933 LocalAddr(-547)                                  -> x7
+    v933 LocalAddr(-547)                                  -> -
     v934 Imm(0)                                           -> x0
     v935 StoreLocal { off=-547, value=v931, kind=V128 }   -> -
     v936 Imm(0)                                           -> x0
@@ -1028,12 +1028,12 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v938 Imm(0)                                           -> x0
     v939 SimdVal { op=__builtin_ia32_psrawi128, imm=Some(3), args=[v130] } -> d0
     v940 Imm(0)                                           -> x0
-    v941 LocalAddr(-548)                                  -> x6
+    v941 LocalAddr(-548)                                  -> -
     v942 Imm(0)                                           -> x0
     v943 StoreLocal { off=-548, value=v939, kind=V128 }   -> -
     v944 LocalAddr(-547)                                  -> x0
     v945 LocalAddr(-548)                                  -> x0
-    v946 Imm(16)                                          -> x2
+    v946 Imm(16)                                          -> -
     v947 CallExt { binding_idx=26, args=[v933, v941, v946], fp_arg_mask=0x0 } -> x0
     v948 BinopI { op=eq, lhs=v947, rhs_imm=0 }            -> x1
     v949 Extend { value=v948, kind=I32 }                  -> x1
@@ -1161,7 +1161,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1057 SimdVal { op=__builtin_ia32_punpckhbw128, imm=None, args=[v127, v128] } -> d0
     v1058 Imm(0)                                           -> x0
     v1059 Imm(0)                                           -> x0
-    v1060 LocalAddr(-549)                                  -> x7
+    v1060 LocalAddr(-549)                                  -> -
     v1061 Imm(0)                                           -> x0
     v1062 StoreLocal { off=-549, value=v1057, kind=V128 }  -> -
     v1063 LifetimeEnd(0)                                   -> -
@@ -1173,13 +1173,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1069 SimdVal { op=__builtin_ia32_punpckhbw128, imm=None, args=[v129, v130] } -> d0
     v1070 Imm(0)                                           -> x0
     v1071 Imm(0)                                           -> x0
-    v1072 LocalAddr(-550)                                  -> x6
+    v1072 LocalAddr(-550)                                  -> -
     v1073 Imm(0)                                           -> x0
     v1074 StoreLocal { off=-550, value=v1069, kind=V128 }  -> -
     v1075 LifetimeEnd(0)                                   -> -
     v1076 LocalAddr(-549)                                  -> x0
     v1077 LocalAddr(-550)                                  -> x0
-    v1078 Imm(16)                                          -> x2
+    v1078 Imm(16)                                          -> -
     v1079 CallExt { binding_idx=26, args=[v1060, v1072, v1078], fp_arg_mask=0x0 } -> x0
     v1080 BinopI { op=eq, lhs=v1079, rhs_imm=0 }           -> x1
     v1081 Extend { value=v1080, kind=I32 }                 -> x1
@@ -1319,7 +1319,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1201 SimdVal { op=__builtin_ia32_psadbw128, imm=None, args=[v127, v128] } -> d0
     v1202 Imm(0)                                           -> x0
     v1203 Imm(0)                                           -> x0
-    v1204 LocalAddr(-551)                                  -> x7
+    v1204 LocalAddr(-551)                                  -> -
     v1205 Imm(0)                                           -> x0
     v1206 StoreLocal { off=-551, value=v1201, kind=V128 }  -> -
     v1207 LifetimeEnd(0)                                   -> -
@@ -1331,13 +1331,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1213 SimdVal { op=__builtin_ia32_psadbw128, imm=None, args=[v129, v130] } -> d0
     v1214 Imm(0)                                           -> x0
     v1215 Imm(0)                                           -> x0
-    v1216 LocalAddr(-552)                                  -> x6
+    v1216 LocalAddr(-552)                                  -> -
     v1217 Imm(0)                                           -> x0
     v1218 StoreLocal { off=-552, value=v1213, kind=V128 }  -> -
     v1219 LifetimeEnd(0)                                   -> -
     v1220 LocalAddr(-551)                                  -> x0
     v1221 LocalAddr(-552)                                  -> x0
-    v1222 Imm(16)                                          -> x2
+    v1222 Imm(16)                                          -> -
     v1223 CallExt { binding_idx=26, args=[v1204, v1216, v1222], fp_arg_mask=0x0 } -> x0
     v1224 BinopI { op=eq, lhs=v1223, rhs_imm=0 }           -> x1
     v1225 Extend { value=v1224, kind=I32 }                 -> x1
@@ -1475,7 +1475,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1343 SimdVal { op=__builtin_ia32_pabsw128, imm=None, args=[v128] } -> d0
     v1344 Imm(0)                                           -> x0
     v1345 Imm(0)                                           -> x0
-    v1346 LocalAddr(-553)                                  -> x7
+    v1346 LocalAddr(-553)                                  -> -
     v1347 Imm(0)                                           -> x0
     v1348 StoreLocal { off=-553, value=v1343, kind=V128 }  -> -
     v1349 LifetimeEnd(0)                                   -> -
@@ -1485,13 +1485,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1353 SimdVal { op=__builtin_ia32_pabsw128, imm=None, args=[v130] } -> d0
     v1354 Imm(0)                                           -> x0
     v1355 Imm(0)                                           -> x0
-    v1356 LocalAddr(-554)                                  -> x6
+    v1356 LocalAddr(-554)                                  -> -
     v1357 Imm(0)                                           -> x0
     v1358 StoreLocal { off=-554, value=v1353, kind=V128 }  -> -
     v1359 LifetimeEnd(0)                                   -> -
     v1360 LocalAddr(-553)                                  -> x0
     v1361 LocalAddr(-554)                                  -> x0
-    v1362 Imm(16)                                          -> x2
+    v1362 Imm(16)                                          -> -
     v1363 CallExt { binding_idx=26, args=[v1346, v1356, v1362], fp_arg_mask=0x0 } -> x0
     v1364 BinopI { op=eq, lhs=v1363, rhs_imm=0 }           -> x1
     v1365 Extend { value=v1364, kind=I32 }                 -> x1
@@ -1623,7 +1623,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1477 SimdVal { op=__builtin_ia32_pmaddubsw128, imm=None, args=[v127, v128] } -> d0
     v1478 Imm(0)                                           -> x0
     v1479 Imm(0)                                           -> x0
-    v1480 LocalAddr(-555)                                  -> x7
+    v1480 LocalAddr(-555)                                  -> -
     v1481 Imm(0)                                           -> x0
     v1482 StoreLocal { off=-555, value=v1477, kind=V128 }  -> -
     v1483 LifetimeEnd(0)                                   -> -
@@ -1635,13 +1635,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1489 SimdVal { op=__builtin_ia32_pmaddubsw128, imm=None, args=[v129, v130] } -> d0
     v1490 Imm(0)                                           -> x0
     v1491 Imm(0)                                           -> x0
-    v1492 LocalAddr(-556)                                  -> x6
+    v1492 LocalAddr(-556)                                  -> -
     v1493 Imm(0)                                           -> x0
     v1494 StoreLocal { off=-556, value=v1489, kind=V128 }  -> -
     v1495 LifetimeEnd(0)                                   -> -
     v1496 LocalAddr(-555)                                  -> x0
     v1497 LocalAddr(-556)                                  -> x0
-    v1498 Imm(16)                                          -> x2
+    v1498 Imm(16)                                          -> -
     v1499 CallExt { binding_idx=26, args=[v1480, v1492, v1498], fp_arg_mask=0x0 } -> x0
     v1500 BinopI { op=eq, lhs=v1499, rhs_imm=0 }           -> x1
     v1501 Extend { value=v1500, kind=I32 }                 -> x1
@@ -1781,7 +1781,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1621 VecConst { imm=4294967295, kind=I64, bytes=16 }  -> d0
     v1622 Imm(0)                                           -> x0
     v1623 Imm(0)                                           -> x0
-    v1624 LocalAddr(-557)                                  -> x7
+    v1624 LocalAddr(-557)                                  -> -
     v1625 Imm(0)                                           -> x0
     v1626 StoreLocal { off=-557, value=v1621, kind=V128 }  -> -
     v1627 LifetimeEnd(0)                                   -> -
@@ -1793,13 +1793,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1633 SimdVal { op=__builtin_ia32_pcmpgtd128, imm=None, args=[v129, v130] } -> d0
     v1634 Imm(0)                                           -> x0
     v1635 Imm(0)                                           -> x0
-    v1636 LocalAddr(-558)                                  -> x6
+    v1636 LocalAddr(-558)                                  -> -
     v1637 Imm(0)                                           -> x0
     v1638 StoreLocal { off=-558, value=v1633, kind=V128 }  -> -
     v1639 LifetimeEnd(0)                                   -> -
     v1640 LocalAddr(-557)                                  -> x0
     v1641 LocalAddr(-558)                                  -> x0
-    v1642 Imm(16)                                          -> x2
+    v1642 Imm(16)                                          -> -
     v1643 CallExt { binding_idx=26, args=[v1624, v1636, v1642], fp_arg_mask=0x0 } -> x0
     v1644 BinopI { op=eq, lhs=v1643, rhs_imm=0 }           -> x1
     v1645 Extend { value=v1644, kind=I32 }                 -> x1
@@ -1938,7 +1938,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1764 Imm(0)                                           -> x0
     v1765 SimdVal { op=__builtin_ia32_palignr128, imm=Some(5), args=[v127, v128] } -> d0
     v1766 Imm(0)                                           -> x0
-    v1767 LocalAddr(-559)                                  -> x7
+    v1767 LocalAddr(-559)                                  -> -
     v1768 Imm(0)                                           -> x0
     v1769 StoreLocal { off=-559, value=v1765, kind=V128 }  -> -
     v1770 Imm(0)                                           -> x0
@@ -1948,12 +1948,12 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1774 Imm(0)                                           -> x0
     v1775 SimdVal { op=__builtin_ia32_palignr128, imm=Some(5), args=[v129, v130] } -> d0
     v1776 Imm(0)                                           -> x0
-    v1777 LocalAddr(-560)                                  -> x6
+    v1777 LocalAddr(-560)                                  -> -
     v1778 Imm(0)                                           -> x0
     v1779 StoreLocal { off=-560, value=v1775, kind=V128 }  -> -
     v1780 LocalAddr(-559)                                  -> x0
     v1781 LocalAddr(-560)                                  -> x0
-    v1782 Imm(16)                                          -> x2
+    v1782 Imm(16)                                          -> -
     v1783 CallExt { binding_idx=26, args=[v1767, v1777, v1782], fp_arg_mask=0x0 } -> x0
     v1784 BinopI { op=eq, lhs=v1783, rhs_imm=0 }           -> x1
     v1785 Extend { value=v1784, kind=I32 }                 -> x1
@@ -2087,7 +2087,7 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1899 SimdVal { op=__builtin_ia32_phminposuw128, imm=None, args=[v128] } -> d0
     v1900 Imm(0)                                           -> x0
     v1901 Imm(0)                                           -> x0
-    v1902 LocalAddr(-561)                                  -> x7
+    v1902 LocalAddr(-561)                                  -> -
     v1903 Imm(0)                                           -> x0
     v1904 StoreLocal { off=-561, value=v1899, kind=V128 }  -> -
     v1905 LifetimeEnd(0)                                   -> -
@@ -2097,13 +2097,13 @@ fn ent_pc=1338 n_params=0 variadic=false locals=0
     v1909 SimdVal { op=__builtin_ia32_phminposuw128, imm=None, args=[v130] } -> d0
     v1910 Imm(0)                                           -> x0
     v1911 Imm(0)                                           -> x0
-    v1912 LocalAddr(-562)                                  -> x6
+    v1912 LocalAddr(-562)                                  -> -
     v1913 Imm(0)                                           -> x0
     v1914 StoreLocal { off=-562, value=v1909, kind=V128 }  -> -
     v1915 LifetimeEnd(0)                                   -> -
     v1916 LocalAddr(-561)                                  -> x0
     v1917 LocalAddr(-562)                                  -> x0
-    v1918 Imm(16)                                          -> x2
+    v1918 Imm(16)                                          -> -
     v1919 CallExt { binding_idx=26, args=[v1902, v1912, v1918], fp_arg_mask=0x0 } -> x0
     v1920 BinopI { op=eq, lhs=v1919, rhs_imm=0 }           -> x1
     v1921 Extend { value=v1920, kind=I32 }                 -> x1
@@ -2333,7 +2333,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -2392,7 +2392,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

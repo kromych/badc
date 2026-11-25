@@ -163,12 +163,12 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	$0x6, %ebx
                	jge	<addr>
-               	leaq	0x220(%rsp), %rdi
                	leaq	0x65(%rbx), %r12
                	movq	%r12, %rsi
-               	callq	<addr>
                	leaq	0x220(%rsp), %rdi
+               	callq	<addr>
                	movq	%r12, %rsi
+               	leaq	0x220(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
@@ -220,12 +220,12 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	$0x3, %ebx
                	jge	<addr>
-               	leaq	0x220(%rsp), %rdi
                	leaq	0x83(%rbx), %r12
                	movq	%r12, %rsi
-               	callq	<addr>
                	leaq	0x220(%rsp), %rdi
+               	callq	<addr>
                	movq	%r12, %rsi
+               	leaq	0x220(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>

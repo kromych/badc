@@ -110,15 +110,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
+               	ldursw	x2, [x29, #-0x10]
                	sub	x0, x29, #0x310
                	mov	x1, #0x40               // =64
-               	ldursw	x2, [x29, #-0x10]
                	bl	<addr>
                	cmp	w0, w20
                	cset	x20, ne
+               	ldur	x2, [x29, #-0x8]
                	sub	x0, x29, #0x210
                	mov	x1, #0x40               // =64
-               	ldur	x2, [x29, #-0x8]
                	bl	<addr>
                	cmp	x0, x21
                	cset	x0, ne

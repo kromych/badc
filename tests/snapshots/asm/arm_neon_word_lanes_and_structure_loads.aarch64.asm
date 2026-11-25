@@ -27,11 +27,11 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
-               	sub	x0, x29, #0x78
-               	sub	x1, x29, #0x40
+               	sub	x0, x29, #0x40
                	ldur	d0, [x29, #-0x3d]
                	stur	d0, [x29, #-0x78]
-               	add	x1, x1, #0x3
+               	add	x1, x0, #0x3
+               	sub	x0, x29, #0x78
                	mov	x2, #0x8                // =8
                	bl	<addr>
                	sxtw	x0, w0

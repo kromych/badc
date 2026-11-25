@@ -271,9 +271,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x200
                	b.lt	<addr>
-               	mov	x2, #0x18               // =24
                	sub	x0, x29, #0x200
                	mov	x1, #0x0                // =0
+               	mov	x2, #0x18               // =24
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x200

@@ -476,12 +476,12 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0
                	movsd	%xmm0, 0xc0(%rsp)
                	movl	$0x64, 0x138(%rsp)
-               	leaq	0xc8(%rsp), %rdi
                	movl	0x138(%rsp), %esi
+               	leaq	0xc8(%rsp), %rdi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	0xc8(%rsp), %rdi
                	movl	0x138(%rsp), %esi
+               	leaq	0xc8(%rsp), %rdi
                	callq	<addr>
                	cmpq	%rax, %rbx
                	je	<addr>
@@ -489,12 +489,12 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x140, %rsp            # imm = 0x140
                	retq
-               	leaq	0x68(%rsp), %rdi
                	movl	0x138(%rsp), %esi
+               	leaq	0x68(%rsp), %rdi
                	callq	<addr>
                	movsd	%xmm0, 0x58(%rsp)
-               	leaq	0x68(%rsp), %rdi
                	movl	0x138(%rsp), %esi
+               	leaq	0x68(%rsp), %rdi
                	callq	<addr>
                	movsd	0x58(%rsp), %xmm14
                	ucomisd	%xmm0, %xmm14

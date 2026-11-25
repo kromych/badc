@@ -375,11 +375,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
+               	adrp	x0, <page>
+               	ldr	x2, [x0, #0x18]
                	mov	x0, #0x2                // =2
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
                	bl	<addr>
                	cmp	x0, #0x905
                	b.eq	<addr>

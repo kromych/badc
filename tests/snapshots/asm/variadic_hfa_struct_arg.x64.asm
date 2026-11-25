@@ -93,10 +93,10 @@ Disassembly of section .text:
                	movsd	%xmm0, (%rsp)
                	movsd	<rip>, %xmm0
                	movsd	%xmm0, 0x8(%rsp)
-               	movl	$0x1, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movsd	0x8(%r10), %xmm1
+               	movl	$0x1, %edi
                	movb	$0x2, %al
                	callq	<addr>
                	xorl	%eax, %eax

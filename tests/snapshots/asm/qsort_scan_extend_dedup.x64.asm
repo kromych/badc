@@ -99,9 +99,9 @@ Disassembly of section .text:
                	cmpl	$0x40, %eax
                	jl	<addr>
                	leaq	0x10(%rsp), %rbx
+               	movq	%rbx, %rdi
                	xorl	%esi, %esi
                	movl	$0x3f, %edx
-               	movq	%rbx, %rdi
                	callq	<addr>
                	movl	$0x1, %eax
                	movl	0x10(%rsp,%rax,4), %ecx

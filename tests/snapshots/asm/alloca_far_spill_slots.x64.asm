@@ -80,8 +80,8 @@ Disassembly of section .text:
                	movq	%r10, -0x1060(%rbp)
                	imulq	$0x35, %rdi, %r10
                	movq	%r10, -0x1068(%rbp)
-               	leaq	-0x1008(%rbp), %rdi
                	movq	%rbx, %rsi
+               	leaq	-0x1008(%rbp), %rdi
                	callq	<addr>
                	leaq	(%r12,%r13), %rax
                	addq	%r14, %rax
@@ -99,8 +99,8 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	addq	-0x1068(%rbp), %r10
                	movq	%r10, -0x1070(%rbp)
-               	leaq	-0x1008(%rbp), %rdi
                	movq	%rbx, %rsi
+               	leaq	-0x1008(%rbp), %rdi
                	callq	<addr>
                	imulq	%r13, %r12
                	imulq	%r15, %r14

@@ -79,7 +79,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	stur	wzr, [x29, #-0x20]
                	sub	x0, x29, #0x20
-               	mov	x1, x0
+               	sub	x1, x29, #0x20
                	bl	<addr>
                	cmp	w0, #0x1
                	b.ne	<addr>

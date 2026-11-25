@@ -72,22 +72,22 @@ Disassembly of section .text:
                	incq	%rsi
                	cmpl	$0xc, %esi
                	jl	<addr>
-               	leaq	-0x20(%rbp), %rdi
                	leaq	<rip>, %rsi
                	movq	%r8, 0x28(%rsp)
                	movq	%rcx, 0x20(%rsp)
                	movq	%rdx, 0x18(%rsp)
+               	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rax, %rbx
                	movq	0x28(%rsp), %r8
                	movq	0x20(%rsp), %rcx
                	movq	0x18(%rsp), %rdx
-               	leaq	-0x20(%rbp), %rdi
                	leaq	<rip>, %rsi
                	movq	%r8, 0x28(%rsp)
                	movq	%rcx, 0x20(%rsp)
                	movq	%rdx, 0x18(%rsp)
+               	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x28(%rsp), %r8

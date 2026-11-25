@@ -72,11 +72,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	sub	x1, x29, #0x18
                	mov	x0, #0x2                // =2
                	stur	x0, [x29, #-0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	sub	x1, x29, #0x18
                	mov	x2, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0

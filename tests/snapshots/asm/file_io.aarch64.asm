@@ -31,9 +31,9 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	bl	<addr>
                	mov	x21, x0
-               	mov	x2, #0x9                // =9
                	mov	x0, x20
                	mov	x1, x21
+               	mov	x2, #0x9                // =9
                	bl	<addr>
                	strb	wzr, [x21, #0x9]
                	mov	x0, x20

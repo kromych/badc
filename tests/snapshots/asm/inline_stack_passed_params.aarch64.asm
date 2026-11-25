@@ -110,6 +110,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	ldr	x9, [x0, #0x40]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #-0xa              // =-10
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0xdef0            // =57072
+               	movk	x16, #0x9abc, lsl #16
+               	movk	x16, #0x5678, lsl #32
+               	movk	x16, #0x1234, lsl #48
+               	str	x16, [sp, #0x10]
                	mov	x0, #0x1                // =1
                	mov	x1, #-0x2               // =-2
                	mov	x2, #0x7788             // =30600
@@ -124,17 +135,6 @@ Disassembly of section .text:
                	mov	x7, #0xea60             // =60000
                	movk	x7, #0x1111, lsl #16
                	movk	x7, #0x1111, lsl #32
-               	adrp	x8, <page>
-               	ldr	x9, [x8, #0x40]
-               	mov	x16, #0x9               // =9
-               	str	x16, [sp]
-               	mov	x16, #-0xa              // =-10
-               	str	x16, [sp, #0x8]
-               	mov	x16, #0xdef0            // =57072
-               	movk	x16, #0x9abc, lsl #16
-               	movk	x16, #0x5678, lsl #32
-               	movk	x16, #0x1234, lsl #48
-               	str	x16, [sp, #0x10]
                	blr	x9
                	cbz	w0, <addr>
                	add	sp, sp, #0x20

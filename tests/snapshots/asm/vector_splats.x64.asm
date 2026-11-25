@@ -615,8 +615,8 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jb	<addr>
-               	leaq	0x40(%rsp), %rdi
                	movq	%rbx, %rsi
+               	leaq	0x40(%rsp), %rdi
                	vzeroupper
                	callq	<addr>
                	leaq	0x40(%rsp), %rcx
@@ -775,8 +775,8 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	jne	<addr>
-               	movl	$0x5, %esi
                	movq	%rbx, %rdi
+               	movl	$0x5, %esi
                	vzeroupper
                	callq	<addr>
                	shlq	%rbx

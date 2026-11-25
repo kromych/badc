@@ -95,13 +95,13 @@ Disassembly of section .text:
                	adrp	x16, <addr>
                	ldr	s0, [x16, #0x28]
                	stur	s0, [x29, #-0x8]
-               	mov	x0, #0x5                // =5
                	fmov	d0, #1.50000000
                	fmov	d1, #2.50000000
                	fmov	d2, #3.00000000
                	fmov	d3, #-7.00000000
                	mov	x16, #0x43f0000000000000 // =4895412794951729152
                	fmov	d4, x16
+               	mov	x0, #0x5                // =5
                	bl	<addr>
                	ldur	s0, [x29, #-0x8]
                	adrp	x16, <addr>

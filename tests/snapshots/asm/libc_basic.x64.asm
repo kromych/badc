@@ -41,14 +41,14 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	addq	$0x88, %rsp
                	retq
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -56,19 +56,18 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	addq	$0x88, %rsp
                	retq
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
-               	callq	<addr>
                	leaq	(%rsp), %rdi
+               	callq	<addr>
                	movzbq	(%rsp), %rax
                	movzbq	0x1(%rsp), %rdx
                	movzbq	0x2(%rsp), %rsi
-               	movzbq	0x3(%rsp), %r8
+               	movzbq	0x3(%rsp), %rdi
                	movzbq	0x4(%rsp), %rcx
                	movb	%al, 0x2(%rsp)
                	movb	%dl, 0x3(%rsp)
                	movb	%sil, 0x4(%rsp)
-               	movb	%r8b, 0x5(%rsp)
+               	movb	%dil, 0x5(%rsp)
                	movb	%cl, 0x6(%rsp)
                	movsbq	%al, %rax
                	cmpl	$0x30, %eax
@@ -83,13 +82,14 @@ Disassembly of section .text:
                	addq	$0x88, %rsp
                	retq
                	leaq	<rip>, %rsi
-               	movl	$0x7, %edx
                	leaq	<rip>, %rcx
+               	leaq	(%rsp), %rdi
+               	movl	$0x7, %edx
                	movl	$0x2a, %r8d
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -97,14 +97,14 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	addq	$0x88, %rsp
                	retq
+               	leaq	<rip>, %rdx
                	leaq	(%rsp), %rdi
                	movl	$0x10, %esi
-               	leaq	<rip>, %rdx
                	movl	$0x63, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

@@ -21,13 +21,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	stur	x0, [x29, #-0x30]
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x30
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
-               	stur	x1, [x29, #-0x30]
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
-               	stur	x1, [x29, #-0x28]
                	bl	<addr>
                	mov	x17, #0x2222            // =8738
                	cmp	x0, x17

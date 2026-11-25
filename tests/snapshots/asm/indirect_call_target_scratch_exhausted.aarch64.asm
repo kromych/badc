@@ -199,28 +199,28 @@ Disassembly of section .text:
                	str	x1, [x0, #0xf0]
                	mov	x1, #0x1e               // =30
                	str	x1, [x0, #0xf8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	add	x8, x0, #0x40
-               	add	x9, x0, #0x50
-               	add	x10, x0, #0x60
-               	add	x11, x0, #0x70
-               	add	x12, x0, #0x80
-               	add	x13, x0, #0x90
-               	add	x14, x0, #0xa0
-               	add	x15, x0, #0xb0
-               	add	x20, x0, #0xc0
-               	add	x21, x0, #0xd0
-               	add	x22, x0, #0xe0
-               	add	x23, x0, #0xf0
-               	ldr	x1, [x0]
-               	ldr	x2, [x0, #0x8]
-               	ldr	x3, [x0, #0x10]
-               	ldr	x4, [x0, #0x18]
-               	ldr	x5, [x0, #0x20]
-               	ldr	x6, [x0, #0x28]
-               	ldr	x7, [x0, #0x30]
-               	ldr	x0, [x0, #0x38]
+               	adrp	x7, <page>
+               	add	x7, x7, <lo12>
+               	add	x8, x7, #0x40
+               	add	x9, x7, #0x50
+               	add	x10, x7, #0x60
+               	add	x11, x7, #0x70
+               	add	x12, x7, #0x80
+               	add	x13, x7, #0x90
+               	add	x14, x7, #0xa0
+               	add	x15, x7, #0xb0
+               	add	x20, x7, #0xc0
+               	add	x21, x7, #0xd0
+               	add	x22, x7, #0xe0
+               	add	x23, x7, #0xf0
+               	ldr	x0, [x7]
+               	ldr	x1, [x7, #0x8]
+               	ldr	x2, [x7, #0x10]
+               	ldr	x3, [x7, #0x18]
+               	ldr	x4, [x7, #0x20]
+               	ldr	x5, [x7, #0x28]
+               	ldr	x6, [x7, #0x30]
+               	ldr	x7, [x7, #0x38]
                	mov	x16, x8
                	ldr	x17, [x16]
                	str	x17, [sp]
@@ -281,15 +281,6 @@ Disassembly of section .text:
                	str	x17, [sp, #0xb0]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0xb8]
-               	mov	x16, x1
-               	mov	x1, x2
-               	mov	x2, x3
-               	mov	x3, x4
-               	mov	x4, x5
-               	mov	x5, x6
-               	mov	x6, x7
-               	mov	x7, x0
-               	mov	x0, x16
                	bl	<addr>
                	cmp	x0, #0x168
                	b.eq	<addr>

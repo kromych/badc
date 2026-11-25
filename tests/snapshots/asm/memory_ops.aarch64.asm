@@ -37,9 +37,9 @@ Disassembly of section .text:
                	str	x0, [x20]
                	mov	x0, #0x41               // =65
                	strh	w0, [x20, #0x8]
-               	mov	x2, #0xa                // =10
                	mov	x0, x21
                	mov	x1, x20
+               	mov	x2, #0xa                // =10
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -49,9 +49,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x42               // =66
                	strb	w0, [x20, #0x5]
-               	mov	x2, #0xa                // =10
                	mov	x0, x21
                	mov	x1, x20
+               	mov	x2, #0xa                // =10
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>

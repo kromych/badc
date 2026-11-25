@@ -108,8 +108,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v42  Imm(0)                                           -> x0
     v43  Imm(0)                                           -> x0
     v44  Imm(0)                                           -> x0
-    v45  Imm(2)                                           -> x7
-    v46  Imm(3)                                           -> x6
+    v45  Imm(2)                                           -> -
+    v46  Imm(3)                                           -> -
     v47  Imm(0)                                           -> x0
     v48  Call { target_pc=0, args=[v45, v46], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v49  Extend { value=v48, kind=I32 }                   -> x1
@@ -124,8 +124,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v60  Imm(0)                                           -> x0
     v61  Imm(0)                                           -> x0
     v62  Imm(0)                                           -> x0
-    v63  Imm(10)                                          -> x7
-    v64  Imm(4)                                           -> x6
+    v63  Imm(10)                                          -> -
+    v64  Imm(4)                                           -> -
     v65  Imm(0)                                           -> x0
     v66  Call { target_pc=1, args=[v63, v64], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v67  Extend { value=v66, kind=I32 }                   -> x1
@@ -140,8 +140,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v72  Imm(0)                                           -> x0
     v73  Imm(0)                                           -> x0
     v74  Imm(0)                                           -> x0
-    v75  Imm(1)                                           -> x7
-    v76  Imm(2)                                           -> x6
+    v75  Imm(1)                                           -> -
+    v76  Imm(2)                                           -> -
     v77  Imm(0)                                           -> x0
     v78  Call { target_pc=2, args=[v75, v76], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v79  Extend { value=v78, kind=I32 }                   -> x1
@@ -217,7 +217,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> x7
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> -
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -276,7 +276,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> x7
-    v33  Imm(0)                                           -> x6
+    v33  Imm(0)                                           -> -
     v34  CallExt { binding_idx=1, args=[v32, v33, v33], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0

@@ -660,8 +660,8 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x1111111111111111, %rsi # imm = 0x1111111111111111
                	imulq	%r12, %rsi
-               	movabsq	$-0x123456789abcdef, %rdx # imm = 0xFEDCBA9876543211
                	movq	%rbx, %rdi
+               	movabsq	$-0x123456789abcdef, %rdx # imm = 0xFEDCBA9876543211
                	callq	<addr>
                	movabsq	$0x7ae147ae147ae147, %r11 # imm = 0x7AE147AE147AE147
                	cmpq	%r11, %rax
@@ -705,9 +705,9 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi # <addr>
-               	movl	$0x3, %edx
                	movq	%rbx, %rcx
                	movq	%r12, %r8
+               	movl	$0x3, %edx
                	movq	0x48(%rsp), %r9
                	callq	<addr>
                	cmpq	$0x13b, %rax            # imm = 0x13B

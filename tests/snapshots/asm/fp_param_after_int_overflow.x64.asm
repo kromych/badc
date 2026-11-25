@@ -46,16 +46,16 @@ Disassembly of section .text:
 <main>:
                	pushq	%rax
                	subq	$0x20, %rsp
+               	movsd	<rip>, %xmm0
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	movq	$0x9, 0x10(%rsp)
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	movsd	<rip>, %xmm0
-               	movq	$0x7, (%rsp)
-               	movq	$0x8, 0x8(%rsp)
-               	movq	$0x9, 0x10(%rsp)
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
                	jp	<addr>
@@ -64,16 +64,16 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%r11
                	retq
+               	movsd	<rip>, %xmm0
+               	movq	$0x46, (%rsp)
+               	movq	$0x50, 0x8(%rsp)
+               	movq	$0x5a, 0x10(%rsp)
                	movl	$0xa, %edi
                	movl	$0x14, %esi
                	movl	$0x1e, %edx
                	movl	$0x28, %ecx
                	movl	$0x32, %r8d
                	movl	$0x3c, %r9d
-               	movsd	<rip>, %xmm0
-               	movq	$0x46, (%rsp)
-               	movq	$0x50, 0x8(%rsp)
-               	movq	$0x5a, 0x10(%rsp)
                	callq	<addr>
                	ucomisd	<rip>, %xmm0
                	jp	<addr>

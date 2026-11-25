@@ -163,9 +163,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
+               	str	d1, [sp, #0x28]
                	sub	x0, x29, #0x200
                	mov	x1, #0x40               // =64
-               	str	d1, [sp, #0x28]
                	bl	<addr>
                	ldr	d1, [sp, #0x28]
                	fcmp	d0, d1

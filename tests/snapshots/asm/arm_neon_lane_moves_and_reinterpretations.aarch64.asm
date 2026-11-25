@@ -6094,12 +6094,12 @@ Disassembly of section .text:
                	mov	x3, x26
                	mov	x2, x25
                	blr	x4
-               	sub	x0, x29, #0x20
-               	ldrsw	x1, [x21, #0x1c]
-               	ldrsw	x2, [x21, #0x20]
-               	mul	x1, x1, x2
-               	sxtw	x2, w1
+               	ldrsw	x0, [x21, #0x1c]
+               	ldrsw	x1, [x21, #0x20]
+               	mul	x0, x0, x1
+               	sxtw	x2, w0
                	mov	x1, x24
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	sub	x0, x29, #0x20
                	ldrsw	x1, [x21, #0x1c]

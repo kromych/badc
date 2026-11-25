@@ -189,9 +189,9 @@ Disassembly of section .text:
                	cvtsi2sd	%rax, %xmm0
                	vmulsd	<rip>, %xmm0, %xmm0 # <addr>
                	jmp	<addr>
+               	movsd	%xmm1, 0x18(%rsp)
                	leaq	0x20(%rsp), %rdi
                	movl	$0x40, %esi
-               	movsd	%xmm1, 0x18(%rsp)
                	callq	<addr>
                	movsd	0x18(%rsp), %xmm1
                	ucomisd	%xmm1, %xmm0

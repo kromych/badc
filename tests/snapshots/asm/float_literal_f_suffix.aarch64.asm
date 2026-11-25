@@ -85,9 +85,9 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0x2                // =2
                	fmov	d0, #1.50000000
                	fmov	d1, #0.25000000
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	fmov	d1, #1.75000000
                	fcmp	d0, d1
@@ -95,9 +95,9 @@ Disassembly of section .text:
                	mov	x0, #0xe                // =14
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
                	adrp	x16, <page>
                	ldr	d0, [x16]
+               	mov	x0, #0x1                // =1
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16]

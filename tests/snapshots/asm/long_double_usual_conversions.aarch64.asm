@@ -264,7 +264,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
                	fmov	d0, #3.25000000
                	fmov	d1, #1.00000000
                	sub	x7, x29, #0x10
@@ -272,6 +271,7 @@ Disassembly of section .text:
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
+               	mov	x0, #0x1                // =1
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	add	x16, sp, #0x50
@@ -280,13 +280,13 @@ Disassembly of section .text:
                	fmov	d0, #3.25000000
                	fcmp	d1, d0
                	b.ne	<addr>
-               	mov	x0, #0x0                // =0
                	fmov	d1, #1.00000000
                	sub	x7, x29, #0x10
                	add	x16, sp, #0x80
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	stur	q0, [x29, #-0x40]
                	add	x16, sp, #0x50

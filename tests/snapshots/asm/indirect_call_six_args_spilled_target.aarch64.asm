@@ -31,22 +31,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x0, x29, #0x50
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	stur	x1, [x29, #-0x50]
-               	sub	x2, x29, #0x40
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	stur	x0, [x29, #-0x50]
+               	sub	x0, x29, #0x40
                	mov	x1, #0x3                // =3
                	stur	x1, [x29, #-0x30]
                	sub	x4, x29, #0x20
                	mov	x1, #0x7                // =7
                	stur	x1, [x29, #-0x10]
+               	stur	wzr, [x29, #-0x48]
+               	add	x2, x0, #0x10
+               	add	x4, x4, #0x10
+               	sub	x0, x29, #0x50
+               	sub	x1, x29, #0x48
                	mov	x3, #0x5                // =5
                	mov	x5, #0x9                // =9
-               	stur	wzr, [x29, #-0x48]
-               	sub	x1, x29, #0x48
-               	add	x2, x2, #0x10
-               	add	x4, x4, #0x10
                	bl	<addr>
                	ldursw	x1, [x29, #-0x48]
                	add	x0, x0, x1

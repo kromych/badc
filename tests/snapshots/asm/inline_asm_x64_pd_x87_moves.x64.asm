@@ -148,8 +148,8 @@ Disassembly of section .text:
                	ucomisd	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rdi
                	leaq	<rip>, %rsi # <addr>
+               	leaq	-0x10(%rbp), %rdi
                	movl	$0xa, %edx
                	callq	<addr>
                	movslq	%eax, %rax

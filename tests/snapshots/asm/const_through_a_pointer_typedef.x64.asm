@@ -65,13 +65,13 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbx
                	retq
-               	movl	$0x1, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x1, %edi
                	callq	*%rax
                	cmpl	$0x3, %eax
                	jne	<addr>
-               	movl	$0x2, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x2, %edi
                	callq	*%rax
                	cmpl	$0x4, %eax
                	jne	<addr>

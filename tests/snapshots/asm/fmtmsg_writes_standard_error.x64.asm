@@ -52,39 +52,39 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	callq	<addr>
                	movq	%rax, %r12
-               	movl	$0x2, %esi
                	movq	%rbx, %rdi
+               	movl	$0x2, %esi
                	callq	<addr>
-               	movl	$0x14a, %edi            # imm = 0x14A
                	leaq	<rip>, %rsi
-               	movl	$0x2, %edx
                	leaq	<rip>, %rcx
                	leaq	<rip>, %r8
                	leaq	<rip>, %r9
+               	movl	$0x14a, %edi            # imm = 0x14A
+               	movl	$0x2, %edx
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
+               	leaq	<rip>, %rcx
                	movl	$0x100, %edi            # imm = 0x100
                	xorl	%esi, %esi
                	movl	$0x4, %edx
-               	leaq	<rip>, %rcx
-               	movq	%rsi, %r8
-               	movq	%rsi, %r9
+               	xorl	%r8d, %r8d
+               	xorl	%r9d, %r9d
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x10(%rsp)
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rdi
                	callq	<addr>
+               	movq	%r12, %rdi
                	movl	$0x2, %esi
-               	movq	%r12, %rdi
                	callq	<addr>
                	movq	%r12, %rdi
                	callq	<addr>
+               	movq	%rbx, %rdi
                	leaq	0x40(%rsp), %rsi
                	movl	$0xff, %edx
                	xorl	%ecx, %ecx
-               	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r12
                	movq	%rbx, %rdi

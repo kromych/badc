@@ -188,15 +188,14 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	shlq	$0x3, %rcx
                	leaq	(%rax,%rcx), %rdi
-               	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
+               	xorl	%esi, %esi
+               	xorl	%ecx, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	incq	%rbx
-               	nopw	(%rax,%rax)
                	cmpl	$0x8, %ebx
                	jl	<addr>
                	xorl	%ebx, %ebx
@@ -207,6 +206,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	incq	%rbx
+               	nopl	(%rax,%rax)
                	cmpl	$0x8, %ebx
                	jl	<addr>
                	movl	<rip>, %eax # <addr>
@@ -320,12 +320,12 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	shlq	$0x3, %rcx
                	leaq	(%rax,%rcx), %rdi
-               	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	leaq	<rip>, %rax # <addr>
                	movq	%rbx, %rcx
                	shlq	$0x2, %rcx
                	addq	%rax, %rcx
+               	xorl	%esi, %esi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -340,7 +340,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	nopw	%cs:(%rax,%rax)
                	cmpq	$0x0, 0x18(%rsp)
                	jne	<addr>
                	incq	%rbx
@@ -373,10 +372,10 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x60, %rsp
                	retq
+               	leaq	-<rip>, %rdx # <addr>
                	leaq	0x20(%rsp), %rdi
                	xorl	%esi, %esi
-               	leaq	-<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -385,8 +384,8 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x60, %rsp
                	retq
-               	xorl	%esi, %esi
                	movq	0x20(%rsp), %rdi
+               	xorl	%esi, %esi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -402,10 +401,10 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x60, %rsp
                	retq
-               	leaq	0x20(%rsp), %rdi
-               	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	leaq	<rip>, %rcx # <addr>
+               	leaq	0x20(%rsp), %rdi
+               	xorl	%esi, %esi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -414,8 +413,8 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x60, %rsp
                	retq
-               	xorl	%esi, %esi
                	movq	0x20(%rsp), %rdi
+               	xorl	%esi, %esi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -431,10 +430,10 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x60, %rsp
                	retq
-               	leaq	0x20(%rsp), %rdi
-               	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	leaq	<rip>, %rcx # <addr>
+               	leaq	0x20(%rsp), %rdi
+               	xorl	%esi, %esi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -473,8 +472,8 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
-               	xorl	%esi, %esi
                	movq	0x20(%rsp), %rdi
+               	xorl	%esi, %esi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

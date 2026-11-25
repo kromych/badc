@@ -37,9 +37,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
+               	mov	x0, x20
                	mov	x2, #0x10               // =16
                	mov	x3, #0x0                // =0
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x0, #0x10
                	b.eq	<addr>
@@ -49,12 +49,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x20, [sp], #0x70
                	ret
-               	sub	x1, x29, #0x28
-               	mov	x3, #0x0                // =0
                	stur	xzr, [x29, #-0x28]
                	stur	xzr, [x29, #-0x20]
-               	mov	x2, #0x10               // =16
                	mov	x0, x20
+               	sub	x1, x29, #0x28
+               	mov	x2, #0x10               // =16
+               	mov	x3, #0x0                // =0
                	bl	<addr>
                	cmp	x0, #0x10
                	b.eq	<addr>
@@ -81,10 +81,10 @@ Disassembly of section .text:
                	ldr	x4, [x0, #0xa8]
                	ldr	x17, [x0, #0x88]
                	str	x17, [sp, #0x18]
+               	mov	x0, x20
                	sub	x1, x29, #0x38
                	mov	x2, #0x8                // =8
                	mov	x3, #0x10               // =16
-               	mov	x0, x20
                	blr	x4
                	cmp	x0, #0x8
                	b.eq	<addr>
@@ -94,14 +94,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x20, [sp], #0x70
                	ret
-               	sub	x1, x29, #0x28
                	stur	xzr, [x29, #-0x28]
                	stur	xzr, [x29, #-0x20]
-               	mov	x2, #0x8                // =8
-               	mov	x3, #0x10               // =16
                	ldr	x16, [sp, #0x18]
                	mov	x9, x16
                	mov	x0, x20
+               	sub	x1, x29, #0x28
+               	mov	x2, #0x8                // =8
+               	mov	x3, #0x10               // =16
                	blr	x9
                	cmp	x0, #0x8
                	b.eq	<addr>

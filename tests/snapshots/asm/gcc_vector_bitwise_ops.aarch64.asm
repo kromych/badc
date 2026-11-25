@@ -121,8 +121,8 @@ Disassembly of section .text:
                	eor	v0.16b, v0.16b, v1.16b
                	sub	x7, x29, #0x50
                	stur	q0, [x29, #-0x50]
-               	sub	x0, x29, #0x30
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x30
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x1                // =1
@@ -134,8 +134,8 @@ Disassembly of section .text:
                	and	v0.16b, v0.16b, v1.16b
                	sub	x7, x29, #0x50
                	stur	q0, [x29, #-0x50]
-               	sub	x0, x29, #0x20
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x2                // =2
@@ -147,8 +147,8 @@ Disassembly of section .text:
                	orr	v0.16b, v0.16b, v1.16b
                	sub	x7, x29, #0x50
                	stur	q0, [x29, #-0x50]
-               	sub	x0, x29, #0x10
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x3                // =3
@@ -161,8 +161,8 @@ Disassembly of section .text:
                	eor	v0.16b, v1.16b, v0.16b
                	sub	x7, x29, #0x50
                	stur	q0, [x29, #-0x50]
-               	sub	x0, x29, #0x70
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x70
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x4                // =4
@@ -177,8 +177,8 @@ Disassembly of section .text:
                	ldur	q1, [x29, #-0x60]
                	eor	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x50]
-               	sub	x0, x29, #0x30
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x30
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x5                // =5
@@ -193,8 +193,8 @@ Disassembly of section .text:
                	ldur	q1, [x29, #-0x60]
                	and	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x50]
-               	sub	x0, x29, #0x20
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x6                // =6
@@ -209,8 +209,8 @@ Disassembly of section .text:
                	ldur	q1, [x29, #-0x60]
                	orr	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x50]
-               	sub	x0, x29, #0x10
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x7                // =7
@@ -222,8 +222,8 @@ Disassembly of section .text:
                	eor	v0.16b, v0.16b, v1.16b
                	sub	x7, x29, #0x50
                	stur	q0, [x29, #-0x50]
-               	sub	x0, x29, #0x30
                	ldr	q0, [x7]
+               	sub	x0, x29, #0x30
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x8                // =8

@@ -77,13 +77,13 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	0x10(%rsp), %rdi
                	callq	<addr>
-               	leaq	0x10(%rsp), %rdi
                	movl	0x10(%rsp), %eax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x28, %rsp
                	retq
+               	leaq	0x10(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -115,13 +115,13 @@ Disassembly of section .text:
                	leaq	0x10(%rsp), %rdi
                	movl	$0xc, %esi
                	callq	<addr>
-               	leaq	0x10(%rsp), %rdi
                	movswq	0x14(%rsp), %rax
                	cmpl	$-0x2, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x28, %rsp
                	retq
+               	leaq	0x10(%rsp), %rdi
                	movl	$0xff00ff, %esi         # imm = 0xFF00FF
                	movl	$0x5, %edx
                	callq	<addr>

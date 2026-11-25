@@ -56,8 +56,8 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x7                // =7
                	ldr	x1, [x2, #0x48]
+               	mov	x0, #0x7                // =7
                	blr	x1
                	cmp	w0, #0x16
                	b.eq	<addr>

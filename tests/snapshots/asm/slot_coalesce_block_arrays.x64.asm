@@ -58,8 +58,8 @@ Disassembly of section .text:
                	nop
                	cmpl	%edx, %eax
                	jl	<addr>
-               	leaq	(%rsp), %rdi
                	movq	%rdx, %rsi
+               	leaq	(%rsp), %rdi
                	callq	<addr>
                	addq	$0x208, %rsp            # imm = 0x208
                	retq
@@ -148,29 +148,29 @@ Disassembly of section .text:
                	pushq	%rbx
                	movl	<rip>, %r12d # <addr>
                	movl	$0x3e8, %ebx            # imm = 0x3E8
-               	xorl	%edi, %edi
                	movq	%rbx, %rsi
                	movq	%r12, %rdx
+               	xorl	%edi, %edi
                	callq	<addr>
                	movq	%rax, %r13
+               	movq	%rbx, %rsi
+               	movq	%r12, %rdx
                	movl	$0x1, %edi
-               	movq	%rbx, %rsi
-               	movq	%r12, %rdx
                	callq	<addr>
                	addq	%rax, %r13
+               	movq	%rbx, %rsi
+               	movq	%r12, %rdx
                	movl	$0x2, %edi
-               	movq	%rbx, %rsi
-               	movq	%r12, %rdx
                	callq	<addr>
                	addq	%rax, %r13
+               	movq	%rbx, %rsi
+               	movq	%r12, %rdx
                	movl	$0x3, %edi
-               	movq	%rbx, %rsi
-               	movq	%r12, %rdx
                	callq	<addr>
                	addq	%rax, %r13
-               	movl	$0x4, %edi
                	movq	%rbx, %rsi
                	movq	%r12, %rdx
+               	movl	$0x4, %edi
                	callq	<addr>
                	leaq	(%r13,%rax), %rdi
                	xorl	%eax, %eax

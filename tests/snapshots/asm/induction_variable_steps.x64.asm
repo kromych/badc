@@ -300,8 +300,8 @@ Disassembly of section .text:
                	addq	$0x38, %rsp
                	retq
                	leaq	<rip>, %rdi # <addr>
-               	movl	$0x3f, %esi
                	movl	0x20(%rsp), %edx
+               	movl	$0x3f, %esi
                	callq	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>
@@ -405,8 +405,8 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	xorl	%esi, %esi
                	leaq	<rip>, %rdi # <addr>
+               	xorl	%esi, %esi
                	movl	$0x3f, %edx
                	callq	<addr>
                	xorl	%ecx, %ecx

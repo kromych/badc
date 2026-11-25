@@ -69,8 +69,8 @@ Disassembly of section .text:
                	jae	<addr>
                	andq	$0xff, %rax
                	leaq	<rip>, %rdi
-               	movl	$0x1, %esi
                	movq	%rax, %rdx
+               	movl	$0x1, %esi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax

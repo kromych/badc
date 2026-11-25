@@ -44,22 +44,20 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x2, x7
                	add	x0, x3, #0x1
-               	mov	x5, #0x2                // =2
+               	mov	x8, #0x2                // =2
                	add	x3, x4, x4, lsl #3
                	add	x3, x3, #0x2
                	add	x4, x1, #0x1
-               	mov	x7, #0x5                // =5
+               	mov	x5, #0x5                // =5
                	add	x6, x6, #0x1
-               	mov	x8, #0x6                // =6
+               	mov	x7, #0x6                // =6
                	lsl	x1, x1, #1
                	add	x1, x1, #0x5
                	str	x1, [sp]
                	mov	x16, #0x34ac            // =13484
                	movk	x16, #0x1, lsl #16
                	str	x16, [sp, #0x8]
-               	mov	x1, x5
-               	mov	x5, x7
-               	mov	x7, x8
+               	mov	x1, x8
                	blr	x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

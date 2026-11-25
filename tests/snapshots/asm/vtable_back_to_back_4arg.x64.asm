@@ -50,9 +50,9 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	movl	$0x64, %ecx
                	callq	*%rax
-               	leaq	0x10(%rsp), %rdi
                	movq	0x10(%rsp), %rax
                	movq	0x8(%rax), %rax
+               	leaq	0x10(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax
@@ -70,9 +70,9 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	movl	$0x64, %ecx
                	callq	*%rax
-               	leaq	0x10(%rsp), %rdi
                	movq	0x10(%rsp), %rax
                	movq	0x8(%rax), %rax
+               	leaq	0x10(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax

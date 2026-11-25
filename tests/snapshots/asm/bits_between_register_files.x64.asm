@@ -205,8 +205,8 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x180, %rsp            # imm = 0x180
                	retq
-               	leaq	0x40(%rsp), %rdi
                	movsd	0x18(%rsp), %xmm0
+               	leaq	0x40(%rsp), %rdi
                	callq	<addr>
                	movq	0x40(%rsp), %rax
                	movsd	0x18(%rsp), %xmm14
@@ -311,7 +311,6 @@ Disassembly of section .text:
                	movq	%r10, (%rax)
                	movq	0x48(%rsp), %rcx
                	movq	%rcx, %xmm0
-               	leaq	0x60(%rsp), %rdi
                	movsd	0x70(%rsp), %xmm1
                	addsd	%xmm1, %xmm0
                	movsd	%xmm0, 0x110(%rsp)
@@ -378,6 +377,7 @@ Disassembly of section .text:
                	movq	%r10, (%rax)
                	movsd	0x48(%rsp), %xmm14
                	movsd	%xmm14, 0x10(%rsp)
+               	leaq	0x60(%rsp), %rdi
                	movl	$0x5, %esi
                	callq	<addr>
                	movsd	%xmm0, 0x160(%rsp)

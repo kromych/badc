@@ -177,12 +177,12 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	0x30(%rsp)
-               	movl	$0x2a, %edi
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
+               	movl	$0x2a, %edi
                	callq	<addr>
                	cmpq	$0x2a, %rax
                	je	<addr>
@@ -191,12 +191,12 @@ Disassembly of section .text:
                	addq	$0x48, %rsp
                	retq
                	leaq	0x20(%rsp), %r9
-               	movl	$0x2a, %edi
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
+               	movl	$0x2a, %edi
                	callq	<addr>
                	cmpq	$0x2a, %rax
                	je	<addr>
@@ -255,12 +255,12 @@ Disassembly of section .text:
                	addq	$0x48, %rsp
                	retq
                	leaq	0x10(%rsp), %r9
-               	movl	$0x3, %edi
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
+               	movl	$0x3, %edi
                	callq	<addr>
                	fstpt	0x40(%rsp)
                	fldt	0x40(%rsp)
@@ -273,14 +273,14 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	addq	$0x48, %rsp
                	retq
-               	movl	$0x7, %edi
                	leaq	0x20(%rsp), %r9
-               	movl	$0x3, %esi
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
+               	movl	$0x7, %edi
+               	movl	$0x3, %esi
                	callq	<addr>
                	fstpt	0x40(%rsp)
                	fldt	0x40(%rsp)
@@ -293,14 +293,14 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	addq	$0x48, %rsp
                	retq
-               	leaq	0x40(%rsp), %rdi
                	leaq	0x30(%rsp), %r9
-               	movl	$0x2, %esi
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
+               	leaq	0x40(%rsp), %rdi
+               	movl	$0x2, %esi
                	callq	<addr>
                	fldt	0x40(%rsp)
                	fstpl	-0x8(%rsp)

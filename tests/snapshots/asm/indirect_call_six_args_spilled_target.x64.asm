@@ -38,19 +38,19 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x58, %rsp
-               	leaq	(%rsp), %rdi
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, (%rsp)
                	leaq	0x10(%rsp), %rax
                	movq	$0x3, 0x20(%rsp)
-               	leaq	0x30(%rsp), %r8
+               	leaq	0x30(%rsp), %rdi
                	movq	$0x7, 0x40(%rsp)
+               	movl	$0x0, 0x8(%rsp)
+               	leaq	0x10(%rax), %rdx
+               	leaq	0x10(%rdi), %r8
+               	leaq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
                	movl	$0x5, %ecx
                	movl	$0x9, %r9d
-               	movl	$0x0, 0x8(%rsp)
-               	leaq	0x8(%rsp), %rsi
-               	leaq	0x10(%rax), %rdx
-               	addq	$0x10, %r8
                	callq	<addr>
                	movslq	0x8(%rsp), %rcx
                	addq	%rcx, %rax

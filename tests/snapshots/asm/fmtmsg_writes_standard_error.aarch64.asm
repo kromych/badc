@@ -44,43 +44,43 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	mov	x21, x0
-               	mov	x1, #0x2                // =2
                	mov	x0, x20
+               	mov	x1, #0x2                // =2
                	bl	<addr>
-               	mov	x0, #0x14a              // =330
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x2, #0x2                // =2
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
+               	mov	x0, #0x14a              // =330
+               	mov	x2, #0x2                // =2
                	bl	<addr>
                	mov	x22, x0
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	mov	x0, #0x100              // =256
                	mov	x1, #0x0                // =0
                	mov	x2, #0x4                // =4
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x4, x1
-               	mov	x5, x1
+               	mov	x4, #0x0                // =0
+               	mov	x5, #0x0                // =0
                	bl	<addr>
                	mov	x23, x0
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
                	bl	<addr>
+               	mov	x0, x21
                	mov	x1, #0x2                // =2
-               	mov	x0, x21
                	bl	<addr>
                	mov	x0, x21
                	bl	<addr>
+               	mov	x0, x20
                	sub	x1, x29, #0x100
                	mov	x2, #0xff               // =255
                	mov	x3, #0x0                // =0
-               	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0
                	mov	x0, x20

@@ -135,16 +135,16 @@ Disassembly of section .text:
                	nopw	(%rax,%rax)
                	cmpl	$0x40, %ecx
                	jl	<addr>
+               	movl	0x310(%rsp), %edx
                	leaq	0x10(%rsp), %rdi
                	movl	$0x40, %esi
-               	movl	0x310(%rsp), %edx
                	callq	<addr>
                	cmpl	%ebx, %eax
                	setne	%bl
                	movzbq	%bl, %rbx
+               	movq	0x318(%rsp), %rdx
                	leaq	0x110(%rsp), %rdi
                	movl	$0x40, %esi
-               	movq	0x318(%rsp), %rdx
                	callq	<addr>
                	cmpq	%r12, %rax
                	setne	%al

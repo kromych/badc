@@ -4435,29 +4435,29 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
             .terminator
             .for_each_operand(|v| bump_into(&mut counts, v));
     }
-    // Iterate to fixed point: a pure inst with zero uses is dead, and
-    // so is a phi nothing reads. Worst case O(n^2) but n is typically
-    // small (per-function inst count) and the fixed point converges in
-    // few passes (chain length).
+    // A pure inst with zero uses is dead, and so is a phi nothing reads.
+    // The pure ones die through a worklist: a death decrements its
+    // operands once, and an operand reaching zero joins the list, so each
+    // round is linear in the function's operands. A round of phi deaths
+    // can zero more, which the next round takes.
     let mut killed: Vec<bool> = vec![false; n];
+    let mut dying: Vec<usize> = Vec::new();
     loop {
         let mut changed = false;
-        loop {
-            let mut pure_changed = false;
-            for (i, inst) in func.insts.iter().enumerate() {
-                if killed[i] || !func.is_pure(inst) {
-                    continue;
-                }
-                if counts[i] == 0 {
-                    killed[i] = true;
-                    changed = true;
-                    pure_changed = true;
-                    for_each_operand(inst, |op| decrement(&mut counts, op));
-                }
+        dying.extend((0..n).filter(|&i| counts[i] == 0 && !killed[i]));
+        while let Some(i) = dying.pop() {
+            let inst = &func.insts[i];
+            if killed[i] || counts[i] != 0 || !func.is_pure(inst) {
+                continue;
             }
-            if !pure_changed {
-                break;
-            }
+            killed[i] = true;
+            changed = true;
+            for_each_operand(inst, |op| {
+                decrement(&mut counts, op);
+                if op != NO_VALUE && (op as usize) < n && counts[op as usize] == 0 {
+                    dying.push(op as usize);
+                }
+            });
         }
         // Phi liveness: a phi read by a non-phi instruction or a
         // terminator that still emits is live, and liveness flows

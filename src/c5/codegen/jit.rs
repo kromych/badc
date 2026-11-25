@@ -3227,9 +3227,13 @@ mod jit_impl {
                 }
                 !inside(handler)
             });
-            // Walk back from the filter in place past each of the region's
-            // to the one the earliest replaced.
+            // Reading the filter swaps it out and back, so a region that set
+            // none leaves it alone. Else walk back from the filter in place
+            // past each of the region's to the one the earliest replaced.
             let mut f = FILTERS.lock().unwrap_or_else(|e| e.into_inner());
+            if !f.iter().any(|&(filter, ..)| inside(filter)) {
+                return;
+            }
             let current = unsafe { SetUnhandledExceptionFilter(0) };
             let mut restore = current;
             for &(filter, prior, held) in f.iter().rev() {

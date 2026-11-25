@@ -629,9 +629,13 @@ fn a_programs_exception_handlers_end_with_its_run() {
             SetUnhandledExceptionFilter(pass);\n\
             return 0;\n\
         }\n";
+    // Reading the filter swaps it out and back: no other program runs
+    // between the reads, so they see only this program's effect.
+    let alone = C_LIBRARY_STATE.write().unwrap_or_else(|e| e.into_inner());
     let before = filter();
-    assert_eq!(jit_exit(src, &["jit-handlers"]), 0);
+    assert_eq!(jit_exit_held(src, &["jit-handlers"]), 0);
     assert_eq!(filter(), before, "the program's filter outlived its run");
+    drop(alone);
     // A panic raises an exception, which the process's vectored handlers see.
     let caught = std::panic::catch_unwind(|| panic!("after the run"));
     assert!(caught.is_err());

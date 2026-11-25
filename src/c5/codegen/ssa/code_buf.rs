@@ -36,6 +36,28 @@ struct SpillStore {
     width: SpillWidth,
 }
 
+/// The scratch registers a site's lowering may write, and for each one that
+/// holds a value live across the site, the frame slot `(base, disp)` that
+/// keeps the value while the lowering borrows the register.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ScratchPlan {
+    pub(crate) regs: [u8; 2],
+    pub(crate) keep: [Option<(u8, i32)>; 2],
+}
+
+/// A borrowed scratch register and the slot `(base, disp)` keeping its value.
+pub(crate) type Borrowed = (u8, (u8, i32));
+
+impl ScratchPlan {
+    /// Two registers that hold no value at any site.
+    pub(crate) const fn free(regs: [u8; 2]) -> Self {
+        Self {
+            regs,
+            keep: [None; 2],
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct CodeBuf {
     bytes: Vec<u8>,
@@ -46,6 +68,13 @@ pub(crate) struct CodeBuf {
     inst_start: usize,
     /// The keep slots the lowerings took since [`Self::take_kept`], one bit each.
     kept: u32,
+    /// The current site's plan; the target's default with none set.
+    scratch: Option<ScratchPlan>,
+    /// The borrowed scratch registers whose values the site has stored.
+    scratch_kept: [bool; 2],
+    /// A register was borrowed after a branch of the site, where the store
+    /// keeping its value would not run on every path.
+    late_borrow: bool,
 }
 
 impl CodeBuf {
@@ -87,6 +116,38 @@ impl CodeBuf {
     /// The keep slots taken since the last call, which it clears.
     pub(crate) fn take_kept(&mut self) -> u32 {
         core::mem::take(&mut self.kept)
+    }
+
+    pub(crate) fn scratch_plan(&self) -> Option<ScratchPlan> {
+        self.scratch
+    }
+
+    /// Scratch `k` is taken: true when its register is borrowed and its value
+    /// still has to be stored, which must precede any branch of the site.
+    pub(crate) fn take_scratch(&mut self, k: usize) -> bool {
+        if self.scratch.is_none_or(|p| p.keep[k].is_none()) || self.scratch_kept[k] {
+            return false;
+        }
+        self.scratch_kept[k] = true;
+        self.late_borrow |= self.branched;
+        true
+    }
+
+    /// The borrowed scratch registers the site stored, which its end
+    /// reloads, and whether one was borrowed after a branch.
+    pub(crate) fn end_scratch(&mut self) -> ([Option<Borrowed>; 2], bool) {
+        let mut out = [None; 2];
+        for (k, o) in out.iter_mut().enumerate() {
+            if self.scratch_kept[k]
+                && let Some(p) = self.scratch
+            {
+                *o = p.keep[k].map(|slot| (p.regs[k], slot));
+            }
+        }
+        let late = self.late_borrow;
+        self.scratch_kept = [false; 2];
+        self.late_borrow = false;
+        (out, late)
     }
 
     /// The bytes from `start` to the end are a store of register `reg` to

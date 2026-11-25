@@ -16,7 +16,7 @@ pub(super) fn emit_tls_addr(
     tls_total_size: usize,
     frame: Frame,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("TlsAddr: dst not int reg / spill");
     };
     match target {
@@ -125,16 +125,27 @@ pub(super) fn emit_tls_addr(
                 return fail("TlsAddr: offset out of i32 range");
             }
             // PE TLS: the TEB at gs:[0x58], its TLS array indexed by `_tls_index`,
-            // plus the per-variable offset. r10 holds the TEB pointer and `rd` the
-            // index, which is live across one mov only; a spilled result, whose
-            // register is r10, is formed in r11.
-            let rd = if rd == SCRATCH_R10 { SCRATCH_R11 } else { rd };
+            // plus the per-variable offset. Scratch `t` holds the TEB pointer and
+            // `rd` the index, which is live across one mov only; a spilled
+            // result, whose register is scratch 0, is formed in scratch 1.
+            let t = scratch(code, S0);
+            let rd = if rd == t { scratch(code, S1) } else { rd };
             //
-            // mov r10, gs:[0x58]           ; TEB
+            // mov t, gs:[0x58]             ; TEB
             // mov rd_w, [rip+disp32]       ; _tls_index slot (zero-extends to rd)
-            // mov r10, [r10 + rd*8]        ; tls_array[idx]
-            // lea rd, [r10 + offset]
-            code.extend_from_slice(&[0x65, 0x4C, 0x8B, 0x14, 0x25, 0x58, 0, 0, 0]);
+            // mov t, [t + rd*8]            ; tls_array[idx]
+            // lea rd, [t + offset]
+            code.extend_from_slice(&[
+                0x65,
+                0x48 | ((t.0 >> 3) << 2),
+                0x8B,
+                0x04 | ((t.0 & 7) << 3),
+                0x25,
+                0x58,
+                0,
+                0,
+                0,
+            ]);
             // mov rd.lo_dword, [rip+disp32]:
             //   REX.R = (rd >= 8); opcode 8B;
             //   ModR/M mod=00 reg=rd.lo rm=101 (rip-relative);
@@ -152,33 +163,22 @@ pub(super) fn emit_tls_addr(
             tls_index_fixups.push(super::TlsIndexFixup {
                 instr_offset: mov_idx_offset,
             });
-            // mov r10, [r10 + rd*8]:
-            //   REX = 0x4D | (rd.high ? 0x02 : 0)  (W=1, R=1 to
-            //                                       reach r10 dest,
-            //                                       X = rd>=8,
-            //                                       B=1 for r10 base)
-            //   opcode 8B; ModR/M mod=00 reg=010 (r10.lo)
-            //                       rm=100 (SIB);
-            //   SIB scale=11 (*8), index=rd.lo, base=010 (r10.lo).
-            let rex_idx_sib = 0x4D | (if rd.0 >= 8 { 0x02 } else { 0 });
-            code.push(rex_idx_sib);
-            code.push(0x8B);
-            code.push(0x14);
-            code.push(0xC2 | ((rd.0 & 7) << 3));
-            // lea rd, [r10 + disp32]: r10 is the TLS block base, so disp32 is the
+            super::encode::emit_mov_r_sib(code, t, t, rd, 8);
+            // lea rd, [t + disp32]: t is the TLS block base, so disp32 is the
             // variable's offset in the merged block. A cross-unit offset is a 0
             // placeholder, a same-unit one the raw block offset; both record an
             // `elf_tpoff_fixups` entry the linker rebases (Local) or resolves by
             // symbol (Extern).
-            //   REX.W=1, REX.R = (rd >= 8), REX.B=1 (r10 base);
-            //   opcode 8D;
-            //   ModR/M mod=10 (disp32), reg=rd.lo, rm=010 (r10).
+            //   REX.W=1, REX.R = (rd >= 8), REX.B = (t >= 8); opcode 8D;
+            //   ModR/M mod=10 (disp32), reg=rd.lo, rm=t.lo (a SIB for rm=100).
             let extern_sym = extern_tls_names.get(&v).map(|r| r.name.clone());
             let disp: i64 = if extern_sym.is_some() { 0 } else { offset };
-            let rex_lea = 0x49 | (if rd.0 >= 8 { 0x04 } else { 0 });
-            code.push(rex_lea);
+            code.push(0x48 | ((rd.0 >> 3) << 2) | (t.0 >> 3));
             code.push(0x8D);
-            code.push(0x82 | ((rd.0 & 7) << 3));
+            code.push(0x80 | ((rd.0 & 7) << 3) | (t.0 & 7));
+            if t.0 & 7 == 4 {
+                code.push(0x24);
+            }
             let imm_offset = code.len();
             code.extend_from_slice(&(disp as i32).to_le_bytes());
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
@@ -356,7 +356,8 @@ fn emit_load_fp_mem(
     // `movss` / `movsd` it replaces does.
     if let Some(a) = bound {
         let width = if matches!(kind, LoadKind::F32) { 4 } else { 8 };
-        let acc = emit_narrow_compose(code, frame, base, disp, width, a, &[]);
+        let acc = scratch(code, S1);
+        emit_narrow_compose(code, frame, acc, base, disp, width, a, &[]);
         super::encode::emit_movq_xmm_r(code, dd, acc);
         if matches!(kind, LoadKind::F32) && !keep_f32 {
             emit_cvtss2sd(code, dd, dd);
@@ -455,8 +456,9 @@ fn emit_store_fp_mem(
         }
     };
     let narrowed = |code: &mut CodeBuf, src: Reg, width: u32, a: u32| {
-        super::encode::emit_movq_r_xmm(code, SCRATCH_R11, src);
-        emit_narrow_store(code, frame, SCRATCH_R11, (base, disp), width, a);
+        let t = scratch(code, S1);
+        super::encode::emit_movq_r_xmm(code, t, src);
+        emit_narrow_store(code, frame, t, (base, disp), width, a);
     };
     if matches!(kind, StoreKind::F32) {
         let src = if value_is_f32 {
@@ -545,7 +547,7 @@ pub(super) fn emit_load_local(
             "LoadLocal",
         );
     }
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("LoadLocal: dst not int reg / spill");
     };
     emit_load_kind_mem(code, kind, rd, base, disp, None, hi);
@@ -622,14 +624,13 @@ pub(super) fn emit_store_local(
         );
     }
     // c5 spills an FP-typed accumulator through the store-local path, so an
-    // FpReg value bridges through `movq r, xmm` into r10, which holds
-    // nothing live here.
+    // FpReg value bridges through `movq r, xmm` into scratch 0.
     let rv = if let Place::FpReg(xr) = value_place {
-        let scratch = SCRATCH_R10;
-        super::encode::emit_movq_r_xmm(code, scratch, Reg(xr));
-        scratch
+        let t = scratch(code, S0);
+        super::encode::emit_movq_r_xmm(code, t, Reg(xr));
+        t
     } else {
-        match materialize_int(code, value_place, SCRATCH_R10, frame) {
+        match materialize_int(code, value_place, S0, frame) {
             Some(r) => r,
             None => return fail("StoreLocal: value not int reg / spill"),
         }
@@ -752,7 +753,7 @@ pub(super) fn emit_load_indexed(
     ) else {
         return fail("LoadIndexed: base / index not int reg / spill");
     };
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("LoadIndexed: dst not int reg / spill");
     };
     let (mnem, widths) = match kind {
@@ -782,7 +783,7 @@ pub(super) fn emit_load_indexed(
 
 /// The base and index registers and the displacement of an indexed access:
 /// the frame register and the object's offset for a frame object's address,
-/// else both operands, a spilled one loaded into r10 or r11.
+/// else both operands, a spilled one loaded into a scratch of the site.
 pub(super) fn indexed_operands(
     code: &mut CodeBuf,
     (base, index): (Place, Place),
@@ -790,7 +791,7 @@ pub(super) fn indexed_operands(
     frame_base: Option<(Reg, i32)>,
 ) -> Option<(Reg, Reg, i32)> {
     match frame_base {
-        Some((fb, disp)) => Some((fb, materialize_int(code, index, SCRATCH_R10, frame)?, disp)),
+        Some((fb, disp)) => Some((fb, materialize_int(code, index, S0, frame)?, disp)),
         None => {
             let regs = materialize_int_operands_distinct(code, &[base, index], frame)?;
             Some((regs[0], regs[1], 0))
@@ -878,23 +879,26 @@ pub(super) fn emit_store_indexed(
     ) else {
         return fail("StoreIndexed: base / index not int reg / spill");
     };
-    // When r10 and r11 both hold the spilled base and index, the effective
-    // address is precomputed into r10 and r11 receives the value.
+    // When both scratch registers hold the spilled base and index, the
+    // effective address is precomputed into scratch 0 and scratch 1 receives
+    // the value.
     let fp_value = matches!(value_place, Place::FpReg(_)) && matches!(kind, StoreKind::I64);
-    let free = [SCRATCH_R10, SCRATCH_R11]
-        .into_iter()
-        .find(|s| s.0 != rbase.0 && s.0 != rindex.0);
+    let free = [S0, S1].into_iter().find(|&s| {
+        let r = scratch_reg(code, s);
+        r != rbase && r != rindex
+    });
     let mut precomputed_addr: Option<Reg> = None;
     let rv = if fp_value {
         let Place::FpReg(xr) = value_place else {
             unreachable!()
         };
         let target = match free {
-            Some(s) => s,
+            Some(s) => scratch(code, s),
             None => {
-                super::encode::emit_lea_sib_disp(code, SCRATCH_R10, (rbase, rindex, scale, disp));
-                precomputed_addr = Some(SCRATCH_R10);
-                SCRATCH_R11
+                let a = scratch(code, S0);
+                super::encode::emit_lea_sib_disp(code, a, (rbase, rindex, scale, disp));
+                precomputed_addr = Some(a);
+                scratch(code, S1)
             }
         };
         super::encode::emit_movq_r_xmm(code, target, Reg(xr));
@@ -908,9 +912,10 @@ pub(super) fn emit_store_indexed(
                 None => return fail("StoreIndexed: value not int reg / spill"),
             },
             None => {
-                super::encode::emit_lea_sib_disp(code, SCRATCH_R10, (rbase, rindex, scale, disp));
-                precomputed_addr = Some(SCRATCH_R10);
-                match materialize_int(code, value_place, SCRATCH_R11, frame) {
+                let a = scratch(code, S0);
+                super::encode::emit_lea_sib_disp(code, a, (rbase, rindex, scale, disp));
+                precomputed_addr = Some(a);
+                match materialize_int(code, value_place, S1, frame) {
                     Some(r) => r,
                     None => return fail("StoreIndexed: value not int reg / spill"),
                 }
@@ -969,8 +974,7 @@ pub(super) fn emit_zero_test_of_load(code: &mut CodeBuf, inst: &Inst, fcx: &FnCt
         Inst::Load {
             addr, disp, kind, ..
         } => {
-            let Some(base) = materialize_int(code, place_of(alloc, *addr), SCRATCH_R10, frame)
-            else {
+            let Some(base) = materialize_int(code, place_of(alloc, *addr), S0, frame) else {
                 return fail("Load: addr Place not int reg / spill");
             };
             super::encode::emit_mi(
@@ -1065,8 +1069,7 @@ pub(super) fn emit_store_of_imm(
         Inst::Store {
             addr, disp, align, ..
         } => {
-            let Some(base) = materialize_int(code, place_of(alloc, *addr), SCRATCH_R10, frame)
-            else {
+            let Some(base) = materialize_int(code, place_of(alloc, *addr), S0, frame) else {
                 return fail("Store: addr Place not int reg / spill");
             };
             match narrow_bound(*align, abi) {
@@ -1075,8 +1078,7 @@ pub(super) fn emit_store_of_imm(
             }
         }
         Inst::SegStore { addr, seg, .. } => {
-            let Some(base) = materialize_int(code, place_of(alloc, *addr), SCRATCH_R10, frame)
-            else {
+            let Some(base) = materialize_int(code, place_of(alloc, *addr), S0, frame) else {
                 return fail("SegStore: addr Place not int reg / spill");
             };
             code.extend(seg_prefix(*seg));
@@ -1174,7 +1176,7 @@ pub(super) fn emit_abs_indexed(
         },
         None => return fail("indexed access: absolute base not a data address"),
     };
-    let Some(ri) = materialize_int(code, place_of(alloc, index), SCRATCH_R10, frame) else {
+    let Some(ri) = materialize_int(code, place_of(alloc, index), S0, frame) else {
         return fail("indexed access: index not int reg / spill");
     };
     let marked = |set: &[bool]| set.get(v as usize).copied().unwrap_or(false);
@@ -1187,7 +1189,7 @@ pub(super) fn emit_abs_indexed(
     } else {
         match inst {
             Inst::LoadIndexed { kind, .. } => {
-                let Some(rd) = int_or_spill_dst(dst) else {
+                let Some(rd) = int_or_spill_dst(code, dst) else {
                     return fail("LoadIndexed: dst not int reg / spill");
                 };
                 let hi = !alloc.high_dead(v);
@@ -1197,13 +1199,14 @@ pub(super) fn emit_abs_indexed(
                 field
             }
             Inst::StoreIndexed { value, kind, .. } => {
-                // r11 is free: the index took r10 at most.
+                // Scratch 1 is free: the index took scratch 0 at most.
                 let rv = match place_of(alloc, *value) {
                     Place::FpReg(x) if *kind == StoreKind::I64 => {
-                        super::encode::emit_movq_r_xmm(code, SCRATCH_R11, Reg(x));
-                        SCRATCH_R11
+                        let t = scratch(code, S1);
+                        super::encode::emit_movq_r_xmm(code, t, Reg(x));
+                        t
                     }
-                    p => match materialize_int(code, p, SCRATCH_R11, frame) {
+                    p => match materialize_int(code, p, S1, frame) {
                         Some(r) => r,
                         None => return fail("StoreIndexed: value not int reg / spill"),
                     },
@@ -1284,7 +1287,7 @@ pub(super) fn emit_pc_rel(
             fp_spill_dst_to_slot(code, dst, dd, frame);
         }
         Inst::Load { kind, .. } => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("Load: dst not int reg / spill");
             };
             let hi = !alloc.high_dead(v);
@@ -1314,8 +1317,7 @@ pub(super) fn emit_pc_rel(
             mirror_fp_dst(code, dst, dn, frame);
         }
         Inst::Store { value, kind, .. } => {
-            let Some(rs) = materialize_int(code, place_of(alloc, *value), SCRATCH_R11, frame)
-            else {
+            let Some(rs) = materialize_int(code, place_of(alloc, *value), S1, frame) else {
                 return fail("Store: value Place not int reg / spill");
             };
             let width = int_store_width(*kind) as u8;
@@ -1343,10 +1345,10 @@ pub(super) fn emit_load(
 ) -> Emit {
     let addr_place = place_of(alloc, addr);
     // Spill-tolerant base materialization: load a spilled address
-    // into r10 first, write into rd next, then spill rd to its
+    // into scratch 0 first, write into rd next, then spill rd to its
     // slot if the allocator wants it parked there. Matches the
     // aarch64 module's primary-scratch shape.
-    let Some(base) = materialize_int(code, addr_place, SCRATCH_R10, frame) else {
+    let Some(base) = materialize_int(code, addr_place, S0, frame) else {
         return fail("Load: addr Place not int reg / spill");
     };
     if is_fp_load(kind) {
@@ -1354,11 +1356,14 @@ pub(super) fn emit_load(
             code, dst, kind, keep_f32, base, disp, seg, frame, bound, "Load",
         );
     }
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Load: dst not int reg / spill");
     };
     match bound {
-        Some(a) => emit_narrow_load(code, frame, rd, (base, disp), kind, a),
+        Some(a) => {
+            let acc = scratch(code, S1);
+            emit_narrow_load(code, frame, acc, rd, (base, disp), kind, a);
+        }
         None => emit_load_kind_mem(code, kind, rd, base, disp, seg, hi),
     }
     spill_dst_to_slot(code, dst, rd, frame);
@@ -1380,10 +1385,8 @@ pub(super) fn emit_store(
 ) -> Emit {
     let addr_place = place_of(alloc, addr);
     let value_place = place_of(alloc, value);
-    // r10 for a spilled address, r11 for a spilled value: both are reserved
-    // outside the allocator banks and disjoint.
-    let addr_scratch = SCRATCH_R10;
-    let Some(base) = materialize_int(code, addr_place, addr_scratch, frame) else {
+    // Scratch 0 for a spilled address, scratch 1 for a spilled value.
+    let Some(base) = materialize_int(code, addr_place, S0, frame) else {
         return fail("Store: addr Place not int reg / spill");
     };
     if is_fp_store(kind) {
@@ -1401,14 +1404,8 @@ pub(super) fn emit_store(
             "Store",
         );
     }
-    // The value scratch must differ from `base` and hold no live value:
-    // r11, reserved outside both allocator banks, is never `base` (an
-    // allocated register or r10). A value already in a register needs none.
-    let value_scratch = match value_place {
-        Place::IntReg(r) => Reg(r),
-        _ => SCRATCH_R11,
-    };
-    let Some(rs) = materialize_int(code, value_place, value_scratch, frame) else {
+    // A spilled value loads into scratch 1, which is never `base`.
+    let Some(rs) = materialize_int(code, value_place, S1, frame) else {
         return fail("Store: value Place not int reg / spill");
     };
     match bound {
@@ -1433,7 +1430,7 @@ pub(super) fn emit_imm_data(
     data_fixups: &mut Vec<DataFixup>,
     frame: Frame,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("ImmData: dst not int reg / spill");
     };
     let instr_offset = code.len();
@@ -1457,7 +1454,7 @@ pub(super) fn emit_imm_code(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     frame: Frame,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("ImmCode: dst not int reg / spill");
     };
     let instr_offset = code.len();
@@ -1479,7 +1476,7 @@ pub(super) fn emit_imm_ext_code(
     imports: &super::ResolvedImports,
     frame: Frame,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("ImmExtCode: dst not int reg / spill");
     };
     let Some(import_index) = imports.index_of_binding(binding_idx) else {
@@ -1831,39 +1828,39 @@ fn int_store_width(kind: StoreKind) -> u32 {
 }
 
 /// Compose `width` bytes at `[base + disp]`, whose address is proven
-/// only `align`-aligned, into SCRATCH_R11 and return it. The caller
-/// must not have `base` in r11.
+/// only `align`-aligned, into `acc`, which is not `base`.
+#[allow(clippy::too_many_arguments)]
 fn emit_narrow_compose(
     code: &mut CodeBuf,
     frame: Frame,
+    acc: Reg,
     base: Reg,
     disp: i32,
     width: u32,
     align: u32,
     avoid: &[u8],
-) -> Reg {
-    let acc = SCRATCH_R11;
+) {
     let mut blocked = alloc::vec![base.0, acc.0];
     blocked.extend_from_slice(avoid);
     let tmp = narrow_borrow(&blocked);
     super::save_across(code, frame, tmp, super::keep::NARROW);
     emit_agg_load_int(code, acc, base, disp, width, align, true, tmp);
     super::restore_across(code, frame, tmp, super::keep::NARROW);
-    acc
 }
 
-/// Lower an integer load bounded by `align` into `rd`, sign-extending
-/// the composed value when the kind is signed.
+/// Lower an integer load bounded by `align` into `rd`, composed in `acc`,
+/// sign-extending the composed value when the kind is signed.
 fn emit_narrow_load(
     code: &mut CodeBuf,
     frame: Frame,
+    acc: Reg,
     rd: Reg,
     (base, disp): (Reg, i32),
     kind: LoadKind,
     align: u32,
 ) {
     let (width, signed) = int_load_shape(kind);
-    let acc = emit_narrow_compose(code, frame, base, disp, width, align, &[rd.0]);
+    emit_narrow_compose(code, frame, acc, base, disp, width, align, &[rd.0]);
     match (signed, width) {
         (true, 4) => super::encode::emit_movsxd_r_r(code, rd, acc),
         (true, 2) => super::encode::emit_movsx_r_r16(code, rd, acc),

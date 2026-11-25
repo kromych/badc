@@ -568,8 +568,8 @@ mod mul_add_tests {
             false,
         );
         let (product, _) = imul_regs(&code);
-        assert_eq!(product, SCRATCH_R11.0, "product in r11: {code:02x?}");
-        assert_eq!(alu_regs(&code, 0x29), (SCRATCH_R11.0, 3), "sub rd, r11");
+        assert_eq!(product, Reg::R11.0, "product in r11: {code:02x?}");
+        assert_eq!(alu_regs(&code, 0x29), (Reg::R11.0, 3), "sub rd, r11");
     }
 
     /// The add form with a spilled destination multiplies into the
@@ -604,10 +604,10 @@ mod mul_add_tests {
             false,
         );
         let (product, _) = imul_regs(&code);
-        assert_eq!(product, SCRATCH_R11.0, "product in r11: {code:02x?}");
+        assert_eq!(product, Reg::R11.0, "product in r11: {code:02x?}");
         assert_eq!(
             alu_regs(&code, 0x29),
-            (SCRATCH_R11.0, SCRATCH_R10.0),
+            (Reg::R11.0, Reg::R10.0),
             "sub r10, r11: {code:02x?}",
         );
     }

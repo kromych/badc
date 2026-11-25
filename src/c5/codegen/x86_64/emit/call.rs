@@ -94,7 +94,8 @@ fn expand_parts(
     Ok(Some((out, values, classes)))
 }
 
-/// Tags r10 among the xmm numbers of an FP argument parallel copy.
+/// Tags the GPR scratch among the xmm numbers of an FP argument parallel
+/// copy.
 const GPR_SCRATCH_MARK: u8 = 0x80;
 
 /// One call's argument marshalling: the plan and the operands it reads.
@@ -156,9 +157,11 @@ impl Marshal<'_> {
     /// Read `args[i]` into an integer register: its own when it holds one,
     /// else `scratch`, through the rsp shift the plan's outgoing area
     /// produced.
-    fn arg_int(&self, code: &mut CodeBuf, i: usize, scratch: Reg) -> Option<Reg> {
+    fn arg_int(&self, code: &mut CodeBuf, i: usize, stage: impl Into<Stage>) -> Option<Reg> {
+        let stage = stage.into();
         // A constant the allocator left to the call (`Allocation::stack_imm`).
         if let Some(&k) = self.alloc.stack_imm.get(&self.args[i]) {
+            let scratch = stage.reg(code);
             emit_mov_r_imm64(code, scratch, k);
             return Some(scratch);
         }
@@ -170,13 +173,14 @@ impl Marshal<'_> {
                 super::ssa::emit_common::c5_slot_to_fp_offset(off, 16, self.frame.locals_shift());
             let disp = i32::try_from(fp_off + i64::from(disp)).ok()?;
             let (base, disp) = self.frame.fp_addr(disp);
+            let scratch = stage.reg(code);
             emit_load_kind_mem(code, kind, scratch, base, disp, None, true);
             return Some(scratch);
         }
         materialize_int_shifted(
             code,
             self.arg_place(i),
-            scratch,
+            stage,
             self.frame,
             self.plan.scratch_bytes,
         )
@@ -205,7 +209,7 @@ impl Marshal<'_> {
                     super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, off as i32, k);
                     continue;
                 }
-                let Some(src) = self.arg_int(code, i, SCRATCH_R10) else {
+                let Some(src) = self.arg_int(code, i, S0) else {
                     return self.fail("stack arg not in int reg / spill");
                 };
                 emit_mov_mem_r(code, Reg::RSP, off as i32, src);
@@ -222,7 +226,8 @@ impl Marshal<'_> {
             let super::ArgPlacement::StructStack { off, size, align } = placement else {
                 continue;
             };
-            if self.arg_into(code, i, SCRATCH_R10).is_err() {
+            let (base, t) = (scratch(code, S0), scratch(code, S1));
+            if self.arg_into(code, i, base).is_err() {
                 return self.fail("by-stack aggregate base not in int reg / spill");
             }
             // The outgoing slot is 8-aligned (System V AMD64 3.2.3); the
@@ -231,13 +236,13 @@ impl Marshal<'_> {
             let words = size / unit;
             for w in 0..words {
                 let o = (w * unit) as i32;
-                emit_load_unit(code, unit, SCRATCH_R11, SCRATCH_R10, o);
-                emit_store_unit(code, unit, Reg::RSP, off as i32 + o, SCRATCH_R11);
+                emit_load_unit(code, unit, t, base, o);
+                emit_store_unit(code, unit, Reg::RSP, off as i32 + o, t);
             }
             for b in (words * unit)..size {
                 let o = b as i32;
-                super::encode::emit_movzx_r_mem8(code, SCRATCH_R11, SCRATCH_R10, o);
-                super::encode::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
+                super::encode::emit_movzx_r_mem8(code, t, base, o);
+                super::encode::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, t);
             }
         }
         Ok(())
@@ -245,7 +250,8 @@ impl Marshal<'_> {
 
     /// FP register placements: the xmm-to-xmm moves as a parallel copy first,
     /// so every xmm source is consumed before a spilled or integer source
-    /// lands in its target xmm; a cycle goes through a free operand scratch, else r10.
+    /// lands in its target xmm; a cycle goes through a free operand scratch,
+    /// else the GPR scratch 0.
     fn fp_args(&self, code: &mut CodeBuf) -> Emit {
         let mut fp_moves: Vec<(u8, u8)> = Vec::new();
         let mut targets = 0u32;
@@ -259,22 +265,25 @@ impl Marshal<'_> {
                 }
             }
         }
-        let scratch = [1, 0]
+        let fp_free = [1, 0]
             .map(|i| self.frame.fp_scratch[i])
             .into_iter()
             .find(|&r| r != super::ssa::reg_alloc::NO_FP_SCRATCH && targets & (1 << r) == 0);
-        match scratch {
+        match fp_free {
             Some(r) => schedule_xmm_reg_moves(code, &mut fp_moves, Reg(r)),
-            None => super::ssa::emit_common::schedule_reg_moves_via_scratch(
-                code,
-                &mut fp_moves,
-                SCRATCH_R10.0 | GPR_SCRATCH_MARK,
-                |code, t, s| match (t & GPR_SCRATCH_MARK != 0, s & GPR_SCRATCH_MARK != 0) {
-                    (true, _) => super::encode::emit_movq_r_xmm(code, SCRATCH_R10, Reg(s)),
-                    (_, true) => emit_movq_xmm_r(code, Reg(t), SCRATCH_R10),
-                    _ => emit_movapd_xmm_xmm(code, Reg(t), Reg(s)),
-                },
-            ),
+            None => {
+                let g = scratch(code, S0);
+                super::ssa::emit_common::schedule_reg_moves_via_scratch(
+                    code,
+                    &mut fp_moves,
+                    g.0 | GPR_SCRATCH_MARK,
+                    |code, t, s| match (t & GPR_SCRATCH_MARK != 0, s & GPR_SCRATCH_MARK != 0) {
+                        (true, _) => super::encode::emit_movq_r_xmm(code, g, Reg(s)),
+                        (_, true) => emit_movq_xmm_r(code, Reg(t), g),
+                        _ => emit_movapd_xmm_xmm(code, Reg(t), Reg(s)),
+                    },
+                )
+            }
         }
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             if let super::ArgPlacement::FpReg(r) = placement {
@@ -313,7 +322,8 @@ impl Marshal<'_> {
             if n == 0 || !regs.iter().take(n as usize).all(|c| c.is_fp) {
                 continue;
             }
-            if self.arg_into(code, i, SCRATCH_R10).is_err() {
+            let (base, t) = (scratch(code, S0), scratch(code, S1));
+            if self.arg_into(code, i, base).is_err() {
                 return self.fail("fp aggregate base not in int reg / spill");
             }
             let slots = super::abi_classify::register_slots(self.arg_classes(i));
@@ -322,12 +332,12 @@ impl Marshal<'_> {
                     code,
                     class,
                     Reg(cr.reg),
-                    SCRATCH_R10,
+                    base,
                     off as i32,
                     self.part_width(i, off as i32),
                     align,
                     self.abi.strict_align,
-                    SCRATCH_R11,
+                    t,
                     self.frame,
                 );
             }
@@ -409,6 +419,7 @@ impl Marshal<'_> {
             let Some(base) = agg_base_reg(&regs, n) else {
                 continue;
             };
+            let (s0, s1) = (scratch(code, S0), scratch(code, S1));
             let slots: Vec<(super::ClassReg, i32)> =
                 super::abi_classify::register_slots(self.arg_classes(i))
                     .zip(regs.iter().take(n as usize))
@@ -424,7 +435,7 @@ impl Marshal<'_> {
                         self.part_width(i, off),
                         align,
                         strict,
-                        SCRATCH_R10,
+                        s0,
                         self.frame,
                     );
                 }
@@ -439,7 +450,7 @@ impl Marshal<'_> {
                         self.part_width(i, off),
                         align,
                         strict,
-                        SCRATCH_R10,
+                        s0,
                     );
                 }
             }
@@ -455,17 +466,8 @@ impl Marshal<'_> {
             {
                 emit_load_unit(code, width, Reg(base), Reg(base), disp);
             } else {
-                emit_agg_load_int(
-                    code,
-                    SCRATCH_R10,
-                    Reg(base),
-                    disp,
-                    width,
-                    align,
-                    strict,
-                    SCRATCH_R11,
-                );
-                emit_mov_rr(code, Reg(base), SCRATCH_R10);
+                emit_agg_load_int(code, s0, Reg(base), disp, width, align, strict, s1);
+                emit_mov_rr(code, Reg(base), s0);
             }
         }
     }
@@ -559,7 +561,7 @@ fn xmm0_result_to_dst(code: &mut CodeBuf, dst: Place, frame: Frame) {
 /// Mirror an integer result in `src` into an integer-or-spill `dst`
 /// through the shared working-register pick; no-op for an FP dst.
 pub(super) fn mirror_int_dst(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) {
-    if let Some(rd) = int_or_spill_dst(dst) {
+    if let Some(rd) = int_or_spill_dst(code, dst) {
         if rd.0 != src.0 {
             emit_mov_rr(code, rd, src);
         }
@@ -924,21 +926,22 @@ pub(super) fn emit_call_indirect(
     };
     // The staged target must avoid every register the marshal reads (the
     // argument sources) or writes (every integer register the plan fills
-    // with another value, and the r10 staging scratch).
+    // with another value, and the staging scratch 0).
     let mut blocked: alloc::vec::Vec<Reg> =
         alloc::vec::Vec::with_capacity(args.len() + abi.int_arg_regs.len() + 2);
     blocked.extend(plan.int_regs_besides(args, target).map(Reg));
-    blocked.push(SCRATCH_R10);
+    blocked.push(scratch_reg(code, S0));
     // A System V variadic call sets `al` just before the `call`, so the
     // target must not sit in rax.
     let sysv_variadic_call = callee_variadic && abi.sysv_host_variadic();
     if sysv_variadic_call {
         blocked.push(Reg::RAX);
     }
-    // A target in a register the marshal does not write (r11 copies its
-    // memory arguments) is called where it is.
+    // A target in a register the marshal does not write (scratch 1 copies
+    // its memory arguments) is called where it is.
+    let s1 = scratch_reg(code, S1);
     let in_place = match target_place {
-        Place::IntReg(r) if r != SCRATCH_R11.0 && !blocked.iter().any(|b| b.0 == r) => Some(Reg(r)),
+        Place::IntReg(r) if r != s1.0 && !blocked.iter().any(|b| b.0 == r) => Some(Reg(r)),
         _ => None,
     };
     // An aggregate given as its parts reads them from their places.
@@ -953,22 +956,22 @@ pub(super) fn emit_call_indirect(
     }
     // Otherwise the target pointer moves to a caller-saved scratch before
     // the marshal clobbers it; when every candidate is blocked it spills
-    // to the stack. r11 is the branch register when the marshal leaves it
-    // alone: its memory-argument, aggregate and va_list paths are the only
-    // writers.
-    let r11_free = !callee_variadic
+    // to the stack. Scratch 1 is the branch register when the marshal leaves
+    // it alone: its memory-argument, aggregate and va_list paths are the
+    // only writers.
+    let s1_free = !callee_variadic
         && plan.placements.iter().all(|p| {
             matches!(
                 p,
                 super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
             )
         });
-    let target_scratch = in_place.or_else(|| {
-        let free = |r: Reg| !blocked.iter().any(|b| b.0 == r.0) && !abi.fixed_regs.has_gpr(r.0);
-        (r11_free && free(SCRATCH_R11))
-            .then_some(SCRATCH_R11)
-            .or_else(|| pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs))
-    });
+    let free = |r: Reg| !blocked.iter().any(|b| b.0 == r.0) && !abi.fixed_regs.has_gpr(r.0);
+    let target_scratch = match in_place {
+        Some(r) => Some(r),
+        None if s1_free && free(s1) => Some(scratch(code, S1)),
+        None => pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs),
+    };
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).
@@ -977,9 +980,9 @@ pub(super) fn emit_call_indirect(
     if target_scratch.is_some() || spilled {
         // A free caller-saved register is available: stage the
         // target there, then marshal. The marshal never writes
-        // `target_scratch` (it is neither an arg source nor r10).
-        // A spilled target is otherwise read from its own slot into r10
-        // once the marshal is done with it.
+        // `target_scratch` (it is neither an arg source nor scratch 0).
+        // A spilled target is otherwise read from its own slot into
+        // scratch 0 once the marshal is done with it.
         if let Some(target_scratch) = target_scratch {
             let Some(target_r) = materialize_int(code, target_place, target_scratch, frame) else {
                 return fail("CallIndirect: target not int reg / spill");
@@ -1006,8 +1009,7 @@ pub(super) fn emit_call_indirect(
             Some(r) => r,
             None => {
                 let sp_shift = plan.scratch_bytes;
-                let Some(r) =
-                    materialize_int_shifted(code, target_place, SCRATCH_R10, frame, sp_shift)
+                let Some(r) = materialize_int_shifted(code, target_place, S0, frame, sp_shift)
                 else {
                     return fail("CallIndirect: target not int reg / spill");
                 };
@@ -1029,8 +1031,8 @@ pub(super) fn emit_call_indirect(
         // No register survives the marshal: the register-held target spills
         // to a 16-byte slot
         // above the scratch window (the call site keeps rsp 16-aligned) and
-        // reloads into r10 for the `call`.
-        let Some(target_r) = materialize_int(code, target_place, SCRATCH_R10, frame) else {
+        // reloads into scratch 0 for the `call`.
+        let Some(target_r) = materialize_int(code, target_place, S0, frame) else {
             return fail("CallIndirect: target not int reg / spill");
         };
         // A frame with no pointer keeps rsp: the target waits in a keep slot.
@@ -1048,12 +1050,13 @@ pub(super) fn emit_call_indirect(
                 abi,
                 site,
             )?;
-            emit_mov_r_mem(code, SCRATCH_R10, base, disp);
+            let t = scratch(code, S0);
+            emit_mov_r_mem(code, t, base, disp);
             if sysv_variadic_call {
                 super::encode::emit_mov_al_imm8(code, xmm_used);
             }
             clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
-            emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
+            emit_hardened_call_r(code, t, abi, extern_sites);
             if ends_path {
                 return Ok(());
             }
@@ -1080,12 +1083,13 @@ pub(super) fn emit_call_indirect(
             )?;
             // The target slot sits just above the marshal's scratch
             // window, at [rsp + scratch_bytes] after the second sub.
-            emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, plan.scratch_bytes as i32);
+            let t = scratch(code, S0);
+            emit_mov_r_mem(code, t, Reg::RSP, plan.scratch_bytes as i32);
             if sysv_variadic_call {
                 super::encode::emit_mov_al_imm8(code, xmm_used);
             }
             clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
-            emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
+            emit_hardened_call_r(code, t, abi, extern_sites);
             if ends_path {
                 return Ok(());
             }
@@ -1145,24 +1149,22 @@ pub(super) fn emit_va_arg_sysv(
     }
     let memory = desc.kind == crate::c5::op::VaArgDesc::MEMORY;
     let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT && !memory;
-    // Cursor pointer (struct address) held in r11, outside the
-    // allocator's banks. The result address is computed in r10; both
-    // are disjoint from the allocator-chosen `dst`.
+    // Cursor pointer (struct address) held in scratch 1, the result address
+    // computed in scratch 0; both are disjoint from the allocator-chosen
+    // `dst`, and the sequence branches, so both are taken first.
     let Some(ap_place) = alloc.places.get(args[0] as usize).copied() else {
         return fail("VaArg: &ap value id out of range");
     };
-    let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
+    let (s0, s1) = (scratch(code, S0), scratch(code, S1));
+    let Some(ap) = materialize_int(code, ap_place, s1, frame) else {
         return fail("VaArg: &ap not in int reg / spill");
     };
-    // r11 must hold the struct pointer across the whole sequence; if
-    // `materialize_int` returned an allocator register, move it into r11
-    // so the offset writebacks don't clobber a live value.
-    let ap = if ap.0 != SCRATCH_R11.0 {
-        emit_mov_rr(code, SCRATCH_R11, ap);
-        SCRATCH_R11
-    } else {
-        ap
-    };
+    // Scratch 1 holds the struct pointer across the whole sequence, so the
+    // offset writebacks clobber no live value.
+    if ap != s1 {
+        emit_mov_rr(code, s1, ap);
+    }
+    let ap = s1;
     if desc.kind == VaArgDesc::NONE {
         int_result_to_dst(code, dst, ap, frame);
         return Ok(());
@@ -1176,23 +1178,23 @@ pub(super) fn emit_va_arg_sysv(
     } else {
         (0, 48 - (aligned - 8), aligned)
     };
-    // The sequence touches only r10 / r11 and the in-memory fields, so no
-    // allocated value is clobbered.
+    // The sequence touches only the scratch pair and the in-memory fields,
+    // so no allocated value is clobbered.
     let mut jmp_rel32_at = None;
     if composed {
         let temp = args.get(2).map_or(Place::None, |&t| place_of(alloc, t));
         jmp_rel32_at = Some(emit_va_arg_eightbytes(code, desc, ap, temp, frame)?);
     } else if !memory && (is_fp || desc.size <= 16) {
         // A MEMORY-class argument (3.2.3) is passed on the stack alone.
-        super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
-        // cmp r10d, bound ; jae use_overflow
-        super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
+        super::encode::emit_mov_r32_mem(code, s0, ap, off_disp);
+        // cmp s0d, bound ; jae use_overflow
+        super::encode::emit_ri(code, Mnem::Cmp, 8, s0, bound);
         super::encode::emit_jcc_rel32(code, Cc::Ae, 0);
         let jae_rel32_at = code.len() - 4;
         // --- register-save path ---
-        // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
+        // s0 = offset + reg_save_area (at [ap + 16]) = the argument slot,
         // then bump the offset field in memory by step.
-        super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
+        super::encode::emit_rm(code, Mnem::Add, 8, s0, ap, 16);
         super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
         // jmp done
         super::encode::emit_jmp_rel32(code, 0);
@@ -1203,21 +1205,21 @@ pub(super) fn emit_va_arg_sysv(
     // --- overflow path ---
     // The overflow slot, advanced by the argument's eightbyte span (System V
     // AMD64 3.5.7 rounds each overflow argument up to an eightbyte).
-    emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
+    emit_mov_r_mem(code, s0, ap, 8);
     // 3.5.7: a type aligned above 8 reads the overflow area 16-aligned.
     if desc.align > 8 {
         let align = desc.align as i32;
-        super::encode::emit_ri(code, Mnem::Add, 8, SCRATCH_R10, align - 1);
-        super::encode::emit_ri(code, Mnem::And, 8, SCRATCH_R10, -align);
-        emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
+        super::encode::emit_ri(code, Mnem::Add, 8, s0, align - 1);
+        super::encode::emit_ri(code, Mnem::And, 8, s0, -align);
+        emit_mov_mem_r(code, ap, 8, s0);
     }
     super::encode::emit_mi(code, Mnem::Add, 8, ap, 8, aligned);
-    // --- done: r10 holds the argument address; deliver it to dst. ---
+    // --- done: s0 holds the argument address; deliver it to dst. ---
     if let Some(at) = jmp_rel32_at {
         let rel_to_done = (code.len() - (at + 4)) as i32;
         code[at..at + 4].copy_from_slice(&rel_to_done.to_le_bytes());
     }
-    int_result_to_dst(code, dst, SCRATCH_R10, frame);
+    int_result_to_dst(code, dst, s0, frame);
     Ok(())
 }
 
@@ -1226,7 +1228,7 @@ pub(super) fn emit_va_arg_sysv(
 /// eightbyte's register fits in its save area, else copy each eightbyte from
 /// its slot into `temp` -- an INTEGER one from `gp_offset`, an SSE one and
 /// the SSEUP after it from one 16-byte slot at `fp_offset` -- advance both
-/// offsets and leave `temp` in r10. rax is borrowed around the copy. Returns
+/// offsets and leave `temp` in scratch 0. rax is borrowed around the copy. Returns
 /// the offset of the rel32 of the `jmp` to the join.
 fn emit_va_arg_eightbytes(
     code: &mut CodeBuf,
@@ -1240,10 +1242,11 @@ fn emit_va_arg_eightbytes(
     let count = |class| (0..n).filter(|&k| desc.eightbyte(k) == class).count() as i32;
     let (num_gp, num_fp) = (count(VaArgDesc::EB_INTEGER), count(VaArgDesc::EB_SSE));
     let mut to_overflow = Vec::new();
+    let s0 = scratch(code, S0);
     for (num, off_disp, limit, slot) in [(num_gp, 0, 48, 8), (num_fp, 4, 176, 16)] {
         if num > 0 {
-            super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
-            super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, limit - slot * num);
+            super::encode::emit_mov_r32_mem(code, s0, ap, off_disp);
+            super::encode::emit_ri(code, Mnem::Cmp, 8, s0, limit - slot * num);
             super::encode::emit_jcc_rel32(code, Cc::A, 0);
             to_overflow.push(code.len() - 4);
         }
@@ -1263,14 +1266,14 @@ fn emit_va_arg_eightbytes(
             _ => continue,
         };
         for part in 0..parts {
-            super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
-            super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
-            emit_mov_r_mem(code, SCRATCH_R10, SCRATCH_R10, 8 * part);
-            emit_mov_mem_r(code, base, (8 * (k + part as u32)) as i32, SCRATCH_R10);
+            super::encode::emit_mov_r32_mem(code, s0, ap, off_disp);
+            super::encode::emit_rm(code, Mnem::Add, 8, s0, ap, 16);
+            emit_mov_r_mem(code, s0, s0, 8 * part);
+            emit_mov_mem_r(code, base, (8 * (k + part as u32)) as i32, s0);
         }
         super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
     }
-    emit_mov_rr(code, SCRATCH_R10, base);
+    emit_mov_rr(code, s0, base);
     super::encode::emit_pop_r(code, borrow);
     super::encode::emit_jmp_rel32(code, 0);
     let jmp_at = code.len() - 4;

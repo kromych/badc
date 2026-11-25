@@ -24,7 +24,7 @@ pub(super) fn emit_x86_simd(
     let row = simd::get(op);
     // An operand's value (an address for the 128-bit and pointer operands),
     // in its own register or loaded into `scratch`.
-    let operand = |code: &mut CodeBuf, i: usize, scratch: Reg| -> Option<Reg> {
+    let operand = |code: &mut CodeBuf, i: usize, scratch: Scratch| -> Option<Reg> {
         let place = alloc.places.get(args[i] as usize).copied()?;
         materialize_int(code, place, scratch, frame)
     };
@@ -99,11 +99,11 @@ pub(super) fn emit_x86_simd(
             return fail("x86 simd: a wide form outside the wide lowering");
         }
         Form::Vv | Form::VvI => {
-            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+            let Some(a) = operand(code, 1, S0) else {
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, dst_x, a)?;
-            let Some(b) = operand(code, 2, SCRATCH_R10) else {
+            let Some(b) = operand(code, 2, S0) else {
                 return fail("x86 simd: operand 2 has no place");
             };
             load128(code, src_x, b)?;
@@ -128,7 +128,7 @@ pub(super) fn emit_x86_simd(
             }
         }
         Form::V | Form::VI => {
-            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+            let Some(a) = operand(code, 1, S0) else {
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, src_x, a)?;
@@ -143,14 +143,14 @@ pub(super) fn emit_x86_simd(
             }?;
         }
         Form::Shift => {
-            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+            let Some(a) = operand(code, 1, S0) else {
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, dst_x, a)?;
             match imm {
                 Some(_) => insn(code, row.mnem, &[imm8, xmm(dst_x)]),
                 None => {
-                    let Some(c) = operand(code, 2, SCRATCH_R10) else {
+                    let Some(c) = operand(code, 2, S0) else {
                         return fail("x86 simd: shift count has no place");
                     };
                     super::encode::emit_movq_xmm_r(code, Reg(src_x), c);
@@ -159,23 +159,24 @@ pub(super) fn emit_x86_simd(
             }?;
         }
         Form::Load => {
-            let Some(p) = operand(code, 1, SCRATCH_R10) else {
+            let Some(p) = operand(code, 1, S0) else {
                 return fail("x86 simd: pointer operand has no place");
             };
             load128(code, dst_x, p)?;
         }
         Form::Store => {
-            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+            let Some(a) = operand(code, 1, S0) else {
                 return fail("x86 simd: source operand has no place");
             };
             load128(code, dst_x, a)?;
-            let Some(p) = operand(code, 0, SCRATCH_R10) else {
+            let Some(p) = operand(code, 0, S0) else {
                 return fail("x86 simd: pointer operand has no place");
             };
             return store128(code, p, dst_x);
         }
         Form::ToInt => {
-            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+            let t1 = scratch(code, S1);
+            let Some(a) = operand(code, 1, S0) else {
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, src_x, a)?;
@@ -183,32 +184,33 @@ pub(super) fn emit_x86_simd(
                 8 => AsmRegSize::Quad,
                 _ => AsmRegSize::Long,
             };
-            insn(code, row.mnem, &[xmm(src_x), gpr(SCRATCH_R11, size)])?;
-            let Some(d) = operand(code, 0, SCRATCH_R10) else {
+            insn(code, row.mnem, &[xmm(src_x), gpr(t1, size)])?;
+            let Some(d) = operand(code, 0, S0) else {
                 return fail("x86 simd: destination has no place");
             };
-            return insn(code, "mov", &[gpr(SCRATCH_R11, size), at(d, size)]);
+            return insn(code, "mov", &[gpr(t1, size), at(d, size)]);
         }
         Form::Extract => {
-            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+            let t1 = scratch(code, S1);
+            let Some(a) = operand(code, 1, S0) else {
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, src_x, a)?;
             // `pextrb` and `pextrw` zero-extend into the 32-bit register;
             // `pextrd` writes all 32 bits and `pextrq` all 64.
             let size = int_size(row.int_width.max(4));
-            insn(code, row.mnem, &[imm8, xmm(src_x), gpr(SCRATCH_R11, size)])?;
-            let Some(d) = operand(code, 0, SCRATCH_R10) else {
+            insn(code, row.mnem, &[imm8, xmm(src_x), gpr(t1, size)])?;
+            let Some(d) = operand(code, 0, S0) else {
                 return fail("x86 simd: destination has no place");
             };
-            return insn(code, "mov", &[gpr(SCRATCH_R11, size), at(d, size)]);
+            return insn(code, "mov", &[gpr(t1, size), at(d, size)]);
         }
         Form::Insert => {
-            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+            let Some(a) = operand(code, 1, S0) else {
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, dst_x, a)?;
-            let Some(x) = operand(code, 2, SCRATCH_R10) else {
+            let Some(x) = operand(code, 2, S0) else {
                 return fail("x86 simd: value operand has no place");
             };
             // Every `pinsr` narrower than a quadword reads a 32-bit
@@ -217,53 +219,48 @@ pub(super) fn emit_x86_simd(
             insn(code, row.mnem, &[imm8, gpr(x, size), xmm(dst_x)])?;
         }
         Form::MoveMask => {
-            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+            let t1 = scratch(code, S1);
+            let Some(a) = operand(code, 1, S0) else {
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, src_x, a)?;
-            insn(
-                code,
-                row.mnem,
-                &[xmm(src_x), gpr(SCRATCH_R11, AsmRegSize::Long)],
-            )?;
-            let Some(d) = operand(code, 0, SCRATCH_R10) else {
+            insn(code, row.mnem, &[xmm(src_x), gpr(t1, AsmRegSize::Long)])?;
+            let Some(d) = operand(code, 0, S0) else {
                 return fail("x86 simd: destination has no place");
             };
             return insn(
                 code,
                 "mov",
-                &[gpr(SCRATCH_R11, AsmRegSize::Long), at(d, AsmRegSize::Long)],
+                &[gpr(t1, AsmRegSize::Long), at(d, AsmRegSize::Long)],
             );
         }
         Form::RdRand => {
+            let t0 = scratch(code, S0);
             let size = int_size(row.int_width);
-            let Some(p) = operand(code, 1, SCRATCH_R11) else {
+            let Some(p) = operand(code, 1, S1) else {
                 return fail("x86 simd: pointer operand has no place");
             };
             // `rdrand` sets the carry flag when the value is valid; the
             // stores in between leave the flags alone.
-            insn(code, "rdrand", &[gpr(SCRATCH_R10, size)])?;
-            insn(code, "mov", &[gpr(SCRATCH_R10, size), at(p, size)])?;
-            insn(code, "setc", &[gpr(SCRATCH_R10, AsmRegSize::Byte)])?;
+            insn(code, "rdrand", &[gpr(t0, size)])?;
+            insn(code, "mov", &[gpr(t0, size), at(p, size)])?;
+            insn(code, "setc", &[gpr(t0, AsmRegSize::Byte)])?;
             insn(
                 code,
                 "movzx",
-                &[
-                    gpr(SCRATCH_R10, AsmRegSize::Byte),
-                    gpr(SCRATCH_R10, AsmRegSize::Long),
-                ],
+                &[gpr(t0, AsmRegSize::Byte), gpr(t0, AsmRegSize::Long)],
             )?;
-            let Some(d) = operand(code, 0, SCRATCH_R11) else {
+            let Some(d) = operand(code, 0, S1) else {
                 return fail("x86 simd: destination has no place");
             };
             return insn(
                 code,
                 "mov",
-                &[gpr(SCRATCH_R10, AsmRegSize::Long), at(d, AsmRegSize::Long)],
+                &[gpr(t0, AsmRegSize::Long), at(d, AsmRegSize::Long)],
             );
         }
     }
-    let Some(d) = operand(code, 0, SCRATCH_R10) else {
+    let Some(d) = operand(code, 0, S0) else {
         return fail("x86 simd: destination has no place");
     };
     if row.form.returns_vector() {
@@ -511,7 +508,7 @@ pub(super) fn wide_binary(
 /// spilled operand loaded into an FP scratch. A vector result is formed in
 /// its own register unless that holds the second source, then in a scratch
 /// it is copied from; an integer result goes to its register or through
-/// r11 to its spill slot.
+/// scratch 1 to its spill slot.
 pub(super) fn emit_x86_simd_val(
     code: &mut CodeBuf,
     op: u32,
@@ -581,13 +578,14 @@ pub(super) fn emit_x86_simd_val(
         8 => AsmRegSize::Quad,
         _ => AsmRegSize::Long,
     };
-    // An integer result: formed in its register, or in r11 and spilled.
-    let int_result = |code: &mut Vec<u8>, form: &dyn Fn(&mut Vec<u8>, Reg) -> Emit| match dst {
+    // An integer result: formed in its register, or in scratch 1 and spilled.
+    let int_result = |code: &mut CodeBuf, form: &dyn Fn(&mut Vec<u8>, Reg) -> Emit| match dst {
         Place::IntReg(r) => form(code, Reg(r)),
         Place::Spill(slot) => {
-            form(code, SCRATCH_R11)?;
+            let t = scratch(code, S1);
+            form(code, t)?;
             let (sb, off) = spill_slot_addr(frame, slot);
-            emit_mov_mem_r(code, sb, off, SCRATCH_R11);
+            emit_mov_mem_r(code, sb, off, t);
             Ok(())
         }
         _ => fail("x86 simd: integer result not int reg / spill"),
@@ -653,7 +651,7 @@ pub(super) fn emit_x86_simd_val(
             match imm {
                 Some(_) => insn(code, row.mnem, &[imm8, xmm(w)])?,
                 None => {
-                    let Some(c) = materialize_int(code, place(1), SCRATCH_R10, frame) else {
+                    let Some(c) = materialize_int(code, place(1), S0, frame) else {
                         return fail("x86 simd: shift count has no place");
                     };
                     super::encode::emit_movq_xmm_r(code, Reg(src_x), c);
@@ -665,7 +663,7 @@ pub(super) fn emit_x86_simd_val(
         Form::Insert => {
             let w = work(None);
             into(code, 0, w)?;
-            let Some(x) = materialize_int(code, place(1), SCRATCH_R10, frame) else {
+            let Some(x) = materialize_int(code, place(1), S0, frame) else {
                 return fail("x86 simd: value operand has no place");
             };
             // Every `pinsr` narrower than a quadword reads a 32-bit
@@ -827,7 +825,7 @@ pub(super) fn emit_intrinsic(
         ),
         // rbp less the FrameOffset the unwind record states.
         I::FuncletFrame | I::EstablisherFrame => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("EstablisherFrame: dst not int reg / spill");
             };
             emit_lea_r_mem(code, rd, Reg::RBP, -(frame.saves_top as i32));
@@ -1002,6 +1000,7 @@ fn emit_va_start_sysv(
     frame: Frame,
     abi: super::Abi,
 ) -> Emit {
+    let s0 = scratch(code, S0);
     if args.len() != 2 {
         return fail("VaStart: expected 2 args");
     }
@@ -1016,7 +1015,7 @@ fn emit_va_start_sysv(
         SYSV_GP_SAVE_BYTES + plan.next_fpr.min(8) as u32 * 16
     };
     let ap_place = arg_place(alloc, args, 0, "VaStart: &ap value id out of range")?;
-    let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
+    let Some(ap) = materialize_int(code, ap_place, S1, frame) else {
         return fail("VaStart: &ap not in int reg / spill");
     };
     super::encode::emit_mov_mem32_imm32(code, ap, 0, gp_offset as i32);
@@ -1025,15 +1024,15 @@ fn emit_va_start_sysv(
     // address at [rbp + 16]; the named parameters that overflowed the
     // argument registers occupy the low slots there.
     let named_stack_bytes = plan.stack_bytes.next_multiple_of(8) as i32;
-    emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, 16 + named_stack_bytes);
-    emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
-    emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, frame.va_reg_save_off);
-    emit_mov_mem_r(code, ap, 16, SCRATCH_R10);
+    emit_lea_r_mem(code, s0, Reg::RBP, 16 + named_stack_bytes);
+    emit_mov_mem_r(code, ap, 8, s0);
+    emit_lea_r_mem(code, s0, Reg::RBP, frame.va_reg_save_off);
+    emit_mov_mem_r(code, ap, 16, s0);
     Ok(())
 }
 
 /// System V `va_copy`: the 24-byte `__va_list_tag` copy (ABI 3.5.7),
-/// `args[0]` = &dst, `args[1]` = &src. The pointers ride r10 / r11; the
+/// `args[0]` = &dst, `args[1]` = &src. The pointers ride the scratch pair; the
 /// copied word borrows a pool register around a push / pop pair, the spill
 /// loads running before the push.
 fn emit_va_copy_sysv(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
@@ -1041,11 +1040,11 @@ fn emit_va_copy_sysv(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame
         return fail("VaCopy: expected 2 args");
     }
     let src_place = arg_place(alloc, args, 1, "VaCopy: &src value id out of range")?;
-    let Some(src_p) = materialize_int(code, src_place, SCRATCH_R11, frame) else {
+    let Some(src_p) = materialize_int(code, src_place, S1, frame) else {
         return fail("VaCopy: &src not in int reg / spill");
     };
     let dst_place = arg_place(alloc, args, 0, "VaCopy: &dst value id out of range")?;
-    let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R10, frame) else {
+    let Some(dst_p) = materialize_int(code, dst_place, S0, frame) else {
         return fail("VaCopy: &dst not in int reg / spill");
     };
     let temp = if dst_p.0 != Reg::RAX.0 && src_p.0 != Reg::RAX.0 {
@@ -1073,24 +1072,25 @@ fn emit_va_start_cursor(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s0 = scratch(code, S0);
     if args.len() != 2 {
         return fail("VaStart: expected 2 args");
     }
     let ap_place = arg_place(alloc, args, 0, "VaStart: &ap value id out of range")?;
-    let Some(ap) = materialize_int(code, ap_place, SCRATCH_R11, frame) else {
+    let Some(ap) = materialize_int(code, ap_place, S1, frame) else {
         return fail("VaStart: &ap not in int reg / spill");
     };
     let first = 16 + VA_CURSOR_STRIDE * func.n_params as i32;
-    emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, first);
-    emit_mov_mem_r(code, ap, 0, SCRATCH_R10);
+    emit_lea_r_mem(code, s0, Reg::RBP, first);
+    emit_mov_mem_r(code, ap, 0, s0);
     Ok(())
 }
 
 /// Win64 `va_arg`: returns `*ap`, or the address it holds for a type passed by
 /// reference (`args[1]` describes the type), and advances it by the stride. The cursor,
 /// the loaded value and the advance occupy distinct registers so the
-/// writeback goes through the cursor: the cursor moves to r11 when it
-/// would alias the work register, the advance takes r10.
+/// writeback goes through the cursor: the cursor moves to scratch 1 when it
+/// would alias the work register, the advance takes scratch 0.
 fn emit_va_arg_cursor(
     code: &mut CodeBuf,
     args: &[u32],
@@ -1099,6 +1099,8 @@ fn emit_va_arg_cursor(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s0 = scratch(code, S0);
+    let s1 = scratch(code, S1);
     if args.is_empty() {
         return fail("VaArg: expected at least the ap argument");
     }
@@ -1107,23 +1109,23 @@ fn emit_va_arg_cursor(
         Place::IntReg(r) => {
             let work_aliases = matches!(dst, Place::IntReg(d) if d == r);
             if work_aliases {
-                emit_mov_rr(code, SCRATCH_R11, Reg(r));
-                SCRATCH_R11
+                emit_mov_rr(code, s1, Reg(r));
+                s1
             } else {
                 Reg(r)
             }
         }
         Place::Spill(slot) => {
             let (sb, sp_off) = spill_slot_addr(frame, slot);
-            emit_mov_r_mem(code, SCRATCH_R11, sb, sp_off);
-            SCRATCH_R11
+            emit_mov_r_mem(code, s1, sb, sp_off);
+            s1
         }
         _ => return fail("VaArg: &ap not in int reg / spill"),
     };
-    // The destination register when distinct from the cursor, else r10.
+    // The destination register when distinct from the cursor, else scratch 0.
     let work = match dst {
         Place::IntReg(d) if Reg(d).0 != ap.0 => Reg(d),
-        _ => SCRATCH_R10,
+        _ => s0,
     };
     emit_mov_r_mem(code, work, ap, 0);
     if let Some(Inst::Imm(d)) = args.get(1).and_then(|a| func.insts.get(*a as usize))
@@ -1134,9 +1136,9 @@ fn emit_va_arg_cursor(
         spill_dst_to_slot(code, dst, work, frame);
         return Ok(());
     }
-    let advance = SCRATCH_R10;
+    let advance = s0;
     if advance.0 == work.0 {
-        // Destination spilled: store the result before reusing r10 for
+        // Destination spilled: store the result before reusing scratch 0 for
         // the advance.
         spill_dst_to_slot(code, dst, work, frame);
         emit_lea_r_mem(code, advance, work, VA_CURSOR_STRIDE);
@@ -1150,20 +1152,21 @@ fn emit_va_arg_cursor(
 }
 
 /// Win64 `va_copy(&dst, &src)`: `*dst = *src`. The source value loads into
-/// r10 before the destination pointer materializes, so r11 serves both
-/// pointers in turn.
+/// scratch 0 before the destination pointer materializes, so scratch 1 serves
+/// both pointers in turn.
 fn emit_va_copy_cursor(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
+    let s0 = scratch(code, S0);
     if args.len() != 2 {
         return fail("VaCopy: expected 2 args");
     }
     let dst_place = arg_place(alloc, args, 0, "VaCopy: &dst value id out of range")?;
     let src_place = arg_place(alloc, args, 1, "VaCopy: &src value id out of range")?;
-    let Some(src_p) = materialize_int(code, src_place, SCRATCH_R11, frame) else {
+    let Some(src_p) = materialize_int(code, src_place, S1, frame) else {
         return fail("VaCopy: &src not in int reg / spill");
     };
-    let scratch = SCRATCH_R10;
+    let scratch = s0;
     emit_mov_r_mem(code, scratch, src_p, 0);
-    let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R11, frame) else {
+    let Some(dst_p) = materialize_int(code, dst_place, S1, frame) else {
         return fail("VaCopy: &dst not in int reg / spill");
     };
     emit_mov_mem_r(code, dst_p, 0, scratch);
@@ -1182,25 +1185,27 @@ fn emit_alloca(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s0 = scratch(code, S0);
+    let s1 = scratch(code, S1);
     if !frame.dynamic_sp {
         return fail("Alloca: AllocaInit didn't run for this function");
     }
     if args.len() != 1 {
         return fail("Alloca: expected 1 arg");
     }
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Alloca: dst not int reg / spill");
     };
     let size_place = place_of(alloc, args[0]);
-    // rd_phys receives the result (r10 for a spill dst); the rounded size
-    // rides r11. Both scratches sit outside the allocator banks, and rd is
-    // never r11, so size and result stay distinct.
+    // rd_phys receives the result (scratch 0 for a spill dst); the rounded size
+    // rides scratch 1, which no operand or result holds, and rd is
+    // never scratch 1, so size and result stay distinct.
     let rd_phys = if matches!(dst, Place::Spill(_)) {
-        SCRATCH_R10
+        s0
     } else {
         rd
     };
-    let size_reg = SCRATCH_R11;
+    let size_reg = s1;
     let Some(n) = materialize_int(code, size_place, size_reg, frame) else {
         return fail("Alloca: size not int reg / spill / fp");
     };
@@ -1234,14 +1239,15 @@ fn emit_alloca(
 
 /// Snapshot rsp for a VLA block (C99 6.2.4p2).
 fn emit_alloca_save(code: &mut CodeBuf, dst: Place, frame: Frame) -> Emit {
+    let s0 = scratch(code, S0);
     if !frame.dynamic_sp {
         return fail("AllocaSave: AllocaInit didn't run for this function");
     }
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("AllocaSave: dst not int reg / spill");
     };
     let rd_phys = if matches!(dst, Place::Spill(_)) {
-        SCRATCH_R10
+        s0
     } else {
         rd
     };
@@ -1260,7 +1266,7 @@ fn emit_alloca_restore(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, fra
         return fail("AllocaRestore: expected 1 arg");
     }
     let v_place = place_of(alloc, args[0]);
-    let Some(v) = materialize_int(code, v_place, SCRATCH_R10, frame) else {
+    let Some(v) = materialize_int(code, v_place, S0, frame) else {
         return fail("AllocaRestore: arg not int reg / spill / fp");
     };
     emit_mov_rr(code, Reg::RSP, v);
@@ -1268,8 +1274,7 @@ fn emit_alloca_restore(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, fra
 }
 
 /// The single-memory-operand x87 / system forms: the operand address is
-/// forced into r10 so the ModRM byte needs no SIB or displacement (rm 010
-/// under REX.B). Opcode and ModRM.reg per form:
+/// forced into scratch 0, addressed `[s0]`. Opcode and ModRM.reg per form:
 ///   fnstcw/fldcw = D9 /7,/5 ; fxsave/fxrstor = 0F AE /0,/1 ;
 ///   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
 ///   sldt/str  = 0F 00 /0,/1 ; lldt = 0F 00 /2 ; clflush = 0F AE /7.
@@ -1280,6 +1285,7 @@ fn emit_mem_operand_insn(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s0 = scratch(code, S0);
     use crate::c5::op::Intrinsic as I;
     if args.len() != 1 {
         return fail("single-memory-operand intrinsic expects 1 arg");
@@ -1290,11 +1296,11 @@ fn emit_mem_operand_insn(
         0,
         "single-memory-operand intrinsic: arg place missing",
     )?;
-    let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
+    let Some(addr) = materialize_int(code, place, S0, frame) else {
         return fail("single-memory-operand intrinsic: arg not an int register");
     };
-    if addr.0 != SCRATCH_R10.0 {
-        super::encode::emit_mov_rr(code, SCRATCH_R10, addr);
+    if addr.0 != s0.0 {
+        super::encode::emit_mov_rr(code, s0, addr);
     }
     let (opc, reg_field): (&[u8], u8) = match intrinsic {
         I::X87StoreControlWord => (&[0xD9], 7),
@@ -1310,9 +1316,17 @@ fn emit_mem_operand_insn(
         I::X86Lldt => (&[0x0F, 0x00], 2),
         _ => (&[0x0F, 0xAE], 7), // clflush
     };
-    code.push(0x41); // REX.B for r10
+    if s0.0 >= 8 {
+        code.push(0x41);
+    }
     code.extend_from_slice(opc);
-    code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
+    // rm 100 takes a SIB byte, and rm 101 with mod 00 is rip-relative, so
+    // that base takes mod 01 and a zero displacement.
+    match s0.0 & 7 {
+        4 => code.extend_from_slice(&[(reg_field << 3) | 0x04, 0x24]),
+        5 => code.extend_from_slice(&[0x40 | (reg_field << 3) | 0x05, 0]),
+        lo => code.push((reg_field << 3) | lo),
+    }
     Ok(())
 }
 
@@ -1324,11 +1338,10 @@ fn emit_mem_operand_insn(
 fn emit_divq128(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Frame) -> Emit {
     const RAX: Reg = Reg(0);
     const RDX: Reg = Reg(2);
-    const R10: Reg = Reg(10);
-    const R11: Reg = Reg(11);
     if args.len() != 5 {
         return fail("divq: wrong operand count");
     }
+    let (s0, s1) = (scratch(code, S0), scratch(code, S1));
     // Force args[idx] into `scratch`; `pushed` counts the 8-byte pushes
     // emitted so far.
     let materialize_at =
@@ -1342,32 +1355,32 @@ fn emit_divq128(code: &mut CodeBuf, args: &[u32], alloc: &Allocation, frame: Fra
         };
     super::encode::emit_push_r(code, RAX);
     super::encode::emit_push_r(code, RDX);
-    if materialize_at(code, 0, R10, 2).is_none() {
+    if materialize_at(code, 0, s0, 2).is_none() {
         return fail("divq: quotient output not an address");
     }
-    super::encode::emit_push_r(code, R10);
-    if materialize_at(code, 1, R10, 3).is_none() {
+    super::encode::emit_push_r(code, s0);
+    if materialize_at(code, 1, s0, 3).is_none() {
         return fail("divq: remainder output not an address");
     }
-    super::encode::emit_push_r(code, R10);
-    // Divisor -> r10, dividend high -> r11, then rax last so an input the
-    // allocator placed in rax / rdx is read first.
-    if materialize_at(code, 4, R10, 4).is_none() {
+    super::encode::emit_push_r(code, s0);
+    // Divisor -> scratch 0, dividend high -> scratch 1, then rax last so an
+    // input the allocator placed in rax / rdx is read first.
+    if materialize_at(code, 4, s0, 4).is_none() {
         return fail("divq: divisor operand missing");
     }
-    if materialize_at(code, 3, R11, 4).is_none() {
+    if materialize_at(code, 3, s1, 4).is_none() {
         return fail("divq: dividend-high operand missing");
     }
     if materialize_at(code, 2, RAX, 4).is_none() {
         return fail("divq: dividend-low operand missing");
     }
-    super::encode::emit_mov_rr(code, RDX, R11);
-    // div r10 (REX.W + REX.B, F7 /6).
-    code.extend_from_slice(&[0x49, 0xF7, 0xF2]);
-    super::encode::emit_pop_r(code, R11);
-    super::encode::emit_mov_mem_r(code, R11, 0, RDX);
-    super::encode::emit_pop_r(code, R11);
-    super::encode::emit_mov_mem_r(code, R11, 0, RAX);
+    super::encode::emit_mov_rr(code, RDX, s1);
+    // div s0 (REX.W, REX.B for r8-r15; F7 /6).
+    code.extend_from_slice(&[0x48 | (s0.0 >> 3), 0xF7, 0xF0 | (s0.0 & 7)]);
+    super::encode::emit_pop_r(code, s1);
+    super::encode::emit_mov_mem_r(code, s1, 0, RDX);
+    super::encode::emit_pop_r(code, s1);
+    super::encode::emit_mov_mem_r(code, s1, 0, RAX);
     super::encode::emit_pop_r(code, RDX);
     super::encode::emit_pop_r(code, RAX);
     Ok(())
@@ -1381,7 +1394,7 @@ fn emit_reg_read(
     src: Reg,
     no_dst: &'static str,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail(no_dst);
     };
     emit_mov_rr(code, rd, src);
@@ -1399,7 +1412,7 @@ fn emit_return_address(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("ReturnAddress: dst not int reg / spill");
     };
     let fp = match args {
@@ -1426,7 +1439,7 @@ fn emit_function_prefix(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let (Some(rd), [target]) = (int_or_spill_dst(dst), args) else {
+    let (Some(rd), [target]) = (int_or_spill_dst(code, dst), args) else {
         return fail("FunctionPrefix: expected an int destination and 1 arg");
     };
     let Some(r) = int_operand_into_rd(code, place_of(alloc, *target), rd, frame) else {
@@ -1438,7 +1451,8 @@ fn emit_function_prefix(
 }
 
 /// Zero `size` bytes at `dst_val`: a `movups` per 16 bytes from `xmm` zeroed once, else an
-/// immediate store per unit; past `MAX_MEM_FILL_ACCESSES` stores, a loop of r10 up to r11.
+/// immediate store per unit; past `MAX_MEM_FILL_ACCESSES` stores, a loop of scratch 0 up to
+/// scratch 1.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mzero(
     code: &mut CodeBuf,
@@ -1450,11 +1464,13 @@ pub(super) fn emit_mzero(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s0 = scratch(code, S0);
+    let s1 = scratch(code, S1);
     use super::encode::{emit_mi, emit_movups_mem_xmm};
     if size < 0 {
         return fail("Mzero: negative size");
     }
-    let Some(base) = materialize_int(code, place_of(alloc, dst_val), SCRATCH_R10, frame) else {
+    let Some(base) = materialize_int(code, place_of(alloc, dst_val), S0, frame) else {
         return fail("Mzero: dst base not int reg / spill");
     };
     let unit = super::super::access_chunk(align, strict_align, 8);
@@ -1497,7 +1513,7 @@ pub(super) fn emit_mzero(
         }
         return Ok(());
     }
-    let (cursor, end) = (SCRATCH_R10, SCRATCH_R11);
+    let (cursor, end) = (s0, s1);
     if base.0 != cursor.0 {
         emit_mov_rr(code, cursor, base);
     }
@@ -1532,11 +1548,11 @@ pub(super) fn emit_mzero(
     Ok(())
 }
 
-/// The registers a copy takes its temporaries among, in order: the writer's
-/// scratch, which holds no value, then rax and the argument registers of the
-/// function's own convention, its volatile bank.
+/// The registers a copy takes its temporaries among, in order: r10 and r11,
+/// which the allocator gives out last, then rax and the argument registers of
+/// the function's own convention, its volatile bank.
 fn copy_temps(abi: super::Abi) -> Vec<u8> {
-    [SCRATCH_R10.0, SCRATCH_R11.0, Reg::RAX.0]
+    [Reg::R10.0, Reg::R11.0, Reg::RAX.0]
         .into_iter()
         .chain(abi.int_arg_regs.iter().copied())
         .collect()
@@ -1569,13 +1585,13 @@ pub(super) fn emit_mcpy(
     };
     let dst_in = place_of(alloc, dst_val);
     let src_in = place_of(alloc, src_val);
-    let Some(dst_r) = materialize_int(code, dst_in, SCRATCH_R10, frame) else {
+    let Some(dst_r) = materialize_int(code, dst_in, S0, frame) else {
         return fail("Mcpy: dst base not int reg / spill");
     };
-    let src_scratch = if dst_r.0 == SCRATCH_R10.0 {
-        SCRATCH_R11
+    let src_scratch = if dst_r == scratch_reg(code, S0) {
+        S1
     } else {
-        SCRATCH_R10
+        S0
     };
     let Some(src_r) = materialize_int(code, src_in, src_scratch, frame) else {
         return fail("Mcpy: src base not int reg / spill");
@@ -1699,7 +1715,7 @@ pub(super) fn emit_mcpy(
     }
     regs.restore(code);
     let result = if reload {
-        materialize_int(code, dst_in, SCRATCH_R10, frame).unwrap_or(dst_r)
+        materialize_int(code, dst_in, S0, frame).unwrap_or(dst_r)
     } else {
         dst_r
     };
@@ -1770,8 +1786,8 @@ fn operand_into(
 /// C11 7.17.7.2 load of `width` bytes, zero-extended: a plain `mov`
 /// for every order. A load is an acquire (Intel SDM Vol.3 8.2.3), and
 /// against the `xchg` seq_cst store it is the seq_cst load. The address
-/// rides its own register or r11; the result lands in `dst`'s register
-/// or r10.
+/// rides its own register or scratch 1; the result lands in `dst`'s register
+/// or scratch 0.
 pub(super) fn emit_atomic_load(
     code: &mut CodeBuf,
     dst: Place,
@@ -1780,10 +1796,11 @@ pub(super) fn emit_atomic_load(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let Some(a) = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame) else {
+    let s0 = scratch(code, S0);
+    let Some(a) = materialize_int(code, place_of(alloc, addr), S1, frame) else {
         return fail("AtomicLoad: address not int reg / spill");
     };
-    let rd = int_or_spill_dst(dst).unwrap_or(SCRATCH_R10);
+    let rd = int_or_spill_dst(code, dst).unwrap_or(s0);
     emit_mov_r_mem_width(code, rd, a, width);
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
@@ -1792,7 +1809,7 @@ pub(super) fn emit_atomic_load(
 /// C11 7.17.7.1 store of the low `width` bytes of `value`: `xchg` for
 /// seq_cst, whose implicit lock orders it before every later load
 /// (Intel SDM Vol.3 8.2.3.9); a plain `mov`, already a release, for
-/// the rest. The address rides its own register or r11, the value r10.
+/// the rest. The address rides its own register or scratch 1, the value scratch 0.
 pub(super) fn emit_atomic_store(
     code: &mut CodeBuf,
     addr: super::super::ir::ValueId,
@@ -1802,18 +1819,19 @@ pub(super) fn emit_atomic_store(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let Some(a) = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame) else {
+    let s0 = scratch(code, S0);
+    let Some(a) = materialize_int(code, place_of(alloc, addr), S1, frame) else {
         return fail("AtomicStore: address not int reg / spill");
     };
     if order == super::super::ir::MemOrder::SeqCst {
         // XCHG writes the prior contents back into its register
         // operand, so the value is copied out of its own register.
-        let Some(v) = operand_into(code, value, SCRATCH_R10, frame, 0, alloc) else {
+        let Some(v) = operand_into(code, value, s0, frame, 0, alloc) else {
             return fail("AtomicStore: value not int reg / spill");
         };
         emit_xchg_mem_r(code, a, 0, v, width);
     } else {
-        let Some(v) = materialize_int(code, place_of(alloc, value), SCRATCH_R10, frame) else {
+        let Some(v) = materialize_int(code, place_of(alloc, value), S0, frame) else {
             return fail("AtomicStore: value not int reg / spill");
         };
         emit_mov_mem_r_width(code, a, v, width);
@@ -1833,12 +1851,18 @@ fn off_rax(code: &mut Vec<u8>, r: Reg, scratch: Reg) -> Reg {
 }
 
 /// Write the atomic result `r` to `dst` and pop what `regs` pushed, the
-/// last first. A result in a pushed register leaves through r10, which
-/// the consumed operands no longer need.
-fn finish_atomic(code: &mut CodeBuf, regs: &[&SiteRegs], dst: Place, r: Reg, frame: Frame) {
+/// last first. A result in a pushed register leaves through the site's
+/// scratch `s0`, which the consumed operands no longer need.
+fn finish_atomic(
+    code: &mut CodeBuf,
+    regs: &[&SiteRegs],
+    dst: Place,
+    (r, s0): (Reg, Reg),
+    frame: Frame,
+) {
     let r = if regs.iter().any(|s| s.borrowed(r)) {
-        emit_mov_rr(code, SCRATCH_R10, r);
-        SCRATCH_R10
+        emit_mov_rr(code, s0, r);
+        s0
     } else {
         r
     };
@@ -1855,7 +1879,7 @@ fn finish_atomic(code: &mut CodeBuf, regs: &[&SiteRegs], dst: Place, r: Reg, fra
 /// the operand negated, both leaving the prior contents in their
 /// register, and for the bitwise operators a `LOCK CMPXCHG` retry on rax. A locked instruction
 /// is a full barrier, so every order lowers alike (the x86 mapping of
-/// C11 atomics). The address rides its own register or r11.
+/// C11 atomics). The address rides its own register or scratch 1.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_rmw(
     code: &mut CodeBuf,
@@ -1872,8 +1896,10 @@ pub(super) fn emit_atomic_rmw(
     frame: Frame,
     abi: super::Abi,
 ) -> Emit {
+    let s0 = scratch(code, S0);
+    let s1 = scratch(code, S1);
     use super::super::ir::AtomicRmwOp as Op;
-    let Some(a) = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame) else {
+    let Some(a) = materialize_int(code, place_of(alloc, addr), S1, frame) else {
         return fail("AtomicRmw: address not int reg / spill");
     };
     // Prior contents nothing reads: one locked operation on the object.
@@ -1894,7 +1920,7 @@ pub(super) fn emit_atomic_rmw(
             super::encode::emit_lock_alu_mem_imm(code, mnem, a, 0, imm, width);
             return Ok(());
         }
-        let Some(x) = materialize_int(code, place_of(alloc, value), SCRATCH_R10, frame) else {
+        let Some(x) = materialize_int(code, place_of(alloc, value), S0, frame) else {
             return fail("AtomicRmw: operand not int reg / spill");
         };
         super::encode::emit_lock_alu_mem_r(code, mnem, a, 0, x, width);
@@ -1906,7 +1932,7 @@ pub(super) fn emit_atomic_rmw(
             // address rides it.
             let t = match dst {
                 Place::IntReg(r) if r != a.0 => Reg(r),
-                _ => SCRATCH_R10,
+                _ => s0,
             };
             let Some(x) = materialize_int(code, place_of(alloc, value), t, frame) else {
                 return fail("AtomicRmw: operand not int reg / spill");
@@ -1927,11 +1953,11 @@ pub(super) fn emit_atomic_rmw(
         Op::Or => Mnem::Or,
         Op::Xor => Mnem::Xor,
     };
-    let Some(x) = materialize_int(code, place_of(alloc, value), SCRATCH_R10, frame) else {
+    let Some(x) = materialize_int(code, place_of(alloc, value), S0, frame) else {
         return fail("AtomicRmw: operand not int reg / spill");
     };
-    let a = off_rax(code, a, SCRATCH_R11);
-    let x = off_rax(code, x, SCRATCH_R10);
+    let a = off_rax(code, a, s1);
+    let x = off_rax(code, x, s0);
     let mut acc = SiteRegs::new(alloc, v, &[Reg::RAX.0], &[a.0, x.0], frame);
     if acc.take(code) != Some(Reg::RAX) {
         return fail("AtomicRmw: rax is reserved");
@@ -1954,15 +1980,15 @@ pub(super) fn emit_atomic_rmw(
     // counts from the byte past the 2-byte Jcc.
     let rel = (retry as i64) - (code.len() as i64 + 2);
     emit_jcc_rel8(code, Cc::Ne, rel as i8);
-    finish_atomic(code, &[&acc, &temps], dst, Reg::RAX, frame);
+    finish_atomic(code, &[&acc, &temps], dst, (Reg::RAX, s0), frame);
     Ok(())
 }
 
 /// C11 7.17.7.4 on 16 bytes as `LOCK CMPXCHG16B` (Intel SDM Vol.2), a full
 /// barrier whatever the order: rcx:rbx takes the replacement and rdx:rax
 /// the comparand from their objects, and a mismatch writes rdx:rax, the
-/// prior contents, over the comparand's object. The object rides r11; the
-/// replacement's and then the comparand's address ride r10, the latter
+/// prior contents, over the comparand's object. The object rides scratch 1; the
+/// replacement's and then the comparand's address ride scratch 0, the latter
 /// kept on the stack meanwhile. rbx, which the caller may hold, is saved
 /// around it, as are rax, rcx and rdx where a value lives in them. The
 /// value is whether it matched.
@@ -1976,6 +2002,8 @@ pub(super) fn emit_atomic_cas16(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s0 = scratch(code, S0);
+    let s1 = scratch(code, S1);
     use super::encode::emit_lock_cmpxchg16b_mem;
     let operand = |code: &mut CodeBuf, value, r: Reg, shift: u32| -> Emit {
         let Some(x) = materialize_int_shifted(code, place_of(alloc, value), r, frame, shift) else {
@@ -1987,16 +2015,16 @@ pub(super) fn emit_atomic_cas16(
         Ok(())
     };
     let pushed = saved_shift(frame, 1);
-    operand(code, expected, SCRATCH_R10, 0)?;
-    save_across(code, frame, SCRATCH_R10, keep::CAS16);
-    operand(code, desired, SCRATCH_R10, pushed)?;
-    operand(code, addr, SCRATCH_R11, pushed)?;
+    operand(code, expected, s0, 0)?;
+    save_across(code, frame, s0, keep::CAS16);
+    operand(code, desired, s0, pushed)?;
+    operand(code, addr, s1, pushed)?;
     save_across(code, frame, Reg::RBX, keep::CAS16 + 1);
     let mut acc = SiteRegs::new(
         alloc,
         v,
         &[Reg::RAX.0, Reg::RCX.0, Reg::RDX.0],
-        &[SCRATCH_R10.0, SCRATCH_R11.0],
+        &[s0.0, s1.0],
         frame,
     );
     for _ in 0..3 {
@@ -2004,31 +2032,31 @@ pub(super) fn emit_atomic_cas16(
             return fail("AtomicCas16: rax, rcx or rdx is reserved");
         }
     }
-    emit_mov_r_mem(code, Reg::RBX, SCRATCH_R10, 0);
-    emit_mov_r_mem(code, Reg::RCX, SCRATCH_R10, 8);
+    emit_mov_r_mem(code, Reg::RBX, s0, 0);
+    emit_mov_r_mem(code, Reg::RCX, s0, 8);
     let parked = if frame.omit_fp {
         keep_slot(code, frame, keep::CAS16)
     } else {
         (Reg::RSP, acc.saved_bytes() as i32 + 8)
     };
-    emit_mov_r_mem(code, SCRATCH_R10, parked.0, parked.1);
-    emit_mov_r_mem(code, Reg::RAX, SCRATCH_R10, 0);
-    emit_mov_r_mem(code, Reg::RDX, SCRATCH_R10, 8);
-    emit_lock_cmpxchg16b_mem(code, SCRATCH_R11, 0);
+    emit_mov_r_mem(code, s0, parked.0, parked.1);
+    emit_mov_r_mem(code, Reg::RAX, s0, 0);
+    emit_mov_r_mem(code, Reg::RDX, s0, 8);
+    emit_lock_cmpxchg16b_mem(code, s1, 0);
     // A match skips the write-back; the stores keep ZF.
     let skip = code.len();
     emit_jcc_rel8(code, Cc::E, 0);
-    emit_mov_mem_r(code, SCRATCH_R10, 0, Reg::RAX);
-    emit_mov_mem_r(code, SCRATCH_R10, 8, Reg::RDX);
+    emit_mov_mem_r(code, s0, 0, Reg::RAX);
+    emit_mov_mem_r(code, s0, 8, Reg::RDX);
     code[skip + 1] = (code.len() - skip - 2) as u8;
     super::encode::emit_setcc_r8(code, Cc::E, Reg::RCX);
-    emit_movzx_r_r8(code, SCRATCH_R10, Reg::RCX);
+    emit_movzx_r_r8(code, s0, Reg::RCX);
     acc.restore(code);
     restore_across(code, frame, Reg::RBX, keep::CAS16 + 1);
     if !frame.omit_fp {
-        emit_pop_r(code, SCRATCH_R11);
+        emit_pop_r(code, s1);
     }
-    write_atomic_result(code, dst, SCRATCH_R10, frame);
+    write_atomic_result(code, dst, s0, frame);
     Ok(())
 }
 
@@ -2036,7 +2064,7 @@ pub(super) fn emit_atomic_cas16(
 /// a full barrier whatever the order: rax takes the comparand
 /// zero-extended from `width` bytes and leaves with the prior contents,
 /// which a match leaves equal to it. The address rides its own register
-/// or r11, `desired` its own or r10.
+/// or scratch 1, `desired` its own or scratch 0.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_atomic_cas(
     code: &mut CodeBuf,
@@ -2049,13 +2077,15 @@ pub(super) fn emit_atomic_cas(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let a = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame);
-    let d = materialize_int(code, place_of(alloc, desired), SCRATCH_R10, frame);
+    let s0 = scratch(code, S0);
+    let s1 = scratch(code, S1);
+    let a = materialize_int(code, place_of(alloc, addr), S1, frame);
+    let d = materialize_int(code, place_of(alloc, desired), S0, frame);
     let (Some(a), Some(d)) = (a, d) else {
         return fail("AtomicCas: operand not int reg / spill");
     };
-    let a = off_rax(code, a, SCRATCH_R11);
-    let d = off_rax(code, d, SCRATCH_R10);
+    let a = off_rax(code, a, s1);
+    let d = off_rax(code, d, s0);
     let mut acc = SiteRegs::new(alloc, v, &[Reg::RAX.0], &[a.0, d.0], frame);
     if acc.take(code) != Some(Reg::RAX) {
         return fail("AtomicCas: rax is reserved");
@@ -2071,7 +2101,7 @@ pub(super) fn emit_atomic_cas(
         _ => emit_mov_rr(code, Reg::RAX, e),
     }
     emit_lock_cmpxchg_mem_r(code, a, 0, d, width);
-    finish_atomic(code, &[&acc], dst, Reg::RAX, frame);
+    finish_atomic(code, &[&acc], dst, (Reg::RAX, s0), frame);
     Ok(())
 }
 
@@ -2206,7 +2236,7 @@ pub(super) fn encode_wide(
 /// A shift of wide register `a` into `d` by an immediate, or by the count
 /// operand moved into the low quadword of xmm `scratch`.
 fn wide_shift(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     row: &crate::c5::x86_simd::SimdOp,
     imm: Option<u8>,
     count: Option<Reg>,
@@ -2232,17 +2262,14 @@ fn wide_shift(
             reg: r.0,
             size: crate::c5::ir::AsmRegSize::Quad,
         };
-        if c.0 != SCRATCH_R10.0 {
-            emit_mov_rr(code, SCRATCH_R10, c);
+        let (s0, s1) = (super::scratch(code, S0), super::scratch(code, S1));
+        if c != s0 {
+            emit_mov_rr(code, s0, c);
         }
-        encode_wide(code, "mov", &[Concrete::Imm(255), q(SCRATCH_R11)])?;
-        encode_wide(code, "cmp", &[q(SCRATCH_R11), q(SCRATCH_R10)])?;
-        encode_wide(code, "cmova", &[q(SCRATCH_R11), q(SCRATCH_R10)])?;
-        encode_wide(
-            code,
-            "vpbroadcastq",
-            &[q(SCRATCH_R10), wide_reg(64, scratch)],
-        )?;
+        encode_wide(code, "mov", &[Concrete::Imm(255), q(s1)])?;
+        encode_wide(code, "cmp", &[q(s1), q(s0)])?;
+        encode_wide(code, "cmova", &[q(s1), q(s0)])?;
+        encode_wide(code, "vpbroadcastq", &[q(s0), wide_reg(64, scratch)])?;
         let ops = [wide_reg(64, scratch), wide_reg(64, a), wide_reg(64, d)];
         return encode_wide(code, var, &ops);
     }
@@ -2297,12 +2324,13 @@ fn emit_x86_simd_wide(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s1 = scratch(code, S1);
     use crate::c5::simd;
     use crate::c5::simd::Form;
     let row = simd::get(op);
     let w = VecWidth::of_bytes(row.bytes);
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
-    let operand = |code: &mut CodeBuf, i: usize, scratch: Reg| -> Emit<Reg> {
+    let operand = |code: &mut CodeBuf, i: usize, scratch: Scratch| -> Emit<Reg> {
         let place = args
             .get(i)
             .and_then(|&a| alloc.places.get(a as usize).copied());
@@ -2312,7 +2340,7 @@ fn emit_x86_simd_wide(
         }
     };
     let load = |code: &mut CodeBuf, i: usize, n: u8| -> Emit {
-        let a = operand(code, i, SCRATCH_R10)?;
+        let a = operand(code, i, S0)?;
         emit_wide_load(code, w, Reg(n), a, 0);
         Ok(())
     };
@@ -2328,14 +2356,14 @@ fn emit_x86_simd_wide(
             // source from memory.
             load(code, 1, dst_x)?;
             load(code, 3, src_x)?;
-            let b = operand(code, 2, SCRATCH_R11)?;
+            let b = operand(code, 2, S1)?;
             let r = |n| wide_reg(row.bytes, n);
             encode_wide(code, row.mnem, &[r(src_x), mem_at(b), r(dst_x), r(dst_x)])?;
         }
         Form::Vvv | Form::VvvI => {
             load(code, 1, dst_x)?;
             load(code, 2, src_x)?;
-            let c = operand(code, 3, SCRATCH_R11)?;
+            let c = operand(code, 3, S1)?;
             let ops = wide_operands(row, imm, src_x, Some(WideSrc::Mem(c, 0)), dst_x);
             encode_wide(code, row.mnem, &ops)?;
         }
@@ -2347,14 +2375,14 @@ fn emit_x86_simd_wide(
             load(code, 1, dst_x)?;
             let count = match imm {
                 Some(_) => None,
-                None => Some(operand(code, 2, SCRATCH_R10)?),
+                None => Some(operand(code, 2, S0)?),
             };
             wide_shift(code, row, imm, count, (dst_x, dst_x, src_x))?;
         }
         Form::Narrow => {
             load(code, 1, src_x)?;
             narrow(code, row, imm, src_x, dst_x)?;
-            let d = operand(code, 0, SCRATCH_R10)?;
+            let d = operand(code, 0, S0)?;
             return encode_wide(
                 code,
                 "vmovdqu",
@@ -2363,7 +2391,7 @@ fn emit_x86_simd_wide(
         }
         Form::Widen => {
             load(code, 1, dst_x)?;
-            let p = operand(code, 2, SCRATCH_R10)?;
+            let p = operand(code, 2, S0)?;
             encode_wide(
                 code,
                 "vmovdqu",
@@ -2379,7 +2407,7 @@ fn emit_x86_simd_wide(
         }
         // A VEX load clears the bits above the part.
         Form::Zext => {
-            let p = operand(code, 1, SCRATCH_R10)?;
+            let p = operand(code, 1, S0)?;
             encode_wide(
                 code,
                 "vmovdqu",
@@ -2389,15 +2417,15 @@ fn emit_x86_simd_wide(
         Form::Load => load(code, 1, dst_x)?,
         Form::Store => {
             load(code, 1, dst_x)?;
-            let p = operand(code, 0, SCRATCH_R10)?;
+            let p = operand(code, 0, S0)?;
             emit_wide_store(code, w, p, 0, Reg(dst_x));
             return Ok(());
         }
         Form::MoveMask => {
             load(code, 1, src_x)?;
-            wide_movemask(code, row, src_x, SCRATCH_R11)?;
-            let d = operand(code, 0, SCRATCH_R10)?;
-            emit_mov_mem_r(code, d, 0, SCRATCH_R11);
+            wide_movemask(code, row, src_x, s1)?;
+            let d = operand(code, 0, S0)?;
+            emit_mov_mem_r(code, d, 0, s1);
             return Ok(());
         }
         Form::CmpMask => {
@@ -2410,23 +2438,23 @@ fn emit_x86_simd_wide(
                 k1(),
             ];
             encode_wide(code, row.mnem, &ops)?;
-            kmov(code, SCRATCH_R11, false)?;
-            let d = operand(code, 0, SCRATCH_R10)?;
-            emit_mov_mem_r(code, d, 0, SCRATCH_R11);
+            kmov(code, s1, false)?;
+            let d = operand(code, 0, S0)?;
+            emit_mov_mem_r(code, d, 0, s1);
             return Ok(());
         }
         Form::MaskBlend => {
             load(code, 1, dst_x)?;
             load(code, 3, src_x)?;
-            let m = operand(code, 2, SCRATCH_R11)?;
+            let m = operand(code, 2, S1)?;
             kmov(code, m, true)?;
             let r = |n| wide_reg(row.bytes, n);
             encode_masked(code, row.mnem, &[r(src_x), r(dst_x), r(dst_x)], false)?;
         }
         Form::MaskLoad => {
-            let m = operand(code, 1, SCRATCH_R11)?;
+            let m = operand(code, 1, S1)?;
             kmov(code, m, true)?;
-            let p = operand(code, 2, SCRATCH_R10)?;
+            let p = operand(code, 2, S0)?;
             encode_masked(
                 code,
                 row.mnem,
@@ -2436,9 +2464,9 @@ fn emit_x86_simd_wide(
         }
         Form::MaskStore => {
             load(code, 2, dst_x)?;
-            let m = operand(code, 1, SCRATCH_R11)?;
+            let m = operand(code, 1, S1)?;
             kmov(code, m, true)?;
-            let p = operand(code, 0, SCRATCH_R10)?;
+            let p = operand(code, 0, S0)?;
             return encode_masked(
                 code,
                 row.mnem,
@@ -2448,7 +2476,7 @@ fn emit_x86_simd_wide(
         }
         _ => return fail(alloc::format!("x86 simd: {} has no wide form", row.name)),
     }
-    let d = operand(code, 0, SCRATCH_R10)?;
+    let d = operand(code, 0, S0)?;
     emit_wide_store(code, w, d, 0, Reg(dst_x));
     Ok(())
 }
@@ -2490,6 +2518,7 @@ fn emit_x86_simd_val_wide(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s1 = scratch(code, S1);
     use crate::c5::simd;
     use crate::c5::simd::Form;
     let row = simd::get(op);
@@ -2579,7 +2608,7 @@ fn emit_x86_simd_val_wide(
             let a = vector(code, 0, sa)?;
             let count = match imm {
                 Some(_) => None,
-                None => match place(1).and_then(|p| materialize_int(code, p, SCRATCH_R10, frame)) {
+                None => match place(1).and_then(|p| materialize_int(code, p, S0, frame)) {
                     Some(c) => Some(c),
                     None => return fail("x86 simd: shift count has no place"),
                 },
@@ -2599,9 +2628,9 @@ fn emit_x86_simd_val_wide(
             return match dst {
                 Place::IntReg(r) => kmov(code, Reg(r), false),
                 Place::Spill(slot) => {
-                    kmov(code, SCRATCH_R11, false)?;
+                    kmov(code, s1, false)?;
                     let (sbase, off) = spill_slot_addr(frame, slot);
-                    emit_mov_mem_r(code, sbase, off, SCRATCH_R11);
+                    emit_mov_mem_r(code, sbase, off, s1);
                     Ok(())
                 }
                 _ => fail("x86 simd: integer result not int reg / spill"),
@@ -2610,8 +2639,7 @@ fn emit_x86_simd_val_wide(
         Form::MaskBlend => {
             let src = vector(code, 0, sa)?;
             let a = vector(code, 2, sb)?;
-            let Some(m) = place(1).and_then(|p| materialize_int(code, p, SCRATCH_R11, frame))
-            else {
+            let Some(m) = place(1).and_then(|p| materialize_int(code, p, S1, frame)) else {
                 return fail("x86 simd: mask has no place");
             };
             kmov(code, m, true)?;
@@ -2662,9 +2690,9 @@ fn emit_x86_simd_val_wide(
             return match dst {
                 Place::IntReg(r) => wide_movemask(code, row, a, Reg(r)),
                 Place::Spill(slot) => {
-                    wide_movemask(code, row, a, SCRATCH_R11)?;
+                    wide_movemask(code, row, a, s1)?;
                     let (sbase, off) = spill_slot_addr(frame, slot);
-                    emit_mov_mem_r(code, sbase, off, SCRATCH_R11);
+                    emit_mov_mem_r(code, sbase, off, s1);
                     Ok(())
                 }
                 _ => fail("x86 simd: integer result not int reg / spill"),
@@ -2789,7 +2817,7 @@ pub(super) fn emit_vec_extract(
         mirror_fp_dst(code, dst, dd, frame);
         return Ok(());
     }
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("VecExtract: dst not int reg / spill");
     };
     let gpr = |size| Concrete::Reg { reg: rd.0, size };
@@ -2822,6 +2850,7 @@ pub(super) fn emit_vec_const(
     dst: Place,
     frame: Frame,
 ) -> Emit {
+    let s1 = scratch(code, S1);
     use super::asm::Concrete;
     use crate::c5::ir::AsmRegSize;
     let rd = match dst {
@@ -2846,25 +2875,22 @@ pub(super) fn emit_vec_const(
         encode_wide(code, "vpcmpeqd", &[w, w, w])?;
     } else if bytes == 8 && bits == 64 {
         // One lane fills the vector: `vmovq` clears the bits above it.
-        super::encode::emit_mov_r_imm64(code, SCRATCH_R11, lane as i64);
+        super::encode::emit_mov_r_imm64(code, s1, lane as i64);
         let g = Concrete::Reg {
-            reg: SCRATCH_R11.0,
+            reg: s1.0,
             size: AsmRegSize::Quad,
         };
         encode_wide(code, "vmovq", &[g, r])?;
         super::mem::mirror_fp_dst(code, dst, Reg(rd), frame);
         return Ok(());
     } else {
-        super::encode::emit_mov_r_imm64(code, SCRATCH_R11, lane as i64);
+        super::encode::emit_mov_r_imm64(code, s1, lane as i64);
         let (mov, size) = if bits == 64 {
             ("vmovq", AsmRegSize::Quad)
         } else {
             ("vmovd", AsmRegSize::Long)
         };
-        let g = Concrete::Reg {
-            reg: SCRATCH_R11.0,
-            size,
-        };
+        let g = Concrete::Reg { reg: s1.0, size };
         encode_wide(code, mov, &[g, r])?;
         encode_wide(code, mnem, &[r, wide_reg(full, rd)])?;
     }
@@ -2911,8 +2937,7 @@ pub(super) fn emit_vec_splat(
             encode_wide(code, mnem, &[wide_reg(16, f.0), wide_reg(full, rd)])?;
         }
         _ => {
-            let Some(gpr) = materialize_int(code, place_of(alloc, value), SCRATCH_R11, frame)
-            else {
+            let Some(gpr) = materialize_int(code, place_of(alloc, value), S1, frame) else {
                 return fail("VecSplat: value has no place");
             };
             let (mov, size, mnem) = match kind {
@@ -2939,7 +2964,7 @@ pub(super) fn emit_vec_splat(
 }
 
 /// `Inst::VecInsert`: the vector with the lane at byte `off` replaced by
-/// `vpinsr*` from a general register (a float's bits moved to r11 by
+/// `vpinsr*` from a general register (a float's bits moved to scratch 1 by
 /// `vmovq` / `vmovd`); a wide vector's 128-bit part is extracted, updated and
 /// inserted back, as a VEX.128 write clears the bits above it.
 pub(super) fn emit_vec_insert(
@@ -3064,6 +3089,7 @@ fn emit_vec_insert_gpr(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    let s1 = scratch(code, S1);
     use super::asm::Concrete;
     use crate::c5::ir::AsmRegSize;
     let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
@@ -3090,10 +3116,10 @@ fn emit_vec_insert_gpr(
             } else {
                 ("vmovd", AsmRegSize::Long)
             };
-            encode_wide(code, mnem, &[wide_reg(16, f.0), q(SCRATCH_R11, size)])?;
-            SCRATCH_R11
+            encode_wide(code, mnem, &[wide_reg(16, f.0), q(s1, size)])?;
+            s1
         }
-        _ => match materialize_int(code, place_of(alloc, value), SCRATCH_R11, frame) {
+        _ => match materialize_int(code, place_of(alloc, value), S1, frame) {
             Some(r) => r,
             None => return fail("VecInsert: value has no place"),
         },

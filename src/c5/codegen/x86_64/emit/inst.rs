@@ -326,7 +326,7 @@ pub(super) fn emit_inst(
         }
         // The language handler leaves the code in rax.
         Inst::ExceptionCode => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("ExceptionCode: dst not int reg / spill");
             };
             emit_mov_rr(code, rd, Reg::RAX);
@@ -335,7 +335,7 @@ pub(super) fn emit_inst(
         }
         Inst::Imm(_) if alloc.imm_held.get(v as usize).copied().unwrap_or(false) => Ok(()),
         Inst::Imm(value) => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("Imm: dst not int reg / spill");
             };
             emit_mov_r_imm64(code, rd, *value);
@@ -344,7 +344,7 @@ pub(super) fn emit_inst(
             Ok(())
         }
         Inst::LocalAddr(off) => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("LocalAddr: dst not int reg / spill");
             };
             // `local_slot_base_disp` places parameter cells, locals, an over-aligned
@@ -363,7 +363,7 @@ pub(super) fn emit_inst(
             parent,
             index,
         } => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("ParentLocalAddr: dst not int reg / spill");
             };
             let Some(bytes) =
@@ -860,7 +860,7 @@ fn folded_operand(
     } = *fcx;
     match func.insts[load as usize] {
         Inst::Load { addr, disp, .. } => {
-            let base = materialize_int(code, place_of(alloc, addr), SCRATCH_R10, frame)?;
+            let base = materialize_int(code, place_of(alloc, addr), S0, frame)?;
             Some(super::super::encode::Mem::at(base, disp))
         }
         Inst::LoadIndexed {
@@ -1150,8 +1150,9 @@ fn emit_incoming(
     match dst {
         Place::IntReg(r) => materialize(code, Reg(r)),
         Place::Spill(_) => {
-            materialize(code, SCRATCH_R10);
-            spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
+            let s = scratch(code, S0);
+            materialize(code, s);
+            spill_dst_to_slot(code, dst, s, frame);
         }
         _ => return fail(alloc::format!("{name}: dst not int reg / spill")),
     }

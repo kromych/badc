@@ -61,7 +61,7 @@ use super::encode::{
     emit_vex_fma_mem, emit_vex_fp_arith, emit_vex_fp_arith_mem, emit_xchg_mem_r, emit_xchg_rr,
     emit_xorps,
 };
-use super::ssa::code_buf::{CodeBuf, SpillWidth};
+use super::ssa::code_buf::{CodeBuf, ScratchPlan, SpillWidth};
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
     Unsupported, build_arg_aggs, c5_slot_to_fp_offset, param_entry_ext, place_same_loc,
@@ -113,17 +113,89 @@ fn int_reg(place: Place) -> Option<Reg> {
     place.int_reg_u8().map(Reg)
 }
 
-/// Scratch outside both allocator banks (`RegBanks::for_target`), so it
-/// never aliases an allocated value; caller-saved, so reserving it costs
-/// no prologue save.
-const SCRATCH_R10: Reg = Reg(10);
+/// The scratch pair of a site whose plan borrows nothing: caller-saved, so
+/// writing it costs no prologue save.
+const SCRATCH_PAIR: [u8; 2] = [Reg::R10.0, Reg::R11.0];
 /// Further scratches inside the allocator's `caller_gprs` pool: a handler
 /// that uses one must check that no `rd` or operand place aliases it.
 const SCRATCH_RCX: Reg = Reg(1);
 const SCRATCH_RDX: Reg = Reg(2);
-/// The second reserved scratch, outside both allocator banks like
-/// `SCRATCH_R10`.
-const SCRATCH_R11: Reg = Reg(11);
+
+/// One of the two scratch registers of the site being lowered
+/// ([`ScratchPlan`]): none holds an operand or the result of the site.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Scratch(usize);
+const S0: Scratch = Scratch(0);
+const S1: Scratch = Scratch(1);
+
+/// The plan of the site being lowered; a buffer with none set lowers as a
+/// site that borrows nothing.
+fn site_plan(code: &CodeBuf) -> ScratchPlan {
+    code.scratch_plan()
+        .unwrap_or(ScratchPlan::free(SCRATCH_PAIR))
+}
+
+/// The register of scratch `s`, which the lowering writes from here on: a
+/// borrowed one first stores the value it holds to the plan's slot, and
+/// the site's end reloads it ([`end_scratch`]).
+fn scratch(code: &mut CodeBuf, s: Scratch) -> Reg {
+    let plan = site_plan(code);
+    let r = Reg(plan.regs[s.0]);
+    if code.take_scratch(s.0)
+        && let Some((base, disp)) = plan.keep[s.0]
+    {
+        emit_mov_mem_r(code, Reg(base), disp, r);
+    }
+    r
+}
+
+/// The register of scratch `s`, for a comparison; taking it is
+/// [`scratch`].
+fn scratch_reg(code: &CodeBuf, s: Scratch) -> Reg {
+    Reg(site_plan(code).regs[s.0])
+}
+
+/// Reload the scratch registers the site borrowed. A borrow after a branch
+/// of the site fails the function: its store would not run on every path.
+fn end_scratch(code: &mut CodeBuf) -> Emit {
+    let (kept, late) = code.end_scratch();
+    for (r, (base, disp)) in kept.into_iter().flatten() {
+        emit_mov_r_mem(code, Reg(r), Reg(base), disp);
+    }
+    if late {
+        return fail("scratch register borrowed after a branch");
+    }
+    Ok(())
+}
+
+/// Where a helper puts a value it loads: a given register, or a scratch of
+/// the site, taken only when the value is loaded.
+#[derive(Clone, Copy)]
+enum Stage {
+    Reg(Reg),
+    Scratch(Scratch),
+}
+
+impl From<Reg> for Stage {
+    fn from(r: Reg) -> Self {
+        Stage::Reg(r)
+    }
+}
+
+impl From<Scratch> for Stage {
+    fn from(s: Scratch) -> Self {
+        Stage::Scratch(s)
+    }
+}
+
+impl Stage {
+    fn reg(self, code: &mut CodeBuf) -> Reg {
+        match self {
+            Stage::Reg(r) => r,
+            Stage::Scratch(s) => scratch(code, s),
+        }
+    }
+}
 
 /// Extract the FP reg from a `Place`, or `None` if it's not an
 /// xmm register.
@@ -351,11 +423,11 @@ fn wide_spill_width(w: VecWidth) -> SpillWidth {
 }
 
 /// The working register of an int-producing handler: the allocated
-/// register for `IntReg`, `SCRATCH_R10` for `Spill`.
-fn int_or_spill_dst(dst: Place) -> Option<Reg> {
+/// register for `IntReg`, scratch 0 for `Spill`.
+fn int_or_spill_dst(code: &mut CodeBuf, dst: Place) -> Option<Reg> {
     match dst {
         Place::IntReg(r) => Some(Reg(r)),
-        Place::Spill(_) => Some(SCRATCH_R10),
+        Place::Spill(_) => Some(scratch(code, S0)),
         _ => None,
     }
 }
@@ -469,40 +541,38 @@ fn spill_wide_rest(code: &mut CodeBuf, w: VecWidth, dst: Place, src: Reg, frame:
 }
 
 /// A value's `Place` in a register: `IntReg` in place, `Spill` loaded into
-/// `scratch`; `None` for the other kinds.
-fn materialize_int(code: &mut CodeBuf, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
-    materialize_int_shifted(code, place, scratch, frame, 0)
+/// `stage`; `None` for the other kinds.
+fn materialize_int(
+    code: &mut CodeBuf,
+    place: Place,
+    stage: impl Into<Stage>,
+    frame: Frame,
+) -> Option<Reg> {
+    materialize_int_shifted(code, place, stage, frame, 0)
 }
 
 /// Up to two integer operands in distinct registers: a register-resident
-/// operand stays, a spilled one loads into whichever of r10 / r11 holds no
-/// other operand. `None` when an operand is neither.
+/// operand stays, a spilled one loads into the next scratch of the site.
+/// `None` when an operand is neither.
 fn materialize_int_operands_distinct(
     code: &mut CodeBuf,
     places: &[Place],
     frame: Frame,
 ) -> Option<alloc::vec::Vec<Reg>> {
     let mut regs: alloc::vec::Vec<Option<Reg>> = alloc::vec![None; places.len()];
-    let mut occupied = [false; 16];
     for (i, &p) in places.iter().enumerate() {
         match p {
-            Place::IntReg(r) => {
-                regs[i] = Some(Reg(r));
-                occupied[r as usize] = true;
-            }
+            Place::IntReg(r) => regs[i] = Some(Reg(r)),
             Place::Spill(_) => {}
             _ => return None,
         }
     }
-    let pool = [SCRATCH_R10, SCRATCH_R11];
+    let mut pool = [S0, S1].into_iter();
     for (i, &p) in places.iter().enumerate() {
         if regs[i].is_some() {
             continue;
         }
-        let scratch = pool.iter().copied().find(|s| !occupied[s.0 as usize])?;
-        occupied[scratch.0 as usize] = true;
-        materialize_int(code, p, scratch, frame)?;
-        regs[i] = Some(scratch);
+        regs[i] = materialize_int(code, p, pool.next()?, frame);
     }
     Some(
         regs.into_iter()
@@ -516,14 +586,19 @@ fn materialize_int_operands_distinct(
 fn materialize_int_shifted(
     code: &mut CodeBuf,
     place: Place,
-    scratch: Reg,
+    stage: impl Into<Stage>,
     frame: Frame,
     sp_shift: u32,
 ) -> Option<Reg> {
+    let stage = stage.into();
     match place {
         Place::IntReg(r) => Some(Reg(r)),
-        Place::Spill(slot) => Some(load_spill_slot(code, frame, slot, sp_shift, scratch)),
+        Place::Spill(slot) => {
+            let scratch = stage.reg(code);
+            Some(load_spill_slot(code, frame, slot, sp_shift, scratch))
+        }
         Place::FpReg(r) => {
+            let scratch = stage.reg(code);
             // Reinterpret the xmm-resident f64 as its 8-byte bit
             // pattern via `movq scratch, xmm[r]`. Used at c5-internal
             // call sites that route every argument through the

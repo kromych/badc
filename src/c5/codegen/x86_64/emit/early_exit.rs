@@ -9,7 +9,7 @@
 use super::super::ssa::early_exit::{EarlyExit, ShadowExpr, ShadowTest};
 use super::*;
 
-const TEMPS: [Reg; 3] = [Reg(0), SCRATCH_R10, SCRATCH_R11];
+const TEMPS: [Reg; 3] = [Reg::RAX, Reg::R10, Reg::R11];
 
 struct Shadow<'a> {
     code: &'a mut CodeBuf,

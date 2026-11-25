@@ -8,14 +8,15 @@ use super::*;
 /// TODO: FpReg sources and destinations, once the promotion path admits
 /// them (`slot_stores_only_int` keeps them out today).
 fn emit_phi_predecessor_moves(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     self_block: super::super::ir::BlockId,
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
 ) -> super::ssa::emit_common::Emit {
-    // r10 / r11 (int) and the FP scratch pair are reserved scratch outside the
-    // allocator's banks, so they hold no value live across the terminator.
+    // The edge's scratch pair and the FP scratch pair hold no value the
+    // moves read or write.
+    let (hold, stage) = (scratch(code, S0), scratch(code, S1));
     super::ssa::emit_common::emit_phi_predecessor_moves(
         &super::ssa::emit_common::X64Backend,
         code,
@@ -23,15 +24,15 @@ fn emit_phi_predecessor_moves(
         func,
         alloc,
         frame,
-        SCRATCH_R10.0,
-        SCRATCH_R11.0,
+        hold.0,
+        stage.0,
         frame.fp_scratch[1],
         frame.fp_scratch[0],
     )
 }
 
 /// The shared parallel-copy scheduler over the x86-64 leaves; `hold` and
-/// `stage` lie outside the allocator's bank.
+/// `stage` hold no value the moves read or write.
 fn schedule_place_moves(
     code: &mut Vec<u8>,
     moves: &mut Vec<PlaceMove>,
@@ -834,9 +835,9 @@ impl FnEmit<'_, '_> {
         if moves.is_empty() || !homes_distinct {
             return Ok(());
         }
-        // r10 / r11 are never argument registers nor in the allocator's
-        // bank, so they cannot collide with a pending source or target.
-        schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R11)?;
+        // The entry's scratch pair holds no pending source or target.
+        let (hold, stage) = (scratch(code, S0), scratch(code, S1));
+        schedule_place_moves(code, &mut moves, frame, hold, stage)?;
         for vid in vids {
             self.param_prebatched[vid] = true;
         }
@@ -1096,10 +1097,10 @@ impl FnEmit<'_, '_> {
         // `&&label`: a PC-relative lea whose disp32 resolves against this
         // function's block offsets once every block is laid out.
         if let Inst::BlockAddr(tb) = inst {
-            let Some(rd) = int_or_spill_dst(place) else {
+            let code = &mut *self.out.cx.code;
+            let Some(rd) = int_or_spill_dst(code, place) else {
                 return fail("BlockAddr: dst not int reg / spill");
             };
-            let code = &mut *self.out.cx.code;
             let lea_start = code.len();
             super::encode::emit_lea_r_rip32(code, rd, 0);
             self.block_addr_fixups.push((lea_start, *tb));
@@ -1144,6 +1145,7 @@ impl FnEmit<'_, '_> {
                 );
             }
         })?;
+        end_scratch(self.out.cx.code)?;
         for s in saves {
             call_save(self.out.cx.code, self.fcx.frame, s, false);
         }
@@ -1234,32 +1236,33 @@ impl FnEmit<'_, '_> {
             Terminator::JumpTable { idx, table } => {
                 let code = &mut *self.out.cx.code;
                 let iplace = place_of(alloc, idx);
-                let Some(rt) = materialize_int(code, iplace, SCRATCH_R10, frame) else {
+                let Some(rt) = materialize_int(code, iplace, S0, frame) else {
                     return fail("JumpTable: idx Place not int reg / spill");
                 };
-                // rt is an allocated register or r10, never r11. The lea's
-                // disp32 reaches into the blob; the writer patches it. A
-                // static link indexes the table by its address instead.
+                // rt is an allocated register or scratch 0, never scratch 1.
+                // The lea's disp32 reaches into the blob; the writer patches
+                // it. A static link indexes the table by its address instead.
+                let (t, base) = (scratch(code, S0), scratch(code, S1));
                 let site = if self.abs32_addrs {
                     super::encode::emit_load_disp32(
                         code,
                         LoadKind::I64,
-                        SCRATCH_R10,
+                        t,
                         super::encode::Disp32Mem::Index(rt, 8),
                         true,
                     )
                 } else {
                     let lea_start = code.len();
-                    super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);
+                    super::encode::emit_lea_r_rip32(code, base, 0);
                     if self.abs_jump_tables {
-                        super::encode::emit_mov_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 8);
+                        super::encode::emit_mov_r_sib(code, t, base, rt, 8);
                     } else {
-                        super::encode::emit_movsxd_r_sib(code, SCRATCH_R10, SCRATCH_R11, rt, 4);
-                        super::encode::emit_rr(code, Mnem::Add, 8, SCRATCH_R10, SCRATCH_R11);
+                        super::encode::emit_movsxd_r_sib(code, t, base, rt, 4);
+                        super::encode::emit_rr(code, Mnem::Add, 8, t, base);
                     }
                     lea_start
                 };
-                emit_hardened_jmp_r(code, SCRATCH_R10, abi, self.out.cx.asm_extern_call_sites);
+                emit_hardened_jmp_r(code, t, abi, self.out.cx.asm_extern_call_sites);
                 self.jump_table_fixups.push((site, table));
                 Ok(())
             }
@@ -1340,7 +1343,7 @@ impl FnEmit<'_, '_> {
         } else {
             let code = &mut *self.out.cx.code;
             let cond_place = place_of(alloc, cond);
-            let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
+            let Some(rc) = materialize_int(code, cond_place, S0, frame) else {
                 return fail(if negate {
                     "Bz: cond Place not int reg / spill / fp"
                 } else {
@@ -1431,7 +1434,7 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         let code = &mut *self.out.cx.code;
         let tplace = place_of(alloc, target);
-        let Some(rt) = materialize_int(code, tplace, SCRATCH_R10, frame) else {
+        let Some(rt) = materialize_int(code, tplace, S0, frame) else {
             return fail("GotoIndirect: target Place not int reg / spill");
         };
         emit_hardened_jmp_r(code, rt, abi, self.out.cx.asm_extern_call_sites);
@@ -2131,7 +2134,9 @@ fn emit_param_homes(
 /// Copy each aggregate parameter passed inline on the stack (System V
 /// AMD64 MEMORY class over 16 bytes, or a Win64 aggregate past the four
 /// positional registers) from the caller's outgoing area, where
-/// `param_home_off` places it, into its parser-reserved body local.
+/// `param_home_off` places it, into its parser-reserved body local. The
+/// prologue runs it ahead of any allocated value, through r10, which is no
+/// argument register.
 fn emit_struct_stack_param_copy(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -2161,8 +2166,8 @@ fn emit_struct_stack_param_copy(
         let words = (size / 8) as i64;
         for w in 0..words {
             let o = w * 8;
-            emit_mov_r_mem(code, SCRATCH_R10, src_base, (src_off + o) as i32);
-            emit_mov_mem_r(code, dst_base, (dst_off + o) as i32, SCRATCH_R10);
+            emit_mov_r_mem(code, Reg::R10, src_base, (src_off + o) as i32);
+            emit_mov_mem_r(code, dst_base, (dst_off + o) as i32, Reg::R10);
         }
         // The tail in the widest moves that end inside the object.
         let mut o = words * 8;
@@ -2173,16 +2178,16 @@ fn emit_struct_stack_param_copy(
             let (src, dst) = ((src_off + o) as i32, (dst_off + o) as i32);
             match width {
                 4 => {
-                    super::encode::emit_mov_r32_mem(code, SCRATCH_R10, src_base, src);
-                    super::encode::emit_mov_mem32_r(code, dst_base, dst, SCRATCH_R10);
+                    super::encode::emit_mov_r32_mem(code, Reg::R10, src_base, src);
+                    super::encode::emit_mov_mem32_r(code, dst_base, dst, Reg::R10);
                 }
                 2 => {
-                    super::encode::emit_movzx_r_mem16(code, SCRATCH_R10, src_base, src);
-                    super::encode::emit_mov_mem16_r(code, dst_base, dst, SCRATCH_R10);
+                    super::encode::emit_movzx_r_mem16(code, Reg::R10, src_base, src);
+                    super::encode::emit_mov_mem16_r(code, dst_base, dst, Reg::R10);
                 }
                 _ => {
-                    super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, src_base, src);
-                    super::encode::emit_mov_mem8_r(code, dst_base, dst, SCRATCH_R10);
+                    super::encode::emit_movzx_r_mem8(code, Reg::R10, src_base, src);
+                    super::encode::emit_mov_mem8_r(code, dst_base, dst, Reg::R10);
                 }
             }
             o += width;
@@ -2256,7 +2261,8 @@ fn emit_return(
     // A return in registers moves its parts ahead of the restores: rax, rdx
     // and the xmm registers are not restored.
     if let Some(Inst::AggParts { parts, fp_mask, .. }) = func.insts.get(value as usize) {
-        emit_parts_return(code, parts, fp_mask, alloc, frame)?;
+        let pair = (scratch(code, S0), scratch(code, S1));
+        emit_parts_return(code, parts, fp_mask, alloc, frame, pair)?;
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame, alloc);
         restore_callee_saved(code, frame, alloc, ex);
@@ -2295,6 +2301,7 @@ fn emit_return(
         let int_ret = [Reg::RAX, Reg::RDX];
         let mut int_i = 0usize;
         let mut sse_i = 0u8;
+        let t = scratch(code, S0);
         for (class, off) in super::abi_classify::register_slots(&eb_classes) {
             // The eightbyte, or what of it the object holds at its end.
             let width = desc.size.saturating_sub(off).clamp(1, 8);
@@ -2311,7 +2318,7 @@ fn emit_return(
                     width,
                     desc.align,
                     abi.strict_align,
-                    SCRATCH_R10,
+                    t,
                     frame,
                 );
                 sse_i += 1;
@@ -2324,7 +2331,7 @@ fn emit_return(
                     width,
                     desc.align,
                     abi.strict_align,
-                    SCRATCH_R10,
+                    t,
                 );
                 int_i += 1;
             }
@@ -2423,15 +2430,16 @@ fn wide_result(func: &FunctionSsa, abi: super::Abi) -> bool {
 }
 
 /// A return in registers (System V AMD64 3.2.3): each part moves into its
-/// class's register, the integer parts as one parallel copy through r10 /
-/// r11, the SSE parts through the FP scratch, and a constant's bit pattern
-/// crossing banks between the two.
+/// class's register, the integer parts as one parallel copy through
+/// `(hold, stage)`, the SSE parts through the FP scratch, and a constant's
+/// bit pattern crossing banks between the two.
 fn emit_parts_return(
     code: &mut Vec<u8>,
     parts: &[super::super::ir::ValueId],
     fp_mask: &super::super::ir::FpMask,
     alloc: &Allocation,
     frame: Frame,
+    (hold, stage): (Reg, Reg),
 ) -> Emit {
     let regs = super::ssa::reg_alloc::agg_part_regs(
         fp_mask,
@@ -2466,7 +2474,7 @@ fn emit_parts_return(
     for (x, s) in cross {
         emit_movq_xmm_r(code, x, s);
     }
-    schedule_place_moves(code, &mut int_moves, frame, SCRATCH_R10, SCRATCH_R11)
+    schedule_place_moves(code, &mut int_moves, frame, hold, stage)
 }
 
 /// Frame teardown and `ret` after the canary check and the callee-saved

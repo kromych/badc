@@ -4437,27 +4437,30 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     }
     // A pure inst with zero uses is dead, and so is a phi nothing reads.
     // The pure ones die through a worklist: a death decrements its
-    // operands once, and an operand reaching zero joins the list, so each
-    // round is linear in the function's operands. A round of phi deaths
-    // can zero more, which the next round takes.
+    // operands once, and an operand reaching zero joins the list. Phi
+    // deaths feed the list too, so a round follows only a round in which
+    // a phi died, and a function with no phis takes none.
     let mut killed: Vec<bool> = vec![false; n];
-    let mut dying: Vec<usize> = Vec::new();
+    let phis: Vec<usize> = (0..n)
+        .filter(|&i| matches!(func.insts[i], Inst::Phi { .. }))
+        .collect();
+    let mut dying: Vec<usize> = (0..n).filter(|&i| counts[i] == 0).collect();
     loop {
-        let mut changed = false;
-        dying.extend((0..n).filter(|&i| counts[i] == 0 && !killed[i]));
         while let Some(i) = dying.pop() {
             let inst = &func.insts[i];
             if killed[i] || counts[i] != 0 || !func.is_pure(inst) {
                 continue;
             }
             killed[i] = true;
-            changed = true;
             for_each_operand(inst, |op| {
                 decrement(&mut counts, op);
                 if op != NO_VALUE && (op as usize) < n && counts[op as usize] == 0 {
                     dying.push(op as usize);
                 }
             });
+        }
+        if phis.is_empty() {
+            break;
         }
         // Phi liveness: a phi read by a non-phi instruction or a
         // terminator that still emits is live, and liveness flows
@@ -4496,24 +4499,28 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
                 seed(&mut live, &mut work, s);
             }
         }
-        for (i, inst) in func.insts.iter().enumerate() {
-            let Inst::Phi { incoming, kind } = inst else {
+        let mut phi_died = false;
+        for &i in &phis {
+            let Inst::Phi { incoming, kind } = &func.insts[i] else {
                 continue;
             };
             if killed[i] || live[i] {
                 continue;
             }
             killed[i] = true;
-            changed = true;
+            phi_died = true;
             // Decrement the incomes whose edge move read a place;
             // `drop_unread_incomes` removes the no-place ones.
             for &(_, s) in incoming {
                 if !super::emit_common::phi_income_reads_no_place(func, *kind, s) {
                     decrement(&mut counts, s);
+                    if s != NO_VALUE && (s as usize) < n && counts[s as usize] == 0 {
+                        dying.push(s as usize);
+                    }
                 }
             }
         }
-        if !changed {
+        if !phi_died {
             break;
         }
     }

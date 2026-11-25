@@ -180,7 +180,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xd0]
                	ldp	x20, x21, [sp], #0xe0
                	ret
-               	sub	x2, x29, #0xa0
                	ldur	x0, [x29, #-0x98]
                	mov	x17, #0xc380            // =50048
                	movk	x17, #0x1c9, lsl #16
@@ -199,6 +198,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0xa0]
                	mov	x0, #0x1                // =1
                	mov	x1, #0x1                // =1
+               	sub	x2, x29, #0xa0
                	mov	x3, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0

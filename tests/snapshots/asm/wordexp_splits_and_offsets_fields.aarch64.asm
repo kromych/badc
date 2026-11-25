@@ -63,14 +63,14 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x18
-               	ldur	x1, [x29, #-0x10]
-               	ldr	x1, [x1, #0x20]
-               	cbz	x1, <addr>
+               	ldur	x0, [x29, #-0x10]
+               	ldr	x0, [x0, #0x20]
+               	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x18
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	stur	x0, [x29, #-0x8]

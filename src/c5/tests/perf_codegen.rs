@@ -6173,6 +6173,32 @@ fn address_arguments_the_call_sets_take_no_slot() {
     );
 }
 
+/// AArch64: a data address evaluated ahead of a conditional argument and
+/// read by the call alone is set by the call, an `adrp` / `add` pair into
+/// x0 just before the `bl`, not held in a register across the branch.
+#[test]
+fn an_address_one_call_reads_is_set_by_it() {
+    const SRC: &str = "void sink(const char *a, const char *b, long k);\n\
+        long f(long a, long b, const char *p) {\n\
+            sink(\"first\", p ? p : \"\", a + b);\n\
+            return a;\n\
+        }\n";
+    let words = function_words(&object_at(SRC, Target::LinuxAarch64, true), "f");
+    let bl = words
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .expect("bl");
+    let adrp_x0 = |w: &u32| w & 0x9F00_001F == 0x9000_0000;
+    let branch = words
+        .iter()
+        .position(|&w| w & 0x7E00_0000 == 0x3400_0000)
+        .expect("cbz");
+    assert!(
+        !words[..branch].iter().any(adrp_x0) && adrp_x0(&words[bl - 2]),
+        "{words:08x?}"
+    );
+}
+
 /// A stack argument read from a local array, with nothing between the read
 /// and the call that writes memory, is read by the call's marshaling into
 /// its slot: the 63 elements take no register ahead of the call and spill

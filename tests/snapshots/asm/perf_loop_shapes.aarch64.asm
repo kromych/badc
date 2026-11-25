@@ -446,12 +446,11 @@ Disassembly of section .text:
                	sub	x0, x29, #0x28
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	sub	x2, x29, #0x28
                	ldursw	x1, [x29, #-0x28]
                	mul	x1, x1, x1
                	cmp	x0, x1
                	b.ne	<addr>
-               	mov	x0, x2
+               	sub	x0, x29, #0x28
                	mov	x1, #0x8                // =8
                	bl	<addr>
                	ldursw	x1, [x29, #-0x8]

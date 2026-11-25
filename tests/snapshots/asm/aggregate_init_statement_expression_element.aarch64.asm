@@ -30,16 +30,16 @@ Disassembly of section .text:
                	mov	x0, #0x1000             // =4096
                	stur	w0, [x29, #-0x8]
                	ldursw	x20, [x29, #-0x8]
-               	sub	x0, x29, #0x18
-               	mov	x1, #0xc3d4             // =50132
-               	movk	x1, #0xa1b2, lsl #16
-               	movk	x1, #0x2, lsl #32
-               	stur	x1, [x29, #-0x18]
-               	mov	x1, #0x100              // =256
+               	mov	x0, #0xc3d4             // =50132
+               	movk	x0, #0xa1b2, lsl #16
+               	movk	x0, #0x2, lsl #32
+               	stur	x0, [x29, #-0x18]
+               	mov	x0, #0x100              // =256
                	cmp	w20, #0x100
-               	csel	x1, x20, x1, gt
-               	add	x1, x1, #0x30
-               	stur	w1, [x29, #-0x10]
+               	csel	x0, x20, x0, gt
+               	add	x0, x0, #0x30
+               	stur	w0, [x29, #-0x10]
+               	sub	x0, x29, #0x18
                	bl	<addr>
                	ldr	w1, [x0]
                	mov	x17, #0xc3d4            // =50132

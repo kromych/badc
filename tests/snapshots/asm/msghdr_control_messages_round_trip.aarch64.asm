@@ -306,17 +306,17 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0x18]
                	stur	xzr, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
-               	sub	x0, x29, #0x78
                	stur	xzr, [x29, #-0x78]
                	stur	xzr, [x29, #-0x70]
                	stur	xzr, [x29, #-0x68]
                	stur	xzr, [x29, #-0x60]
                	stur	xzr, [x29, #-0x48]
                	stur	x1, [x29, #-0x58]
-               	mov	x2, #0x30               // =48
-               	stur	x2, [x29, #-0x50]
-               	mov	x2, #0x14               // =20
-               	str	x2, [x1]
+               	mov	x0, #0x30               // =48
+               	stur	x0, [x29, #-0x50]
+               	mov	x0, #0x14               // =20
+               	str	x0, [x1]
+               	sub	x0, x29, #0x78
                	bl	<addr>
                	mov	x1, x0
                	sub	x0, x29, #0x40

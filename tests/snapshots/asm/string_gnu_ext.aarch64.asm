@@ -205,41 +205,41 @@ Disassembly of section .text:
                	add	x0, x0, #0x2
                	mov	x1, #0x4                // =4
                	bl	<addr>
-               	sub	x0, x29, #0x10
-               	ldurb	w1, [x29, #-0x10]
-               	cmp	w1, #0x78
+               	ldurb	w0, [x29, #-0x10]
+               	cmp	w0, #0x78
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0xf]
-               	cmp	w1, #0x78
+               	ldurb	w0, [x29, #-0xf]
+               	cmp	w0, #0x78
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w1, [x29, #-0xe]
-               	cbz	w1, <addr>
+               	ldurb	w0, [x29, #-0xe]
+               	cbz	w0, <addr>
                	mov	x0, #0xe                // =14
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w1, [x29, #-0xd]
-               	cbnz	w1, <addr>
-               	ldurb	w1, [x29, #-0xc]
-               	cbnz	w1, <addr>
-               	ldurb	w1, [x29, #-0xb]
-               	cbnz	w1, <addr>
-               	ldurb	w1, [x29, #-0xa]
-               	cmp	w1, #0x78
+               	ldurb	w0, [x29, #-0xd]
+               	cbnz	w0, <addr>
+               	ldurb	w0, [x29, #-0xc]
+               	cbnz	w0, <addr>
+               	ldurb	w0, [x29, #-0xb]
+               	cbnz	w0, <addr>
+               	ldurb	w0, [x29, #-0xa]
+               	cmp	w0, #0x78
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x9]
-               	cmp	w1, #0x78
+               	ldurb	w0, [x29, #-0x9]
+               	cmp	w0, #0x78
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x79               // =121
-               	sturb	w1, [x29, #-0x10]
+               	mov	x0, #0x79               // =121
+               	sturb	w0, [x29, #-0x10]
+               	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	ldurb	w0, [x29, #-0x10]

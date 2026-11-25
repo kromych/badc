@@ -36,22 +36,22 @@ Disassembly of section .text:
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	mov	x1, #0x0                // =0
-               	mov	x3, #0x1                // =1
-               	movk	x3, #0x2, lsl #32
-               	mov	x4, #0x4                // =4
-               	str	x3, [x2]
-               	add	x3, x2, #0xc
-               	str	w4, [x2, #0x8]
-               	cmp	x2, x3
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x2, lsl #32
+               	mov	x3, #0x4                // =4
+               	str	x2, [x0]
+               	add	x2, x0, #0xc
+               	str	w3, [x0, #0x8]
+               	cmp	x0, x2
                	b.hs	<addr>
-               	ldrsw	x4, [x2]
-               	add	x1, x1, x4
-               	add	x2, x2, #0x4
-               	cmp	x2, x3
+               	ldrsw	x3, [x0]
+               	add	x1, x1, x3
+               	add	x0, x0, #0x4
+               	cmp	x0, x2
                	b.lo	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10

@@ -172,7 +172,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	bl	<addr>
                	mov	x22, x0
-               	sub	x21, x29, #0x110
                	mov	x0, #-0x5555555555555556 // =-6148914691236517206
                	str	x0, [sp, #0x50]
                	str	x0, [sp, #0x58]
@@ -294,7 +293,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldr	x0, [x23]
                	ldr	x1, [x23, #0x8]
-               	mov	x2, x21
+               	sub	x2, x29, #0x110
                	bl	<addr>
                	mov	x21, x0
                	b	<addr>

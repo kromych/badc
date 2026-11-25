@@ -88,11 +88,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x8
                	mov	x1, #0xf                // =15
                	stur	x1, [x29, #-0x8]
                	stur	x0, [x29, #-0x8]
                	mov	x1, #0x5                // =5
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	cbnz	w0, <addr>
                	ldur	x0, [x29, #-0x8]

@@ -95,7 +95,6 @@ Disassembly of section .text:
                	bl	<addr>
                	cmp	x0, #0x1
                	b.ne	<addr>
-               	sub	x1, x29, #0x88
                	ldurb	w0, [x29, #-0x88]
                	cmp	w0, #0x61
                	b.eq	<addr>
@@ -104,6 +103,7 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0xd0
                	ret
                	ldursw	x0, [x29, #-0x9c]
+               	sub	x1, x29, #0x88
                	mov	x2, #0x2                // =2
                	mov	x3, #0x100              // =256
                	bl	<addr>

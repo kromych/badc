@@ -167,7 +167,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	sub	x8, x29, #0x20
                	bl	<addr>
-               	sub	x5, x29, #0x20
                	ldur	x1, [x29, #-0x20]
                	ldur	x2, [x29, #-0x18]
                	ldur	x3, [x29, #-0x10]
@@ -186,7 +185,7 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	csel	x1, x2, x0, ne
                	cbz	x1, <addr>
-               	mov	x0, x5
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	mov	x17, #0x10e1            // =4321
                	cmp	x0, x17

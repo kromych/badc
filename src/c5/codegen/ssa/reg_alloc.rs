@@ -5445,8 +5445,9 @@ fn call_plan<'f>(
 /// which is an integer argument of a call that sets it
 /// ([`Allocation::call_set`]): a constant the call places on the stack; a
 /// value the call sets in one instruction, the move a register holding it
-/// would take; or a value whose reading calls lie in its own block, which
-/// sets it as often.
+/// would take; a value whose reading calls lie in its own block, which
+/// sets it as often; or a value one call reads once, in a block of no
+/// deeper loop, set there instead of at its definition.
 fn call_set_arguments(
     func: &FunctionSsa,
     target: Target,
@@ -5467,9 +5468,11 @@ fn call_set_arguments(
         // needs, a data or code address two.
         _ => target.is_x86_64() && !bound.contains(&v),
     };
-    let mut readers: alloc::collections::BTreeMap<ValueId, u32> =
+    // Per value: the reading calls' arguments, whether each is set at no
+    // cost over a register holding it, and the last one's block.
+    let mut readers: alloc::collections::BTreeMap<ValueId, (u32, bool, usize)> =
         alloc::collections::BTreeMap::new();
-    for blk in &func.blocks {
+    for (b, blk) in func.blocks.iter().enumerate() {
         for pc in blk.inst_range.clone() {
             let inst = &func.insts[pc as usize];
             let Some((args, fp, plan)) = call_plan(func, inst, target) else {
@@ -5477,7 +5480,7 @@ fn call_set_arguments(
             };
             for (i, (&v, p)) in args.iter().zip(&plan.placements).enumerate() {
                 let here = blk.inst_range.contains(&v);
-                let set = match (func.insts.get(v as usize), p) {
+                let cheap = match (func.insts.get(v as usize), p) {
                     (Some(Inst::Imm(_)), ArgPlacement::Stack(_)) => true,
                     (
                         Some(
@@ -5488,17 +5491,31 @@ fn call_set_arguments(
                         ),
                         ArgPlacement::IntReg(_) | ArgPlacement::Stack(_),
                     ) => here || one(v, def),
-                    _ => false,
+                    (Some(_), ArgPlacement::IntReg(_) | ArgPlacement::Stack(_)) => false,
+                    _ => continue,
                 };
-                if set && !fp.has(i) && !func.f32_values.get(v as usize).copied().unwrap_or(false) {
-                    *readers.entry(v).or_default() += 1;
+                if !fp.has(i) && !func.f32_values.get(v as usize).copied().unwrap_or(false) {
+                    let r = readers.entry(v).or_insert((0, true, b));
+                    *r = (r.0 + 1, r.1 && cheap, b);
                 }
             }
         }
     }
+    let mut depths = None;
+    let mut as_often = |v: ValueId, reader: usize| {
+        let depths =
+            depths.get_or_insert_with(|| crate::c5::codegen::passes::layout::loop_depths(func));
+        let def = func
+            .blocks
+            .iter()
+            .position(|blk| blk.inst_range.contains(&v));
+        def.is_some_and(|d| depths[reader] <= depths[d])
+    };
     readers
         .into_iter()
-        .filter(|&(v, n)| use_counts.get(v as usize) == Some(&n))
+        .filter(|&(v, (n, cheap, b))| {
+            use_counts.get(v as usize) == Some(&n) && (cheap || n == 1 && as_often(v, b))
+        })
         .filter_map(|(v, _)| match func.insts[v as usize] {
             Inst::Imm(k) => Some((v, ArgSet::Imm(k))),
             Inst::LocalAddr(off) if off < 0 => Some((v, ArgSet::Local(off))),

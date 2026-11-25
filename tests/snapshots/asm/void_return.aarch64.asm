@@ -78,14 +78,13 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #-0x1               // =-1
                	stur	w0, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	stur	wzr, [x29, #-0x8]
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
                	stur	w0, [x29, #-0x8]
                	mov	x0, #0x4                // =4
                	stur	w0, [x29, #-0x8]
-               	mov	x0, x1
+               	sub	x0, x29, #0x8
                	bl	<addr>
                	mov	x0, #0x3                // =3
                	sub	x1, x29, #0x8

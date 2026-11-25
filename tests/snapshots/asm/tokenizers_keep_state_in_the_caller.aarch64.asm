@@ -42,9 +42,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x70
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -59,9 +59,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x68
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -76,9 +76,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x70
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -91,9 +91,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x68
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -106,9 +106,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x70
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -121,9 +121,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x68
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

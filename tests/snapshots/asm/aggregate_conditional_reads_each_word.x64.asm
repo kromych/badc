@@ -26,44 +26,32 @@ Disassembly of section .text:
                	int3
 
 <pick_pair>:
-               	subq	$0x28, %rsp
+               	movl	$0x4, %eax
+               	movl	$0x5, %ecx
+               	movq	$-0x4, %rdx
+               	movq	$-0x5, %rdi
                	testl	%esi, %esi
-               	je	<addr>
-               	leaq	(%rsp), %rax
-               	movq	$0x4, (%rsp)
-               	movq	$0x5, 0x8(%rsp)
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
-               	imulq	$0x64, %rcx, %rcx
-               	addq	%rcx, %rax
-               	addq	$0x28, %rsp
-               	retq
-               	leaq	0x10(%rsp), %rax
-               	movq	$-0x4, 0x10(%rsp)
-               	movq	$-0x5, 0x18(%rsp)
-               	jmp	<addr>
-
-<pick_triple>:
-               	subq	$0x38, %rsp
+               	cmoveq	%rdi, %rcx
                	testl	%esi, %esi
-               	je	<addr>
-               	leaq	(%rsp), %rax
-               	movq	$0x2, (%rsp)
-               	movq	$0x4, 0x8(%rsp)
-               	movq	$0x6, 0x10(%rsp)
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rdx
-               	movq	0x10(%rax), %rax
-               	imulq	$0xa, %rdx, %rdx
-               	addq	%rdx, %rcx
+               	cmoveq	%rdx, %rax
                	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
-               	addq	$0x38, %rsp
                	retq
-               	leaq	0x18(%rsp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movq	$0x0, 0x10(%rax)
+
+<pick_triple>:
+               	movl	$0x2, %edx
+               	testl	%esi, %esi
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movl	$0x6, %ecx
+               	imulq	$0xa, %rax, %rax
+               	addq	%rdx, %rax
+               	imulq	$0x64, %rcx, %rcx
+               	addq	%rcx, %rax
+               	retq
+               	xorl	%eax, %eax
+               	movq	%rax, %rcx
+               	movq	%rax, %rdx
                	jmp	<addr>
 
 <main>:

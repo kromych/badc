@@ -1,7 +1,8 @@
 /* A load through an address chosen between a frame object and memory
  * elsewhere: a conditional of struct type with an lvalue arm, a pointer
- * local set to a local or to a parameter, the same around a loop, and a
- * null pointer the guarded path never reads. `seed` is volatile, so no
+ * local set to a local or to a parameter, the same around a loop, a null
+ * pointer the guarded path never reads, and a pointer local carried
+ * around a loop that only an unused read takes. `seed` is volatile, so no
  * input is a translation-time constant. */
 
 volatile long seed = 6;
@@ -52,6 +53,26 @@ __attribute__((noinline)) long guarded(const long *q, int flag) {
     return *p;
 }
 
+/* The read's value is unused and the pointer is read nowhere else, so the
+ * pointer's phi at the loop head reads only the phi of the arms; the read
+ * through the pointer arm keeps reading the pointer, not the value. */
+int keep = 1;
+signed char steps;
+long target = 3;
+
+__attribute__((noinline)) int unused_read_in_a_loop(void) {
+    long *c = &target;
+    long d = seed;
+    for (; steps <= 1; steps++) {
+        if (keep)
+            ;
+        else
+            c = &d;
+        *c;
+    }
+    return steps;
+}
+
 int main(void) {
     Ref v[3] = {{10}, {20}, {30}};
     long w[4] = {1, 2, 3, 4};
@@ -65,5 +86,7 @@ int main(void) {
         return 4;
     if (guarded(0, 0) != seed || guarded(w, 1) != 1)
         return 5;
+    if (unused_read_in_a_loop() != 2)
+        return 6;
     return 0;
 }

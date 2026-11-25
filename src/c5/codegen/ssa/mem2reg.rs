@@ -1898,9 +1898,17 @@ fn split_address_phi_loads(func: &mut FunctionSsa) -> bool {
             let mut reads = Vec::with_capacity(incoming.len());
             for &(pred, v) in incoming {
                 let p = &func.blocks[pred as usize];
+                // A pointer read here must be live already: reading a dead one
+                // revives what it reads, the address phi this split rewrites
+                // into the loaded values among them (a pointer local's phi
+                // around a loop reads its own back-edge value).
                 let arm = match func.insts.get(v as usize) {
                     Some(&Inst::LocalAddr(off)) => Arm::Object(off),
-                    Some(_) if matches!(p.terminator, Terminator::Jmp(_)) => Arm::Pointer(v),
+                    Some(_)
+                        if matches!(p.terminator, Terminator::Jmp(_)) && uses[v as usize] > 0 =>
+                    {
+                        Arm::Pointer(v)
+                    }
                     _ => break,
                 };
                 let at = match p.inst_range.clone().last() {

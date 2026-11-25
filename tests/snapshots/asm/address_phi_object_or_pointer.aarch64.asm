@@ -70,6 +70,22 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
+<unused_read_in_a_loop>:
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	adrp	x0, <page>
+               	ldrsb	x1, [x0, #0x40]
+               	cmp	w1, #0x1
+               	b.gt	<addr>
+               	add	x1, x1, #0x1
+               	strb	w1, [x0, #0x40]
+               	ldrsb	x1, [x0, #0x40]
+               	cmp	w1, #0x1
+               	b.le	<addr>
+               	adrp	x0, <page>
+               	ldrsb	x0, [x0, #0x40]
+               	ret
+
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -160,6 +176,13 @@ Disassembly of section .text:
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	bl	<addr>
+               	cmp	w0, #0x2
+               	b.eq	<addr>
+               	mov	x0, #0x6                // =6
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

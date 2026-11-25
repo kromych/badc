@@ -85,6 +85,19 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
 
+<unused_read_in_a_loop>:
+               	movq	<rip>, %rax # <addr>
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x1, %eax
+               	jg	<addr>
+               	incq	%rax
+               	movb	%al, <rip> # <addr>
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x1, %eax
+               	jle	<addr>
+               	movsbq	<rip>, %rax # <addr>
+               	retq
+
 <main>:
                	subq	$0x48, %rsp
                	leaq	0x8(%rsp), %rdi
@@ -163,6 +176,12 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x5, %eax
+               	addq	$0x48, %rsp
+               	retq
+               	callq	<addr>
+               	cmpl	$0x2, %eax
+               	je	<addr>
+               	movl	$0x6, %eax
                	addq	$0x48, %rsp
                	retq
                	xorl	%eax, %eax

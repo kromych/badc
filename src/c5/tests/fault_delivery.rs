@@ -9,6 +9,8 @@
 
 use core::ffi::{c_int, c_void};
 
+use super::signals::Set;
+
 type Port = u32;
 
 const MACH_PORT_RIGHT_RECEIVE: u32 = 1;
@@ -94,7 +96,7 @@ unsafe extern "C" {
     fn pid_for_task(task: Port, pid: *mut c_int) -> c_int;
     fn thread_get_state(thread: Port, flavor: c_int, state: *mut u64, count: *mut u32) -> c_int;
     fn getpid() -> c_int;
-    fn sigprocmask(how: c_int, set: *const u32, old: *mut u32) -> c_int;
+    fn sigprocmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
     fn sigaction(sig: c_int, act: *const SigAction, old: *mut SigAction) -> c_int;
     fn write(fd: c_int, buf: *const c_void, len: usize) -> isize;
     fn pthread_create(
@@ -184,7 +186,7 @@ unsafe extern "C" fn serve(port: *mut c_void) -> *mut c_void {
 fn make_deliverable() {
     let set = FAULT_SIGNALS
         .iter()
-        .fold(0u32, |s, &sig| s | 1 << (sig - 1));
+        .fold(Set::empty(), |s, &sig| s.and(sig));
     unsafe { sigprocmask(SIG_UNBLOCK, &set, core::ptr::null_mut()) };
     for sig in FAULT_SIGNALS {
         let mut old = SigAction {

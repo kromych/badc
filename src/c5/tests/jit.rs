@@ -128,7 +128,10 @@ pub(super) fn runs_without_linker(name: &str) -> bool {
 /// programs the JIT runs share one process: a program that sets any of them
 /// runs with no other beside it. So does one that starts
 /// a process, which inherits the inheritable handles of every program open
-/// then; on Windows a file a child holds open cannot be removed.
+/// then; on Windows a file a child holds open cannot be removed. A program
+/// that runs alone starts with no signal blocked: the macOS C library saves
+/// and restores the mask around `tmpfile`, `longjmp` and others, and two
+/// programs doing so beside each other can leave every signal blocked.
 static C_LIBRARY_STATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 /// The sources running now. A fixture names its files by process, and the
@@ -188,6 +191,8 @@ pub(super) fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
     .any(|call| src.contains(call))
     {
         let _alone = C_LIBRARY_STATE.write().unwrap_or_else(|e| e.into_inner());
+        #[cfg(unix)]
+        super::signals::set_process_mask(&super::signals::Set::empty());
         run()
     } else {
         let _shared = C_LIBRARY_STATE.read().unwrap_or_else(|e| e.into_inner());
@@ -303,16 +308,41 @@ fn jit_exit_child() {
     if std::env::var_os(CHILD_BLOCKED).is_some() {
         super::signals::set_thread_mask(&super::signals::Set::full());
     }
-    let program = Compiler::new(src).compile().expect("compile failed");
-    let code = if std::env::var_os(CHILD_OPTIMIZE).is_some() {
-        let opts = NativeOptions::new().with_optimize();
-        jit_run_with_options(&program, &argv, opts, &mut |_| {})
-    } else {
-        jit_run(&program, &argv)
-    }
+    let program = Compiler::new(src.clone())
+        .compile()
+        .expect("compile failed");
+    let code = beside_others(&src, || {
+        if std::env::var_os(CHILD_OPTIMIZE).is_some() {
+            let opts = NativeOptions::new().with_optimize();
+            jit_run_with_options(&program, &argv, opts, &mut |_| {})
+        } else {
+            jit_run(&program, &argv)
+        }
+    })
     .expect("jit_run failed");
     println!("{CHILD_RAN}");
     std::process::exit(code);
+}
+
+/// A program that runs alone starts with no signal blocked, whatever mask
+/// the programs before it left (see [`C_LIBRARY_STATE`]).
+#[cfg(unix)]
+#[test]
+fn a_program_run_alone_starts_with_no_signal_blocked() {
+    let src = "#include <signal.h>\n\
+        int main(void) {\n\
+            sigset_t now;\n\
+            if (sigprocmask(SIG_BLOCK, 0, &now)) return 1;\n\
+            return sigismember(&now, SIGUSR1) ? 2 : 0;\n\
+        }\n";
+    let (mut cmd, dir) = child_command(src, &[], false, false);
+    let out = cmd
+        .env(CHILD_BLOCKED, "1")
+        .output()
+        .expect("spawn the child");
+    let _ = std::fs::remove_dir_all(&dir);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "{stderr}");
 }
 
 /// A fault in a thread a program starts ends the process by the fault, with

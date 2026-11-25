@@ -180,6 +180,7 @@ pub mod signals {
         fn sigaddset(set: *mut Set, sig: c_int) -> c_int;
         fn sigismember(set: *const Set, sig: c_int) -> c_int;
         fn pthread_sigmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
+        fn sigprocmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
         fn signal(sig: c_int, handler: usize) -> usize;
     }
 
@@ -197,9 +198,12 @@ pub mod signals {
         }
 
         pub fn with(sig: c_int) -> Self {
-            let mut set = Self::empty();
-            unsafe { sigaddset(&mut set, sig) };
-            set
+            Self::empty().and(sig)
+        }
+
+        pub fn and(mut self, sig: c_int) -> Self {
+            unsafe { sigaddset(&mut self, sig) };
+            self
         }
 
         pub fn holds(&self, sig: c_int) -> bool {
@@ -217,6 +221,12 @@ pub mod signals {
     /// Restore a mask taken from [`block_on_this_thread`].
     pub fn set_thread_mask(mask: &Set) {
         unsafe { pthread_sigmask(SIG_SETMASK, mask, core::ptr::null_mut()) };
+    }
+
+    /// Set the mask through `sigprocmask`: the calling thread's, and on
+    /// macOS every thread's.
+    pub fn set_process_mask(mask: &Set) {
+        unsafe { sigprocmask(SIG_SETMASK, mask, core::ptr::null_mut()) };
     }
 
     /// The calling thread's blocked set.

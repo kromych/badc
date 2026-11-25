@@ -563,8 +563,6 @@ Disassembly of section .text:
                	movq	-0x1000(%rbp), %rax
                	leaq	(%rbx,%rax), %rdi
                	callq	<addr>
-               	movq	%rax, -0x1010(%rbp)
-               	movq	%rdx, -0x1008(%rbp)
                	movq	%rbx, %rcx
                	shlq	%rcx
                	leaq	0x1(%rcx), %rsi

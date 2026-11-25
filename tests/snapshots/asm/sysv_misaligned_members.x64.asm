@@ -382,13 +382,25 @@ Disassembly of section .text:
                	retq
                	movl	$0x8, %edi
                	callq	<addr>
-               	movl	%eax, 0x38(%rsp)
-               	leaq	0x20(%rsp), %rcx
-               	movl	%eax, (%rcx)
-               	movsbq	0x20(%rsp), %rax
+               	movq	%rax, %rcx
+               	shrq	$0x8, %rcx
+               	movq	%rax, %rdx
+               	shrq	$0x10, %rdx
+               	movq	%rax, %rsi
+               	shrq	$0x18, %rsi
+               	andq	$0xff, %rax
+               	movb	%al, 0x20(%rsp)
+               	andq	$0xff, %rcx
+               	movb	%cl, 0x21(%rsp)
+               	andq	$0xff, %rdx
+               	movb	%dl, 0x22(%rsp)
+               	movq	%rsi, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, 0x23(%rsp)
+               	movsbq	%al, %rax
                	cmpl	$0x8, %eax
                	jne	<addr>
-               	movsbq	0x23(%rsp), %rax
+               	movsbq	%cl, %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0xd, %eax

@@ -423,7 +423,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	stur	x0, [x29, #-0x8]
                	fmov	d0, x0
                	fmov	d1, #0.75000000
                	fcmp	d0, d1

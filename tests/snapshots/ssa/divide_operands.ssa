@@ -842,12 +842,12 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v336 RetPart(0, kind=I64)                             -> x0
     v337 RetPart(1, kind=I64)                             -> x2
     v338 Imm(0)                                           -> x1
-    v339 LocalAddr(-44)                                   -> x1
+    v339 Imm(0)                                           -> x1
     v340 Imm(0)                                           -> x1
-    v341 LocalAddr(-44)                                   -> x1
-    v342 LoadLocal { off=-44, kind=I64 }                  -> x1
-    v343 BinopI { op=add, lhs=v339, rhs_imm=8 }           -> x1
-    v344 LoadLocal { off=-44, disp=8, kind=I64 }          -> x1
+    v341 Imm(0)                                           -> x1
+    v342 Imm(0)                                           -> x1
+    v343 Imm(0)                                           -> x1
+    v344 Imm(0)                                           -> x1
     v345 Imm(0)                                           -> x1
     v346 Imm(0)                                           -> x1
     v347 Imm(0)                                           -> x1
@@ -871,12 +871,12 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v363 RetPart(0, kind=I64)                             -> x0
     v364 RetPart(1, kind=I64)                             -> x2
     v365 Imm(0)                                           -> x1
-    v366 LocalAddr(-45)                                   -> x1
+    v366 Imm(0)                                           -> x1
     v367 Imm(0)                                           -> x1
-    v368 LocalAddr(-45)                                   -> x1
-    v369 LoadLocal { off=-45, kind=I64 }                  -> x1
-    v370 BinopI { op=add, lhs=v366, rhs_imm=8 }           -> x1
-    v371 LoadLocal { off=-45, disp=8, kind=I64 }          -> x1
+    v368 Imm(0)                                           -> x1
+    v369 Imm(0)                                           -> x1
+    v370 Imm(0)                                           -> x1
+    v371 Imm(0)                                           -> x1
     v372 Imm(1)                                           -> x1
     v373 Imm(0)                                           -> x1
     v374 BinopI { op=xor, lhs=v363, rhs_imm=1 }           -> x0

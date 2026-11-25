@@ -496,45 +496,58 @@ fn ent_pc=14 n_params=0 variadic=false locals=5
     v223 Imm(8)                                           -> x7
     v224 Call { target_pc=5, args=[v223], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v225 RetPart(0, kind=I64)                             -> x0
-    v226 StoreLocal { off=-1, value=v225, kind=I32 }      -> -
-    v227 LocalAddr(-1)                                    -> x1
-    v228 LocalAddr(-4)                                    -> x1
-    v229 Store { addr=v228, disp=0, value=v225, kind=I32, align=1 } -> -
-    v230 LifetimeEnd(-1)                                  -> -
-    v231 LocalAddr(-4)                                    -> x0
-    v232 LoadLocal { off=-4, kind=I8 }                    -> x0
-    v233 BinopI { op=ne, lhs=v232, rhs_imm=8 }            -> x0
-    v234 Imm(0)                                           -> x1
-    terminator Bnz { cond=v233, target=b29, fall=b28 }   (exit_acc=v233)
+    v226 Imm(0)                                           -> x1
+    v227 Imm(0)                                           -> x1
+    v228 BinopI { op=shru, lhs=v225, rhs_imm=8 }          -> x1
+    v229 Imm(0)                                           -> x2
+    v230 BinopI { op=shru, lhs=v225, rhs_imm=16 }         -> x2
+    v231 Imm(0)                                           -> x6
+    v232 BinopI { op=shru, lhs=v225, rhs_imm=24 }         -> x6
+    v233 Imm(0)                                           -> x7
+    v234 Imm(0)                                           -> x7
+    v235 BinopI { op=and, lhs=v225, rhs_imm=255 }         -> x0
+    v236 StoreLocal { off=-4, value=v235, kind=I8 }       -> -
+    v237 BinopI { op=and, lhs=v228, rhs_imm=255 }         -> x1
+    v238 StoreLocal { off=-4, disp=1, value=v237, kind=I8 } -> -
+    v239 BinopI { op=and, lhs=v230, rhs_imm=255 }         -> x2
+    v240 StoreLocal { off=-4, disp=2, value=v239, kind=I8 } -> -
+    v241 BinopI { op=and, lhs=v232, rhs_imm=255 }         -> x1
+    v242 StoreLocal { off=-4, disp=3, value=v241, kind=I8 } -> -
+    v243 LifetimeEnd(0)                                   -> -
+    v244 LocalAddr(-4)                                    -> x2
+    v245 Extend { value=v235, kind=I8 }                   -> x0
+    v246 BinopI { op=ne, lhs=v245, rhs_imm=8 }            -> x0
+    v247 Imm(0)                                           -> x2
+    terminator Bnz { cond=v246, target=b29, fall=b28 }   (exit_acc=v246)
   block 28  start_pc=0
-    v235 LocalAddr(-4)                                    -> x0
-    v236 BinopI { op=add, lhs=v231, rhs_imm=1 }           -> x0
-    v237 Imm(2)                                           -> x0
-    v238 BinopI { op=add, lhs=v231, rhs_imm=3 }           -> x0
-    v239 LoadLocal { off=-4, disp=3, kind=I8 }            -> x0
-    v240 BinopI { op=ne, lhs=v239, rhs_imm=3 }            -> x0
-    v241 Imm(0)                                           -> x1
-    v242 Imm(0)                                           -> x1
-    v243 Imm(0)                                           -> x1
-    terminator Bz { cond=v240, target=b30, fall=b29 }   (exit_acc=v240)
+    v248 LocalAddr(-4)                                    -> x0
+    v249 BinopI { op=add, lhs=v244, rhs_imm=1 }           -> x0
+    v250 Imm(2)                                           -> x0
+    v251 BinopI { op=add, lhs=v244, rhs_imm=3 }           -> x0
+    v252 Extend { value=v241, kind=I8 }                   -> x0
+    v253 BinopI { op=ne, lhs=v252, rhs_imm=3 }            -> x0
+    v254 Imm(0)                                           -> x1
+    v255 Imm(0)                                           -> x1
+    v256 Imm(0)                                           -> x1
+    terminator Bz { cond=v253, target=b30, fall=b29 }   (exit_acc=v253)
   block 29  start_pc=0
-    v244 Imm(13)                                          -> x0
-    v245 LifetimeEnd(-2)                                  -> -
-    v246 LifetimeEnd(-3)                                  -> -
-    v247 LifetimeEnd(-1)                                  -> -
-    v248 LifetimeEnd(-4)                                  -> -
-    v249 LifetimeEnd(-5)                                  -> -
-    v250 LifetimeEnd(-2)                                  -> -
-    terminator Return(v244)   (exit_acc=v244)
+    v257 Imm(13)                                          -> x0
+    v258 LifetimeEnd(-2)                                  -> -
+    v259 LifetimeEnd(-3)                                  -> -
+    v260 LifetimeEnd(-1)                                  -> -
+    v261 LifetimeEnd(-4)                                  -> -
+    v262 LifetimeEnd(-5)                                  -> -
+    v263 LifetimeEnd(-2)                                  -> -
+    terminator Return(v257)   (exit_acc=v257)
   block 30  start_pc=0
-    v251 Imm(0)                                           -> x0
-    v252 LifetimeEnd(-2)                                  -> -
-    v253 LifetimeEnd(-3)                                  -> -
-    v254 LifetimeEnd(-1)                                  -> -
-    v255 LifetimeEnd(-4)                                  -> -
-    v256 LifetimeEnd(-5)                                  -> -
-    v257 LifetimeEnd(-2)                                  -> -
-    terminator Return(v251)   (exit_acc=v251)
+    v264 Imm(0)                                           -> x0
+    v265 LifetimeEnd(-2)                                  -> -
+    v266 LifetimeEnd(-3)                                  -> -
+    v267 LifetimeEnd(-1)                                  -> -
+    v268 LifetimeEnd(-4)                                  -> -
+    v269 LifetimeEnd(-5)                                  -> -
+    v270 LifetimeEnd(-2)                                  -> -
+    terminator Return(v264)   (exit_acc=v264)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -403,8 +403,6 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	movq	%rcx, %rsi
                	callq	<addr>
-               	movq	%rax, 0x290(%rsp)
-               	movq	%rdx, 0x298(%rsp)
                	leaq	0x1(%rbx), %rcx
                	cmpq	%rcx, %rax
                	jne	<addr>
@@ -573,8 +571,6 @@ Disassembly of section .text:
                	retq
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rax, 0x290(%rsp)
-               	movq	%rdx, 0x298(%rsp)
                	cmpq	%rbx, %rax
                	jne	<addr>
                	cmpq	$0x9, %rdx

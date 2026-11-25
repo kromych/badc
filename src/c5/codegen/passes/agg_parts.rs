@@ -196,8 +196,9 @@ fn gap_stores(out: &mut Vec<(u32, u32, StoreKind)>, mut lo: u32, hi: u32) {
 }
 
 /// Whether every use of the object at `slot` is a load or store at a
-/// constant offset or a copy, the uses `sroa` splits an object over; a
-/// `Return` of its address counts as one when the pass rewrites it.
+/// constant offset or a copy between it and another object, the uses
+/// `sroa` splits an object over; a `Return` of its address counts as one
+/// when the pass rewrites it.
 fn splits_by_fields(func: &FunctionSsa, slot: i64, returns_parts: bool) -> bool {
     let n = func.insts.len();
     let mut addrs = alloc::vec![false; n];
@@ -216,7 +217,7 @@ fn splits_by_fields(func: &FunctionSsa, slot: i64, returns_parts: bool) -> bool 
     let escapes = |inst: &Inst| match inst {
         Inst::Load { .. } | Inst::BinopI { .. } => false,
         Inst::Store { value, .. } => names(*value),
-        Inst::Mcpy { dst, src, .. } => !names(*dst) && !names(*src),
+        Inst::Mcpy { dst, src, .. } => names(*dst) && names(*src),
         _ => {
             let mut any = false;
             inst.for_each_operand(|o| any |= names(o));
@@ -1053,16 +1054,23 @@ mod tests {
 
     /// An object whose address reaches a call, or that an index reaches,
     /// takes one whole store per register; a copy out of it does not
-    /// count as an escape.
+    /// count as an escape, nor does a copy between two other objects.
     #[test]
     fn escaping_object_takes_whole_register_stores() {
         const SRC: &str = "struct S { char c; int i; };\n\
             int g(const struct S *p);\n\
             int esc(struct S s) { return g(&s); }\n\
             int idx(struct S s, int k) { return ((char *)&s)[k]; }\n\
-            struct S copy(struct S s) { struct S r = s; return r; }";
+            struct S copy(struct S s) { struct S r = s; return r; }\n\
+            struct S beside(struct S s, struct S *p, struct S *q) { *p = *q; struct S r = s; return r; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
-            for (name, whole) in [("esc", true), ("idx", true), ("copy", false)] {
+            let cases = [
+                ("esc", true),
+                ("idx", true),
+                ("copy", false),
+                ("beside", false),
+            ];
+            for (name, whole) in cases {
                 let mut f = walked(SRC, name, target);
                 let slot = f.param_local_slots[0];
                 run(core::slice::from_mut(&mut f), target);

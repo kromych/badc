@@ -418,8 +418,6 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x28]
                	ldr	x1, [sp, #0x30]
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	add	x2, x20, #0x1
                	cmp	x0, x2
                	b.ne	<addr>
@@ -595,8 +593,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, x20
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	cmp	x0, x20
                	b.ne	<addr>
                	cmp	x1, #0x9

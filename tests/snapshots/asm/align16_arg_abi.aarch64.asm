@@ -456,8 +456,6 @@ Disassembly of section .text:
                	mov	x3, x2
                	mov	x2, x1
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	mov	x17, #0x19              // =25
                	eor	x0, x0, x17
                	mov	x17, #0xa               // =10
@@ -475,8 +473,6 @@ Disassembly of section .text:
                	mov	x3, x2
                	mov	x2, x1
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	mov	x17, #0x51              // =81
                	eor	x0, x0, x17
                	eor	x1, x1, #0xfffffffffffffffc

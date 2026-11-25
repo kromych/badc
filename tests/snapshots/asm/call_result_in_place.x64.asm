@@ -569,62 +569,53 @@ Disassembly of section .text:
                	retq
 
 <regs_in_registers>:
-               	subq	$0x18, %rsp
+               	pushq	%rax
                	pushq	%r12
                	pushq	%rbx
                	movl	$0x6, %edi
                	callq	<addr>
-               	movq	%rax, %r12
-               	movq	%rdx, %rbx
-               	movq	%rbx, 0x18(%rsp)
+               	movq	%rax, %rbx
+               	movq	%rdx, %r12
                	movl	$0x7, %edi
                	callq	<addr>
-               	movq	%rax, 0x18(%rsp)
-               	movl	0x18(%rsp), %ecx
-               	movl	0x1c(%rsp), %edx
-               	leaq	(%r12,%rbx), %rsi
-               	xorl	%eax, %eax
-               	cmpl	$0x7, %ecx
-               	sete	%cl
-               	movzbq	%cl, %rcx
+               	movq	%rax, %rdx
+               	shrq	$0x20, %rdx
+               	leaq	(%rbx,%r12), %rsi
+               	xorl	%ecx, %ecx
+               	cmpl	$0x7, %eax
+               	sete	%al
+               	movzbq	%al, %rax
                	cmpq	$0x12, %rsi
-               	cmovneq	%rax, %rcx
+               	cmovneq	%rcx, %rax
                	cmpl	$-0x7, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	testq	%rcx, %rcx
-               	cmovneq	%rdx, %rax
+               	testq	%rax, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
-               	addq	$0x18, %rsp
+               	popq	%r11
                	retq
 
 <regs_escaped>:
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movq	%rax, <rip> # <addr>
                	callq	<addr>
-               	movq	%rax, 0x10(%rsp)
-               	leaq	0x10(%rsp), %rax
-               	movq	%rdx, 0x18(%rsp)
-               	leaq	(%rsp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movq	(%rsp), %rax
+               	movq	%rax, (%rsp)
+               	movq	%rdx, 0x8(%rsp)
+               	xorl	%ecx, %ecx
+               	cmpq	$0x1, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
                	cmpq	$0x2, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	xorl	%eax, %eax
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movq	0x8(%rsp), %rax
-               	cmpq	$0x1, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	addq	$0x28, %rsp
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
+               	addq	$0x18, %rsp
                	retq
 
 <member_of_call>:

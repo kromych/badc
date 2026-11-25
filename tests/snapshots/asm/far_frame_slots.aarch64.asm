@@ -804,8 +804,6 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x70]
                	add	x0, x20, x0
                	bl	<addr>
-               	str	x0, [sp, #0x60]
-               	str	x1, [sp, #0x68]
                	lsl	x2, x20, #1
                	add	x3, x2, #0x1
                	cmp	x21, x3

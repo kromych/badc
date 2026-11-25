@@ -123,19 +123,13 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	mov	x1, #0x4d               // =77
                	bl	<addr>
-               	stur	w0, [x29, #-0x8]
-               	lsr	x0, x0, #32
-               	sub	x1, x29, #0x8
-               	sturb	w0, [x29, #-0x4]
-               	sub	x0, x29, #0x10
-               	ldr	w16, [x1]
-               	str	w16, [x0]
-               	ldrb	w16, [x1, #0x4]
-               	strb	w16, [x0, #0x4]
-               	ldurb	w0, [x29, #-0x10]
+               	sturb	w0, [x29, #-0x10]
+               	lsr	x1, x0, #8
+               	stur	w1, [x29, #-0xf]
+               	and	x0, x0, #0xff
                	cmp	w0, #0x6
                	b.ne	<addr>
-               	ldursw	x0, [x29, #-0xf]
+               	mov	x0, x1
                	cmp	w0, #0x4d
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
@@ -145,19 +139,13 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	mov	x1, #0xb                // =11
                	bl	<addr>
-               	stur	w0, [x29, #-0x8]
-               	lsr	x0, x0, #32
-               	sub	x1, x29, #0x8
-               	sturh	w0, [x29, #-0x4]
-               	sub	x0, x29, #0x20
-               	ldr	w16, [x1]
-               	str	w16, [x0]
-               	ldrh	w16, [x1, #0x4]
-               	strh	w16, [x0, #0x4]
-               	ldursh	x0, [x29, #-0x20]
+               	sturh	w0, [x29, #-0x20]
+               	lsr	x1, x0, #16
+               	stur	w1, [x29, #-0x1e]
+               	sxth	x0, w0
                	cmp	w0, #0x4
                	b.ne	<addr>
-               	ldursw	x0, [x29, #-0x1e]
+               	mov	x0, x1
                	cmp	w0, #0xb
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
@@ -166,12 +154,11 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x8                // =8
                	bl	<addr>
-               	stur	w0, [x29, #-0x8]
-               	ldurb	w0, [x29, #-0x8]
-               	ldurb	w1, [x29, #-0x5]
-               	cmp	w0, #0x8
+               	and	x1, x0, #0xff
+               	ubfx	x2, x0, #24, #8
+               	cmp	w1, #0x8
                	b.ne	<addr>
-               	cmp	w1, #0x3
+               	cmp	w2, #0x3
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x20

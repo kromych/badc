@@ -561,38 +561,35 @@ Disassembly of section .text:
                	ret
 
 <regs_in_registers>:
-               	stp	x20, x21, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x20, x21, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
                	mov	x0, #0x6                // =6
                	bl	<addr>
-               	mov	x21, x0
-               	mov	x20, x1
-               	stur	x20, [x29, #-0x8]
+               	mov	x20, x0
+               	mov	x21, x1
                	mov	x0, #0x7                // =7
                	bl	<addr>
-               	stur	x0, [x29, #-0x8]
-               	ldur	w1, [x29, #-0x8]
-               	ldur	w2, [x29, #-0x4]
-               	add	x3, x21, x20
-               	mov	x0, #0x0                // =0
-               	cmp	w1, #0x7
-               	cset	x1, eq
+               	lsr	x2, x0, #32
+               	add	x3, x20, x21
+               	mov	x1, #0x0                // =0
+               	cmp	w0, #0x7
+               	cset	x0, eq
                	cmp	x3, #0x12
-               	csel	x1, x1, x0, eq
+               	csel	x0, x0, x1, eq
                	cmn	w2, #0x7
                	cset	x2, eq
-               	cmp	x1, #0x0
-               	csel	x0, x2, x0, ne
-               	ldp	x29, x30, [sp, #0x20]
-               	ldp	x20, x21, [sp], #0x30
+               	cmp	x0, #0x0
+               	csel	x0, x2, x1, ne
+               	ldp	x29, x30, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x20
                	ret
 
 <regs_escaped>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x20
+               	sub	sp, sp, #0x10
+               	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
@@ -601,19 +598,13 @@ Disassembly of section .text:
                	str	x0, [x1, #0x28]
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x20
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x1]
-               	ldur	x0, [x29, #-0x20]
+               	mov	x2, #0x0                // =0
+               	cmp	x1, #0x1
+               	cset	x1, eq
                	cmp	x0, #0x2
-               	mov	x0, #0x0                // =0
-               	b.ne	<addr>
-               	ldur	x0, [x29, #-0x18]
-               	cmp	x0, #0x1
-               	cset	x0, eq
-               	add	sp, sp, #0x20
+               	csel	x0, x1, x2, eq
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

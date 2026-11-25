@@ -354,7 +354,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v375, target=b8, fall=b2 }   (exit_acc=v375)
   block 2  start_pc=0
     v382 LocalAddr(-1)                                    -> x0
-    v383 BinopI { op=add, lhs=v382, rhs_imm=3 }           -> x0
+    v383 BinopI { op=add, lhs=v293, rhs_imm=3 }           -> x0
     v384 LoadLocal { off=-1, disp=3, kind=U32 }           -> x0
     v385 BinopI { op=shr, lhs=v384, rhs_imm=4 }           -> x1
     v386 BinopI { op=and, lhs=v385, rhs_imm=1048575 }     -> x2
@@ -376,7 +376,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v400 Imm(0)                                           -> x1
     v401 Imm(0)                                           -> x1
     v402 LocalAddr(-1)                                    -> x1
-    v403 BinopI { op=add, lhs=v382, rhs_imm=3 }           -> x1
+    v403 BinopI { op=add, lhs=v293, rhs_imm=3 }           -> x1
     v404 Imm(-1)                                          -> x1
     v405 Imm(1048575)                                     -> x1
     v406 LoadLocal { off=-1, disp=3, kind=U32 }           -> x1
@@ -412,7 +412,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v434, target=b6, fall=b5 }   (exit_acc=v434)
   block 5  start_pc=0
     v440 LocalAddr(-1)                                    -> x0
-    v441 BinopI { op=add, lhs=v382, rhs_imm=6 }           -> x0
+    v441 BinopI { op=add, lhs=v412, rhs_imm=6 }           -> x0
     v442 LoadLocal { off=-1, disp=6, kind=I8 }            -> x0
     v443 BinopI { op=ne, lhs=v442, rhs_imm=4 }            -> x0
     v444 Imm(0)                                           -> x1

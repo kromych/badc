@@ -45,6 +45,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x28, %rsp
                	retq
+               	xorl	%eax, %eax
                	movabsq	$0xa00000000, %rcx      # imm = 0xA00000000
                	movq	%rcx, <rip> # <addr>
                	movabsq	$0x1e00000014, %rcx     # imm = 0x1E00000014
@@ -52,17 +53,16 @@ Disassembly of section .text:
                	movl	$0x28, <rip> # <addr>
                	movw	$0x6968, <rip> # imm = 0x6968
                                                 # <addr>
-               	movb	$0x0, <rip> # <addr>
-               	movl	0x10(%rsp), %eax
-               	movl	0x14(%rsp), %ecx
-               	addq	%rcx, %rax
-               	movl	0x18(%rsp), %ecx
-               	addq	%rcx, %rax
-               	cmpl	$0xc, %eax
+               	movb	%al, <rip> # <addr>
+               	movl	0x10(%rsp), %ecx
+               	movl	0x14(%rsp), %edx
+               	addq	%rdx, %rcx
+               	movl	0x18(%rsp), %edx
+               	addq	%rdx, %rcx
+               	cmpl	$0xc, %ecx
                	je	<addr>
                	movl	$0x10, %eax
                	addq	$0x28, %rsp
                	retq
-               	xorl	%eax, %eax
                	addq	$0x28, %rsp
                	retq

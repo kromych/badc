@@ -115,8 +115,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	addq	$0x28, %rsp
                	retq
-               	movq	0x8(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x8(%rsp)
                	jne	<addr>
                	movl	$0x8, %eax
                	addq	$0x28, %rsp

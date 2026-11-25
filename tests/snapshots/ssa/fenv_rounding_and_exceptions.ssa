@@ -60,7 +60,7 @@ fn ent_pc=21 n_params=2 variadic=false locals=1
     terminator Jmp(b10)   (exit_acc=v39)
   block 10  start_pc=0
     v41  Phi { incoming=[b9:v39, b14:v40], kind=I64 }     -> x9
-    v42  Extend { value=v15, kind=I32 }                   -> x3
+    v42  Extend { value=v15, kind=I32 }                   -> x10
     terminator Bz { cond=v15, target=b13, fall=b11 }   (low word)   (exit_acc=v42)
   block 11  start_pc=0
     v43  ImmData(31)                                      -> x0
@@ -213,7 +213,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b13)   (exit_acc=v80)
   block 13  start_pc=0
     v82  Phi { incoming=[b12:v80, b502:v81], kind=I64 }   -> x9
-    v83  Extend { value=v40, kind=I32 }                   -> x12
+    v83  Extend { value=v40, kind=I32 }                   -> x10
     terminator Bz { cond=v40, target=b501, fall=b14 }   (low word)   (exit_acc=v83)
   block 14  start_pc=0
     v84  ImmData(31)                                      -> x0
@@ -276,7 +276,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b25)   (exit_acc=v125)
   block 25  start_pc=0
     v127 Phi { incoming=[b24:v125, b496:v126], kind=I64 } -> x9
-    v128 Extend { value=v101, kind=I32 }                  -> x12
+    v128 Extend { value=v101, kind=I32 }                  -> x10
     terminator Bz { cond=v101, target=b495, fall=b26 }   (low word)   (exit_acc=v128)
   block 26  start_pc=0
     v129 ImmData(31)                                      -> x0
@@ -337,7 +337,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b37)   (exit_acc=v168)
   block 37  start_pc=0
     v170 Phi { incoming=[b36:v168, b490:v169], kind=I64 } -> x9
-    v171 Extend { value=v144, kind=I32 }                  -> x12
+    v171 Extend { value=v144, kind=I32 }                  -> x10
     terminator Bz { cond=v144, target=b489, fall=b38 }   (low word)   (exit_acc=v171)
   block 38  start_pc=0
     v172 ImmData(31)                                      -> x0
@@ -398,7 +398,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b49)   (exit_acc=v211)
   block 49  start_pc=0
     v213 Phi { incoming=[b48:v211, b484:v212], kind=I64 } -> x9
-    v214 Extend { value=v187, kind=I32 }                  -> x12
+    v214 Extend { value=v187, kind=I32 }                  -> x10
     terminator Bz { cond=v187, target=b483, fall=b50 }   (low word)   (exit_acc=v214)
   block 50  start_pc=0
     v215 ImmData(31)                                      -> x0
@@ -460,7 +460,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b61)   (exit_acc=v255)
   block 61  start_pc=0
     v257 Phi { incoming=[b60:v255, b478:v256], kind=I64 } -> x9
-    v258 Extend { value=v231, kind=I32 }                  -> x12
+    v258 Extend { value=v231, kind=I32 }                  -> x10
     terminator Bz { cond=v231, target=b477, fall=b62 }   (low word)   (exit_acc=v258)
   block 62  start_pc=0
     v259 ImmData(31)                                      -> x0
@@ -522,7 +522,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b73)   (exit_acc=v299)
   block 73  start_pc=0
     v301 Phi { incoming=[b72:v299, b472:v300], kind=I64 } -> x9
-    v302 Extend { value=v275, kind=I32 }                  -> x12
+    v302 Extend { value=v275, kind=I32 }                  -> x10
     terminator Bz { cond=v275, target=b471, fall=b74 }   (low word)   (exit_acc=v302)
   block 74  start_pc=0
     v303 ImmData(31)                                      -> x0
@@ -585,7 +585,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b85)   (exit_acc=v344)
   block 85  start_pc=0
     v346 Phi { incoming=[b84:v344, b466:v345], kind=I64 } -> x9
-    v347 Extend { value=v320, kind=I32 }                  -> x12
+    v347 Extend { value=v320, kind=I32 }                  -> x10
     terminator Bz { cond=v320, target=b465, fall=b86 }   (low word)   (exit_acc=v347)
   block 86  start_pc=0
     v348 ImmData(31)                                      -> x0
@@ -648,7 +648,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b97)   (exit_acc=v389)
   block 97  start_pc=0
     v391 Phi { incoming=[b96:v389, b460:v390], kind=I64 } -> x9
-    v392 Extend { value=v365, kind=I32 }                  -> x12
+    v392 Extend { value=v365, kind=I32 }                  -> x10
     terminator Bz { cond=v365, target=b459, fall=b98 }   (low word)   (exit_acc=v392)
   block 98  start_pc=0
     v393 ImmData(31)                                      -> x0
@@ -709,7 +709,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b109)   (exit_acc=v432)
   block 109  start_pc=0
     v434 Phi { incoming=[b108:v432, b454:v433], kind=I64 } -> x9
-    v435 Extend { value=v408, kind=I32 }                  -> x12
+    v435 Extend { value=v408, kind=I32 }                  -> x10
     terminator Bz { cond=v408, target=b453, fall=b110 }   (low word)   (exit_acc=v435)
   block 110  start_pc=0
     v436 ImmData(31)                                      -> x0
@@ -771,7 +771,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b121)   (exit_acc=v476)
   block 121  start_pc=0
     v478 Phi { incoming=[b120:v476, b448:v477], kind=I64 } -> x9
-    v479 Extend { value=v452, kind=I32 }                  -> x12
+    v479 Extend { value=v452, kind=I32 }                  -> x10
     terminator Bz { cond=v452, target=b447, fall=b122 }   (low word)   (exit_acc=v479)
   block 122  start_pc=0
     v480 ImmData(31)                                      -> x0
@@ -834,7 +834,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b133)   (exit_acc=v521)
   block 133  start_pc=0
     v523 Phi { incoming=[b132:v521, b442:v522], kind=I64 } -> x9
-    v524 Extend { value=v497, kind=I32 }                  -> x12
+    v524 Extend { value=v497, kind=I32 }                  -> x10
     terminator Bz { cond=v497, target=b441, fall=b134 }   (low word)   (exit_acc=v524)
   block 134  start_pc=0
     v525 ImmData(31)                                      -> x0
@@ -896,7 +896,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b145)   (exit_acc=v565)
   block 145  start_pc=0
     v567 Phi { incoming=[b144:v565, b436:v566], kind=I64 } -> x9
-    v568 Extend { value=v541, kind=I32 }                  -> x12
+    v568 Extend { value=v541, kind=I32 }                  -> x10
     terminator Bz { cond=v541, target=b435, fall=b146 }   (low word)   (exit_acc=v568)
   block 146  start_pc=0
     v569 ImmData(31)                                      -> x0
@@ -957,7 +957,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b157)   (exit_acc=v608)
   block 157  start_pc=0
     v610 Phi { incoming=[b156:v608, b430:v609], kind=I64 } -> x9
-    v611 Extend { value=v584, kind=I32 }                  -> x12
+    v611 Extend { value=v584, kind=I32 }                  -> x10
     terminator Bz { cond=v584, target=b429, fall=b158 }   (low word)   (exit_acc=v611)
   block 158  start_pc=0
     v612 ImmData(31)                                      -> x0
@@ -1017,7 +1017,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b169)   (exit_acc=v650)
   block 169  start_pc=0
     v652 Phi { incoming=[b168:v650, b424:v651], kind=I64 } -> x9
-    v653 Extend { value=v626, kind=I32 }                  -> x12
+    v653 Extend { value=v626, kind=I32 }                  -> x10
     terminator Bz { cond=v626, target=b423, fall=b170 }   (low word)   (exit_acc=v653)
   block 170  start_pc=0
     v654 ImmData(31)                                      -> x0
@@ -1084,7 +1084,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b181)   (exit_acc=v699)
   block 181  start_pc=0
     v701 Phi { incoming=[b180:v699, b418:v700], kind=I64 } -> x9
-    v702 Extend { value=v675, kind=I32 }                  -> x12
+    v702 Extend { value=v675, kind=I32 }                  -> x10
     terminator Bz { cond=v675, target=b417, fall=b182 }   (low word)   (exit_acc=v702)
   block 182  start_pc=0
     v703 ImmData(31)                                      -> x0
@@ -1147,7 +1147,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b193)   (exit_acc=v744)
   block 193  start_pc=0
     v746 Phi { incoming=[b192:v744, b412:v745], kind=I64 } -> x9
-    v747 Extend { value=v720, kind=I32 }                  -> x12
+    v747 Extend { value=v720, kind=I32 }                  -> x10
     terminator Bz { cond=v720, target=b411, fall=b194 }   (low word)   (exit_acc=v747)
   block 194  start_pc=0
     v748 ImmData(31)                                      -> x0
@@ -1249,7 +1249,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b205)   (exit_acc=v828)
   block 205  start_pc=0
     v830 Phi { incoming=[b204:v828, b406:v829], kind=I64 } -> x9
-    v831 Extend { value=v804, kind=I32 }                  -> x12
+    v831 Extend { value=v804, kind=I32 }                  -> x10
     terminator Bz { cond=v804, target=b405, fall=b206 }   (low word)   (exit_acc=v831)
   block 206  start_pc=0
     v832 ImmData(31)                                      -> x0
@@ -1314,7 +1314,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b217)   (exit_acc=v875)
   block 217  start_pc=0
     v877 Phi { incoming=[b216:v875, b400:v876], kind=I64 } -> x9
-    v878 Extend { value=v851, kind=I32 }                  -> x12
+    v878 Extend { value=v851, kind=I32 }                  -> x10
     terminator Bz { cond=v851, target=b399, fall=b218 }   (low word)   (exit_acc=v878)
   block 218  start_pc=0
     v879 ImmData(31)                                      -> x0
@@ -1388,7 +1388,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b229)   (exit_acc=v931)
   block 229  start_pc=0
     v933 Phi { incoming=[b228:v931, b394:v932], kind=I64 } -> x9
-    v934 Extend { value=v907, kind=I32 }                  -> x12
+    v934 Extend { value=v907, kind=I32 }                  -> x10
     terminator Bz { cond=v907, target=b393, fall=b230 }   (low word)   (exit_acc=v934)
   block 230  start_pc=0
     v935 ImmData(31)                                      -> x0
@@ -1450,7 +1450,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b241)   (exit_acc=v975)
   block 241  start_pc=0
     v977 Phi { incoming=[b240:v975, b388:v976], kind=I64 } -> x9
-    v978 Extend { value=v951, kind=I32 }                  -> x12
+    v978 Extend { value=v951, kind=I32 }                  -> x10
     terminator Bz { cond=v951, target=b387, fall=b242 }   (low word)   (exit_acc=v978)
   block 242  start_pc=0
     v979 ImmData(31)                                      -> x0
@@ -1509,7 +1509,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b253)   (exit_acc=v1016)
   block 253  start_pc=0
     v1018 Phi { incoming=[b252:v1016, b382:v1017], kind=I64 } -> x9
-    v1019 Extend { value=v992, kind=I32 }                  -> x12
+    v1019 Extend { value=v992, kind=I32 }                  -> x10
     terminator Bz { cond=v992, target=b381, fall=b254 }   (low word)   (exit_acc=v1019)
   block 254  start_pc=0
     v1020 ImmData(31)                                      -> x0
@@ -1568,7 +1568,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b265)   (exit_acc=v1057)
   block 265  start_pc=0
     v1059 Phi { incoming=[b264:v1057, b376:v1058], kind=I64 } -> x9
-    v1060 Extend { value=v1033, kind=I32 }                 -> x12
+    v1060 Extend { value=v1033, kind=I32 }                 -> x10
     terminator Bz { cond=v1033, target=b375, fall=b266 }   (low word)   (exit_acc=v1060)
   block 266  start_pc=0
     v1061 ImmData(31)                                      -> x0
@@ -1628,7 +1628,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b277)   (exit_acc=v1099)
   block 277  start_pc=0
     v1101 Phi { incoming=[b276:v1099, b370:v1100], kind=I64 } -> x9
-    v1102 Extend { value=v1075, kind=I32 }                 -> x12
+    v1102 Extend { value=v1075, kind=I32 }                 -> x10
     terminator Bz { cond=v1075, target=b369, fall=b278 }   (low word)   (exit_acc=v1102)
   block 278  start_pc=0
     v1103 ImmData(31)                                      -> x0
@@ -1688,7 +1688,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b289)   (exit_acc=v1141)
   block 289  start_pc=0
     v1143 Phi { incoming=[b288:v1141, b364:v1142], kind=I64 } -> x9
-    v1144 Extend { value=v1117, kind=I32 }                 -> x12
+    v1144 Extend { value=v1117, kind=I32 }                 -> x10
     terminator Bz { cond=v1117, target=b363, fall=b290 }   (low word)   (exit_acc=v1144)
   block 290  start_pc=0
     v1145 ImmData(31)                                      -> x0
@@ -1748,7 +1748,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b301)   (exit_acc=v1183)
   block 301  start_pc=0
     v1185 Phi { incoming=[b300:v1183, b358:v1184], kind=I64 } -> x9
-    v1186 Extend { value=v1159, kind=I32 }                 -> x12
+    v1186 Extend { value=v1159, kind=I32 }                 -> x10
     terminator Bz { cond=v1159, target=b357, fall=b302 }   (low word)   (exit_acc=v1186)
   block 302  start_pc=0
     v1187 ImmData(31)                                      -> x0
@@ -1812,7 +1812,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b313)   (exit_acc=v1229)
   block 313  start_pc=0
     v1231 Phi { incoming=[b312:v1229, b352:v1230], kind=I64 } -> x9
-    v1232 Extend { value=v1205, kind=I32 }                 -> x12
+    v1232 Extend { value=v1205, kind=I32 }                 -> x10
     terminator Bz { cond=v1205, target=b351, fall=b314 }   (low word)   (exit_acc=v1232)
   block 314  start_pc=0
     v1233 ImmData(31)                                      -> x0
@@ -1871,7 +1871,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b325)   (exit_acc=v1270)
   block 325  start_pc=0
     v1272 Phi { incoming=[b324:v1270, b346:v1271], kind=I64 } -> x9
-    v1273 Extend { value=v1246, kind=I32 }                 -> x12
+    v1273 Extend { value=v1246, kind=I32 }                 -> x10
     terminator Bz { cond=v1246, target=b345, fall=b326 }   (low word)   (exit_acc=v1273)
   block 326  start_pc=0
     v1274 ImmData(31)                                      -> x0
@@ -1930,7 +1930,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b337)   (exit_acc=v1311)
   block 337  start_pc=0
     v1313 Phi { incoming=[b336:v1311, b340:v1312], kind=I64 } -> x9
-    v1314 Extend { value=v1287, kind=I32 }                 -> x12
+    v1314 Extend { value=v1287, kind=I32 }                 -> x10
     terminator Bz { cond=v1287, target=b339, fall=b338 }   (low word)   (exit_acc=v1314)
   block 338  start_pc=0
     v1315 ImmData(31)                                      -> x0
@@ -2494,7 +2494,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b517)   (exit_acc=v1366)
   block 517  start_pc=0
     v1368 Phi { incoming=[b516:v1366, b899:v1367], kind=I64 } -> x9
-    v1369 Extend { value=v56, kind=I32 }                   -> x3
+    v1369 Extend { value=v56, kind=I32 }                   -> x10
     terminator Bz { cond=v56, target=b898, fall=b518 }   (low word)   (exit_acc=v1369)
   block 518  start_pc=0
     v1370 ImmData(31)                                      -> x0
@@ -2555,7 +2555,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b529)   (exit_acc=v1409)
   block 529  start_pc=0
     v1411 Phi { incoming=[b528:v1409, b893:v1410], kind=I64 } -> x9
-    v1412 Extend { value=v1385, kind=I32 }                 -> x3
+    v1412 Extend { value=v1385, kind=I32 }                 -> x10
     terminator Bz { cond=v1385, target=b892, fall=b530 }   (low word)   (exit_acc=v1412)
   block 530  start_pc=0
     v1413 ImmData(31)                                      -> x0
@@ -2626,7 +2626,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b541)   (exit_acc=v1462)
   block 541  start_pc=0
     v1464 Phi { incoming=[b540:v1462, b887:v1463], kind=I64 } -> x9
-    v1465 Extend { value=v1438, kind=I32 }                 -> x3
+    v1465 Extend { value=v1438, kind=I32 }                 -> x10
     terminator Bz { cond=v1438, target=b886, fall=b542 }   (low word)   (exit_acc=v1465)
   block 542  start_pc=0
     v1466 ImmData(31)                                      -> x0
@@ -2688,7 +2688,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b553)   (exit_acc=v1506)
   block 553  start_pc=0
     v1508 Phi { incoming=[b552:v1506, b881:v1507], kind=I64 } -> x9
-    v1509 Extend { value=v1482, kind=I32 }                 -> x3
+    v1509 Extend { value=v1482, kind=I32 }                 -> x10
     terminator Bz { cond=v1482, target=b880, fall=b554 }   (low word)   (exit_acc=v1509)
   block 554  start_pc=0
     v1510 ImmData(31)                                      -> x0
@@ -2750,7 +2750,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b565)   (exit_acc=v1550)
   block 565  start_pc=0
     v1552 Phi { incoming=[b564:v1550, b875:v1551], kind=I64 } -> x9
-    v1553 Extend { value=v1526, kind=I32 }                 -> x3
+    v1553 Extend { value=v1526, kind=I32 }                 -> x10
     terminator Bz { cond=v1526, target=b874, fall=b566 }   (low word)   (exit_acc=v1553)
   block 566  start_pc=0
     v1554 ImmData(31)                                      -> x0
@@ -2810,7 +2810,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b577)   (exit_acc=v1592)
   block 577  start_pc=0
     v1594 Phi { incoming=[b576:v1592, b869:v1593], kind=I64 } -> x9
-    v1595 Extend { value=v1568, kind=I32 }                 -> x3
+    v1595 Extend { value=v1568, kind=I32 }                 -> x10
     terminator Bz { cond=v1568, target=b868, fall=b578 }   (low word)   (exit_acc=v1595)
   block 578  start_pc=0
     v1596 ImmData(31)                                      -> x0
@@ -2871,7 +2871,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b589)   (exit_acc=v1635)
   block 589  start_pc=0
     v1637 Phi { incoming=[b588:v1635, b863:v1636], kind=I64 } -> x9
-    v1638 Extend { value=v1611, kind=I32 }                 -> x3
+    v1638 Extend { value=v1611, kind=I32 }                 -> x10
     terminator Bz { cond=v1611, target=b862, fall=b590 }   (low word)   (exit_acc=v1638)
   block 590  start_pc=0
     v1639 ImmData(31)                                      -> x0
@@ -2930,7 +2930,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b601)   (exit_acc=v1676)
   block 601  start_pc=0
     v1678 Phi { incoming=[b600:v1676, b857:v1677], kind=I64 } -> x9
-    v1679 Extend { value=v1652, kind=I32 }                 -> x3
+    v1679 Extend { value=v1652, kind=I32 }                 -> x10
     terminator Bz { cond=v1652, target=b856, fall=b602 }   (low word)   (exit_acc=v1679)
   block 602  start_pc=0
     v1680 ImmData(31)                                      -> x0
@@ -2992,7 +2992,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b613)   (exit_acc=v1720)
   block 613  start_pc=0
     v1722 Phi { incoming=[b612:v1720, b851:v1721], kind=I64 } -> x9
-    v1723 Extend { value=v1696, kind=I32 }                 -> x3
+    v1723 Extend { value=v1696, kind=I32 }                 -> x10
     terminator Bz { cond=v1696, target=b850, fall=b614 }   (low word)   (exit_acc=v1723)
   block 614  start_pc=0
     v1724 ImmData(31)                                      -> x0
@@ -3053,7 +3053,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b625)   (exit_acc=v1763)
   block 625  start_pc=0
     v1765 Phi { incoming=[b624:v1763, b845:v1764], kind=I64 } -> x9
-    v1766 Extend { value=v1739, kind=I32 }                 -> x3
+    v1766 Extend { value=v1739, kind=I32 }                 -> x10
     terminator Bz { cond=v1739, target=b844, fall=b626 }   (low word)   (exit_acc=v1766)
   block 626  start_pc=0
     v1767 ImmData(31)                                      -> x0
@@ -3121,7 +3121,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b637)   (exit_acc=v1813)
   block 637  start_pc=0
     v1815 Phi { incoming=[b636:v1813, b839:v1814], kind=I64 } -> x9
-    v1816 Extend { value=v1789, kind=I32 }                 -> x3
+    v1816 Extend { value=v1789, kind=I32 }                 -> x10
     terminator Bz { cond=v1789, target=b838, fall=b638 }   (low word)   (exit_acc=v1816)
   block 638  start_pc=0
     v1817 ImmData(31)                                      -> x0
@@ -3188,7 +3188,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b649)   (exit_acc=v1862)
   block 649  start_pc=0
     v1864 Phi { incoming=[b648:v1862, b833:v1863], kind=I64 } -> x9
-    v1865 Extend { value=v1838, kind=I32 }                 -> x3
+    v1865 Extend { value=v1838, kind=I32 }                 -> x10
     terminator Bz { cond=v1838, target=b832, fall=b650 }   (low word)   (exit_acc=v1865)
   block 650  start_pc=0
     v1866 ImmData(31)                                      -> x0
@@ -3255,7 +3255,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b661)   (exit_acc=v1911)
   block 661  start_pc=0
     v1913 Phi { incoming=[b660:v1911, b827:v1912], kind=I64 } -> x9
-    v1914 Extend { value=v1887, kind=I32 }                 -> x3
+    v1914 Extend { value=v1887, kind=I32 }                 -> x10
     terminator Bz { cond=v1887, target=b826, fall=b662 }   (low word)   (exit_acc=v1914)
   block 662  start_pc=0
     v1915 ImmData(31)                                      -> x0
@@ -3322,7 +3322,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b673)   (exit_acc=v1960)
   block 673  start_pc=0
     v1962 Phi { incoming=[b672:v1960, b821:v1961], kind=I64 } -> x9
-    v1963 Extend { value=v1936, kind=I32 }                 -> x3
+    v1963 Extend { value=v1936, kind=I32 }                 -> x10
     terminator Bz { cond=v1936, target=b820, fall=b674 }   (low word)   (exit_acc=v1963)
   block 674  start_pc=0
     v1964 ImmData(31)                                      -> x0
@@ -3389,7 +3389,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b685)   (exit_acc=v2009)
   block 685  start_pc=0
     v2011 Phi { incoming=[b684:v2009, b815:v2010], kind=I64 } -> x9
-    v2012 Extend { value=v1985, kind=I32 }                 -> x3
+    v2012 Extend { value=v1985, kind=I32 }                 -> x10
     terminator Bz { cond=v1985, target=b814, fall=b686 }   (low word)   (exit_acc=v2012)
   block 686  start_pc=0
     v2013 ImmData(31)                                      -> x0
@@ -3460,7 +3460,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b697)   (exit_acc=v2062)
   block 697  start_pc=0
     v2064 Phi { incoming=[b696:v2062, b809:v2063], kind=I64 } -> x9
-    v2065 Extend { value=v2038, kind=I32 }                 -> x3
+    v2065 Extend { value=v2038, kind=I32 }                 -> x10
     terminator Bz { cond=v2038, target=b808, fall=b698 }   (low word)   (exit_acc=v2065)
   block 698  start_pc=0
     v2066 ImmData(31)                                      -> x0
@@ -3520,7 +3520,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b709)   (exit_acc=v2104)
   block 709  start_pc=0
     v2106 Phi { incoming=[b708:v2104, b803:v2105], kind=I64 } -> x9
-    v2107 Extend { value=v2080, kind=I32 }                 -> x3
+    v2107 Extend { value=v2080, kind=I32 }                 -> x10
     terminator Bz { cond=v2080, target=b802, fall=b710 }   (low word)   (exit_acc=v2107)
   block 710  start_pc=0
     v2108 ImmData(31)                                      -> x0
@@ -3591,7 +3591,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b721)   (exit_acc=v2157)
   block 721  start_pc=0
     v2159 Phi { incoming=[b720:v2157, b797:v2158], kind=I64 } -> x9
-    v2160 Extend { value=v2133, kind=I32 }                 -> x3
+    v2160 Extend { value=v2133, kind=I32 }                 -> x10
     terminator Bz { cond=v2133, target=b796, fall=b722 }   (low word)   (exit_acc=v2160)
   block 722  start_pc=0
     v2161 ImmData(31)                                      -> x0
@@ -3655,7 +3655,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b733)   (exit_acc=v2203)
   block 733  start_pc=0
     v2205 Phi { incoming=[b732:v2203, b791:v2204], kind=I64 } -> x9
-    v2206 Extend { value=v2179, kind=I32 }                 -> x3
+    v2206 Extend { value=v2179, kind=I32 }                 -> x10
     terminator Bz { cond=v2179, target=b790, fall=b734 }   (low word)   (exit_acc=v2206)
   block 734  start_pc=0
     v2207 ImmData(31)                                      -> x0
@@ -3715,7 +3715,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b745)   (exit_acc=v2245)
   block 745  start_pc=0
     v2247 Phi { incoming=[b744:v2245, b785:v2246], kind=I64 } -> x9
-    v2248 Extend { value=v2221, kind=I32 }                 -> x3
+    v2248 Extend { value=v2221, kind=I32 }                 -> x10
     terminator Bz { cond=v2221, target=b784, fall=b746 }   (low word)   (exit_acc=v2248)
   block 746  start_pc=0
     v2249 ImmData(31)                                      -> x0
@@ -3776,7 +3776,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b757)   (exit_acc=v2288)
   block 757  start_pc=0
     v2290 Phi { incoming=[b756:v2288, b779:v2289], kind=I64 } -> x9
-    v2291 Extend { value=v2264, kind=I32 }                 -> x3
+    v2291 Extend { value=v2264, kind=I32 }                 -> x10
     terminator Bz { cond=v2264, target=b778, fall=b758 }   (low word)   (exit_acc=v2291)
   block 758  start_pc=0
     v2292 ImmData(31)                                      -> x0
@@ -3838,7 +3838,7 @@ fn ent_pc=23 n_params=0 variadic=false locals=15
     terminator Jmp(b769)   (exit_acc=v2332)
   block 769  start_pc=0
     v2334 Phi { incoming=[b768:v2332, b773:v2333], kind=I64 } -> x9
-    v2335 Extend { value=v2308, kind=I32 }                 -> x3
+    v2335 Extend { value=v2308, kind=I32 }                 -> x10
     terminator Bz { cond=v2308, target=b772, fall=b770 }   (low word)   (exit_acc=v2335)
   block 770  start_pc=0
     v2336 ImmData(31)                                      -> x0

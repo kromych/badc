@@ -220,8 +220,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %rbx
-               	movq	0x18(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x18(%rsp)
                	je	<addr>
                	testq	%rbx, %rbx
                	jne	<addr>
@@ -290,7 +289,7 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	leaq	(%rcx,%rcx,2), %rcx
                	incq	%rax
-               	nopw	(%rax,%rax)
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x9c40, %eax           # imm = 0x9C40
                	jl	<addr>
                	leaq	<rip>, %rax # <addr>

@@ -408,8 +408,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
-               	movq	0x20(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x20(%rsp)
                	je	<addr>
                	movl	$0x61, %edi
                	movq	%rbx, %rdx

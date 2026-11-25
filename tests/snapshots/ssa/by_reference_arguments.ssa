@@ -215,7 +215,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=13
   block 8  start_pc=0
     v103 Imm(0)                                           -> x0
     v104 Imm(0)                                           -> x0
-    v105 LocalAddr(-9)                                    -> x0
+    v105 LocalAddr(-9)                                    -> x7
     v106 Imm(0)                                           -> x0
     v107 Imm(0)                                           -> x0
     v108 Imm(0)                                           -> x0
@@ -243,10 +243,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=13
     v130 Imm(-1)                                          -> x0
     v131 StoreLocal { off=-6, value=v130, kind=I64 }      -> -
     v132 StoreLocal { off=-9, value=v130, kind=I64 }      -> -
-    v133 LocalAddr(-9)                                    -> x7
+    v133 LocalAddr(-9)                                    -> x0
     v134 ImmData(8)                                       -> x0
     v135 Load { addr=v134, disp=0, kind=I64, volatile pc_rel } -> x0
-    v136 CallIndirect { target=v135, args=[v133], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v136 CallIndirect { target=v135, args=[v105], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v137 LocalAddr(-6)                                    -> x7
     v138 ImmData(8)                                       -> x0
     v139 Load { addr=v138, disp=0, kind=I64, volatile pc_rel } -> x0
@@ -272,7 +272,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=13
     v157 Imm(7)                                           -> x0
     v158 Imm(8)                                           -> x0
     v159 Imm(0)                                           -> x0
-    v160 LocalAddr(-6)                                    -> x0
+    v160 LocalAddr(-6)                                    -> x7
     v161 Imm(0)                                           -> x0
     v162 Imm(0)                                           -> x0
     v163 Imm(0)                                           -> x0
@@ -304,10 +304,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=13
     v189 LocalAddr(-6)                                    -> x0
     v190 Imm(-1)                                          -> x0
     v191 StoreLocal { off=-6, value=v190, kind=I64 }      -> -
-    v192 LocalAddr(-6)                                    -> x7
+    v192 LocalAddr(-6)                                    -> x0
     v193 ImmData(8)                                       -> x0
     v194 Load { addr=v193, disp=0, kind=I64, volatile pc_rel } -> x0
-    v195 CallIndirect { target=v194, args=[v192], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v195 CallIndirect { target=v194, args=[v160], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v196 Imm(134)                                         -> x0
     v197 Imm(137)                                         -> x0
     v198 Imm(141)                                         -> x0
@@ -374,14 +374,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=13
     v262 Imm(3)                                           -> x8
     v263 StoreLocal { off=-9, disp=16, value=v262, kind=I64 } -> -
     v264 LocalAddr(-11)                                   -> [spill 0]
-    v265 Imm(4)                                           -> [spill 1]
-    v266 Imm(21474836484)                                 -> [spill 1]
-    v267 Imm(5)                                           -> [spill 2]
+    v265 Imm(4)                                           -> x10
+    v266 Imm(21474836484)                                 -> x10
+    v267 Imm(5)                                           -> x11
     v268 StoreLocal { off=-11, value=v266, kind=I64 }     -> -
-    v269 Imm(6)                                           -> [spill 1]
+    v269 Imm(6)                                           -> x10
     v270 StoreLocal { off=-11, disp=8, value=v269, kind=I32 } -> -
     v271 LocalAddr(-6)                                    -> [spill 1]
-    v272 Imm(0)                                           -> [spill 2]
+    v272 Imm(0)                                           -> x10
     v273 StoreLocal { off=-6, value=v256, kind=I64 }      -> -
     v274 Imm(0)                                           -> x0
     v275 StoreLocal { off=-6, disp=8, value=v259, kind=I64 } -> -

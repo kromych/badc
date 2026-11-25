@@ -27,23 +27,23 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
+               	movl	$0x20, %ecx
                	movl	$0x80008080, <rip> # imm = 0x80008080
                                                 # <addr>
                	movw	$0x8000, <rip> # imm = 0x8000
                                                 # <addr>
-               	movabsq	$-0x7fffffff80000000, %rcx # imm = 0x8000000080000000
-               	movq	%rcx, <rip> # <addr>
+               	movabsq	$-0x7fffffff80000000, %rdx # imm = 0x8000000080000000
+               	movq	%rdx, <rip> # <addr>
                	movq	$-0x1, <rip> # <addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	%rcx, <rip> # <addr>
+               	leaq	<rip>, %rdx # <addr>
+               	movq	%rdx, <rip> # <addr>
                	movw	$0x905, <rip> # imm = 0x905
                                                 # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movb	$0x7, (%rcx)
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
-               	movl	$0x20, %ecx
+               	movq	<rip>, %rdx # <addr>
+               	movb	$0x7, (%rdx)
+               	movl	<rip>, %edx # <addr>
+               	incq	%rdx
+               	movl	%edx, <rip> # <addr>
                	movzbq	<rip>, %rdx # <addr>
                	cmpl	$0x7, %edx
                	cmovneq	%rcx, %rax

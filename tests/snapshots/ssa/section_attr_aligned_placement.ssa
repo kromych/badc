@@ -131,7 +131,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v84  ImmData(12288)                                   -> x0
     v85  Load { addr=v9, disp=0, kind=I32 pc_rel }        -> x0
     v86  ImmData(64)                                      -> x1
-    v87  Load { addr=v86, disp=0, kind=I32 pc_rel }       -> x1
+    v87  Load { addr=v17, disp=0, kind=I32 pc_rel }       -> x1
     v88  Binop { op=add, lhs=v85, rhs=v87 }               -> x0
     v89  Extend { value=v88, kind=I32, nsw }              -> x1
     v90  BinopI { op=ne, lhs=v88, rhs_imm=32 }            -> x0
@@ -141,9 +141,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Return(v91)   (exit_acc=v91)
   block 18  start_pc=0
     v92  ImmData(80)                                      -> x0
-    v93  Load { addr=v92, disp=0, kind=I64 pc_rel }       -> x0
-    v94  BinopI { op=add, lhs=v92, rhs_imm=8 }            -> x1
-    v95  Load { addr=v92, disp=8, kind=I64 pc_rel }       -> x1
+    v93  Load { addr=v25, disp=0, kind=I64 pc_rel }       -> x0
+    v94  BinopI { op=add, lhs=v25, rhs_imm=8 }            -> x1
+    v95  Load { addr=v25, disp=8, kind=I64 pc_rel }       -> x1
     v96  Binop { op=add, lhs=v93, rhs=v95 }               -> x0
     v97  BinopI { op=ne, lhs=v96, rhs_imm=3 }             -> x0
     terminator Bz { cond=v97, target=b20, fall=b19 }   (exit_acc=v97)
@@ -165,9 +165,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v106 Imm(9)                                           -> x0
     v107 BinopI { op=add, lhs=v73, rhs_imm=9 }            -> x0
     v108 Load { addr=v73, disp=9, kind=I8 pc_rel }        -> x0
-    v109 ImmData(96)                                      -> x1
-    v110 Load { addr=v109, disp=0, kind=I32 pc_rel }      -> x1
-    v111 Binop { op=add, lhs=v108, rhs=v110 }             -> x0
+    v109 ImmData(96)                                      -> x0
+    v110 Load { addr=v109, disp=0, kind=I32 pc_rel }      -> x0
+    v111 BinopI { op=add, lhs=v110, rhs_imm=4 }           -> x0
     v112 Extend { value=v111, kind=I32, nsw }             -> x1
     v113 BinopI { op=ne, lhs=v111, rhs_imm=11 }           -> x0
     terminator Bz { cond=v113, target=b24, fall=b23 }   (exit_acc=v113)

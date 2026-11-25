@@ -130,10 +130,10 @@ Disassembly of section .text:
                	movw	$0x6f6e, 0x2a(%rsp)     # imm = 0x6F6E
                	movw	$0xd0c, 0x1c(%rsp)      # imm = 0xD0C
                	movw	$0x7170, 0x2c(%rsp)     # imm = 0x7170
-               	movw	$0xf0e, 0x1e(%rsp)      # imm = 0xF0E
-               	movw	$0x7372, 0x2e(%rsp)     # imm = 0x7372
                	leaq	0x10(%rsp), %r9
+               	movw	$0xf0e, 0x1e(%rsp)      # imm = 0xF0E
                	leaq	0x20(%rsp), %rax
+               	movw	$0x7372, 0x2e(%rsp)     # imm = 0x7372
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	movq	%rax, %r10
@@ -286,20 +286,20 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
+               	leaq	0x10(%rsp), %r9
                	movl	$0x3fc00000, 0x10(%rsp) # imm = 0x3FC00000
                	movss	0x68(%rsp), %xmm0
                	movss	%xmm0, 0x14(%rsp)
                	movl	$0x40600000, 0x18(%rsp) # imm = 0x40600000
                	movl	$0x40900000, 0x1c(%rsp) # imm = 0x40900000
-               	leaq	0x20(%rsp), %r9
+               	leaq	0x20(%rsp), %rax
                	movss	%xmm0, 0x20(%rsp)
                	movl	$0xc0000000, 0x24(%rsp) # imm = 0xC0000000
                	movl	$0x0, 0x28(%rsp)
                	movl	$0x41100000, 0x2c(%rsp) # imm = 0x41100000
-               	leaq	0x10(%rsp), %rax
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm0
                	movq	%r9, %r10
+               	movups	(%r10), %xmm0
+               	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	vzeroupper
                	callq	<addr>

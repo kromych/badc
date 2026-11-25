@@ -214,9 +214,9 @@ Disassembly of section .text:
                	movb	$0x55, <rip> # <addr>
                	movb	$0x6e, <rip> # <addr>
                	movb	$0x66, <rip> # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movb	$0x7f, <rip> # <addr>
                	movb	$0x77, <rip> # <addr>
-               	leaq	<rip>, %rdi # <addr>
                	movb	$-0x1, <rip> # <addr>
                	movl	<rip>, %esi # <addr>
                	callq	<addr>

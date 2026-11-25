@@ -73,10 +73,9 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%r11
                	retq
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x2a, %eax
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x2a, %ecx
                	je	<addr>
-               	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	movl	$0x8, %eax

@@ -344,15 +344,15 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v109 Imm(5)                                           -> x8
     v110 Imm(4617315517961601024)                         -> x8
     v111 Imm(6)                                           -> x9
-    v112 Imm(4618441417868443648)                         -> x9
-    v113 Imm(7)                                           -> [spill 0]
-    v114 Imm(4619567317775286272)                         -> [spill 0]
-    v115 Imm(8)                                           -> [spill 1]
-    v116 Imm(4620693217682128896)                         -> [spill 1]
-    v117 Imm(9)                                           -> [spill 2]
-    v118 Imm(4621256167635550208)                         -> [spill 2]
-    v119 Imm(4621819117588971520)                         -> [spill 3]
-    v120 LocalAddr(-80)                                   -> [spill 4]
+    v112 Imm(4618441417868443648)                         -> x10
+    v113 Imm(7)                                           -> x9
+    v114 Imm(4619567317775286272)                         -> x11
+    v115 Imm(8)                                           -> x9
+    v116 Imm(4620693217682128896)                         -> x9
+    v117 Imm(9)                                           -> [spill 0]
+    v118 Imm(4621256167635550208)                         -> [spill 0]
+    v119 Imm(4621819117588971520)                         -> [spill 1]
+    v120 LocalAddr(-80)                                   -> [spill 2]
     v121 StoreLocal { off=-80, value=v102, kind=F80 }     -> -
     v122 LocalAddr(-81)                                   -> x0
     v123 StoreLocal { off=-81, value=v104, kind=F80 }     -> -
@@ -364,13 +364,13 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v129 StoreLocal { off=-84, value=v110, kind=F80 }     -> -
     v130 LocalAddr(-85)                                   -> x8
     v131 StoreLocal { off=-85, value=v112, kind=F80 }     -> -
-    v132 LocalAddr(-86)                                   -> x9
+    v132 LocalAddr(-86)                                   -> [spill 3]
     v133 StoreLocal { off=-86, value=v114, kind=F80 }     -> -
-    v134 LocalAddr(-87)                                   -> [spill 0]
+    v134 LocalAddr(-87)                                   -> [spill 4]
     v135 StoreLocal { off=-87, value=v116, kind=F80 }     -> -
-    v136 LocalAddr(-88)                                   -> [spill 1]
+    v136 LocalAddr(-88)                                   -> x9
     v137 StoreLocal { off=-88, value=v118, kind=F80 }     -> -
-    v138 LocalAddr(-89)                                   -> [spill 2]
+    v138 LocalAddr(-89)                                   -> [spill 0]
     v139 StoreLocal { off=-89, value=v119, kind=F80 }     -> -
     v140 Call { target_pc=6, args=[v100, v120, v122, v124, v126, v128, v130, v132, v134, v136, v138], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v141 Imm(4632937379169042432)                         -> d1

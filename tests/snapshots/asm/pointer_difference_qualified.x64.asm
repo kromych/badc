@@ -90,22 +90,21 @@ Disassembly of section .text:
                	leaq	0x5(%rcx), %rdx
                	subq	%rcx, %rdx
                	leaq	-0x5(%rdx), %rcx
-               	addq	%rcx, %rsi
+               	leaq	(%rsi,%rcx), %rdi
                	leaq	0x10(%rax), %rcx
                	movq	%rcx, %rdx
                	subq	%rax, %rdx
-               	movq	%rdx, %rax
-               	sarq	$0x3f, %rax
-               	shrq	$0x3d, %rax
-               	addq	%rdx, %rax
-               	sarq	$0x3, %rax
-               	subq	$0x2, %rax
-               	addq	%rsi, %rax
+               	movq	%rdx, %rsi
+               	sarq	$0x3f, %rsi
+               	shrq	$0x3d, %rsi
+               	addq	%rsi, %rdx
+               	sarq	$0x3, %rdx
+               	subq	$0x2, %rdx
+               	addq	%rdi, %rdx
                	subq	$0x10, %rcx
-               	leaq	(%rsp), %rdx
-               	cmpq	%rdx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	addq	%rcx, %rax
+               	cmpq	%rax, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	addq	%rdx, %rax
                	addq	$0x28, %rsp
                	retq

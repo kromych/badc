@@ -67,7 +67,6 @@ Disassembly of section .text:
                	cmpq	$0x3, %rcx
                	jne	<addr>
                	movq	<rip>, %rcx # <addr>
-               	leaq	-<rip>, %rax # <addr>
                	subq	%rax, %rcx
                	cmpq	$0x3, %rcx
                	je	<addr>
@@ -77,9 +76,10 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	cmpq	$-0x4, %rcx
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	subq	%rax, %rcx
-               	cmpq	$0x6, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	-<rip>, %rcx # <addr>
+               	subq	%rcx, %rax
+               	cmpq	$0x6, %rax
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>

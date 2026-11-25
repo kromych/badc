@@ -228,7 +228,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=4
     v40  LoadLocal { off=-4, kind=I64 }                   -> x0
     v41  LoadLocal { off=-4, disp=8, kind=I64 }           -> x1
     v42  AggParts { desc=0, parts=[v40, v35], fp_mask=0x0 } -> -
-    terminator Return(v42)   (exit_acc=v37)
+    terminator Return(v42)   (exit_acc=v9)
   block 3  start_pc=0
     v21  LocalAddr(-4)                                    -> x0
     v22  LocalAddr(-2)                                    -> x0

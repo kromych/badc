@@ -75,12 +75,7 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x16, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x10000, %rax          # imm = 0x10000
-               	movq	(%rax), %rax
-               	cmpq	$0x21, %rax
-               	je	<addr>
-               	movl	$0x1e, %eax
-               	retq
                	xorl	%eax, %eax
+               	retq
+               	movl	$0x1e, %eax
                	retq

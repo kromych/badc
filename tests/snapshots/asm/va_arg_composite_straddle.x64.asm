@@ -113,6 +113,7 @@ Disassembly of section .text:
 <main>:
                	subq	$0x18, %rsp
                	subq	$0x20, %rsp
+               	leaq	0x20(%rsp), %rax
                	movq	$0x6f, 0x20(%rsp)
                	movq	$0xde, 0x28(%rsp)
                	movl	$0x1, %edi
@@ -121,7 +122,6 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	leaq	0x20(%rsp), %rax
                	movq	$0x7, (%rsp)
                	movq	$0x309, 0x18(%rsp)      # imm = 0x309
                	movq	%rax, %r10

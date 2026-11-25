@@ -28,20 +28,21 @@ Disassembly of section .text:
 <main>:
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movq	%rcx, %rdx
                	movq	%rcx, %rsi
-               	jmp	<addr>
-               	movl	0x8(%rax), %edi
-               	movq	(%rax), %r8
-               	movl	$0x3e8, %r9d            # imm = 0x3E8
-               	cmpb	$0x0, 0x1(%r8)
-               	cmoveq	%rcx, %r9
-               	addq	%r9, %rdi
-               	addq	%rdi, %rsi
+               	cmpq	%rdi, %rax
+               	jae	<addr>
+               	movl	0x8(%rax), %r8d
+               	movq	(%rax), %r9
+               	movl	$0x3e8, %r10d           # imm = 0x3E8
+               	cmpb	$0x0, 0x1(%r9)
+               	cmoveq	%rcx, %r10
+               	addq	%r10, %r8
+               	addq	%r8, %rsi
                	addq	$0x10, %rax
                	incq	%rdx
-               	leaq	<rip>, %rdi # <addr>
-               	nopw	(%rax,%rax)
+               	nop
                	cmpq	%rdi, %rax
                	jb	<addr>
                	cmpl	$0x3, %edx

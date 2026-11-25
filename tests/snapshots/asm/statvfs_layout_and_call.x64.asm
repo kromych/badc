@@ -79,8 +79,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rax
                	movq	%rax, %rdi
                	callq	<addr>
-               	movq	0x8(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x8(%rsp)
                	jne	<addr>
                	movq	0x88(%rsp), %rax
                	movq	0x18(%rsp), %rcx

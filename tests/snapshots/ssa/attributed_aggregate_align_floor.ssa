@@ -127,7 +127,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v89, target=b18, fall=b17 }   (exit_acc=v89)
   block 17  start_pc=0
     v91  ImmData(208)                                     -> x1
-    v92  Load { addr=v91, disp=0, kind=I64 pc_rel }       -> x1
+    v92  Load { addr=v28, disp=0, kind=I64 pc_rel }       -> x1
     v93  Extend { value=v92, kind=I32 }                   -> x2
     v94  BinopI { op=ne, lhs=v92, rhs_imm=4 }             -> x1
     v95  Imm(0)                                           -> x2
@@ -140,7 +140,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v98)   (exit_acc=v98)
   block 19  start_pc=0
     v100 ImmData(288)                                     -> x1
-    v101 Load { addr=v100, disp=0, kind=I64 pc_rel }      -> x1
+    v101 Load { addr=v37, disp=0, kind=I64 pc_rel }       -> x1
     v102 Extend { value=v101, kind=I32 }                  -> x2
     v103 BinopI { op=ne, lhs=v101, rhs_imm=6 }            -> x1
     terminator Bz { cond=v103, target=b21, fall=b20 }   (exit_acc=v103)

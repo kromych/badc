@@ -137,6 +137,7 @@ Disassembly of section .text:
                	leaq	(%rsp), %rdi
                	movl	$0x1, %esi
                	callq	<addr>
+               	leaq	(%rsp), %r8
                	movq	(%rsp), %rcx
                	movq	0x8(%rsp), %rdx
                	movq	0x10(%rsp), %rsi
@@ -159,7 +160,7 @@ Disassembly of section .text:
                	cmoveq	%rax, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
-               	leaq	(%rsp), %rdi
+               	movq	%r8, %rdi
                	callq	<addr>
                	cmpq	$0x10e1, %rax           # imm = 0x10E1
                	sete	%al

@@ -191,8 +191,7 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %rcx
                	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movq	(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, (%rsp)
                	jne	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>

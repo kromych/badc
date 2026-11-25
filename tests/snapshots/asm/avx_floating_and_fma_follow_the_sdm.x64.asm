@@ -4992,6 +4992,7 @@ Disassembly of section .text:
                	vmovups	-0x1e0(%rbp), %ymm14
                	vpextrd	$0x3, %xmm14, %eax
                	movslq	%eax, %rax
+               	leaq	0x40(%rsp), %rsi
                	movl	%eax, 0x40(%rsp)
                	movl	%eax, 0x44(%rsp)
                	movl	%eax, 0x48(%rsp)
@@ -4999,7 +5000,6 @@ Disassembly of section .text:
                	movl	%eax, 0x50(%rsp)
                	movl	%eax, 0x54(%rsp)
                	movl	%eax, 0x58(%rsp)
-               	leaq	0x40(%rsp), %rsi
                	movl	%eax, 0x5c(%rsp)
                	movl	$0x20, %edx
                	movq	<rip>, %rdi # <addr>
@@ -6090,8 +6090,8 @@ Disassembly of section .text:
                	leaq	0x100(%rsp), %rsi
                	vmovups	-0x80(%rbp), %ymm14
                	vmovups	%ymm14, 0x100(%rsp)
-               	vmovups	%ymm0, 0x120(%rsp)
                	leaq	0x120(%rsp), %rdi
+               	vmovups	%ymm0, 0x120(%rsp)
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	movq	%rax, %r10
@@ -6130,42 +6130,55 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
-               	movl	$0x1, %eax
-               	movq	<rip>, %rcx # <addr>
+               	movl	$0x1, %ecx
+               	movq	<rip>, %rdx # <addr>
                	movabsq	$0x74ccbd3f6dc406f9, %r11 # imm = 0x74CCBD3F6DC406F9
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	movq	<rip>, %rcx # <addr>
+               	cmpq	%r11, %rdx
+               	je	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
+               	movl	$0x2, %ecx
+               	movq	<rip>, %rdx # <addr>
                	movabsq	$0x1109575788509c5, %r11 # imm = 0x1109575788509C5
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	movl	$0x3, %eax
-               	movq	<rip>, %rcx # <addr>
+               	cmpq	%r11, %rdx
+               	je	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
+               	movl	$0x3, %ecx
+               	movq	<rip>, %rdx # <addr>
                	movabsq	$0x22e32b377fe2c5f9, %r11 # imm = 0x22E32B377FE2C5F9
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	movl	$0x4, %eax
-               	movq	<rip>, %rcx # <addr>
+               	cmpq	%r11, %rdx
+               	je	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
+               	movl	$0x4, %ecx
+               	movq	<rip>, %rdx # <addr>
                	movabsq	$0x643ff85c67bfe70e, %r11 # imm = 0x643FF85C67BFE70E
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	movl	$0x5, %eax
-               	movq	<rip>, %rcx # <addr>
+               	cmpq	%r11, %rdx
+               	je	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
+               	movl	$0x5, %ecx
+               	movq	<rip>, %rdx # <addr>
                	movabsq	$0x1399ba70a23f6f3f, %r11 # imm = 0x1399BA70A23F6F3F
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	movl	$0x6, %eax
-               	movq	<rip>, %rcx # <addr>
+               	cmpq	%r11, %rdx
+               	je	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
+               	movl	$0x6, %ecx
+               	movq	<rip>, %rdx # <addr>
                	movabsq	$-0x59fced26f1c647c3, %r11 # imm = 0xA60312D90E39B83D
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	movl	$0x7, %eax
-               	movq	<rip>, %rcx # <addr>
+               	cmpq	%r11, %rdx
+               	je	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
+               	movl	$0x7, %ecx
+               	movq	<rip>, %rdx # <addr>
                	movabsq	$-0x65ee5915fc0be271, %r11 # imm = 0x9A11A6EA03F41D8F
-               	cmpq	%r11, %rcx
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	cmpq	%r11, %rdx
+               	je	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
                	leaq	-0x120(%rbp), %rsp
                	popq	%rbx
                	popq	%r12

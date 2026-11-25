@@ -36,9 +36,9 @@ Disassembly of section .text:
                	movq	<rip>, %rcx # <addr>
                	testb	$-0x1, %cl
                	jne	<addr>
-               	movl	$0x1, %edx
+               	movl	$0x1, %esi
                	testq	%rcx, %rcx
-               	movq	%rdx, %rcx
+               	movq	%rsi, %rcx
                	cmovneq	%rax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
@@ -59,10 +59,9 @@ Disassembly of section .text:
                	movq	%rcx, 0x8(%rsp)
                	leaq	0x8(%rsp), %rax
                	movq	%rax, <rip> # <addr>
-               	movq	0x8(%rsp), %rax
-               	cmpq	$0x64, %rax
+               	movq	0x8(%rsp), %rsi
+               	cmpq	$0x64, %rsi
                	jge	<addr>
-               	movq	<rip>, %rax # <addr>
                	movq	$0x100, (%rax)          # imm = 0x100
                	movq	0x8(%rsp), %rax
                	cmpq	$0x64, %rax

@@ -586,7 +586,8 @@ fn stack_parameters_are_read_past_the_pushes_alone() {
     const SRC: &str = "long seven(long a0, long a1, long a2, long a3, long a4, long a5, long a6,\n\
         long a7, signed char c, short s, int i) {\n\
         long t = c > 0 ? s * 3 : i - 1;\n\
-        return a6 + t * 5 + c + a0 + a1 + a2 + a3 + a4 + a5 + a7; }\n";
+        long u = a6 * a7, w = a6 ^ a7;\n\
+        return a6 + t * 5 + c + a0 + a1 + a2 + a3 + a4 + a5 + a7 + u * (w + t) + (u ^ a0); }\n";
     let target = Target::LinuxX64;
     let obj = object(SRC, target, true, FULL, NativeOptions::new());
     let insns = insns_of(&obj, "seven");

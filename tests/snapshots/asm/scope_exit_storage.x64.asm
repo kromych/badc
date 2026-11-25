@@ -234,8 +234,7 @@ Disassembly of section .text:
                	popq	%r12
                	addq	$0x438, %rsp            # imm = 0x438
                	retq
-               	movq	0x438(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x438(%rsp)
                	je	<addr>
                	leaq	0x220(%rsp), %rdi
                	movl	$0x8c, %esi

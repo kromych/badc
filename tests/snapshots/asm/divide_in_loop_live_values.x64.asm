@@ -114,7 +114,7 @@ Disassembly of section .text:
                	subq	%rdx, %rax
                	addq	%rsi, %rax
                	addq	%rax, %rbx
-               	imulq	$0x1f, %r12, %r12
+               	imulq	$0x1f, %r12, %r10
                	movq	0x110(%rsp,%rcx,8), %rsi
                	movabsq	$0x4ec4ec4ec4ec4ec5, %r8 # imm = 0x4EC4EC4EC4EC4EC5
                	movq	%rsi, %rax
@@ -130,8 +130,9 @@ Disassembly of section .text:
                	movq	%r9, %rax
                	xorl	%edx, %edx
                	divq	%rsi
-               	addq	%rax, %r12
+               	leaq	(%r10,%rax), %r12
                	incq	%rcx
+               	nopw	(%rax,%rax)
                	cmpl	$0x40, %ecx
                	jl	<addr>
                	leaq	0x10(%rsp), %rdi

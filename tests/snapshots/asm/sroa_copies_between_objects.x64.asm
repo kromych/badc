@@ -41,25 +41,23 @@ Disassembly of section .text:
                	retq
 
 <rotate>:
-               	pushq	%r12
-               	pushq	%rbx
-               	movq	%rdi, %rbx
                	movq	<rip>, %rsi # <addr>
                	movl	$0x1, %r8d
                	movl	$0x2, %edx
-               	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %r10 # <addr>
                	movl	$0x3, %r9d
                	movl	$0x4, %ecx
                	xorl	%eax, %eax
-               	cmpq	%rbx, %rax
+               	cmpq	%rdi, %rax
                	jge	<addr>
                	addq	%rax, %rsi
                	incq	%rax
                	xchgq	%rsi, %r9
                	xchgq	%r8, %rcx
                	xchgq	%rsi, %rdx
-               	xchgq	%r8, %rdi
-               	cmpq	%rbx, %rax
+               	xchgq	%r8, %r10
+               	nopl	(%rax)
+               	cmpq	%rdi, %rax
                	jl	<addr>
                	imulq	$0xf4240, %rsi, %rax    # imm = 0xF4240
                	imulq	$0x2710, %r8, %rsi      # imm = 0x2710
@@ -67,12 +65,9 @@ Disassembly of section .text:
                	imulq	$0x64, %rdx, %rdx
                	addq	%rdx, %rax
                	addq	%rcx, %rax
-               	popq	%rbx
-               	popq	%r12
                	retq
 
 <member_copy>:
-               	pushq	%rbx
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rax # <addr>
                	leaq	0x1(%rax), %rdx
@@ -87,12 +82,10 @@ Disassembly of section .text:
                	incq	%rsi
                	xchgq	%rdx, %rax
                	xchgq	%r8, %r9
-               	nopw	(%rax,%rax)
                	cmpq	%rdi, %rsi
                	jl	<addr>
                	leaq	(%rcx,%r8), %rax
                	subq	%r9, %rax
-               	popq	%rbx
                	retq
 
 <two_widths>:

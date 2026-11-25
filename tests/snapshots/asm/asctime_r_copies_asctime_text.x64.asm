@@ -27,12 +27,12 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x68, %rsp
-               	leaq	0x28(%rsp), %rax
+               	leaq	0x28(%rsp), %rdi
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movq	$0x0, 0x30(%rax)
+               	movups	%xmm14, (%rdi)
+               	movups	%xmm14, 0x10(%rdi)
+               	movups	%xmm14, 0x20(%rdi)
+               	movq	$0x0, 0x30(%rdi)
                	movl	$0x46, 0x3c(%rsp)
                	movabsq	$0xf0000000d, %rax      # imm = 0xF0000000D
                	movabsq	$0xe00000004, %rcx      # imm = 0xE00000004
@@ -41,7 +41,6 @@ Disassembly of section .text:
                	movabsq	$0x400000005, %rax      # imm = 0x400000005
                	movq	%rax, 0x28(%rsp)
                	movq	<rip>, %rax # <addr>
-               	leaq	0x28(%rsp), %rdi
                	callq	*%rax
                	movq	%rax, %rdi
                	testq	%rdi, %rdi

@@ -55,12 +55,11 @@ Disassembly of section .text:
                	ja	<addr>
                	movl	$0x3, %eax
                	retq
-               	movsd	<rip>, %xmm0 # <addr>
-               	vsubsd	<rip>, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm1 # <addr>
+               	vsubsd	<rip>, %xmm1, %xmm1
+               	comisd	%xmm1, %xmm0
                	jbe	<addr>
-               	comisd	<rip>, %xmm0
+               	comisd	<rip>, %xmm1
                	ja	<addr>
                	movl	$0x4, %eax
                	retq

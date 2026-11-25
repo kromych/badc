@@ -196,6 +196,7 @@ Disassembly of section .text:
                	vpxor	%xmm0, %xmm1, %xmm0
                	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, 0x80(%rsp)
+               	leaq	(%rsp), %rcx
                	aeskeygenassist	$0x1b, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -226,12 +227,11 @@ Disassembly of section .text:
                	vpxor	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, 0xb0(%rsp)
                	movl	$0x1, %eax
-               	leaq	(%rsp), %rcx
                	movq	%rax, %rdx
                	shlq	$0x4, %rdx
-               	addq	%rdx, %rcx
+               	addq	%rcx, %rdx
                	movups	0xb0(%rsp), %xmm0
-               	movups	(%rcx), %xmm1
+               	movups	(%rdx), %xmm1
                	vaesenc	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, 0xb0(%rsp)
                	incq	%rax

@@ -47,8 +47,9 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x1c8, %rsp            # imm = 0x1C8
                	retq
-               	xorl	%eax, %eax
-               	movb	$0x0, 0xb0(%rsp,%rax)
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rax
+               	movb	%cl, 0xb0(%rsp,%rax)
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>

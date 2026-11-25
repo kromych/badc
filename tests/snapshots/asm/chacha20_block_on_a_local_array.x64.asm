@@ -45,7 +45,7 @@ Disassembly of section .text:
                	movups	0x30(%r13), %xmm14
                	movups	%xmm14, 0x30(%rax)
                	xorl	%eax, %eax
-               	movq	%r13, 0x38(%rsp)
+               	movq	%r13, 0x40(%rsp)
                	movl	0x70(%rsp), %ecx
                	movl	0x80(%rsp), %edx
                	leaq	(%rcx,%rdx), %rsi
@@ -77,66 +77,66 @@ Disassembly of section .text:
                	xorq	%rdi, %r8
                	rorl	$0x10, %r8d
                	movl	0x94(%rsp), %edi
-               	addq	%r8, %rdi
+               	leaq	(%rdi,%r8), %r10
                	movl	0x84(%rsp), %r9d
-               	movl	%edi, %ebx
-               	xorq	%rbx, %r9
+               	movl	%r10d, %edi
+               	xorq	%rdi, %r9
                	rorl	$0x14, %r9d
                	leaq	(%rsi,%r9), %rbp
                	movl	%r8d, %r8d
                	movl	%ebp, %esi
                	xorq	%rsi, %r8
                	rorl	$0x18, %r8d
-               	leaq	(%rdi,%r8), %r13
+               	leaq	(%r10,%r8), %r13
                	movl	%r9d, %r9d
                	movl	%r13d, %esi
                	xorq	%rsi, %r9
                	rorl	$0x19, %r9d
                	movl	0x78(%rsp), %esi
                	movl	0x88(%rsp), %edi
-               	leaq	(%rsi,%rdi), %rbx
+               	leaq	(%rsi,%rdi), %r10
                	movl	0xa8(%rsp), %esi
-               	movl	%ebx, %edi
+               	movl	%r10d, %edi
                	xorq	%rdi, %rsi
                	rorl	$0x10, %esi
                	movl	0x98(%rsp), %edi
-               	leaq	(%rdi,%rsi), %r12
+               	leaq	(%rdi,%rsi), %rbx
                	movl	0x88(%rsp), %edi
-               	movl	%r12d, %r10d
-               	movq	%r10, 0x68(%rsp)
-               	xorq	0x68(%rsp), %rdi
+               	movl	%ebx, %r11d
+               	xorq	%r11, %rdi
                	rorl	$0x14, %edi
-               	leaq	(%rbx,%rdi), %r10
-               	movq	%r10, 0x68(%rsp)
+               	leaq	(%r10,%rdi), %r11
+               	movq	%r11, 0x68(%rsp)
                	movl	%esi, %esi
-               	movq	0x68(%rsp), %rbx
-               	movl	%ebx, %ebx
-               	xorq	%rbx, %rsi
+               	movq	0x68(%rsp), %r10
+               	movl	%r10d, %r10d
+               	xorq	%r10, %rsi
                	rorl	$0x18, %esi
-               	leaq	(%r12,%rsi), %r10
+               	leaq	(%rbx,%rsi), %r10
                	movq	%r10, 0x60(%rsp)
                	movl	%edi, %edi
-               	movq	0x60(%rsp), %rbx
-               	movl	%ebx, %ebx
-               	xorq	%rbx, %rdi
+               	movq	0x60(%rsp), %r10
+               	movl	%r10d, %r10d
+               	xorq	%r10, %rdi
                	rorl	$0x19, %edi
-               	movl	0x7c(%rsp), %ebx
-               	movl	0x8c(%rsp), %r12d
-               	leaq	(%rbx,%r12), %r10
-               	movq	%r10, 0x58(%rsp)
+               	movl	0x7c(%rsp), %r10d
+               	movl	0x8c(%rsp), %r11d
+               	movq	%r9, 0x38(%rsp)
+               	leaq	(%r10,%r11), %r9
+               	movq	%r9, 0x58(%rsp)
+               	movq	0x38(%rsp), %r9
                	movl	0xac(%rsp), %ebx
-               	movq	0x58(%rsp), %r12
-               	movl	%r12d, %r12d
-               	xorq	%r12, %rbx
+               	movq	0x58(%rsp), %r10
+               	movl	%r10d, %r10d
+               	xorq	%r10, %rbx
                	rorl	$0x10, %ebx
-               	movl	0x9c(%rsp), %r12d
-               	leaq	(%r12,%rbx), %r10
-               	movq	%r10, 0x50(%rsp)
+               	movl	0x9c(%rsp), %r10d
+               	leaq	(%r10,%rbx), %r11
+               	movq	%r11, 0x50(%rsp)
                	movl	0x8c(%rsp), %r12d
                	movq	0x50(%rsp), %r10
                	movl	%r10d, %r10d
-               	movq	%r10, 0x40(%rsp)
-               	xorq	0x40(%rsp), %r12
+               	xorq	%r10, %r12
                	rorl	$0x14, %r12d
                	movq	0x58(%rsp), %r10
                	addq	%r12, %r10
@@ -144,8 +144,7 @@ Disassembly of section .text:
                	movl	%ebx, %ebx
                	movq	0x58(%rsp), %r10
                	movl	%r10d, %r10d
-               	movq	%r10, 0x40(%rsp)
-               	xorq	0x40(%rsp), %rbx
+               	xorq	%r10, %rbx
                	rorl	$0x18, %ebx
                	movq	0x50(%rsp), %r10
                	addq	%rbx, %r10
@@ -153,62 +152,55 @@ Disassembly of section .text:
                	movl	%r12d, %r12d
                	movq	0x50(%rsp), %r10
                	movl	%r10d, %r10d
-               	movq	%r10, 0x40(%rsp)
-               	xorq	0x40(%rsp), %r12
+               	xorq	%r10, %r12
                	rorl	$0x19, %r12d
                	addq	%r9, %r14
                	movl	%ebx, %ebx
                	movl	%r14d, %r10d
-               	movq	%r10, 0x40(%rsp)
-               	xorq	0x40(%rsp), %rbx
+               	xorq	%r10, %rbx
                	rorl	$0x10, %ebx
                	movq	0x60(%rsp), %r10
                	addq	%rbx, %r10
-               	movq	%r10, 0x60(%rsp)
                	movl	%r9d, %r9d
-               	movq	0x60(%rsp), %r10
-               	movl	%r10d, %r10d
-               	movq	%r10, 0x40(%rsp)
-               	xorq	0x40(%rsp), %r9
+               	movl	%r10d, %r11d
+               	xorq	%r11, %r9
                	rorl	$0x14, %r9d
-               	addq	%r9, %r14
-               	movl	%r14d, 0x70(%rsp)
+               	leaq	(%r14,%r9), %r11
+               	movl	%r11d, 0x70(%rsp)
                	movl	%ebx, %ebx
-               	movl	%r14d, %r14d
-               	xorq	%r14, %rbx
+               	movl	%r11d, %r11d
+               	xorq	%r11, %rbx
                	rorl	$0x18, %ebx
                	movl	%ebx, 0xac(%rsp)
-               	movq	%rbx, %r10
-               	movq	0x60(%rsp), %rbx
-               	addq	%r10, %rbx
-               	movl	%ebx, 0x98(%rsp)
+               	addq	%rbx, %r10
+               	movl	%r10d, 0x98(%rsp)
                	movl	%r9d, %r9d
-               	movl	%ebx, %ebx
-               	xorq	%rbx, %r9
+               	movl	%r10d, %r10d
+               	xorq	%r10, %r9
                	rorl	$0x19, %r9d
                	movl	%r9d, 0x84(%rsp)
-               	leaq	(%rbp,%rdi), %rbx
+               	leaq	(%rbp,%rdi), %r10
                	movl	%ecx, %ecx
-               	movl	%ebx, %r9d
+               	movl	%r10d, %r9d
                	xorq	%r9, %rcx
                	rorl	$0x10, %ecx
-               	movq	0x50(%rsp), %r14
-               	addq	%rcx, %r14
+               	movq	0x50(%rsp), %r11
+               	addq	%rcx, %r11
                	movl	%edi, %r9d
-               	movl	%r14d, %edi
+               	movl	%r11d, %edi
                	xorq	%rdi, %r9
                	rorl	$0x14, %r9d
-               	leaq	(%rbx,%r9), %rdi
-               	movl	%edi, 0x74(%rsp)
+               	addq	%r9, %r10
+               	movl	%r10d, 0x74(%rsp)
                	movl	%ecx, %ecx
-               	movl	%edi, %edi
+               	movl	%r10d, %edi
                	xorq	%rdi, %rcx
                	rorl	$0x18, %ecx
                	movl	%ecx, 0xa0(%rsp)
-               	leaq	(%r14,%rcx), %rdi
-               	movl	%edi, 0x9c(%rsp)
+               	leaq	(%r11,%rcx), %r10
+               	movl	%r10d, 0x9c(%rsp)
                	movl	%r9d, %ecx
-               	movl	%edi, %edi
+               	movl	%r10d, %edi
                	xorq	%rdi, %rcx
                	rorl	$0x19, %ecx
                	movl	%ecx, 0x88(%rsp)
@@ -218,19 +210,19 @@ Disassembly of section .text:
                	movl	%r9d, %edi
                	xorq	%rdi, %rcx
                	rorl	$0x10, %ecx
-               	leaq	(%r15,%rcx), %rdi
+               	leaq	(%r15,%rcx), %r10
                	movl	%r12d, %r8d
-               	movl	%edi, %ebx
-               	xorq	%rbx, %r8
+               	movl	%r10d, %edi
+               	xorq	%rdi, %r8
                	rorl	$0x14, %r8d
                	addq	%r8, %r9
                	movl	%r9d, 0x78(%rsp)
                	movl	%ecx, %ecx
-               	movl	%r9d, %r9d
-               	xorq	%r9, %rcx
+               	movl	%r9d, %edi
+               	xorq	%rdi, %rcx
                	rorl	$0x18, %ecx
                	movl	%ecx, 0xa4(%rsp)
-               	leaq	(%rdi,%rcx), %r9
+               	leaq	(%r10,%rcx), %r9
                	movl	%r9d, 0x90(%rsp)
                	movl	%r8d, %ecx
                	movl	%r9d, %edi
@@ -263,7 +255,8 @@ Disassembly of section .text:
                	rorl	$0x19, %ecx
                	movl	%ecx, 0x80(%rsp)
                	incq	%rax
-               	movq	0x38(%rsp), %r13
+               	movq	0x40(%rsp), %r13
+               	nop
                	cmpl	$0xa, %eax
                	jl	<addr>
                	movl	0x70(%rsp), %eax

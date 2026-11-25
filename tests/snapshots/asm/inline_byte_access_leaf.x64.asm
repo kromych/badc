@@ -186,31 +186,28 @@ Disassembly of section .text:
                	andq	$0xff, %rsi
                	orq	%rsi, %rax
                	shlq	$0x8, %rax
-               	addq	$0x7, %rcx
-               	imulq	$0x7, %rcx, %rcx
-               	incq	%rcx
-               	andq	$0xff, %rcx
-               	orq	%rcx, %rax
-               	leaq	0x40(%rsp), %rcx
-               	movq	%rdx, %rsi
-               	shlq	$0x3, %rsi
-               	leaq	(%rcx,%rsi), %rdi
+               	leaq	0x7(%rcx), %rsi
+               	imulq	$0x7, %rsi, %rsi
+               	incq	%rsi
+               	andq	$0xff, %rsi
+               	orq	%rsi, %rax
+               	leaq	0x40(%rsp), %rsi
+               	leaq	(%rsi,%rcx), %rdi
                	movq	(%rdi), %rdi
                	bswapq	%rdi
                	movq	%rdx, %r8
                	shlq	$0x2, %r8
-               	addq	%r8, %rcx
-               	movl	(%rcx), %ecx
-               	leaq	(%rsp), %r8
                	addq	%r8, %rsi
-               	movq	(%rsi), %rsi
-               	bswapq	%rsi
-               	addq	%rdi, %rcx
-               	xorq	%rcx, %rax
-               	cmpq	%rax, %rsi
+               	movl	(%rsi), %esi
+               	leaq	(%rsp), %r8
+               	addq	%r8, %rcx
+               	movq	(%rcx), %rcx
+               	bswapq	%rcx
+               	addq	%rdi, %rsi
+               	xorq	%rsi, %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
                	incq	%rdx
-               	nopl	(%rax,%rax)
                	cmpl	$0x8, %edx
                	jb	<addr>
                	xorl	%eax, %eax

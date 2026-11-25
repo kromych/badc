@@ -83,8 +83,8 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	movsd	<rip>, %xmm1
-               	vaddsd	<rip>, %xmm1, %xmm0
+               	movsd	<rip>, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	%xmm0, 0x10(%rsp)
                	movsd	0x18(%rsp), %xmm1
                	vaddsd	<rip>, %xmm1, %xmm1

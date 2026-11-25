@@ -62,10 +62,9 @@ Disassembly of section .text:
                	cmoveq	%rcx, %rax
                	retq
                	leaq	0x4(%rax), %rcx
-               	movslq	0x4(%rax), %rsi
-               	leaq	<rip>, %rdi # <addr>
-               	addq	%rsi, %rcx
-               	subq	%rdi, %rcx
+               	movslq	0x4(%rax), %rdi
+               	addq	%rdi, %rcx
+               	subq	%rsi, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
@@ -116,6 +115,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%ch, -0xf000002(%rax)
 
 <text_tbl>:
                	testb	$-0x2, %al

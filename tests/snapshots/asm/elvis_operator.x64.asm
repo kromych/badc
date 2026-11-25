@@ -28,38 +28,32 @@ Disassembly of section .text:
 <main>:
                	subq	$0x18, %rsp
                	movl	$0x0, (%rsp)
-               	movl	$0x5, 0x8(%rsp)
-               	movslq	0x8(%rsp), %rax
-               	testq	%rax, %rax
+               	movl	$0x5, %eax
+               	movl	%eax, 0x8(%rsp)
+               	movslq	0x8(%rsp), %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x18, %rsp
                	retq
-               	movslq	(%rsp), %rax
-               	testq	%rax, %rax
+               	movslq	(%rsp), %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	cmpl	$0x63, %eax
+               	cmpl	$0x63, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x18, %rsp
                	retq
                	movl	$0x1, <rip> # <addr>
                	movl	$0x1, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x1, %eax
+               	leaq	<rip>, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x18, %rsp
-               	retq
-               	leaq	<rip>, %rax
-               	testq	%rax, %rax
+               	movsbq	(%rcx), %rcx
+               	cmpl	$0x78, %ecx
                	je	<addr>
-               	movsbq	(%rax), %rax
-               	cmpl	$0x78, %eax
-               	je	<addr>
-               	movl	$0x5, %eax
                	addq	$0x18, %rsp
                	retq
                	movslq	(%rsp), %rax
@@ -105,5 +99,5 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	0x8(%rsp), %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rcx
                	jmp	<addr>

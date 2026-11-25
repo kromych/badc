@@ -35,17 +35,16 @@ Disassembly of section .text:
                	retq
 
 <sum>:
-               	pushq	%rbx
                	movslq	%edi, %rdi
-               	movq	%rsi, %rbx
-               	movq	%rdi, %rsi
-               	shlq	$0x2, %rsi
+               	movq	%rdi, %r10
+               	shlq	$0x2, %r10
                	xorl	%r9d, %r9d
                	movq	%r9, %rcx
                	xorl	%eax, %eax
                	movq	%r9, %rdx
-               	imulq	%rsi, %rdx
-               	addq	%rbx, %rdx
+               	imulq	%r10, %rdx
+               	addq	%rsi, %rdx
+               	nopl	(%rax)
                	cmpl	%edi, %eax
                	jge	<addr>
                	movl	(%rdx,%rax,4), %r8d
@@ -56,14 +55,13 @@ Disassembly of section .text:
                	incq	%r9
                	cmpl	$0x2, %r9d
                	jl	<addr>
-               	movslq	%esi, %rax
+               	movslq	%r10d, %rax
                	movq	%rax, %rdx
                	shrq	$0x3e, %rdx
                	addq	%rdx, %rax
                	sarq	$0x2, %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	addq	%rcx, %rax
-               	popq	%rbx
                	retq
 
 <main>:

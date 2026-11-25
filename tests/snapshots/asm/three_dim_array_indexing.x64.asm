@@ -81,7 +81,6 @@ Disassembly of section .text:
                	popq	%r11
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	movzbq	<rip>, %rcx # <addr>
                	subq	%rcx, %rax
                	cmpl	$0xc, %eax
                	je	<addr>

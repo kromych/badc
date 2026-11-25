@@ -128,8 +128,7 @@ Disassembly of section .text:
                	movq	(%rsp), %rcx
                	movq	%rcx, %rdi
                	callq	<addr>
-               	movq	0x8(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x8(%rsp)
                	jne	<addr>
                	leaq	0x10(%rsp), %rdi
                	callq	<addr>

@@ -45,24 +45,23 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x1, %eax
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x2, %eax
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x7, %eax
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x7, %ecx
                	jne	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
-               	cmpl	%ecx, %eax
+               	cmpl	%eax, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	retq

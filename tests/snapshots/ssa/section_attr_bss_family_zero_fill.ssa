@@ -226,9 +226,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v172 Store { addr=v170, disp=0, value=v171, kind=I8 } -> -
     v173 ImmData(28672)                                   -> x1
     v174 Imm(56)                                          -> x1
-    v175 BinopI { op=add, lhs=v173, rhs_imm=56 }          -> x1
+    v175 BinopI { op=add, lhs=v58, rhs_imm=56 }           -> x1
     v176 Imm(5)                                           -> x1
-    v177 Store { addr=v173, disp=56, value=v176, kind=I64 pc_rel } -> -
+    v177 Store { addr=v58, disp=56, value=v176, kind=I64 pc_rel } -> -
     v178 Load { addr=v160, disp=0, kind=I64 pc_rel }      -> x1
     v179 Load { addr=v160, disp=4088, kind=I64 pc_rel }   -> x2
     v180 Binop { op=add, lhs=v178, rhs=v179 }             -> x1

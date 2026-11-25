@@ -26,36 +26,34 @@ Disassembly of section .text:
                	int3
 
 <mash_outline>:
-               	pushq	%rbx
                	movswq	%r8w, %r8
                	subq	%rsi, %r8
-               	movswq	%r8w, %rbx
+               	movswq	%r8w, %r10
                	andq	$0xff, %r9
                	leaq	0x3(%r9), %r8
                	andq	$0xff, %r8
-               	movzwq	0x18(%rsp), %rax
+               	movzwq	0x10(%rsp), %rax
                	shlq	%rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movw	%ax, 0x18(%rsp)
-               	movl	0x20(%rsp), %esi
+               	movw	%ax, 0x10(%rsp)
+               	movl	0x18(%rsp), %esi
                	addq	%rdi, %rsi
-               	movl	%esi, 0x20(%rsp)
+               	movl	%esi, 0x18(%rsp)
                	movslq	%esi, %rdi
-               	movq	0x28(%rsp), %rsi
+               	movq	0x20(%rsp), %rsi
                	subq	%rdx, %rsi
-               	movq	%rsi, 0x28(%rsp)
-               	movsbq	0x10(%rsp), %rdx
+               	movq	%rsi, 0x20(%rsp)
+               	movsbq	0x8(%rsp), %rdx
                	addq	%rsi, %rdx
-               	movq	%rdx, 0x28(%rsp)
-               	movl	0x30(%rsp), %esi
-               	addq	%rbx, %r8
+               	movq	%rdx, 0x20(%rsp)
+               	movl	0x28(%rsp), %esi
+               	addq	%r10, %r8
                	addq	%r8, %rax
                	addq	%rdi, %rax
                	addq	%rdx, %rax
                	addq	%rsi, %rax
                	movl	%ecx, %ecx
                	addq	%rcx, %rax
-               	popq	%rbx
                	retq
 
 <main>:

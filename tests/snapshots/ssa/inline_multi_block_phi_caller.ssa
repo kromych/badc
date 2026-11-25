@@ -66,7 +66,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v58  BinopI { op=shl, lhs=v57, rhs_imm=2 }            -> x9
     v59  Binop { op=add, lhs=v8, rhs=v58 }                -> x9
     v60  LoadIndexed { base=v8, index=v57, scale=4, kind=U32 } -> x9
-    v61  BinopI { op=and, lhs=v11, rhs_imm=4294967295 }   -> x3
+    v61  BinopI { op=and, lhs=v11, rhs_imm=4294967295 }   -> x10
     v62  Binop { op=xor, lhs=v60, rhs=v11 }               -> x9
     v63  StoreIndexed { base=v8, index=v57, scale=4, value=v62, kind=I32 } -> -
     terminator Jmp(b1)
@@ -80,7 +80,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v79  BinopI { op=shl, lhs=v78, rhs_imm=2 }            -> x9
     v80  Binop { op=add, lhs=v8, rhs=v79 }                -> x9
     v81  LoadIndexed { base=v8, index=v78, scale=4, kind=U32 } -> x9
-    v82  BinopI { op=and, lhs=v11, rhs_imm=4294967295 }   -> x3
+    v82  BinopI { op=and, lhs=v11, rhs_imm=4294967295 }   -> x10
     v83  Binop { op=add, lhs=v81, rhs=v11 }               -> x9
     v84  StoreIndexed { base=v8, index=v78, scale=4, value=v83, kind=I32 } -> -
     terminator Jmp(b1)

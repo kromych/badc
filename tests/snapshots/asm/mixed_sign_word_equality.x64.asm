@@ -74,26 +74,24 @@ Disassembly of section .text:
                	cmpl	%eax, %r12d
                	jne	<addr>
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
-               	sete	%al
-               	movzbq	%al, %rax
-               	movl	(%rdx,%rbx,4), %ecx
-               	cmpl	$0x80000000, %ecx       # imm = 0x80000000
                	sete	%cl
                	movzbq	%cl, %rcx
-               	cmpl	%ecx, %eax
+               	movl	(%rdx,%rbx,4), %eax
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	cmpl	$0x80000000, %r12d      # imm = 0x80000000
-               	sete	%al
-               	movzbq	%al, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movl	(%rcx,%rbx,4), %ecx
-               	cmpl	$0x80000000, %ecx       # imm = 0x80000000
                	sete	%cl
                	movzbq	%cl, %rcx
-               	nop
-               	cmpl	%ecx, %eax
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpl	%eax, %ecx
                	jne	<addr>
                	incq	%rbx
+               	nopw	(%rax,%rax)
                	cmpl	$0x6, %ebx
                	jl	<addr>
                	xorl	%eax, %eax

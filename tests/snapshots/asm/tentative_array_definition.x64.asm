@@ -41,17 +41,18 @@ Disassembly of section .text:
                	movsbq	<rip>, %rdi # <addr>
                	cmpl	$0x68, %edi
                	cmovneq	%rdx, %rsi
-               	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
-               	movsbq	(%rdx,%rax), %rdx
-               	movq	%rsi, %rdi
-               	orq	$0x8, %rdi
-               	movsbq	(%rcx,%rax), %r8
-               	cmpl	%edx, %r8d
-               	cmovneq	%rdi, %rsi
+               	leaq	<rip>, %rdi # <addr>
+               	cmpb	$0x0, (%rdx,%rax)
+               	je	<addr>
+               	movsbq	(%rdi,%rax), %r8
+               	movq	%rsi, %r9
+               	orq	$0x8, %r9
+               	movsbq	(%rcx,%rax), %r10
+               	cmpl	%r8d, %r10d
+               	cmovneq	%r9, %rsi
                	incq	%rax
-               	leaq	<rip>, %rdx # <addr>
-               	nopl	(%rax,%rax)
+               	nop
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	testq	%rsi, %rsi

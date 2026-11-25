@@ -92,30 +92,30 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v60  Store { addr=v20, disp=0, value=v59, kind=I32 pc_rel } -> -
     v61  ImmData(32)                                      -> x1
     v62  Extend { value=v59, kind=I32 }                   -> x0
-    v63  BinopI { op=ne, lhs=v62, rhs_imm=2 }             -> x0
+    v63  BinopI { op=ne, lhs=v62, rhs_imm=2 }             -> x1
     terminator Bz { cond=v63, target=b15, fall=b14 }   (exit_acc=v63)
   block 14  start_pc=0
     v64  Imm(7)                                           -> x0
     terminator Return(v64)   (exit_acc=v64)
   block 15  start_pc=0
-    v65  Imm(0)                                           -> x0
-    v66  Imm(0)                                           -> x0
-    v67  ImmData(16)                                      -> x0
-    v68  Imm(0)                                           -> x0
-    v69  Imm(0)                                           -> x0
-    v70  Imm(0)                                           -> x0
-    v71  Imm(0)                                           -> x0
-    v72  Load { addr=v67, disp=0, kind=I32 pc_rel }       -> x0
-    v73  BinopI { op=ne, lhs=v72, rhs_imm=42 }            -> x0
+    v65  Imm(0)                                           -> x1
+    v66  Imm(0)                                           -> x1
+    v67  ImmData(16)                                      -> x1
+    v68  Imm(0)                                           -> x1
+    v69  Imm(0)                                           -> x1
+    v70  Imm(0)                                           -> x1
+    v71  Imm(0)                                           -> x1
+    v72  Load { addr=v1, disp=0, kind=I32 pc_rel }        -> x1
+    v73  BinopI { op=ne, lhs=v72, rhs_imm=42 }            -> x1
     terminator Bz { cond=v73, target=b17, fall=b16 }   (exit_acc=v73)
   block 16  start_pc=0
-    v88  Imm(8)                                           -> x0
-    v89  Imm(0)                                           -> x0
-    v90  LocalAddr(-2)                                    -> x0
-    v91  ImmData(32)                                      -> x0
-    v92  Load { addr=v91, disp=0, kind=I32 pc_rel }       -> x0
-    v93  BinopI { op=add, lhs=v92, rhs_imm=1 }            -> x0
-    v94  Store { addr=v91, disp=0, value=v93, kind=I32 pc_rel } -> -
+    v88  Imm(8)                                           -> x1
+    v89  Imm(0)                                           -> x1
+    v90  LocalAddr(-2)                                    -> x1
+    v91  ImmData(32)                                      -> x1
+    v92  Load { addr=v20, disp=0, kind=I32 pc_rel }       -> x1
+    v93  BinopI { op=add, lhs=v62, rhs_imm=1 }            -> x0
+    v94  Store { addr=v20, disp=0, value=v93, kind=I32 pc_rel } -> -
     v95  Imm(0)                                           -> x0
     v96  Imm(8)                                           -> x0
     terminator Return(v96)   (exit_acc=v96)

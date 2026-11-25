@@ -84,17 +84,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v31  ImmData(16)                                      -> x0
     v32  Imm(24)                                          -> x0
     v33  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
-    v34  Load { addr=v1, disp=24, kind=F64 pc_rel }       -> d0
+    v34  Load { addr=v1, disp=24, kind=F64 pc_rel }       -> d1
     v35  Imm(4611686018427387904)                         -> x0
-    v36  Imm(-4611686018427387904)                        -> d1
-    v37  Binop { op=fsub, lhs=v34, rhs=v36 }              -> d0
-    v38  Imm(4562254508917369340)                         -> d1
-    v39  Binop { op=flt, lhs=v37, rhs=v38 }               -> x0
+    v36  Imm(-4611686018427387904)                        -> d2
+    v37  Binop { op=fsub, lhs=v34, rhs=v36 }              -> d1
+    v38  Imm(4562254508917369340)                         -> x0
+    v39  Binop { op=flt, lhs=v37, rhs=v7 }                -> x0
     v40  Imm(0)                                           -> x1
     terminator Bz { cond=v39, target=b11, fall=b10 }   (exit_acc=v39)
   block 10  start_pc=0
-    v109 Imm(-4661117527937406468)                        -> d1
-    v110 Binop { op=fgt, lhs=v37, rhs=v109 }              -> x0
+    v109 Imm(-4661117527937406468)                        -> x0
+    v110 Binop { op=fgt, lhs=v37, rhs=v91 }               -> x0
     v111 Imm(0)                                           -> x1
     v112 Extend { value=v110, kind=I32 }                  -> x1
     v113 Extend { value=v110, kind=I32 }                  -> x1

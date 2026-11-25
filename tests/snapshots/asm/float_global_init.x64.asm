@@ -64,12 +64,12 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	retq
                	movss	<rip>, %xmm0 # <addr>
-               	vcvtss2sd	%xmm0, %xmm0, %xmm1
-               	vsubsd	<rip>, %xmm1, %xmm1
+               	cvtss2sd	%xmm0, %xmm0
+               	vsubsd	<rip>, %xmm0, %xmm2
                	movsd	<rip>, %xmm0
-               	comisd	%xmm1, %xmm0
+               	comisd	%xmm2, %xmm0
                	jbe	<addr>
-               	comisd	<rip>, %xmm1
+               	comisd	<rip>, %xmm2
                	ja	<addr>
                	movl	$0x5, %eax
                	retq
@@ -89,12 +89,11 @@ Disassembly of section .text:
                	ja	<addr>
                	movl	$0x7, %eax
                	retq
-               	movsd	<rip>, %xmm0 # <addr>
-               	vsubsd	<rip>, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm1 # <addr>
+               	vsubsd	<rip>, %xmm1, %xmm1
+               	comisd	%xmm1, %xmm0
                	jbe	<addr>
-               	comisd	<rip>, %xmm0
+               	comisd	<rip>, %xmm1
                	ja	<addr>
                	movl	$0x8, %eax
                	retq

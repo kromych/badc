@@ -241,6 +241,11 @@ pub(crate) struct Allocation {
     pub loop_saves: LoopSaveCode,
     /// The SVE predicates' places and the VL-scaled slots.
     pub sve: super::sve_alloc::SveAlloc,
+    /// x86-64, when a value holds a register of [`X86_SCRATCH_PAIR`]: the
+    /// registers of the values at each point, from which the emitter plans
+    /// each site's scratch, and the first of the two spill slots a
+    /// borrowed scratch register keeps its value in.
+    pub scratch_sites: Option<ScratchSites>,
 }
 
 /// The code the saves around loops and branch arms add at block boundaries
@@ -1271,9 +1276,13 @@ impl RegBanks {
             fp_scratch[n] = r;
             n += 1;
         }
+        let mut caller_gprs = keep(rows.caller_gprs, FixedRegs::has_gpr);
+        if target.is_x86_64() && scratch_pair_first() {
+            caller_gprs.sort_by_key(|r| !X86_SCRATCH_PAIR.contains(r));
+        }
         Self {
             callee_gprs: keep(rows.callee_gprs, FixedRegs::has_gpr),
-            caller_gprs: keep(rows.caller_gprs, FixedRegs::has_gpr),
+            caller_gprs,
             callee_fprs,
             caller_fprs,
             fp_scratch,
@@ -1400,6 +1409,221 @@ fn call_forbid_masks(
             let entry = &mut out[node_of[v as usize] as usize];
             entry.0 |= gpr;
             entry.1 |= fpr;
+        }
+    }
+    out
+}
+
+/// The values in [`X86_SCRATCH_PAIR`] at the x86-64 sites whose lowering
+/// would find fewer than two scratch registers ([`scratch_room`]): an
+/// instruction's operands and result, the phi moves of an edge that stage
+/// through scratch, the parameters an entry places. Kept off the pair,
+/// they leave it to the site, which then borrows it at worst.
+fn x86_scratch_starved(
+    func: &FunctionSsa,
+    target: Target,
+    alloc: &Allocation,
+    sites: &ScratchSites,
+) -> Vec<ValueId> {
+    let in_pair = |v: ValueId| matches!(alloc.places.get(v as usize), Some(Place::IntReg(r)) if X86_SCRATCH_PAIR.contains(r));
+    let starved = |order: &[u8], touched: u16| scratch_room(order, sites.writable, touched) < 2;
+    let tls = tls_addr_is_call(target, func);
+    let mut out = Vec::new();
+    for (v, inst) in func.insts.iter().enumerate() {
+        let v = v as ValueId;
+        if matches!(inst, Inst::Phi { .. })
+            || is_call_site(inst, tls)
+            || super::emit_common::is_dead_pure(inst, v, alloc)
+            || !starved(&X86_SCRATCH_ORDER, sites.masks.touched[v as usize])
+        {
+            continue;
+        }
+        if in_pair(v) {
+            out.push(v);
+        }
+        for_each_operand(inst, |op| {
+            if in_pair(op) {
+                out.push(op);
+            }
+        });
+    }
+    out.extend(x86_scratch_borrowed_in_loops(func, alloc, sites, tls));
+    let reg = |v: ValueId| match alloc.places.get(v as usize) {
+        Some(&Place::IntReg(r)) => 1u16 << r,
+        _ => 0,
+    };
+    for (b, blk) in func.blocks.iter().enumerate() {
+        let succs = super::mem2reg::successors(
+            &blk.terminator,
+            &func.computed_goto_targets,
+            &func.jump_tables,
+        );
+        let mut moved = Vec::new();
+        let mut staged = false;
+        for s in succs {
+            let m = super::emit_common::edge_moves(func, alloc, b as crate::c5::ir::BlockId, s);
+            staged |= super::super::x86_64::emit::moves_stage(&m.int)
+                || !m.fp_const.is_empty()
+                || !m.pred.is_empty();
+            for id in func.blocks[s as usize].inst_range.clone() {
+                let Inst::Phi { incoming, .. } = &func.insts[id as usize] else {
+                    break;
+                };
+                for &(p, src) in incoming {
+                    if p as usize == b {
+                        moved.extend([id, src]);
+                    }
+                }
+            }
+        }
+        let touched = moved.iter().fold(0, |m, &v| m | reg(v));
+        if staged && starved(&X86_MOVE_ORDER, touched) {
+            out.extend(moved.into_iter().filter(|&v| in_pair(v)));
+        }
+    }
+    let args = target.abi_for(func.conv).int_arg_regs;
+    let params: Vec<ValueId> = (0..func.insts.len() as ValueId)
+        .filter(|&v| {
+            matches!(
+                func.insts[v as usize],
+                Inst::ParamRef { .. } | Inst::ParamPart { .. }
+            )
+        })
+        .collect();
+    let touched = params
+        .iter()
+        .fold(args.iter().fold(0u16, |m, &r| m | 1 << r), |m, &v| {
+            m | reg(v)
+        });
+    if starved(&X86_MOVE_ORDER, touched) {
+        out.extend(params.into_iter().filter(|&v| in_pair(v)));
+    }
+    out
+}
+
+/// The values in [`X86_SCRATCH_PAIR`] that an instruction inside a loop
+/// would borrow the register of: one reading or writing a spill slot, which
+/// stages through scratch, where no two scratch registers are free. A
+/// borrow there stores and reloads on every iteration; kept off the pair,
+/// the value leaves the pair to the staging, as with 13 registers.
+fn x86_scratch_borrowed_in_loops(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    sites: &ScratchSites,
+    tls: bool,
+) -> Vec<ValueId> {
+    let depth = crate::c5::codegen::passes::layout::loop_depths(func);
+    let block_of = crate::c5::codegen::passes::constfold_branch::block_index(func);
+    let spilled = |v: ValueId| matches!(alloc.places.get(v as usize), Some(Place::Spill(_)));
+    let mut held = 0u16;
+    let mut sites_in = Vec::new();
+    for (v, inst) in func.insts.iter().enumerate() {
+        let looped = (block_of.get(v))
+            .and_then(|&b| depth.get(b as usize))
+            .is_some_and(|&d| d > 0);
+        let through = sites.masks.through[v];
+        if !looped
+            || matches!(inst, Inst::Phi { .. })
+            || is_call_site(inst, tls)
+            || super::emit_common::is_dead_pure(inst, v as ValueId, alloc)
+            || scratch_room(
+                &X86_SCRATCH_ORDER,
+                sites.writable,
+                sites.masks.touched[v] | through,
+            ) >= 2
+        {
+            continue;
+        }
+        let mut stages = spilled(v as ValueId);
+        for_each_operand(inst, |op| stages |= spilled(op));
+        let pair = X86_SCRATCH_PAIR.iter().fold(0u16, |m, &r| m | 1 << r) & through;
+        if stages && pair != 0 {
+            held |= pair;
+            sites_in.push((v as ValueId, pair));
+        }
+    }
+    if held == 0 {
+        return Vec::new();
+    }
+    // A value lives over `[v, last_use[v]]` (`Allocation::last_use`).
+    let mut out = Vec::new();
+    for (u, &p) in alloc.places.iter().enumerate() {
+        let Place::IntReg(r) = p else { continue };
+        if held >> r & 1 == 0 {
+            continue;
+        }
+        let end = alloc.last_use.get(u).copied().unwrap_or(0);
+        if sites_in
+            .iter()
+            .any(|&(v, pair)| pair >> r & 1 != 0 && (u as ValueId) < v && v <= end)
+        {
+            out.push(u as ValueId);
+        }
+    }
+    out
+}
+
+/// How many registers of `order` an x86-64 site may take as scratch:
+/// writable, and neither read nor written by the site.
+pub(crate) fn scratch_room(order: &[u8], writable: u16, touched: u16) -> usize {
+    order
+        .iter()
+        .filter(|&&r| writable >> r & 1 != 0 && touched >> r & 1 == 0)
+        .count()
+}
+
+/// x86-64 values kept off [`X86_SCRATCH_PAIR`] where a lowering takes
+/// that pair as scratch and cannot borrow it from a value: the operands of
+/// a call, whose marshal moves rsp before it stages; the operands and
+/// outputs of an inline-asm statement and the values live across it, whose
+/// lowering stages through the pair; and the values live out of a block
+/// whose terminator jumps through a register, and its operands, as no code
+/// runs past the jump to give a borrowed register back.
+fn x86_scratch_pair_forbid(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    target: Target,
+) -> Vec<bool> {
+    if !target.is_x86_64() {
+        return Vec::new();
+    }
+    let n = func.insts.len();
+    let tls = tls_addr_is_call(target, func);
+    let mut out = vec![false; n];
+    let mark = |v: ValueId, out: &mut Vec<bool>| {
+        if (v as usize) < n {
+            out[v as usize] = true;
+        }
+    };
+    for (v, inst) in func.insts.iter().enumerate() {
+        if is_call_site(inst, tls) || matches!(inst, Inst::InlineAsm { .. }) {
+            for_each_operand(inst, |op| {
+                mark(op, &mut out);
+                // A call reads an aggregate argument's parts in place.
+                if let Some(parts @ Inst::AggParts { .. }) = func.insts.get(op as usize) {
+                    for_each_operand(parts, |p| mark(p, &mut out));
+                }
+            });
+        }
+        if matches!(inst, Inst::AsmOut { .. }) {
+            mark(v as ValueId, &mut out);
+        }
+    }
+    let asm = |inst: &Inst| matches!(inst, Inst::InlineAsm { .. });
+    for (_, live) in liveness.values_live_after(func, &asm) {
+        for u in live {
+            mark(u, &mut out);
+        }
+    }
+    for (b, blk) in func.blocks.iter().enumerate() {
+        if matches!(
+            blk.terminator,
+            Terminator::JumpTable { .. } | Terminator::GotoIndirect { .. }
+        ) {
+            liveness
+                .block_liveness()
+                .for_each_live_out(b as crate::c5::ir::BlockId, |v| mark(v, &mut out));
+            blk.terminator.for_each_operand(|v| mark(v, &mut out));
         }
     }
     out
@@ -1548,20 +1772,12 @@ impl Rows {
             },
             Target::LinuxX64 => Self {
                 // System V x86_64. Callee-saved: rbx, r12, r13, r14,
-                // r15. r10 and r11 stay reserved as the writer's fixed
-                // scratch (`SCRATCH_R10` / `SCRATCH_R11` in
-                // ssa_emit_x86_64) -- many handlers (int_or_spill_dst,
-                // materialize_int for spilled sources, the Va* /
-                // call-arg marshallers) write them unconditionally to
-                // land a value in a known register, so the allocator
-                // must not park another SSA value there. Both are
-                // caller-saved, so reserving them forces no prologue
-                // save and a scratch-only body stays leaf-elidable. r13
-                // is an ordinary callee-saved allocation target, saved
-                // only when colored. Caller-saved opens up to the SysV
-                // arg regs (rdi, rsi, rdx, rcx, r8, r9) plus rax.
+                // r15. Caller-saved: rax, the argument registers rdi,
+                // rsi, rdx, rcx, r8, r9, and r10 and r11 last, which a
+                // lowering takes first as scratch when no value holds
+                // them (`ScratchPlan`).
                 callee_gprs: &[3, 12, 13, 14, 15],
-                caller_gprs: &[0, 1, 2, 6, 7, 8, 9],
+                caller_gprs: &[0, 1, 2, 6, 7, 8, 9, 10, 11],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
                 // xmm14 / xmm15 are the emit pass's scratch; xmm8..xmm13
@@ -1570,14 +1786,10 @@ impl Rows {
             },
             Target::WindowsX64 => Self {
                 // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r13, r14,
-                // r15. r10 / r11 stay reserved as the writer's fixed
-                // scratch (see the LinuxX64 comment for the SCRATCH_R10
-                // / SCRATCH_R11 contract); both are caller-saved. r13 is
-                // an ordinary callee-saved allocation target. Caller-
-                // saved opens up to the Win64 arg regs (rcx, rdx, r8,
-                // r9) plus rax.
+                // r15. Caller-saved: rax, the argument registers rcx,
+                // rdx, r8, r9, and r10 and r11 last, as on System V.
                 callee_gprs: &[3, 6, 7, 12, 13, 14, 15],
-                caller_gprs: &[0, 1, 2, 8, 9],
+                caller_gprs: &[0, 1, 2, 8, 9, 10, 11],
                 // Win64 marks xmm6..xmm15 non-volatile (callee-saved);
                 // the prologue and every epilogue path save and restore
                 // the full 128 bits of each one the body uses, so the
@@ -1589,6 +1801,35 @@ impl Rows {
         }
     }
 }
+
+/// The registers an x86-64 lowering takes as scratch, in order: the pair,
+/// then r9 and r8, then r15 and r14. Each is one of r8-r15 other than r12
+/// and r13, which an encoding names through REX bits with no SIB byte or
+/// displacement.
+pub(crate) const X86_SCRATCH_ORDER: [u8; 6] = [10, 11, 9, 8, 15, 14];
+
+/// The registers an x86-64 parallel copy of places takes as scratch, in
+/// order: its moves encode any general register, so every one other than
+/// rsp and rbp serves.
+pub(crate) const X86_MOVE_ORDER: [u8; 14] = [10, 11, 9, 8, 0, 1, 2, 6, 7, 3, 12, 13, 14, 15];
+
+/// What the x86-64 emitter plans each site's scratch from
+/// ([`Allocation::scratch_sites`]).
+#[derive(Debug, Clone)]
+pub(crate) struct ScratchSites {
+    pub masks: super::liveness::RegisterMasks,
+    /// The first of the two spill slots past the allocation's own that a
+    /// borrowed scratch register keeps its value in, which the frame adds
+    /// once a site borrows one.
+    pub borrow_slot: u32,
+    /// The general registers a lowering may write: the convention's
+    /// caller-saved ones and the callee-saved ones the prologue saves.
+    pub writable: u16,
+}
+
+/// The x86-64 registers a lowering takes first as scratch
+/// (`ScratchPlan`), which the caller-saved banks list last.
+pub(crate) const X86_SCRATCH_PAIR: [u8; 2] = [10, 11];
 
 /// General-purpose registers the allocator may use for `target`, after
 /// the codegen-test bank caps (`BADC_MAX_GPR` / the per-thread override).
@@ -1713,6 +1954,30 @@ pub(crate) fn free_fp_register(
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
+    let mut pair_off: Vec<bool> = Vec::new();
+    loop {
+        let alloc = allocate_keeping(func, target, fixed, &pair_off);
+        let starved = alloc.scratch_sites.as_ref().map_or_else(Vec::new, |sites| {
+            x86_scratch_starved(func, target, &alloc, sites)
+        });
+        if starved.is_empty() {
+            return alloc;
+        }
+        pair_off.resize(func.insts.len(), false);
+        for v in starved {
+            pair_off[v as usize] = true;
+        }
+    }
+}
+
+/// [`allocate`], keeping the values `pair_off` marks off
+/// [`X86_SCRATCH_PAIR`].
+fn allocate_keeping(
+    func: &FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    pair_off: &[bool],
+) -> Allocation {
     let region_base = super::emit_common::region_base(func, target, fixed);
     let fixed = super::emit_common::fixed_for_function(func, target, fixed);
     let n_insts = func.insts.len();
@@ -1798,6 +2063,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             call_saves: Vec::new(),
             loop_saves: LoopSaveCode::default(),
             sve: Default::default(),
+            scratch_sites: None,
         };
     }
 
@@ -1915,6 +2181,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let mut asm_live = asm_live_values(func, &liveness, target, fixed);
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
     let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
+    let pair_forbid = x86_scratch_pair_forbid(func, &liveness, target);
     let crossings = call_crossings(func, &liveness, target);
     let ret_part_forbid = ret_part_crossing_forbid(func, target, &crossings, &node_of);
     let mut wide = wide_values(func);
@@ -1946,6 +2213,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.hint = hints[v];
         }
         entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
+        if pair_forbid.get(v) == Some(&true) || pair_off.get(v) == Some(&true) {
+            entry.forbid |= X86_SCRATCH_PAIR.iter().fold(0, |m, &r| m | 1 << r);
+        }
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
         entry.loop_avoid |= loop_avoid.get(v).copied().unwrap_or(0);
         if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
@@ -2677,8 +2947,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .into_iter()
         .filter(|r| conv_banks.callee_gprs.contains(r))
         .collect();
-    // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
-    // it needs no save. The aarch64 writer's callee-saved x19 is saved
+    // The x86_64 writer's scratch is caller-saved or a register the
+    // prologue saves anyway. The aarch64 writer's callee-saved x19 is saved
     // through `Frame::uses_x19`, not this list.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
@@ -2774,6 +3044,22 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         },
     );
     let asm_preserve = asm_preserve_masks(func, target, region_base);
+    let pair_held = target.is_x86_64()
+        && places
+            .iter()
+            .any(|p| matches!(p, Place::IntReg(r) if X86_SCRATCH_PAIR.contains(r)));
+    let scratch_sites = pair_held.then(|| {
+        let reg = |v: ValueId| match places[v as usize] {
+            Place::IntReg(r) => Some(r),
+            _ => None,
+        };
+        let bits = |regs: &[u8]| regs.iter().fold(0u16, |m, &r| m | 1 << r);
+        ScratchSites {
+            masks: liveness.register_masks(func, &reg),
+            borrow_slot: spill_count,
+            writable: bits(&conv_banks.caller_gprs) | bits(&gpr_used_callee),
+        }
+    });
     let imm_held = imm_already_held(func, &places, &use_counts, target);
     let fp_mem_operand = if target.is_x86_64() {
         fp_memory_operands(func, &use_counts, fp_literals)
@@ -2819,6 +3105,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         call_saves: saves_at,
         loop_saves: loop_code,
         sve,
+        scratch_sites,
     }
 }
 
@@ -3810,6 +4097,23 @@ pub(crate) fn with_pool_size_override<R>(
 /// takes precedence. Under the `codegen_test` feature the
 /// `BADC_MAX_GPR` / `BADC_MAX_FPR` environment variables truncate the
 /// integer / FP banks; without the feature they are ignored.
+/// Whether the codegen-test environment asks for the x86-64 scratch pair
+/// at the front of the caller-saved bank (`BADC_X86_SCRATCH_FIRST`), so
+/// every lowering that takes scratch meets a register a value holds. A
+/// test that sets the bank sizes ([`with_pool_size_override`]) keeps the
+/// order.
+fn scratch_pair_first() -> bool {
+    #[cfg(feature = "codegen_test")]
+    {
+        POOL_SIZE_OVERRIDE.with(|cell| cell.get()).is_none()
+            && std::env::var_os("BADC_X86_SCRATCH_FIRST").is_some()
+    }
+    #[cfg(not(feature = "codegen_test"))]
+    {
+        false
+    }
+}
+
 fn pool_size_limits() -> (usize, usize) {
     #[cfg(feature = "std")]
     if let Some(caps) = POOL_SIZE_OVERRIDE.with(|cell| cell.get()) {

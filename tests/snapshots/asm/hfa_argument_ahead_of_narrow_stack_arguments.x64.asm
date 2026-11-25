@@ -26,56 +26,55 @@ Disassembly of section .text:
                	int3
 
 <f>:
-               	subq	$0x28, %rsp
-               	movsd	%xmm0, 0x10(%rsp)
-               	movsd	%xmm1, 0x18(%rsp)
-               	movq	%rcx, 0x8(%rsp)
-               	movq	0x40(%rsp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	subq	$0x18, %rsp
+               	movsd	%xmm0, (%rsp)
+               	movsd	%xmm1, 0x8(%rsp)
+               	movq	0x30(%rsp), %rax
+               	leaq	<rip>, %r10 # <addr>
+               	cmpq	%r10, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
                	movl	(%rax), %eax
                	cmpl	$0x2a, %eax
                	jne	<addr>
-               	movl	0x48(%rsp), %eax
+               	movl	0x38(%rsp), %eax
                	cmpl	$-0x7, %eax
                	jne	<addr>
-               	movl	0x50(%rsp), %eax
+               	movl	0x40(%rsp), %eax
                	cmpl	$0x9, %eax
                	jne	<addr>
-               	movl	0x58(%rsp), %eax
+               	movl	0x48(%rsp), %eax
                	cmpl	$-0xb, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
-               	movss	0x10(%rsp), %xmm0
-               	movss	0x14(%rsp), %xmm1
+               	movss	(%rsp), %xmm0
+               	movss	0x4(%rsp), %xmm1
                	vfmadd231ss	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
-               	movss	0x18(%rsp), %xmm1
+               	movss	0x8(%rsp), %xmm1
                	vfmadd231ss	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
-               	movss	0x1c(%rsp), %xmm1
+               	movss	0xc(%rsp), %xmm1
                	vfmadd231ss	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	cvttss2si	%xmm0, %rax
                	addq	%rdi, %rax
                	addq	%rsi, %rax
                	addq	%rdx, %rax
-               	addq	0x8(%rsp), %rax
+               	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x30(%rsp), %rcx
+               	movq	0x20(%rsp), %rcx
                	addq	%rcx, %rax
-               	movq	0x38(%rsp), %rcx
+               	movq	0x28(%rsp), %rcx
                	addq	%rcx, %rax
                	xorl	%ecx, %ecx
                	movl	$0x3, %edx
                	cmpq	$0x42, %rax
                	movq	%rdx, %rax
                	cmoveq	%rcx, %rax
-               	addq	$0x28, %rsp
+               	addq	$0x18, %rsp
                	retq
 
 <main>:

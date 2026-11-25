@@ -432,16 +432,16 @@ Disassembly of section .text:
                	cmpl	$0xa, %r13d
                	jae	<addr>
                	leaq	0x38(%rsp), %rax
-               	imulq	$0x18, %r13, %rcx
-               	addq	%rcx, %rax
+               	imulq	$0x18, %r13, %rsi
+               	addq	%rsi, %rax
                	cmpl	$0x0, 0x10(%rax)
                	je	<addr>
                	movsd	0x128(%rsp), %xmm14
                	movsd	%xmm14, 0x28(%rsp)
                	movslq	0x8(%rax), %rdx
-               	leaq	0x38(%rsp), %rax
-               	addq	%rcx, %rax
                	movl	0xc(%rax), %ecx
+               	leaq	0x38(%rsp), %rax
+               	addq	%rsi, %rax
                	movl	0x10(%rax), %eax
                	xorl	%esi, %esi
                	testl	%ecx, %ecx

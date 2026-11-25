@@ -71,21 +71,22 @@ Disassembly of section .text:
                	movabsq	$-0x61c8864680b583eb, %rax # imm = 0x9E3779B97F4A7C15
                	imulq	%rdi, %rax
                	xorl	%ecx, %ecx
+               	movl	$0x92492493, %r8d       # imm = 0x92492493
+               	leaq	<rip>, %r9 # <addr>
                	movslq	%eax, %rax
                	subq	$0x1, %rdx
                	jb	<addr>
                	sarq	$0x3, %rax
-               	leaq	<rip>, %rdi # <addr>
                	incq	%rsi
-               	movzbq	-0x1(%rsi), %r8
-               	movslq	(%rdi,%r8,4), %rdi
+               	movzbq	-0x1(%rsi), %rdi
+               	movslq	(%r9,%rdi,4), %rdi
                	xorq	%rdi, %rax
-               	movl	$0x92492493, %edi       # imm = 0x92492493
-               	imulq	%rax, %rdi
+               	movq	%rax, %rdi
+               	imulq	%r8, %rdi
                	sarq	$0x22, %rdi
-               	movq	%rdi, %r8
-               	shrq	$0x3f, %r8
-               	addq	%r8, %rdi
+               	movq	%rdi, %r10
+               	shrq	$0x3f, %r10
+               	addq	%r10, %rdi
                	addq	%rdi, %rcx
                	subq	$0x1, %rdx
                	jae	<addr>
@@ -180,8 +181,8 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	movl	$0x80000000, %r9d       # imm = 0x80000000
                	movl	$0xedb88320, %edi       # imm = 0xEDB88320
-               	leaq	<rip>, %rbx # <addr>
-               	leaq	<rip>, %r12 # <addr>
+               	leaq	<rip>, %r10 # <addr>
+               	leaq	<rip>, %r11 # <addr>
                	xorl	%ecx, %ecx
                	movq	%rsi, %rax
                	movq	%rax, %rdx
@@ -195,11 +196,11 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x8, %ecx
                	jl	<addr>
-               	movl	%eax, (%rbx,%rsi,4)
+               	movl	%eax, (%r10,%rsi,4)
                	xorq	%r9, %rax
-               	movl	%eax, (%r12,%rsi,4)
+               	movl	%eax, (%r11,%rsi,4)
                	incq	%rsi
-               	nopw	(%rax,%rax)
+               	nopl	(%rax,%rax)
                	cmpl	$0x100, %esi            # imm = 0x100
                	jb	<addr>
                	xorl	%eax, %eax

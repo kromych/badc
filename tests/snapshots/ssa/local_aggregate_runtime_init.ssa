@@ -40,28 +40,28 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v22  StoreLocal { off=-3, disp=4, value=v18, kind=I32 } -> -
     v23  Imm(0)                                           -> x1
     v24  LocalAddr(-3)                                    -> x1
-    v25  BinopI { op=add, lhs=v24, rhs_imm=8 }            -> x1
+    v25  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
     v26  Imm(0)                                           -> x1
     v27  LocalAddr(-3)                                    -> x1
-    v28  BinopI { op=add, lhs=v24, rhs_imm=9 }            -> x1
+    v28  BinopI { op=add, lhs=v1, rhs_imm=9 }             -> x1
     v29  Imm(0)                                           -> x1
-    v30  LocalAddr(-3)                                    -> x1
-    v31  BinopI { op=add, lhs=v24, rhs_imm=10 }           -> x1
+    v30  LocalAddr(-3)                                    -> x7
+    v31  BinopI { op=add, lhs=v30, rhs_imm=10 }           -> x1
     v32  Imm(0)                                           -> x1
     v33  LocalAddr(-3)                                    -> x2
-    v34  BinopI { op=add, lhs=v24, rhs_imm=11 }           -> x2
+    v34  BinopI { op=add, lhs=v30, rhs_imm=11 }           -> x2
     v35  StoreLocal { off=-3, disp=8, value=v32, kind=I32 } -> -
     v36  LocalAddr(-3)                                    -> x1
-    v37  BinopI { op=add, lhs=v24, rhs_imm=12 }           -> x1
+    v37  BinopI { op=add, lhs=v30, rhs_imm=12 }           -> x1
     v38  Imm(0)                                           -> x1
     v39  LocalAddr(-3)                                    -> x2
-    v40  BinopI { op=add, lhs=v24, rhs_imm=13 }           -> x2
+    v40  BinopI { op=add, lhs=v30, rhs_imm=13 }           -> x2
     v41  StoreLocal { off=-3, disp=12, value=v38, kind=I16 } -> -
-    v42  LocalAddr(-3)                                    -> x7
-    v43  BinopI { op=add, lhs=v42, rhs_imm=16 }           -> x1
+    v42  LocalAddr(-3)                                    -> x1
+    v43  BinopI { op=add, lhs=v30, rhs_imm=16 }           -> x1
     v44  StoreLocal { off=-3, disp=16, value=v3, kind=I64 } -> -
     v45  LocalAddr(-3)                                    -> x0
-    v46  Call { target_pc=0, args=[v42], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v46  Call { target_pc=0, args=[v30], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v47  Imm(0)                                           -> x1
     v48  Imm(0)                                           -> x1
     v49  Load { addr=v46, disp=0, kind=I32 }              -> x1

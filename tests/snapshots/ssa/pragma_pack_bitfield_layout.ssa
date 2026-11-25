@@ -404,7 +404,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=18
     v356 LifetimeEnd(-18)                                 -> -
     terminator Return(v343)   (exit_acc=v343)
   block 22  start_pc=0
-    v357 LocalAddr(-12)                                   -> x0
+    v357 LocalAddr(-12)                                   -> x7
     v358 Imm(0)                                           -> x0
     v359 Imm(0)                                           -> x1
     v360 Imm(0)                                           -> x1
@@ -490,10 +490,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=18
     v440 Imm(82176)                                       -> x1
     v441 BinopI { op=or, lhs=v439, rhs_imm=82176 }        -> x0
     v442 StoreLocal { off=-12, disp=11, value=v441, kind=I32 } -> -
-    v443 LocalAddr(-12)                                   -> x7
+    v443 LocalAddr(-12)                                   -> x0
     v444 ImmData(24)                                      -> x6
     v445 Imm(15)                                          -> x2
-    v446 CallExt { binding_idx=26, args=[v443, v444, v445], fp_arg_mask=0x0 } -> x0
+    v446 CallExt { binding_idx=26, args=[v357, v444, v445], fp_arg_mask=0x0 } -> x0
     v447 BinopI { op=eq, lhs=v446, rhs_imm=0 }            -> x1
     v448 Extend { value=v447, kind=I32 }                  -> x1
     v449 Extend { value=v447, kind=I32 }                  -> x1
@@ -832,10 +832,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=18
     v752 BinopI { op=and, lhs=v751, rhs_imm=-1073741824 } -> x0
     v753 Binop { op=or, lhs=v752, rhs=v741 }              -> x0
     v754 StoreLocal { off=-6, disp=1, value=v753, kind=I32 } -> -
-    v755 LocalAddr(-6)                                    -> x7
-    v756 BinopI { op=add, lhs=v755, rhs_imm=4 }           -> x0
+    v755 LocalAddr(-6)                                    -> x0
+    v756 BinopI { op=add, lhs=v703, rhs_imm=4 }           -> x0
     v757 LocalAddr(-4)                                    -> x0
-    v758 BinopI { op=add, lhs=v757, rhs_imm=4 }           -> x0
+    v758 BinopI { op=add, lhs=v715, rhs_imm=4 }           -> x0
     v759 LocalAddr(-2)                                    -> x0
     v760 BinopI { op=add, lhs=v759, rhs_imm=8 }           -> x0
     v761 Imm(715827882)                                   -> x0
@@ -854,10 +854,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=18
     v774 BinopI { op=and, lhs=v773, rhs_imm=-68719476673 } -> x1
     v775 Binop { op=or, lhs=v774, rhs=v770 }              -> x1
     v776 StoreLocal { off=-6, disp=4, value=v775, kind=I64 } -> -
-    v777 LocalAddr(-6)                                    -> x0
+    v777 LocalAddr(-6)                                    -> x7
     v778 ImmData(65)                                      -> x6
     v779 Imm(12)                                          -> x2
-    v780 CallExt { binding_idx=26, args=[v755, v778, v779], fp_arg_mask=0x0 } -> x0
+    v780 CallExt { binding_idx=26, args=[v777, v778, v779], fp_arg_mask=0x0 } -> x0
     v781 BinopI { op=eq, lhs=v780, rhs_imm=0 }            -> x1
     v782 Extend { value=v781, kind=I32 }                  -> x1
     v783 Extend { value=v781, kind=I32 }                  -> x1

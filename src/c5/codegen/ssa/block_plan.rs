@@ -660,6 +660,7 @@ mod tests {
             call_saves: Vec::new(),
             loop_saves: Default::default(),
             sve: Default::default(),
+            scratch_sites: None,
         }
     }
 

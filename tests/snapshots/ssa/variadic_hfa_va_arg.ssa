@@ -655,9 +655,9 @@ fn ent_pc=6 n_params=0 variadic=false locals=21
     v216 LocalAddr(-46)                                   -> x0
     v217 LocalAddr(-46)                                   -> x0
     v218 LocalAddr(-46)                                   -> x0
-    v219 LocalAddr(-46)                                   -> x1
-    v220 LocalAddr(-47)                                   -> x2
-    v221 Call { target_pc=3, args=[v211, v212, v212, v212, v212, v212, v212, v218, v219, v220], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v219 LocalAddr(-46)                                   -> x0
+    v220 LocalAddr(-47)                                   -> x0
+    v221 Call { target_pc=3, args=[v211, v212, v212, v212, v212, v212, v212, v212, v212, v220], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v222 LocalAddr(-49)                                   -> x0
     v223 LoadLocal { off=-49, kind=F80 }                  -> d0
     v224 Imm(4619848792751996928)                         -> d1

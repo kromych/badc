@@ -566,30 +566,30 @@ fn ent_pc=14 n_params=0 variadic=false locals=43
     v288 LocalAddr(-39)                                   -> x1
     v289 LocalAddr(-19)                                   -> x1
     v290 Mcpy { dst=v231, src=v289, size=8, align=1 }     -> -
-    v291 LoadLocal { off=-39, kind=I64 }                  -> x0
+    v291 LoadLocal { off=-39, kind=I64 }                  -> x1
     v292 LifetimeEnd(-39)                                 -> -
     v293 LifetimeEnd(-19)                                 -> -
-    v294 Imm(0)                                           -> x1
-    v295 Imm(0)                                           -> x1
-    v296 Imm(0)                                           -> x1
+    v294 Imm(0)                                           -> x2
+    v295 Imm(0)                                           -> x2
+    v296 Imm(0)                                           -> x2
     v297 FpCast { kind=BitsFp, value=v291 }               -> d0
-    v298 LocalAddr(-36)                                   -> x0
-    v299 Imm(1)                                           -> x0
-    v300 Imm(8)                                           -> x0
-    v301 BinopI { op=add, lhs=v298, rhs_imm=8 }           -> x0
+    v298 LocalAddr(-36)                                   -> x1
+    v299 Imm(1)                                           -> x1
+    v300 Imm(8)                                           -> x1
+    v301 BinopI { op=add, lhs=v213, rhs_imm=8 }           -> x1
     v302 LoadLocal { off=-36, disp=8, kind=F64 }          -> d1
     v303 Binop { op=fadd, lhs=v297, rhs=v302 }            -> d0
     v304 StoreLocal { off=-18, value=v303, kind=F64, volatile } -> -
-    v305 LocalAddr(-39)                                   -> x0
+    v305 LocalAddr(-39)                                   -> x1
     v306 LocalAddr(-18)                                   -> x1
-    v307 Mcpy { dst=v305, src=v306, size=8, align=1 }     -> -
-    v308 LoadLocal { off=-39, kind=I64 }                  -> x1
+    v307 Mcpy { dst=v231, src=v306, size=8, align=1 }     -> -
+    v308 LoadLocal { off=-39, kind=I64 }                  -> x0
     v309 LifetimeEnd(-39)                                 -> -
     v310 LifetimeEnd(-18)                                 -> -
     v311 StoreLocal { off=-17, value=v308, kind=I64, volatile } -> -
-    v312 LocalAddr(-39)                                   -> x1
+    v312 LocalAddr(-39)                                   -> x0
     v313 LocalAddr(-17)                                   -> x1
-    v314 Mcpy { dst=v305, src=v313, size=8, align=1 }     -> -
+    v314 Mcpy { dst=v312, src=v313, size=8, align=1 }     -> -
     v315 LoadLocal { off=-39, kind=F64 }                  -> d0
     v316 LifetimeEnd(-39)                                 -> -
     v317 LifetimeEnd(-17)                                 -> -
@@ -608,14 +608,14 @@ fn ent_pc=14 n_params=0 variadic=false locals=43
     v330 StoreLocal { off=-16, value=v329, kind=I64, volatile } -> -
     v331 LocalAddr(-39)                                   -> x1
     v332 LocalAddr(-16)                                   -> x1
-    v333 Mcpy { dst=v305, src=v332, size=8, align=1 }     -> -
+    v333 Mcpy { dst=v312, src=v332, size=8, align=1 }     -> -
     v334 LoadLocal { off=-39, kind=F64 }                  -> d0
     v335 LifetimeEnd(-39)                                 -> -
     v336 LifetimeEnd(-16)                                 -> -
     v337 StoreLocal { off=-15, value=v334, kind=F64, volatile } -> -
     v338 LocalAddr(-39)                                   -> x1
     v339 LocalAddr(-15)                                   -> x1
-    v340 Mcpy { dst=v305, src=v339, size=8, align=1 }     -> -
+    v340 Mcpy { dst=v312, src=v339, size=8, align=1 }     -> -
     v341 LoadLocal { off=-39, kind=I64 }                  -> x1
     v342 LifetimeEnd(-39)                                 -> -
     v343 LifetimeEnd(-15)                                 -> -
@@ -623,49 +623,49 @@ fn ent_pc=14 n_params=0 variadic=false locals=43
     v345 Imm(0)                                           -> x2
     v346 Imm(0)                                           -> x2
     v347 FpCast { kind=BitsFp, value=v341 }               -> d0
-    v348 LocalAddr(-36)                                   -> x1
+    v348 LocalAddr(-36)                                   -> x7
     v349 Imm(2)                                           -> x1
     v350 Imm(16)                                          -> x1
-    v351 BinopI { op=add, lhs=v298, rhs_imm=16 }          -> x1
+    v351 BinopI { op=add, lhs=v348, rhs_imm=16 }          -> x1
     v352 LoadLocal { off=-36, disp=16, kind=F64 }         -> d1
     v353 Binop { op=fadd, lhs=v347, rhs=v352 }            -> d0
     v354 StoreLocal { off=-14, value=v353, kind=F64, volatile } -> -
     v355 LocalAddr(-39)                                   -> x1
     v356 LocalAddr(-14)                                   -> x1
-    v357 Mcpy { dst=v305, src=v356, size=8, align=1 }     -> -
+    v357 Mcpy { dst=v312, src=v356, size=8, align=1 }     -> -
     v358 LoadLocal { off=-39, kind=I64 }                  -> x1
     v359 LifetimeEnd(-39)                                 -> -
     v360 LifetimeEnd(-14)                                 -> -
     v361 StoreLocal { off=-13, value=v358, kind=I64, volatile } -> -
     v362 LocalAddr(-39)                                   -> x1
     v363 LocalAddr(-13)                                   -> x1
-    v364 Mcpy { dst=v305, src=v363, size=8, align=1 }     -> -
+    v364 Mcpy { dst=v312, src=v363, size=8, align=1 }     -> -
     v365 LoadLocal { off=-39, kind=F64 }                  -> d0
     v366 LifetimeEnd(-39)                                 -> -
     v367 LifetimeEnd(-13)                                 -> -
-    v368 FpCast { kind=FpBits, value=v365 }               -> x0
-    v369 Imm(2)                                           -> x1
-    v370 Imm(3)                                           -> x1
-    v371 Imm(3)                                           -> x1
-    v372 Imm(3)                                           -> x1
-    v373 Imm(1)                                           -> x1
-    v374 Imm(0)                                           -> x1
-    v375 Imm(0)                                           -> x1
-    v376 Imm(0)                                           -> x1
-    v377 Imm(3)                                           -> x1
-    v378 Imm(3298534883328)                               -> x1
-    v379 BinopI { op=xor, lhs=v368, rhs_imm=3298534883328 } -> x0
+    v368 FpCast { kind=FpBits, value=v365 }               -> x1
+    v369 Imm(2)                                           -> x2
+    v370 Imm(3)                                           -> x2
+    v371 Imm(3)                                           -> x2
+    v372 Imm(3)                                           -> x2
+    v373 Imm(1)                                           -> x2
+    v374 Imm(0)                                           -> x2
+    v375 Imm(0)                                           -> x2
+    v376 Imm(0)                                           -> x2
+    v377 Imm(3)                                           -> x2
+    v378 Imm(3298534883328)                               -> x2
+    v379 BinopI { op=xor, lhs=v368, rhs_imm=3298534883328 } -> x1
     v380 StoreLocal { off=-12, value=v379, kind=I64, volatile } -> -
-    v381 LocalAddr(-39)                                   -> x0
+    v381 LocalAddr(-39)                                   -> x1
     v382 LocalAddr(-12)                                   -> x1
-    v383 Mcpy { dst=v381, src=v382, size=8, align=1 }     -> -
+    v383 Mcpy { dst=v312, src=v382, size=8, align=1 }     -> -
     v384 LoadLocal { off=-39, kind=F64 }                  -> d0
     v385 LifetimeEnd(-39)                                 -> -
     v386 LifetimeEnd(-12)                                 -> -
     v387 StoreLocal { off=-11, value=v384, kind=F64, volatile } -> -
     v388 LocalAddr(-39)                                   -> x1
     v389 LocalAddr(-11)                                   -> x1
-    v390 Mcpy { dst=v381, src=v389, size=8, align=1 }     -> -
+    v390 Mcpy { dst=v312, src=v389, size=8, align=1 }     -> -
     v391 LoadLocal { off=-39, kind=I64 }                  -> x1
     v392 LifetimeEnd(-39)                                 -> -
     v393 LifetimeEnd(-11)                                 -> -
@@ -673,49 +673,49 @@ fn ent_pc=14 n_params=0 variadic=false locals=43
     v395 Imm(0)                                           -> x2
     v396 Imm(0)                                           -> x2
     v397 FpCast { kind=BitsFp, value=v391 }               -> d0
-    v398 LocalAddr(-36)                                   -> x7
+    v398 LocalAddr(-36)                                   -> x1
     v399 Imm(3)                                           -> x1
     v400 Imm(24)                                          -> x1
-    v401 BinopI { op=add, lhs=v398, rhs_imm=24 }          -> x1
+    v401 BinopI { op=add, lhs=v348, rhs_imm=24 }          -> x1
     v402 LoadLocal { off=-36, disp=24, kind=F64 }         -> d1
     v403 Binop { op=fadd, lhs=v397, rhs=v402 }            -> d0
     v404 StoreLocal { off=-10, value=v403, kind=F64, volatile } -> -
     v405 LocalAddr(-39)                                   -> x1
     v406 LocalAddr(-10)                                   -> x1
-    v407 Mcpy { dst=v381, src=v406, size=8, align=1 }     -> -
+    v407 Mcpy { dst=v312, src=v406, size=8, align=1 }     -> -
     v408 LoadLocal { off=-39, kind=I64 }                  -> x1
     v409 LifetimeEnd(-39)                                 -> -
     v410 LifetimeEnd(-10)                                 -> -
     v411 StoreLocal { off=-9, value=v408, kind=I64, volatile } -> -
     v412 LocalAddr(-39)                                   -> x1
     v413 LocalAddr(-9)                                    -> x1
-    v414 Mcpy { dst=v381, src=v413, size=8, align=1 }     -> -
+    v414 Mcpy { dst=v312, src=v413, size=8, align=1 }     -> -
     v415 LoadLocal { off=-39, kind=F64 }                  -> d0
     v416 LifetimeEnd(-39)                                 -> -
     v417 LifetimeEnd(-9)                                  -> -
-    v418 FpCast { kind=FpBits, value=v415 }               -> x1
-    v419 Imm(3)                                           -> x2
-    v420 Imm(4)                                           -> x2
-    v421 Imm(4)                                           -> x2
-    v422 Imm(4)                                           -> x2
-    v423 Imm(1)                                           -> x2
-    v424 Imm(0)                                           -> x2
-    v425 Imm(0)                                           -> x2
-    v426 Imm(0)                                           -> x2
-    v427 Imm(4)                                           -> x2
-    v428 Imm(4398046511104)                               -> x2
-    v429 BinopI { op=xor, lhs=v418, rhs_imm=4398046511104 } -> x1
+    v418 FpCast { kind=FpBits, value=v415 }               -> x0
+    v419 Imm(3)                                           -> x1
+    v420 Imm(4)                                           -> x1
+    v421 Imm(4)                                           -> x1
+    v422 Imm(4)                                           -> x1
+    v423 Imm(1)                                           -> x1
+    v424 Imm(0)                                           -> x1
+    v425 Imm(0)                                           -> x1
+    v426 Imm(0)                                           -> x1
+    v427 Imm(4)                                           -> x1
+    v428 Imm(4398046511104)                               -> x1
+    v429 BinopI { op=xor, lhs=v418, rhs_imm=4398046511104 } -> x0
     v430 StoreLocal { off=-8, value=v429, kind=I64, volatile } -> -
-    v431 LocalAddr(-39)                                   -> x1
+    v431 LocalAddr(-39)                                   -> x0
     v432 LocalAddr(-8)                                    -> x1
-    v433 Mcpy { dst=v381, src=v432, size=8, align=1 }     -> -
+    v433 Mcpy { dst=v431, src=v432, size=8, align=1 }     -> -
     v434 LoadLocal { off=-39, kind=F64 }                  -> d0
     v435 LifetimeEnd(-39)                                 -> -
     v436 LifetimeEnd(-8)                                  -> -
     v437 StoreLocal { off=-7, value=v434, kind=F64, volatile } -> -
     v438 LocalAddr(-39)                                   -> x1
     v439 LocalAddr(-7)                                    -> x1
-    v440 Mcpy { dst=v381, src=v439, size=8, align=1 }     -> -
+    v440 Mcpy { dst=v431, src=v439, size=8, align=1 }     -> -
     v441 LoadLocal { off=-39, kind=I64 }                  -> x1
     v442 LifetimeEnd(-39)                                 -> -
     v443 LifetimeEnd(-7)                                  -> -
@@ -726,20 +726,20 @@ fn ent_pc=14 n_params=0 variadic=false locals=43
     v448 LocalAddr(-36)                                   -> x1
     v449 Imm(4)                                           -> x1
     v450 Imm(32)                                          -> x1
-    v451 BinopI { op=add, lhs=v398, rhs_imm=32 }          -> x1
+    v451 BinopI { op=add, lhs=v348, rhs_imm=32 }          -> x1
     v452 LoadLocal { off=-36, disp=32, kind=F64 }         -> d1
     v453 Binop { op=fadd, lhs=v447, rhs=v452 }            -> d0
     v454 StoreLocal { off=-6, value=v453, kind=F64, volatile } -> -
     v455 LocalAddr(-39)                                   -> x1
     v456 LocalAddr(-6)                                    -> x1
-    v457 Mcpy { dst=v381, src=v456, size=8, align=1 }     -> -
-    v458 LoadLocal { off=-39, kind=I64 }                  -> x0
+    v457 Mcpy { dst=v431, src=v456, size=8, align=1 }     -> -
+    v458 LoadLocal { off=-39, kind=I64 }                  -> x1
     v459 LifetimeEnd(-39)                                 -> -
     v460 LifetimeEnd(-6)                                  -> -
     v461 StoreLocal { off=-5, value=v458, kind=I64, volatile } -> -
-    v462 LocalAddr(-39)                                   -> x0
+    v462 LocalAddr(-39)                                   -> x1
     v463 LocalAddr(-5)                                    -> x1
-    v464 Mcpy { dst=v462, src=v463, size=8, align=1 }     -> -
+    v464 Mcpy { dst=v431, src=v463, size=8, align=1 }     -> -
     v465 LoadLocal { off=-39, kind=F64 }                  -> [spill 1]
     v466 LifetimeEnd(-39)                                 -> -
     v467 LifetimeEnd(-5)                                  -> -
@@ -751,7 +751,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=43
     v473 Imm(0)                                           -> x0
     v474 LocalAddr(-36)                                   -> x0
     v475 Imm(5)                                           -> x6
-    v476 Call { target_pc=8, args=[v398, v475], fixed_args=2, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v476 Call { target_pc=8, args=[v348, v475], fixed_args=2, fp_return=true, fp_arg_mask=0x0 } -> d0
     v477 StoreLocal { off=-4, value=v476, kind=F64, volatile } -> -
     v478 LocalAddr(-39)                                   -> x0
     v479 LocalAddr(-4)                                    -> x1

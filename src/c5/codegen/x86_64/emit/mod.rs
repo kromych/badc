@@ -113,9 +113,16 @@ fn int_reg(place: Place) -> Option<Reg> {
     place.int_reg_u8().map(Reg)
 }
 
-/// The scratch pair of a site whose plan borrows nothing: caller-saved, so
-/// writing it costs no prologue save.
-const SCRATCH_PAIR: [u8; 2] = [Reg::R10.0, Reg::R11.0];
+/// The scratch pair of a site where no value holds it, which the
+/// caller-saved banks give out last: writing it costs no prologue save.
+const SCRATCH_PAIR: [u8; 2] = super::ssa::reg_alloc::X86_SCRATCH_PAIR;
+use super::ssa::reg_alloc::{X86_MOVE_ORDER as MOVE_ORDER, X86_SCRATCH_ORDER as SCRATCH_ORDER};
+/// The register of a scratch its site has none for: taking it fails the
+/// function.
+const NO_SCRATCH: u8 = 0xFF;
+/// The plan outside the planned sites of a function whose values hold the
+/// pair.
+const NO_PLAN: ScratchPlan = ScratchPlan::free([NO_SCRATCH; 2]);
 /// Further scratches inside the allocator's `caller_gprs` pool: a handler
 /// that uses one must check that no `rd` or operand place aliases it.
 const SCRATCH_RCX: Reg = Reg(1);
@@ -137,13 +144,20 @@ fn site_plan(code: &CodeBuf) -> ScratchPlan {
 
 /// The register of scratch `s`, which the lowering writes from here on: a
 /// borrowed one first stores the value it holds to the plan's slot, and
-/// the site's end reloads it ([`end_scratch`]).
+/// the site's end reloads it ([`end_scratch`]). A lowering takes its
+/// scratch before it moves rsp, as the slot's address is rsp's at the
+/// site's start in a frame with no pointer.
 fn scratch(code: &mut CodeBuf, s: Scratch) -> Reg {
     let plan = site_plan(code);
+    if plan.regs[s.0] == NO_SCRATCH {
+        code.scratch_fault();
+        return Reg::R10;
+    }
     let r = Reg(plan.regs[s.0]);
     if code.take_scratch(s.0)
         && let Some((base, disp)) = plan.keep[s.0]
     {
+        code.note_kept(keep::BORROW_AREA as u32);
         emit_mov_mem_r(code, Reg(base), disp, r);
     }
     r
@@ -155,17 +169,144 @@ fn scratch_reg(code: &CodeBuf, s: Scratch) -> Reg {
     Reg(site_plan(code).regs[s.0])
 }
 
-/// Reload the scratch registers the site borrowed. A borrow after a branch
-/// of the site fails the function: its store would not run on every path.
-fn end_scratch(code: &mut CodeBuf) -> Emit {
-    let (kept, late) = code.end_scratch();
-    for (r, (base, disp)) in kept.into_iter().flatten() {
+/// Begin a site under `plan`. A register an ended site borrowed is
+/// reloaded first, unless this plan borrows it into the same slot, where
+/// its value stays.
+fn begin_site(code: &mut CodeBuf, plan: Option<ScratchPlan>) {
+    let pending = code.take_pending();
+    code.set_scratch(plan);
+    for (k, p) in pending.into_iter().enumerate() {
+        let Some((r, slot)) = p else { continue };
+        if plan.is_some_and(|q| q.regs[k] == r && q.keep[k] == Some(slot)) {
+            code.carry_scratch(k);
+        } else {
+            emit_mov_r_mem(code, Reg(r), Reg(slot.0), slot.1);
+        }
+    }
+}
+
+/// Reload the registers ended sites borrowed, ahead of code no site plans.
+fn flush_scratch(code: &mut CodeBuf) {
+    for (r, (base, disp)) in code.take_pending().into_iter().flatten() {
         emit_mov_r_mem(code, Reg(r), Reg(base), disp);
     }
-    if late {
-        return fail("scratch register borrowed after a branch");
+}
+
+/// The registers ended sites borrowed and did not reload, by scratch
+/// index, which a plan borrows again first.
+fn pending_regs(code: &CodeBuf) -> [Option<u8>; 2] {
+    code.pending().map(|p| p.map(|(r, _)| r))
+}
+
+/// End the site. The registers it borrowed stay pending until the next
+/// site ([`begin_site`]) or a flush. A site that took a scratch its plan
+/// has none for, or borrowed one after a branch, whose store would not run
+/// on every path, fails the function.
+fn end_scratch(code: &mut CodeBuf) -> Emit {
+    let (kept, fault) = code.end_scratch();
+    code.set_pending(kept);
+    if fault {
+        return fail("scratch register the site's plan does not give");
     }
     Ok(())
+}
+
+/// The plan of a site that reads or writes the registers in `touched`
+/// while values live across it hold those in `through`: the first two
+/// registers of `order` ([`SCRATCH_ORDER`], [`MOVE_ORDER`]) no value holds,
+/// else ones only a value living across holds, borrowed into the
+/// allocation's two borrow slots, the register `prefer` names for a slot
+/// first ([`pending_regs`]). `None` when no value holds the pair, so each
+/// site takes it free.
+fn plan_site(
+    alloc: &Allocation,
+    frame: Frame,
+    (touched, through): (u16, u16),
+    order: &[u8],
+    prefer: [Option<u8>; 2],
+) -> Option<ScratchPlan> {
+    let sites = alloc.scratch_sites.as_ref()?;
+    let usable: alloc::vec::Vec<u8> = order
+        .iter()
+        .copied()
+        .filter(|&r| sites.writable >> r & 1 != 0 && !frame.fixed_regs.has_gpr(r))
+        .collect();
+    let held = |r: u8, mask: u16| mask >> r & 1 != 0;
+    let free = usable
+        .iter()
+        .filter(|&&r| !held(r, touched | through))
+        .map(|&r| (r, false));
+    let borrowed = usable
+        .iter()
+        .filter(|&&r| held(r, through) && !held(r, touched))
+        .map(|&r| (r, true));
+    let mut picked: alloc::vec::Vec<(u8, bool)> = free.take(2).collect();
+    let mut borrowed: alloc::vec::Vec<u8> = borrowed.map(|(r, _)| r).collect();
+    for want in prefer.into_iter().skip(picked.len()) {
+        let at = want
+            .and_then(|r| borrowed.iter().position(|&b| b == r))
+            .or((!borrowed.is_empty()).then_some(0));
+        if let Some(i) = at {
+            picked.push((borrowed.remove(i), true));
+        }
+    }
+    let mut plan = NO_PLAN;
+    for (k, &(r, borrow)) in picked.iter().enumerate() {
+        plan.regs[k] = r;
+        if borrow {
+            // A frame without the area is laid out again once a site
+            // borrows (keep::BORROW_AREA): this pass's slots are stand-ins.
+            let (base, disp) = if frame.borrow_area {
+                spill_slot_addr(frame, sites.borrow_slot + k as u32)
+            } else {
+                (Reg::RSP, 8 * k as i32)
+            };
+            plan.keep[k] = Some((base.0, disp));
+        }
+    }
+    Some(plan)
+}
+
+/// The plan of instruction `v`: a call's lowering takes the pair, which
+/// none of its operands holds and no value lives across a call in.
+fn plan_inst(
+    alloc: &Allocation,
+    frame: Frame,
+    v: super::super::ir::ValueId,
+    call: bool,
+    prefer: [Option<u8>; 2],
+) -> Option<ScratchPlan> {
+    let masks = &alloc.scratch_sites.as_ref()?.masks;
+    if call {
+        return Some(ScratchPlan::free(SCRATCH_PAIR));
+    }
+    let at = |m: &[u16]| m.get(v as usize).copied().unwrap_or(u16::MAX);
+    plan_site(
+        alloc,
+        frame,
+        (at(&masks.touched), at(&masks.through)),
+        &SCRATCH_ORDER,
+        prefer,
+    )
+}
+
+/// The scratch pair of a parallel copy of places (`schedule_place_moves`):
+/// taken only when a move may stage through it -- one with a spill slot
+/// at either end or an extension, which the x86-64 moves stage or which
+/// joins a cycle an exchange cannot break -- else none the copy may write.
+fn move_scratch(code: &mut CodeBuf, staged: bool) -> (Reg, Reg) {
+    if staged {
+        (scratch(code, S0), scratch(code, S1))
+    } else {
+        (Reg(NO_SCRATCH), Reg(NO_SCRATCH))
+    }
+}
+
+/// Whether a parallel copy stages a move through scratch ([`move_scratch`]).
+pub(crate) fn moves_stage(moves: &[super::ssa::emit_common::PlaceMove]) -> bool {
+    moves.iter().any(|m| {
+        m.ext.is_some() || matches!(m.src, Place::Spill(_)) || matches!(m.dst, Place::Spill(_))
+    })
 }
 
 /// Where a helper puts a value it loads: a given register, or a scratch of
@@ -476,6 +617,10 @@ pub(super) mod keep {
     /// [`super::mem::SiteRegs`], through [`LAST`].
     pub(crate) const SITE: i32 = 9;
     pub(crate) const LAST: i32 = 15;
+    /// No slot: taken, it asks the frame for the two spill slots a borrowed
+    /// scratch register keeps its value in
+    /// (`reg_alloc::ScratchSites::borrow_slot`).
+    pub(crate) const BORROW_AREA: i32 = 31;
 }
 
 /// The address of keep slot `k` ([`keep`]), which `code` records as taken.

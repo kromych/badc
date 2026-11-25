@@ -97,10 +97,10 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	movsd	<rip>, %xmm2
                	movsd	<rip>, %xmm3
-               	vmulsd	%xmm1, %xmm3, %xmm1
-               	vfmadd231sd	<rip>, %xmm2, %xmm1 # xmm1 = (xmm2 * mem) + xmm1
+               	movsd	<rip>, %xmm2
+               	vmulsd	%xmm1, %xmm2, %xmm1
+               	vfmadd231sd	<rip>, %xmm3, %xmm1 # xmm1 = (xmm3 * mem) + xmm1
                	movsd	<rip>, %xmm2
                	addsd	%xmm2, %xmm1
                	vaddsd	%xmm0, %xmm1, %xmm0

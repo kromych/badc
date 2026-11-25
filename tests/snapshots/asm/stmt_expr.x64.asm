@@ -33,27 +33,20 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x3, <rip> # <addr>
-               	movl	$0x0, <rip> # <addr>
+               	movl	$0x2, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	imulq	$0xa, %rax, %rcx
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
-               	imulq	$0x64, %rax, %rdx
-               	cmpl	$0xa, %ecx
-               	jne	<addr>
-               	cmpl	$0xc8, %edx
-               	jne	<addr>
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	xorl	%eax, %eax
                	movl	$0x3, <rip> # <addr>
+               	movl	$0x1, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x3, %ecx
+               	incq	%rcx
+               	movl	%ecx, <rip> # <addr>
+               	cmpl	$0x2, %ecx
                	je	<addr>
-               	movl	$0x5, %eax
+               	movl	$0x6, %eax
                	retq
-               	movl	$0x2, <rip> # <addr>
                	retq

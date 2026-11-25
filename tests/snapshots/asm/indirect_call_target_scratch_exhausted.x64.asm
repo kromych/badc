@@ -167,13 +167,13 @@ Disassembly of section .text:
                	movq	$0x12, <rip> # <addr>
                	movq	$0xa, <rip> # <addr>
                	movq	$0x14, <rip> # <addr>
-               	leaq	<rip>, %rax # <addr>
                	movq	$0xb, <rip> # <addr>
                	movq	$0x16, <rip> # <addr>
                	movq	$0xc, <rip> # <addr>
                	movq	$0x18, <rip> # <addr>
                	movq	$0xd, <rip> # <addr>
                	movq	$0x1a, <rip> # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	$0xe, <rip> # <addr>
                	movq	$0x1c, <rip> # <addr>
                	movq	$0xf, <rip> # <addr>

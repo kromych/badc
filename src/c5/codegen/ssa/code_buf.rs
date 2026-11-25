@@ -70,11 +70,17 @@ pub(crate) struct CodeBuf {
     kept: u32,
     /// The current site's plan; the target's default with none set.
     scratch: Option<ScratchPlan>,
+    /// The plan outside the sites, which a site's end restores.
+    between: Option<ScratchPlan>,
     /// The borrowed scratch registers whose values the site has stored.
     scratch_kept: [bool; 2],
-    /// A register was borrowed after a branch of the site, where the store
-    /// keeping its value would not run on every path.
-    late_borrow: bool,
+    /// The site took a scratch register its plan has none for, or borrowed
+    /// one after a branch, where the store keeping its value would not run
+    /// on every path.
+    fault: bool,
+    /// The registers ended sites borrowed and did not reload yet: their
+    /// values are in the slots until a later site or a flush reloads them.
+    pending: [Option<Borrowed>; 2],
 }
 
 impl CodeBuf {
@@ -122,6 +128,40 @@ impl CodeBuf {
         self.scratch
     }
 
+    /// The plan of the site whose lowering follows, until its end: a
+    /// branch ahead of it lands nowhere in it.
+    pub(crate) fn set_scratch(&mut self, plan: Option<ScratchPlan>) {
+        self.scratch = plan;
+        self.branched = false;
+    }
+
+    /// The plan outside the sites of the code that follows.
+    pub(crate) fn set_scratch_between(&mut self, plan: Option<ScratchPlan>) {
+        self.between = plan;
+        self.scratch = plan;
+        self.pending = [None; 2];
+    }
+
+    /// The borrowed registers not reloaded yet, which the caller reloads or
+    /// carries into the next site.
+    pub(crate) fn take_pending(&mut self) -> [Option<Borrowed>; 2] {
+        core::mem::take(&mut self.pending)
+    }
+
+    pub(crate) fn pending(&self) -> [Option<Borrowed>; 2] {
+        self.pending
+    }
+
+    pub(crate) fn set_pending(&mut self, pending: [Option<Borrowed>; 2]) {
+        self.pending = pending;
+    }
+
+    /// Scratch `k` of the site already keeps the value its register held, a
+    /// register an earlier site borrowed into the same slot.
+    pub(crate) fn carry_scratch(&mut self, k: usize) {
+        self.scratch_kept[k] = true;
+    }
+
     /// Scratch `k` is taken: true when its register is borrowed and its value
     /// still has to be stored, which must precede any branch of the site.
     pub(crate) fn take_scratch(&mut self, k: usize) -> bool {
@@ -129,12 +169,17 @@ impl CodeBuf {
             return false;
         }
         self.scratch_kept[k] = true;
-        self.late_borrow |= self.branched;
+        self.fault |= self.branched;
         true
     }
 
-    /// The borrowed scratch registers the site stored, which its end
-    /// reloads, and whether one was borrowed after a branch.
+    /// The site took a scratch register its plan has none for.
+    pub(crate) fn scratch_fault(&mut self) {
+        self.fault = true;
+    }
+
+    /// End the site: the borrowed scratch registers it stored, which its end
+    /// reloads, and whether it faulted.
     pub(crate) fn end_scratch(&mut self) -> ([Option<Borrowed>; 2], bool) {
         let mut out = [None; 2];
         for (k, o) in out.iter_mut().enumerate() {
@@ -144,10 +189,11 @@ impl CodeBuf {
                 *o = p.keep[k].map(|slot| (p.regs[k], slot));
             }
         }
-        let late = self.late_borrow;
+        let fault = self.fault;
         self.scratch_kept = [false; 2];
-        self.late_borrow = false;
-        (out, late)
+        self.fault = false;
+        self.scratch = self.between;
+        (out, fault)
     }
 
     /// The bytes from `start` to the end are a store of register `reg` to

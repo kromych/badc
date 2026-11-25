@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=forward
 fn ent_pc=1 n_params=1 variadic=false locals=0
-  spill_count=9 gpr_used=[] fp_used=[]
+  spill_count=7 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
@@ -12,7 +12,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v6   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x6
     v7   Extend { value=v6, kind=I32, nsw }               -> x0
     v8   Imm(0)                                           -> x0
-    v9   BinopI { op=add, lhs=v1, rhs_imm=2 }             -> [spill 8]
+    v9   BinopI { op=add, lhs=v1, rhs_imm=2 }             -> [spill 6]
     v10  Extend { value=v9, kind=I32, nsw }               -> x0
     v11  Imm(0)                                           -> x0
     v12  BinopI { op=add, lhs=v1, rhs_imm=3 }             -> x8
@@ -24,38 +24,38 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v18  BinopI { op=add, lhs=v1, rhs_imm=5 }             -> x1
     v19  Extend { value=v18, kind=I32, nsw }              -> x0
     v20  Imm(0)                                           -> x0
-    v21  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> [spill 0]
+    v21  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> x10
     v22  Extend { value=v21, kind=I32, nsw }              -> x0
     v23  Imm(0)                                           -> x0
-    v24  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> [spill 1]
+    v24  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> x11
     v25  Extend { value=v24, kind=I32, nsw }              -> x0
     v26  Imm(0)                                           -> x0
-    v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> [spill 2]
+    v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> [spill 0]
     v28  Extend { value=v27, kind=I32, nsw }              -> x0
     v29  Imm(0)                                           -> x0
     v30  BinopI { op=add, lhs=v1, rhs_imm=9 }             -> x0
     v31  Extend { value=v30, kind=I32, nsw }              -> x2
     v32  Imm(0)                                           -> x2
-    v33  BinopI { op=add, lhs=v1, rhs_imm=10 }            -> [spill 3]
+    v33  BinopI { op=add, lhs=v1, rhs_imm=10 }            -> [spill 1]
     v34  Extend { value=v33, kind=I32, nsw }              -> x2
     v35  Imm(0)                                           -> x2
-    v36  BinopI { op=add, lhs=v1, rhs_imm=11 }            -> [spill 4]
+    v36  BinopI { op=add, lhs=v1, rhs_imm=11 }            -> [spill 2]
     v37  Extend { value=v36, kind=I32, nsw }              -> x2
     v38  Imm(0)                                           -> x2
-    v39  BinopI { op=add, lhs=v1, rhs_imm=12 }            -> [spill 5]
+    v39  BinopI { op=add, lhs=v1, rhs_imm=12 }            -> [spill 3]
     v40  Extend { value=v39, kind=I32, nsw }              -> x2
     v41  Imm(0)                                           -> x2
     v42  BinopI { op=add, lhs=v1, rhs_imm=13 }            -> x2
-    v43  Extend { value=v42, kind=I32, nsw }              -> [spill 6]
-    v44  Imm(0)                                           -> [spill 6]
-    v45  BinopI { op=add, lhs=v1, rhs_imm=14 }            -> [spill 6]
-    v46  Extend { value=v45, kind=I32, nsw }              -> [spill 7]
-    v47  Imm(0)                                           -> [spill 7]
-    v48  BinopI { op=add, lhs=v1, rhs_imm=15 }            -> [spill 7]
-    v49  Extend { value=v48, kind=I32, nsw }              -> [spill 9]
-    v50  Imm(0)                                           -> [spill 9]
-    v51  Imm(0)                                           -> [spill 9]
-    v52  Imm(0)                                           -> [spill 9]
+    v43  Extend { value=v42, kind=I32, nsw }              -> [spill 4]
+    v44  Imm(0)                                           -> [spill 4]
+    v45  BinopI { op=add, lhs=v1, rhs_imm=14 }            -> [spill 4]
+    v46  Extend { value=v45, kind=I32, nsw }              -> [spill 5]
+    v47  Imm(0)                                           -> [spill 5]
+    v48  BinopI { op=add, lhs=v1, rhs_imm=15 }            -> [spill 5]
+    v49  Extend { value=v48, kind=I32, nsw }              -> [spill 7]
+    v50  Imm(0)                                           -> [spill 7]
+    v51  Imm(0)                                           -> [spill 7]
+    v52  Imm(0)                                           -> [spill 7]
     v53  Binop { op=add, lhs=v1, rhs=v6 }                 -> x6
     v54  Extend { value=v53, kind=I32, nsw }              -> x7
     v55  Imm(0)                                           -> x7

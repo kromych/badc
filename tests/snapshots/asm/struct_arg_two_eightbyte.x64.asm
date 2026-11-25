@@ -33,40 +33,35 @@ Disassembly of section .text:
                	movq	$0x2222, <rip> # imm = 0x2222
                                                 # <addr>
                	movl	$0x6, <rip> # <addr>
-               	movl	<rip>, %edx # <addr>
-               	cmpl	$0x9, %edx
+               	movl	<rip>, %esi # <addr>
+               	cmpl	$0x9, %esi
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	$0x1111, %rdx           # imm = 0x1111
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	$0x1111, %rsi           # imm = 0x1111
                	jne	<addr>
-               	movl	<rip>, %edx # <addr>
-               	cmpl	$0x4, %edx
+               	movl	<rip>, %esi # <addr>
+               	cmpl	$0x4, %esi
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	$0x2222, %rdx           # imm = 0x2222
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	$0x2222, %rsi           # imm = 0x2222
                	jne	<addr>
-               	movl	<rip>, %edx # <addr>
-               	cmpl	$0x6, %edx
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
                	movq	$0x1111, <rip> # imm = 0x1111
                                                 # <addr>
-               	movl	$0x4, %eax
-               	movl	%eax, <rip> # <addr>
+               	movl	$0x4, <rip> # <addr>
                	movq	$0x2222, <rip> # imm = 0x2222
                                                 # <addr>
                	movl	$0x6, <rip> # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x1111, %rcx           # imm = 0x1111
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x1111, %rax           # imm = 0x1111
                	jne	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x4, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x4, %eax
                	je	<addr>
+               	movl	$0x4, %eax
                	retq
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x2222, %rax           # imm = 0x2222
@@ -74,4 +69,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	retq
                	movl	$0x5, %eax
+               	retq
+               	movl	$0x3, %eax
                	retq

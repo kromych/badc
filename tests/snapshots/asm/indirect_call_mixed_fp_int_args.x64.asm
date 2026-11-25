@@ -35,15 +35,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	$0x19, %rax
                	addq	$0x3, %rax
-               	leaq	0x7(%rax), %rcx
-               	cmpl	$0x40, %ecx
+               	addq	$0x7, %rax
+               	cmpl	$0x40, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	retq
-               	addq	$0x7, %rax
-               	cmpl	%eax, %ecx
-               	je	<addr>
-               	movl	$0x2, %eax
                	retq
                	xorl	%eax, %eax
                	retq

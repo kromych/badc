@@ -95,16 +95,16 @@ Disassembly of section .text:
                	leaq	0x6(%rax), %rcx
                	andq	$0xff, %rcx
                	vpinsrb	$0x6, %ecx, %xmm0, %xmm0
-               	addq	$0x7, %rax
-               	andq	$0xff, %rax
-               	vpinsrb	$0x7, %eax, %xmm0, %xmm0
-               	andq	$0xff, %rdi
-               	leaq	0x8(%rdi), %rax
-               	andq	$0xff, %rax
-               	vpinsrb	$0x8, %eax, %xmm0, %xmm0
-               	leaq	0x9(%rdi), %rax
+               	leaq	0x7(%rax), %rcx
+               	andq	$0xff, %rcx
+               	vpinsrb	$0x7, %ecx, %xmm0, %xmm0
+               	leaq	0x8(%rax), %rcx
+               	andq	$0xff, %rcx
+               	vpinsrb	$0x8, %ecx, %xmm0, %xmm0
+               	addq	$0x9, %rax
                	andq	$0xff, %rax
                	vpinsrb	$0x9, %eax, %xmm0, %xmm0
+               	andq	$0xff, %rdi
                	leaq	0xa(%rdi), %rax
                	andq	$0xff, %rax
                	vpinsrb	$0xa, %eax, %xmm0, %xmm0

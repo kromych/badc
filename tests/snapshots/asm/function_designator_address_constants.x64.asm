@@ -59,7 +59,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	leaq	<rip>, %r9 # <addr>
                	leaq	-<rip>, %rsi # <addr>
-               	leaq	-<rip>, %rbx # <addr>
+               	leaq	-<rip>, %r10 # <addr>
                	imulq	$0x38, %rdx, %rax
                	addq	%r9, %rax
                	movq	(%r8,%rdx,8), %rcx
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rdi
                	jne	<addr>
                	movq	0x30(%rax), %rax
-               	subq	%rbx, %rax
+               	subq	%r10, %rax
                	cmpq	%rcx, %rax
                	jne	<addr>
                	incq	%rdx

@@ -113,8 +113,8 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movss	<rip>, %xmm1 # <addr>
-               	ucomiss	<rip>, %xmm1
+               	movss	<rip>, %xmm0 # <addr>
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movss	<rip>, %xmm1 # <addr>

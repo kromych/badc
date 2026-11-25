@@ -34,9 +34,9 @@ Disassembly of section .text:
                	movl	$0xffffffff, 0xb0(%rsp) # imm = 0xFFFFFFFF
                	movl	$0xfffffffe, 0x154(%rsp) # imm = 0xFFFFFFFE
                	movabsq	$0x1f4fffffffd, %rax    # imm = 0x1F4FFFFFFFD
-               	leaq	(%rsp), %rsi
                	movq	%rax, 0x1f8(%rsp)
                	movabsq	$0x2bc00000258, %rax    # imm = 0x2BC00000258
+               	leaq	(%rsp), %rsi
                	movq	%rax, 0x200(%rsp)
                	movl	$0x320, 0x208(%rsp)     # imm = 0x320
                	xorl	%eax, %eax
@@ -90,7 +90,6 @@ Disassembly of section .text:
                	movl	0x200(%rsp), %eax
                	cmpl	$0x258, %eax            # imm = 0x258
                	jne	<addr>
-               	leaq	0x210(%rsp), %rcx
                	movl	0x204(%rsp), %eax
                	cmpl	$0x2bc, %eax            # imm = 0x2BC
                	jne	<addr>
@@ -100,6 +99,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x428, %rsp            # imm = 0x428
                	retq
+               	leaq	0x210(%rsp), %rcx
                	movl	0xb0(%rsp), %eax
                	cmpl	$-0x1, %eax
                	je	<addr>

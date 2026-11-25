@@ -76,10 +76,10 @@ Disassembly of section .text:
                	cmpl	%r9d, %r8d
                	jg	<addr>
                	incq	%rax
-               	movl	(%rdi,%rax,4), %ebx
+               	movl	(%rdi,%rax,4), %r10d
                	movl	%r8d, (%rdi,%rax,4)
-               	movl	%ebx, (%rdi,%rsi,4)
-               	nopl	(%rax)
+               	movl	%r10d, (%rdi,%rsi,4)
+               	nop
                	jmp	<addr>
                	leaq	0x1(%rax), %rbx
                	movslq	%ebx, %rax

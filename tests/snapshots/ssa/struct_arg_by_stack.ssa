@@ -34,7 +34,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v28  Imm(0)                                           -> x9
     v29  Imm(0)                                           -> x9
     v30  Imm(7)                                           -> x9
-    v31  ImmData(16)                                      -> x3
+    v31  ImmData(16)                                      -> x10
     v32  Store { addr=v31, disp=0, value=v30, kind=I64 pc_rel } -> -
     v33  ImmData(24)                                      -> x9
     v34  Imm(0)                                           -> x9
@@ -67,7 +67,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v61  LifetimeEnd(0)                                   -> -
     v62  LifetimeEnd(0)                                   -> -
     v63  ImmData(16)                                      -> x0
-    v64  Load { addr=v63, disp=0, kind=I64 pc_rel }       -> x0
+    v64  Load { addr=v31, disp=0, kind=I64 pc_rel }       -> x0
     v65  BinopI { op=ne, lhs=v64, rhs_imm=7 }             -> x0
     terminator Bz { cond=v65, target=b2, fall=b1 }   (exit_acc=v65)
   block 1  start_pc=0

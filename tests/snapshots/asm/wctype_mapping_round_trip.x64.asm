@@ -48,20 +48,15 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
                	movl	$0x0, 0x40(%rsp)
-               	movq	0x28(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x28(%rsp)
                	je	<addr>
-               	movq	0x18(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x18(%rsp)
                	je	<addr>
-               	movq	0x20(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x20(%rsp)
                	je	<addr>
-               	movq	0x10(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x10(%rsp)
                	je	<addr>
-               	movq	0x8(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x8(%rsp)
                	jne	<addr>
                	movl	$0x1, %eax
                	addq	$0x58, %rsp

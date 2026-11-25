@@ -316,7 +316,6 @@ Disassembly of section .text:
                	movl	$0x3f400000, -0x20(%rbp) # imm = 0x3F400000
                	movl	$0x3fa00000, -0x1c(%rbp) # imm = 0x3FA00000
                	movl	$0x3fe00000, -0x18(%rbp) # imm = 0x3FE00000
-               	leaq	-0x30(%rbp), %rax
                	movl	$0x40100000, -0x14(%rbp) # imm = 0x40100000
                	movl	$0x42c80000, -0xe0(%rbp) # imm = 0x42C80000
                	movl	$0x42ca0000, -0xdc(%rbp) # imm = 0x42CA0000
@@ -326,6 +325,7 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rdi
                	vextracti128	$0x1, %ymm0, %xmm1
                	movups	%xmm1, -0x90(%rbp)
+               	leaq	-0x30(%rbp), %rax
                	leaq	0x10(%rax), %rsi
                	movl	$0x10, %edx
                	vmovups	%ymm0, -0x128(%rbp)
@@ -417,20 +417,20 @@ Disassembly of section .text:
                	ucomiss	%xmm1, %xmm2
                	jp	<addr>
                	jne	<addr>
-               	leaq	-0x90(%rbp), %rdi
                	movss	-0x78(%rbp), %xmm2
-               	leaq	-0x30(%rbp), %rsi
                	movss	-0x18(%rbp), %xmm1
                	addss	%xmm1, %xmm1
                	ucomiss	%xmm1, %xmm2
                	jp	<addr>
                	jne	<addr>
                	movss	-0x74(%rbp), %xmm2
+               	leaq	-0x30(%rbp), %rsi
                	movss	-0x14(%rbp), %xmm1
                	addss	%xmm1, %xmm1
                	ucomiss	%xmm1, %xmm2
                	jp	<addr>
                	jne	<addr>
+               	leaq	-0x90(%rbp), %rdi
                	movups	%xmm0, -0x90(%rbp)
                	movl	$0x10, %edx
                	vzeroupper

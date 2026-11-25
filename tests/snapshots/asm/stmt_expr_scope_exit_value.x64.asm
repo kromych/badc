@@ -120,16 +120,20 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	popq	%r11
                	retq
-               	movl	$0x0, <rip> # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
+               	movl	$0x1, <rip> # <addr>
                	movl	$0xb, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0xb, %eax
+               	je	<addr>
+               	movl	$0xa, %eax
+               	popq	%r11
+               	retq
+               	xorl	%eax, %eax
                	movl	$0x1, <rip> # <addr>
-               	movl	$0x0, <rip> # <addr>
+               	movl	%eax, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
                	cmpl	$0x1, %ecx
                	je	<addr>
@@ -141,16 +145,12 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx
                	movl	%ecx, <rip> # <addr>
-               	movl	$0x0, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x2, %eax
+               	movl	%eax, <rip> # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0xe, %eax
                	popq	%r11
                	retq
-               	xorl	%eax, %eax
-               	popq	%r11
-               	retq
-               	movl	$0xa, %eax
                	popq	%r11
                	retq

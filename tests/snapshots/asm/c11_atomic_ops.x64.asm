@@ -110,7 +110,6 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	addq	$0x28, %rsp
                	retq
-               	leaq	(%rsp), %rcx
                	movl	$0xf, %esi
                	movl	(%rcx), %eax
                	movq	%rax, %r10
@@ -137,12 +136,13 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	addq	$0x28, %rsp
                	retq
-               	movl	(%rsp), %edi
-               	cmpl	$0x7, %edi
+               	movl	(%rsp), %ecx
+               	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0xe, %eax
                	addq	$0x28, %rsp
                	retq
+               	leaq	(%rsp), %rcx
                	movl	$0x63, %edi
                	movl	%eax, %eax
                	lock

@@ -988,6 +988,68 @@ impl Liveness {
         out
     }
 
+    /// The registers `reg` gives the values at each point of `func`
+    /// ([`RegisterMasks`]), by the backward sweep of
+    /// [`Self::values_live_after`].
+    pub(crate) fn register_masks(
+        &self,
+        func: &FunctionSsa,
+        reg: &dyn Fn(ValueId) -> Option<u8>,
+    ) -> RegisterMasks {
+        let n = func.insts.len();
+        let mut masks = RegisterMasks {
+            through: vec![0; n],
+            touched: vec![0; n],
+            block_end: vec![0; func.blocks.len()],
+        };
+        let bit = |v: ValueId| reg(v).map_or(0u16, |r| 1 << r);
+        let mut live = SparseValueSet::new(n, track_occupancy(func));
+        let mut held: [u32; 16];
+        let add = |live: &mut SparseValueSet, held: &mut [u32; 16], v: ValueId| {
+            if live.insert(v)
+                && let Some(r) = reg(v)
+            {
+                held[usize::from(r)] += 1;
+            }
+        };
+        let mask = |held: &[u32; 16]| (0..16).filter(|&r| held[r] != 0).fold(0, |m, r| m | 1 << r);
+        for (b, blk) in func.blocks.iter().enumerate() {
+            live.clear();
+            held = [0; 16];
+            self.blocks
+                .for_each_live_out(b as BlockId, |v| add(&mut live, &mut held, v));
+            blk.terminator.for_each_operand(|v| {
+                if v != NO_VALUE && (v as usize) < n {
+                    add(&mut live, &mut held, v);
+                }
+            });
+            masks.block_end[b] = mask(&held);
+            for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
+                let inst = &func.insts[idx as usize];
+                let mut touched = 0u16;
+                if super::reg_alloc::produces_value(inst) {
+                    if live.remove(idx)
+                        && let Some(r) = reg(idx)
+                    {
+                        held[usize::from(r)] -= 1;
+                    }
+                    touched |= bit(idx);
+                }
+                masks.through[idx as usize] = mask(&held);
+                if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
+                    for_each_read_operand(inst, &self.reads, |op| {
+                        if op != NO_VALUE && (op as usize) < n {
+                            add(&mut live, &mut held, op);
+                            touched |= bit(op);
+                        }
+                    });
+                }
+                masks.touched[idx as usize] = touched;
+            }
+        }
+        masks
+    }
+
     /// Values live at the program point immediately after each
     /// instruction `is_site` selects, as `(site, values)` pairs ordered
     /// by site. Same per-block backward sweep as
@@ -1043,6 +1105,19 @@ impl Liveness {
         out.sort_unstable_by_key(|(site, _)| *site);
         out
     }
+}
+
+/// Registers of the values at each point of a function, one bit per
+/// general register.
+#[derive(Debug, Clone)]
+pub(crate) struct RegisterMasks {
+    /// Per instruction, the values live across it: live after it, itself
+    /// excepted.
+    pub(crate) through: Vec<u16>,
+    /// Per instruction, the values it reads and the value it defines.
+    pub(crate) touched: Vec<u16>,
+    /// Per block, the values live out of it and those its terminator reads.
+    pub(crate) block_end: Vec<u16>,
 }
 
 /// Whether a per-block live-set sweep over `func` should track which

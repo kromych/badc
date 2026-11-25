@@ -83,12 +83,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x14, %eax
                	retq
-               	andq	$0x3f, %rax
-               	testl	%eax, %eax
+               	movq	%rax, %rdx
+               	andq	$0x3f, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0x15, %eax
                	retq
-               	testl	%eax, %eax
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0x16, %eax
                	retq
@@ -97,14 +98,14 @@ Disassembly of section .text:
                	jne	<addr>
                	testl	%ecx, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x80(%rcx), %rax
-               	andq	$0x3f, %rax
-               	testl	%eax, %eax
+               	addq	$0x80, %rax
+               	testb	$0x3f, %al
                	jne	<addr>
-               	testl	%eax, %eax
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x80(%rax), %rcx
+               	testb	$0x3f, %cl
                	jne	<addr>
-               	leaq	0xc0(%rcx), %rax
+               	addq	$0xc0, %rax
                	andq	$0x3f, %rax
                	testl	%eax, %eax
                	jne	<addr>
@@ -123,7 +124,10 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x2c, %eax
                	jne	<addr>
-               	xorl	%eax, %eax
-               	retq
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x37, %eax
+               	je	<addr>
                	movl	$0x17, %eax
+               	retq
+               	xorl	%eax, %eax
                	retq

@@ -53,50 +53,49 @@ Disassembly of section .text:
                	movl	%r10d, (%rdi)
                	movzbq	0x4(%r8), %r10
                	movb	%r10b, 0x4(%rdi)
-               	leaq	0x28(%rsp), %rdi
-               	leaq	<rip>, %r8
-               	movl	(%r8), %r10d
-               	movl	%r10d, (%rdi)
-               	leaq	0xb8(%rsp), %rdi
-               	leaq	<rip>, %r8
-               	movq	(%r8), %r10
-               	movq	%r10, (%rdi)
-               	movzwq	0x8(%r8), %r10
-               	movw	%r10w, 0x8(%rdi)
-               	leaq	0x30(%rsp), %rdi
-               	leaq	<rip>, %r8
-               	movl	(%r8), %r10d
-               	movl	%r10d, (%rdi)
-               	movzwq	0x4(%r8), %r10
-               	movw	%r10w, 0x4(%rdi)
-               	movzbq	0x6(%r8), %r10
-               	movb	%r10b, 0x6(%rdi)
-               	leaq	0x38(%rsp), %rdi
-               	leaq	<rip>, %r8
-               	movl	(%r8), %r10d
-               	movl	%r10d, (%rdi)
-               	movzwq	0x4(%r8), %r10
-               	movw	%r10w, 0x4(%rdi)
-               	movzbq	0x6(%r8), %r10
-               	movb	%r10b, 0x6(%rdi)
-               	leaq	0x40(%rsp), %rdi
-               	leaq	<rip>, %r8
-               	movzwq	(%r8), %r10
-               	movw	%r10w, (%rdi)
-               	movzbq	0x2(%r8), %r10
-               	movb	%r10b, 0x2(%rdi)
-               	leaq	0x48(%rsp), %rdi
-               	leaq	<rip>, %r8
-               	movzwq	(%r8), %r10
-               	movw	%r10w, (%rdi)
-               	movzbq	0x2(%r8), %r10
-               	movb	%r10b, 0x2(%rdi)
+               	leaq	0x28(%rsp), %r8
+               	leaq	<rip>, %r9
+               	movl	(%r9), %r10d
+               	movl	%r10d, (%r8)
+               	leaq	0xb8(%rsp), %r8
+               	leaq	<rip>, %r9
+               	movq	(%r9), %r10
+               	movq	%r10, (%r8)
+               	movzwq	0x8(%r9), %r10
+               	movw	%r10w, 0x8(%r8)
+               	leaq	0x30(%rsp), %r8
+               	leaq	<rip>, %r9
+               	movl	(%r9), %r10d
+               	movl	%r10d, (%r8)
+               	movzwq	0x4(%r9), %r10
+               	movw	%r10w, 0x4(%r8)
+               	movzbq	0x6(%r9), %r10
+               	movb	%r10b, 0x6(%r8)
+               	leaq	0x38(%rsp), %r8
+               	leaq	<rip>, %r9
+               	movl	(%r9), %r10d
+               	movl	%r10d, (%r8)
+               	movzwq	0x4(%r9), %r10
+               	movw	%r10w, 0x4(%r8)
+               	movzbq	0x6(%r9), %r10
+               	movb	%r10b, 0x6(%r8)
+               	leaq	0x40(%rsp), %r8
+               	leaq	<rip>, %r9
+               	movzwq	(%r9), %r10
+               	movw	%r10w, (%r8)
+               	movzbq	0x2(%r9), %r10
+               	movb	%r10b, 0x2(%r8)
+               	leaq	0x48(%rsp), %r8
+               	leaq	<rip>, %r9
+               	movzwq	(%r9), %r10
+               	movw	%r10w, (%r8)
+               	movzbq	0x2(%r9), %r10
+               	movb	%r10b, 0x2(%r8)
                	movq	%rax, 0x140(%rsp)
                	movq	%rcx, 0x148(%rsp)
                	movq	%rdx, 0x150(%rsp)
                	movq	%rsi, 0x158(%rsp)
-               	leaq	0x20(%rsp), %rax
-               	movq	%rax, 0x160(%rsp)
+               	movq	%rdi, 0x160(%rsp)
                	leaq	0x28(%rsp), %rax
                	movq	%rax, 0x168(%rsp)
                	leaq	0xb8(%rsp), %rax
@@ -193,8 +192,7 @@ Disassembly of section .text:
                	movq	%rdx, 0x118(%rsp)
                	movq	%rsi, 0x120(%rsp)
                	movq	%rdi, 0x128(%rsp)
-               	leaq	0xa8(%rsp), %rcx
-               	movq	%rcx, 0x130(%rsp)
+               	movq	%r8, 0x130(%rsp)
                	movq	$0x0, 0x138(%rsp)
                	leaq	<rip>, %rdx
                	movl	$0xffffffff, 0xb0(%rsp) # imm = 0xFFFFFFFF

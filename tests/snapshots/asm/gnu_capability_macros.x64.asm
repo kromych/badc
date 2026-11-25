@@ -90,7 +90,6 @@ Disassembly of section .text:
                	addq	$0x68, %rsp
                	retq
                	leaq	0x30(%rsp), %rsi
-               	movl	$0x1, %ecx
                	movl	%ecx, %eax
                	lock
                	cmpxchgl	%edx, (%rsi)
@@ -116,10 +115,10 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	leaq	(%rsp), %rsi
-               	movq	%rcx, (%rsp)
+               	movq	$0x1, (%rsp)
                	movq	%rax, 0x8(%rsp)
                	leaq	0x40(%rsp), %rdi
-               	movq	%rcx, 0x40(%rsp)
+               	movq	$0x1, 0x40(%rsp)
                	movq	%rax, 0x48(%rsp)
                	leaq	0x50(%rsp), %rcx
                	movq	%rdx, 0x50(%rsp)

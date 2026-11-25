@@ -123,37 +123,36 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	xchgb	%r10b, (%rcx)
                	movl	%eax, 0x28(%rsp)
-               	leaq	0x28(%rsp), %rax
-               	movl	$0x2a, %ecx
-               	movq	%rcx, %r10
-               	xchgl	%r10d, (%rax)
-               	movl	(%rax), %eax
-               	cmpl	$0x2a, %eax
+               	leaq	0x28(%rsp), %rcx
+               	movl	$0x2a, %esi
+               	movq	%rsi, %r10
+               	xchgl	%r10d, (%rcx)
+               	movl	(%rcx), %ecx
+               	cmpl	$0x2a, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	addq	$0x58, %rsp
                	retq
-               	leaq	0x30(%rsp), %rax
-               	movl	$0x64, %ecx
-               	movq	%rcx, %r10
-               	xchgq	%r10, (%rax)
+               	leaq	0x30(%rsp), %rcx
+               	movl	$0x64, %esi
+               	movq	%rsi, %r10
+               	xchgq	%r10, (%rcx)
                	lock
-               	addq	%rdx, (%rax)
-               	movq	(%rax), %rcx
-               	cmpq	$0x65, %rcx
+               	addq	%rdx, (%rcx)
+               	movq	(%rcx), %rsi
+               	cmpq	$0x65, %rsi
                	je	<addr>
                	movl	$0x8, %eax
                	addq	$0x58, %rsp
                	retq
-               	addq	$0x8, %rax
+               	addq	$0x8, %rcx
                	movq	%rdx, %r10
-               	xchgl	%r10d, (%rax)
-               	movl	(%rax), %eax
-               	cmpl	$0x1, %eax
+               	xchgl	%r10d, (%rcx)
+               	movl	(%rcx), %ecx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x9, %eax
                	addq	$0x58, %rsp
                	retq
-               	xorl	%eax, %eax
                	addq	$0x58, %rsp
                	retq

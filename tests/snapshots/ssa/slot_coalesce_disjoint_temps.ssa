@@ -68,30 +68,30 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v52  Extend { value=v49, kind=I32 }                   -> x9
     v53  Imm(2)                                           -> x9
     v54  BinopI { op=and, lhs=v49, rhs_imm=1 }            -> x9
-    v55  Extend { value=v54, kind=I32, nsw }              -> x3
-    v56  BinopI { op=eq, lhs=v54, rhs_imm=0 }             -> x3
-    v57  Imm(0)                                           -> x3
+    v55  Extend { value=v54, kind=I32, nsw }              -> x10
+    v56  BinopI { op=eq, lhs=v54, rhs_imm=0 }             -> x10
+    v57  Imm(0)                                           -> x10
     terminator Bz { cond=v54, target=b9, fall=b8 }   (low word)   (exit_acc=v56)
   block 8  start_pc=0
     v58  Extend { value=v49, kind=I32 }                   -> x9
     v59  BinopI { op=gt, lhs=v49, rhs_imm=50 }            -> x9
-    v60  Imm(0)                                           -> x3
-    v61  Imm(0)                                           -> x3
-    v62  Imm(0)                                           -> x3
+    v60  Imm(0)                                           -> x10
+    v61  Imm(0)                                           -> x10
+    v62  Imm(0)                                           -> x10
     terminator Bz { cond=v59, target=b19, fall=b9 }   (exit_acc=v59)
   block 9  start_pc=0
     v63  Extend { value=v49, kind=I32 }                   -> x9
     v64  BinopI { op=shl, lhs=v49, rhs_imm=1 }            -> x9
-    v65  Extend { value=v64, kind=I32, nsw }              -> x3
-    v66  Imm(0)                                           -> x3
+    v65  Extend { value=v64, kind=I32, nsw }              -> x10
+    v66  Imm(0)                                           -> x10
     terminator Jmp(b10)   (exit_acc=v64)
   block 10  start_pc=0
     v69  Phi { incoming=[b9:v64, b19:v49], kind=I64 }     -> x9
-    v70  Imm(0)                                           -> x3
-    v71  Imm(0)                                           -> x3
-    v72  Extend { value=v7, kind=I32 }                    -> x3
-    v73  Extend { value=v69, kind=I32 }                   -> x3
-    v74  Extend { value=v14, kind=I32 }                   -> x3
+    v70  Imm(0)                                           -> x10
+    v71  Imm(0)                                           -> x10
+    v72  Extend { value=v7, kind=I32 }                    -> x10
+    v73  Extend { value=v69, kind=I32 }                   -> x10
+    v74  Extend { value=v14, kind=I32 }                   -> x10
     v75  Binop { op=add, lhs=v69, rhs=v14 }               -> x2
     v76  Extend { value=v75, kind=I32, nsw }              -> x9
     v77  Extend { value=v49, kind=I32 }                   -> x9

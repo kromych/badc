@@ -62,24 +62,22 @@ Disassembly of section .text:
                	addq	$0x408, %rsp            # imm = 0x408
                	retq
                	xorl	%eax, %eax
-               	leaq	0x3e0(%rsp), %rdx
-               	movq	%rax, %rsi
-               	shlq	$0x2, %rsi
-               	leaq	0x41(%rax), %rcx
-               	movb	%cl, 0x3e0(%rsp,%rsi)
-               	addq	%rsi, %rdx
-               	leaq	0x1(%rcx), %rsi
-               	movb	%sil, 0x1(%rdx)
-               	addq	$0x2, %rcx
-               	movb	%cl, 0x2(%rdx)
-               	leaq	0x3e0(%rsp), %rcx
+               	leaq	0x3e0(%rsp), %rsi
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx
-               	addq	%rdx, %rcx
-               	leaq	0x41(%rax), %rdx
-               	addq	$0x3, %rdx
-               	movb	%dl, 0x3(%rcx)
+               	leaq	0x41(%rax), %rcx
+               	movb	%cl, 0x3e0(%rsp,%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x1(%rcx), %rdi
+               	movb	%dil, 0x1(%rsi)
+               	leaq	0x2(%rcx), %rdi
+               	movb	%dil, 0x2(%rsi)
+               	leaq	0x3e0(%rsp), %rsi
+               	addq	%rsi, %rdx
+               	addq	$0x3, %rcx
+               	movb	%cl, 0x3(%rdx)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x8, %eax
                	jl	<addr>
                	movsbq	0x3ec(%rsp), %rax

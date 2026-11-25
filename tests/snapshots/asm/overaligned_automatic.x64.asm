@@ -38,9 +38,9 @@ Disassembly of section .text:
                	leaq	0x40(%rsp), %rdx
                	andq	$0x3f, %rdx
                	orq	%rdx, %rax
-               	leaq	0x80(%rsp), %rdx
-               	andq	$0x1f, %rdx
-               	orq	%rdx, %rax
+               	leaq	0x80(%rsp), %rsi
+               	andq	$0x1f, %rsi
+               	orq	%rsi, %rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
@@ -53,9 +53,7 @@ Disassembly of section .text:
                	movl	0x6c(%rsp), %eax
                	cmpl	$0x16, %eax
                	jne	<addr>
-               	leaq	0x40(%rsp), %rax
-               	andq	$0x3f, %rax
-               	orq	%rax, %rcx
+               	orq	%rdx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax

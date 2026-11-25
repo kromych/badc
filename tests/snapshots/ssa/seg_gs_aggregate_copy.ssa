@@ -390,13 +390,13 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v57  Imm(0)                                           -> x1
     terminator Bnz { cond=v52, target=b4, fall=b3 }   (exit_acc=v52)
   block 3  start_pc=0
-    v58  ImmData(48)                                      -> x1
-    v59  BinopI { op=add, lhs=v58, rhs_imm=24 }           -> x2
-    v60  SegLoad { addr=v59, kind=I64, seg=Gs }           -> x0
+    v58  ImmData(48)                                      -> x0
+    v59  BinopI { op=add, lhs=v15, rhs_imm=24 }           -> x0
+    v60  SegLoad { addr=v29, kind=I64, seg=Gs }           -> x0
     v61  BinopI { op=ne, lhs=v60, rhs_imm=81985529216486895 } -> x0
-    v62  Imm(0)                                           -> x6
-    v63  Imm(0)                                           -> x6
-    v64  Imm(0)                                           -> x6
+    v62  Imm(0)                                           -> x1
+    v63  Imm(0)                                           -> x1
+    v64  Imm(0)                                           -> x1
     terminator Bz { cond=v61, target=b5, fall=b4 }   (exit_acc=v61)
   block 4  start_pc=0
     v65  Imm(1)                                           -> x0
@@ -408,26 +408,26 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     terminator Return(v65)   (exit_acc=v65)
   block 5  start_pc=0
     v71  ImmData(16)                                      -> x0
-    v72  ImmData(48)                                      -> x6
-    v73  SegLoad { addr=v58, kind=I64, seg=Gs }           -> x6
+    v72  ImmData(48)                                      -> x1
+    v73  SegLoad { addr=v72, kind=I64, seg=Gs }           -> x2
     v74  SegStore { addr=v71, value=v73, kind=I64, seg=Gs } -> -
-    v75  BinopI { op=add, lhs=v58, rhs_imm=8 }            -> x6
-    v76  SegLoad { addr=v75, kind=I64, seg=Gs }           -> x7
-    v77  BinopI { op=add, lhs=v71, rhs_imm=8 }            -> x6
+    v75  BinopI { op=add, lhs=v72, rhs_imm=8 }            -> x2
+    v76  SegLoad { addr=v75, kind=I64, seg=Gs }           -> x6
+    v77  BinopI { op=add, lhs=v71, rhs_imm=8 }            -> x2
     v78  SegStore { addr=v77, value=v76, kind=I64, seg=Gs } -> -
-    v79  BinopI { op=add, lhs=v58, rhs_imm=16 }           -> x1
-    v80  SegLoad { addr=v79, kind=I64, seg=Gs }           -> x1
-    v81  BinopI { op=add, lhs=v71, rhs_imm=16 }           -> x7
+    v79  BinopI { op=add, lhs=v72, rhs_imm=16 }           -> x6
+    v80  SegLoad { addr=v79, kind=I64, seg=Gs }           -> x7
+    v81  BinopI { op=add, lhs=v71, rhs_imm=16 }           -> x6
     v82  SegStore { addr=v81, value=v80, kind=I64, seg=Gs } -> -
-    v83  BinopI { op=add, lhs=v58, rhs_imm=24 }           -> x1
-    v84  SegLoad { addr=v59, kind=I64, seg=Gs }           -> x1
-    v85  BinopI { op=add, lhs=v71, rhs_imm=24 }           -> x2
+    v83  BinopI { op=add, lhs=v72, rhs_imm=24 }           -> x1
+    v84  SegLoad { addr=v83, kind=I64, seg=Gs }           -> x7
+    v85  BinopI { op=add, lhs=v71, rhs_imm=24 }           -> x1
     v86  SegStore { addr=v85, value=v84, kind=I64, seg=Gs } -> -
-    v87  ImmData(16)                                      -> x1
+    v87  ImmData(16)                                      -> x7
     v88  SegLoad { addr=v71, kind=I64, seg=Gs }           -> x0
     v89  BinopI { op=ne, lhs=v88, rhs_imm=-77129852519530769 } -> x0
-    v90  Imm(1)                                           -> x1
-    v91  Imm(0)                                           -> x1
+    v90  Imm(1)                                           -> x7
+    v91  Imm(0)                                           -> x7
     terminator Bnz { cond=v89, target=b9, fall=b6 }   (exit_acc=v89)
   block 6  start_pc=0
     v92  ImmData(16)                                      -> x0
@@ -435,34 +435,34 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v94  Imm(0)                                           -> x0
     v95  SegLoad { addr=v77, kind=U32, seg=Gs }           -> x0
     v96  BinopI { op=ne, lhs=v95, rhs_imm=287454020 }     -> x0
-    v97  BinopI { op=ne, lhs=v96, rhs_imm=0 }             -> x1
-    v98  Imm(0)                                           -> x1
-    v99  Imm(0)                                           -> x1
-    v100 Imm(0)                                           -> x1
-    v101 Imm(1)                                           -> x1
-    v102 Imm(0)                                           -> x1
+    v97  BinopI { op=ne, lhs=v96, rhs_imm=0 }             -> x2
+    v98  Imm(0)                                           -> x2
+    v99  Imm(0)                                           -> x2
+    v100 Imm(0)                                           -> x2
+    v101 Imm(1)                                           -> x2
+    v102 Imm(0)                                           -> x2
     terminator Bnz { cond=v96, target=b9, fall=b7 }   (exit_acc=v96)
   block 7  start_pc=0
     v103 ImmData(16)                                      -> x0
-    v104 BinopI { op=add, lhs=v103, rhs_imm=8 }           -> x1
-    v105 Imm(8)                                           -> x1
-    v106 BinopI { op=add, lhs=v103, rhs_imm=16 }          -> x2
-    v107 SegLoad { addr=v106, kind=U32, seg=Gs }          -> x1
-    v108 BinopI { op=ne, lhs=v107, rhs_imm=1432778632 }   -> x1
-    v109 BinopI { op=ne, lhs=v108, rhs_imm=0 }            -> x6
-    v110 Imm(0)                                           -> x6
-    v111 Imm(0)                                           -> x6
-    v112 Imm(0)                                           -> x6
-    v113 Imm(0)                                           -> x6
+    v104 BinopI { op=add, lhs=v71, rhs_imm=8 }            -> x0
+    v105 Imm(8)                                           -> x0
+    v106 BinopI { op=add, lhs=v71, rhs_imm=16 }           -> x0
+    v107 SegLoad { addr=v81, kind=U32, seg=Gs }           -> x0
+    v108 BinopI { op=ne, lhs=v107, rhs_imm=1432778632 }   -> x0
+    v109 BinopI { op=ne, lhs=v108, rhs_imm=0 }            -> x2
+    v110 Imm(0)                                           -> x2
+    v111 Imm(0)                                           -> x2
+    v112 Imm(0)                                           -> x2
+    v113 Imm(0)                                           -> x2
     terminator Bnz { cond=v108, target=b9, fall=b8 }   (exit_acc=v108)
   block 8  start_pc=0
-    v114 ImmData(16)                                      -> x1
-    v115 BinopI { op=add, lhs=v103, rhs_imm=24 }          -> x6
-    v116 SegLoad { addr=v115, kind=I64, seg=Gs }          -> x1
-    v117 BinopI { op=ne, lhs=v116, rhs_imm=81985529216486895 } -> x1
-    v118 Imm(0)                                           -> x7
-    v119 Imm(0)                                           -> x7
-    v120 Imm(0)                                           -> x7
+    v114 ImmData(16)                                      -> x0
+    v115 BinopI { op=add, lhs=v71, rhs_imm=24 }           -> x0
+    v116 SegLoad { addr=v85, kind=I64, seg=Gs }           -> x0
+    v117 BinopI { op=ne, lhs=v116, rhs_imm=81985529216486895 } -> x0
+    v118 Imm(0)                                           -> x1
+    v119 Imm(0)                                           -> x1
+    v120 Imm(0)                                           -> x1
     terminator Bz { cond=v117, target=b10, fall=b9 }   (exit_acc=v117)
   block 9  start_pc=0
     v121 Imm(2)                                           -> x0
@@ -473,37 +473,37 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v126 LifetimeEnd(0)                                   -> -
     terminator Return(v121)   (exit_acc=v121)
   block 10  start_pc=0
-    v127 Imm(0)                                           -> x1
-    v128 Imm(0)                                           -> x1
-    v129 Imm(0)                                           -> x1
-    v130 ImmData(16)                                      -> x1
-    v131 SegLoad { addr=v103, kind=I64, seg=Gs }          -> x1
-    v132 Imm(0)                                           -> x7
-    v133 BinopI { op=add, lhs=v103, rhs_imm=8 }           -> x7
+    v127 Imm(0)                                           -> x0
+    v128 Imm(0)                                           -> x0
+    v129 Imm(0)                                           -> x0
+    v130 ImmData(16)                                      -> x0
+    v131 SegLoad { addr=v130, kind=I64, seg=Gs }          -> x1
+    v132 Imm(0)                                           -> x2
+    v133 BinopI { op=add, lhs=v130, rhs_imm=8 }           -> x2
     v134 SegLoad { addr=v133, kind=I64, seg=Gs }          -> x8
-    v135 Imm(0)                                           -> x9
-    v136 Imm(0)                                           -> x9
-    v137 BinopI { op=add, lhs=v103, rhs_imm=16 }          -> x9
-    v138 SegLoad { addr=v106, kind=I64, seg=Gs }          -> x9
-    v139 Imm(0)                                           -> [spill 0]
-    v140 Imm(0)                                           -> [spill 0]
-    v141 BinopI { op=add, lhs=v103, rhs_imm=24 }          -> [spill 0]
-    v142 SegLoad { addr=v115, kind=I64, seg=Gs }          -> [spill 0]
-    v143 Imm(0)                                           -> [spill 1]
-    v144 Imm(0)                                           -> [spill 1]
-    v145 Imm(0)                                           -> [spill 1]
-    v146 Imm(0)                                           -> [spill 1]
-    v147 Imm(0)                                           -> [spill 1]
-    v148 BinopI { op=and, lhs=v134, rhs_imm=4294967295 }  -> [spill 1]
-    v149 Imm(0)                                           -> [spill 1]
-    v150 Imm(0)                                           -> [spill 1]
-    v151 BinopI { op=and, lhs=v138, rhs_imm=4294967295 }  -> [spill 1]
-    v152 Imm(0)                                           -> [spill 1]
+    v135 Imm(0)                                           -> x6
+    v136 Imm(0)                                           -> x6
+    v137 BinopI { op=add, lhs=v130, rhs_imm=16 }          -> x6
+    v138 SegLoad { addr=v137, kind=I64, seg=Gs }          -> x9
+    v139 Imm(0)                                           -> x7
+    v140 Imm(0)                                           -> x7
+    v141 BinopI { op=add, lhs=v130, rhs_imm=24 }          -> x7
+    v142 SegLoad { addr=v141, kind=I64, seg=Gs }          -> x10
+    v143 Imm(0)                                           -> x11
+    v144 Imm(0)                                           -> x11
+    v145 Imm(0)                                           -> x11
+    v146 Imm(0)                                           -> x11
+    v147 Imm(0)                                           -> x11
+    v148 BinopI { op=and, lhs=v134, rhs_imm=4294967295 }  -> x11
+    v149 Imm(0)                                           -> x11
+    v150 Imm(0)                                           -> x11
+    v151 BinopI { op=and, lhs=v138, rhs_imm=4294967295 }  -> x11
+    v152 Imm(0)                                           -> x11
     v153 LifetimeEnd(0)                                   -> -
-    v154 Imm(0)                                           -> [spill 1]
-    v155 Imm(0)                                           -> [spill 1]
+    v154 Imm(0)                                           -> x11
+    v155 Imm(0)                                           -> x11
     v156 BinopI { op=eq, lhs=v131, rhs_imm=-77129852519530769 } -> x1
-    v157 Imm(0)                                           -> [spill 1]
+    v157 Imm(0)                                           -> x11
     terminator Bz { cond=v156, target=b14, fall=b11 }   (exit_acc=v156)
   block 11  start_pc=0
     v528 Imm(0)                                           -> x1
@@ -549,18 +549,18 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v173 Store { addr=v164, disp=24, value=v165, kind=I64 pc_rel } -> -
     v174 ImmData(80)                                      -> x1
     v175 ImmData(16)                                      -> x1
-    v176 SegLoad { addr=v103, kind=I64, seg=Gs }          -> x0
+    v176 SegLoad { addr=v130, kind=I64, seg=Gs }          -> x0
     v177 Store { addr=v164, disp=0, value=v176, kind=I64, align=8 pc_rel } -> -
-    v178 BinopI { op=add, lhs=v103, rhs_imm=8 }           -> x1
+    v178 BinopI { op=add, lhs=v130, rhs_imm=8 }           -> x1
     v179 SegLoad { addr=v133, kind=I64, seg=Gs }          -> x1
-    v180 BinopI { op=add, lhs=v164, rhs_imm=8 }           -> x7
+    v180 BinopI { op=add, lhs=v164, rhs_imm=8 }           -> x2
     v181 Store { addr=v164, disp=8, value=v179, kind=I64, align=8 pc_rel } -> -
-    v182 BinopI { op=add, lhs=v103, rhs_imm=16 }          -> x1
-    v183 SegLoad { addr=v106, kind=I64, seg=Gs }          -> x1
+    v182 BinopI { op=add, lhs=v130, rhs_imm=16 }          -> x1
+    v183 SegLoad { addr=v137, kind=I64, seg=Gs }          -> x1
     v184 BinopI { op=add, lhs=v164, rhs_imm=16 }          -> x2
     v185 Store { addr=v164, disp=16, value=v183, kind=I64, align=8 pc_rel } -> -
-    v186 BinopI { op=add, lhs=v103, rhs_imm=24 }          -> x1
-    v187 SegLoad { addr=v115, kind=I64, seg=Gs }          -> x1
+    v186 BinopI { op=add, lhs=v130, rhs_imm=24 }          -> x1
+    v187 SegLoad { addr=v141, kind=I64, seg=Gs }          -> x1
     v188 BinopI { op=add, lhs=v164, rhs_imm=24 }          -> x2
     v189 Store { addr=v164, disp=24, value=v187, kind=I64, align=8 pc_rel } -> -
     v190 ImmData(80)                                      -> x2
@@ -618,46 +618,46 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v211 Imm(0)                                           -> x0
     v212 Imm(0)                                           -> x1
     v213 Imm(0)                                           -> x1
-    v214 Imm(32)                                          -> x2
+    v214 Imm(32)                                          -> x7
     v215 Imm(0)                                           -> x1
     v216 Imm(0)                                           -> x1
     v217 Imm(-77129852519530769)                          -> x1
-    v218 Imm(0)                                           -> x6
-    v219 Imm(0)                                           -> x6
-    v220 Imm(0)                                           -> x6
-    v221 Imm(287454020)                                   -> x6
-    v222 Undef                                            -> x6
-    v223 Imm(0)                                           -> x6
-    v224 Imm(287454020)                                   -> x6
-    v225 Imm(287454020)                                   -> x6
-    v226 Imm(0)                                           -> x6
-    v227 Imm(0)                                           -> x6
-    v228 Imm(0)                                           -> x6
-    v229 Imm(4)                                           -> x6
-    v230 Imm(0)                                           -> x6
-    v231 Imm(0)                                           -> x6
-    v232 Imm(287454020)                                   -> x6
-    v233 Imm(0)                                           -> x6
-    v234 Imm(0)                                           -> x6
-    v235 Imm(287454020)                                   -> x6
-    v236 Imm(0)                                           -> x7
-    v237 Imm(0)                                           -> x7
-    v238 Imm(0)                                           -> x7
-    v239 Imm(8)                                           -> x7
-    v240 Imm(0)                                           -> x7
-    v241 Imm(1432778632)                                  -> x7
-    v242 Undef                                            -> x7
-    v243 Imm(0)                                           -> x7
-    v244 Imm(1432778632)                                  -> x7
-    v245 Imm(1432778632)                                  -> x7
-    v246 Imm(0)                                           -> x7
-    v247 Imm(0)                                           -> x7
-    v248 Imm(0)                                           -> x7
-    v249 Imm(0)                                           -> x7
-    v250 Imm(1432778632)                                  -> x7
-    v251 Imm(0)                                           -> x7
-    v252 Imm(0)                                           -> x7
-    v253 Imm(1432778632)                                  -> x7
+    v218 Imm(0)                                           -> x2
+    v219 Imm(0)                                           -> x2
+    v220 Imm(0)                                           -> x2
+    v221 Imm(287454020)                                   -> x2
+    v222 Undef                                            -> x2
+    v223 Imm(0)                                           -> x2
+    v224 Imm(287454020)                                   -> x2
+    v225 Imm(287454020)                                   -> x2
+    v226 Imm(0)                                           -> x2
+    v227 Imm(0)                                           -> x2
+    v228 Imm(0)                                           -> x2
+    v229 Imm(4)                                           -> x2
+    v230 Imm(0)                                           -> x2
+    v231 Imm(0)                                           -> x2
+    v232 Imm(287454020)                                   -> x2
+    v233 Imm(0)                                           -> x2
+    v234 Imm(0)                                           -> x2
+    v235 Imm(287454020)                                   -> x2
+    v236 Imm(0)                                           -> x6
+    v237 Imm(0)                                           -> x6
+    v238 Imm(0)                                           -> x6
+    v239 Imm(8)                                           -> x6
+    v240 Imm(0)                                           -> x6
+    v241 Imm(1432778632)                                  -> x6
+    v242 Undef                                            -> x6
+    v243 Imm(0)                                           -> x6
+    v244 Imm(1432778632)                                  -> x6
+    v245 Imm(1432778632)                                  -> x6
+    v246 Imm(0)                                           -> x6
+    v247 Imm(0)                                           -> x6
+    v248 Imm(0)                                           -> x6
+    v249 Imm(0)                                           -> x6
+    v250 Imm(1432778632)                                  -> x6
+    v251 Imm(0)                                           -> x6
+    v252 Imm(0)                                           -> x6
+    v253 Imm(1432778632)                                  -> x6
     v254 Imm(0)                                           -> x8
     v255 Imm(0)                                           -> x8
     v256 Imm(0)                                           -> x8
@@ -677,13 +677,13 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v270 Imm(0)                                           -> x1
     v271 Imm(8)                                           -> x1
     v272 SegStore { addr=v271, value=v235, kind=I64, seg=Gs } -> -
-    v273 Imm(0)                                           -> x6
-    v274 Imm(0)                                           -> x6
-    v275 Imm(16)                                          -> x6
+    v273 Imm(0)                                           -> x2
+    v274 Imm(0)                                           -> x2
+    v275 Imm(16)                                          -> x2
     v276 SegStore { addr=v275, value=v253, kind=I64, seg=Gs } -> -
-    v277 Imm(0)                                           -> x7
-    v278 Imm(0)                                           -> x7
-    v279 Imm(24)                                          -> x7
+    v277 Imm(0)                                           -> x6
+    v278 Imm(0)                                           -> x6
+    v279 Imm(24)                                          -> x6
     v280 SegStore { addr=v279, value=v257, kind=I64, seg=Gs } -> -
     v281 LifetimeEnd(0)                                   -> -
     v282 Imm(0)                                           -> x8
@@ -695,33 +695,33 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v288 Imm(40)                                          -> x8
     v289 SegStore { addr=v288, value=v287, kind=I64, seg=Gs } -> -
     v290 Imm(16)                                          -> x9
-    v291 SegLoad { addr=v275, kind=I64, seg=Gs }          -> x6
+    v291 SegLoad { addr=v275, kind=I64, seg=Gs }          -> x10
     v292 Imm(48)                                          -> x9
     v293 SegStore { addr=v292, value=v291, kind=I64, seg=Gs } -> -
-    v294 Imm(24)                                          -> x6
-    v295 SegLoad { addr=v279, kind=I64, seg=Gs }          -> x6
-    v296 Imm(56)                                          -> x7
+    v294 Imm(24)                                          -> x10
+    v295 SegLoad { addr=v279, kind=I64, seg=Gs }          -> x11
+    v296 Imm(56)                                          -> x10
     v297 SegStore { addr=v296, value=v295, kind=I64, seg=Gs } -> -
-    v298 Imm(0)                                           -> x6
-    v299 Imm(64)                                          -> x6
-    v300 Imm(8608480567731124087)                         -> x7
+    v298 Imm(0)                                           -> x11
+    v299 Imm(64)                                          -> x11
+    v300 Imm(8608480567731124087)                         -> [spill 0]
     v301 SegStore { addr=v299, value=v300, kind=I64, seg=Gs } -> -
-    v302 Imm(0)                                           -> x6
-    v303 Imm(0)                                           -> x6
-    v304 Imm(0)                                           -> x6
-    v305 Imm(0)                                           -> x6
-    v306 SegLoad { addr=v211, kind=I64, seg=Gs }          -> x9
-    v307 Imm(0)                                           -> x6
-    v308 Imm(8)                                           -> x6
-    v309 SegLoad { addr=v271, kind=I64, seg=Gs }          -> [spill 0]
+    v302 Imm(0)                                           -> x11
+    v303 Imm(0)                                           -> x11
+    v304 Imm(0)                                           -> x11
+    v305 Imm(0)                                           -> x11
+    v306 SegLoad { addr=v211, kind=I64, seg=Gs }          -> [spill 0]
+    v307 Imm(0)                                           -> x11
+    v308 Imm(8)                                           -> x11
+    v309 SegLoad { addr=v271, kind=I64, seg=Gs }          -> [spill 1]
     v310 Imm(0)                                           -> x1
     v311 Imm(0)                                           -> x1
     v312 Imm(16)                                          -> x1
-    v313 SegLoad { addr=v312, kind=I64, seg=Gs }          -> [spill 1]
+    v313 SegLoad { addr=v275, kind=I64, seg=Gs }          -> x2
     v314 Imm(0)                                           -> x1
     v315 Imm(0)                                           -> x1
     v316 Imm(24)                                          -> x1
-    v317 SegLoad { addr=v316, kind=I64, seg=Gs }          -> [spill 2]
+    v317 SegLoad { addr=v279, kind=I64, seg=Gs }          -> [spill 2]
     v318 Imm(0)                                           -> x1
     v319 Imm(0)                                           -> x1
     v320 Imm(0)                                           -> x1
@@ -738,18 +738,18 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v331 Imm(0)                                           -> x1
     v332 Imm(0)                                           -> x1
     v333 Imm(0)                                           -> x1
-    v334 SegLoad { addr=v214, kind=I64, seg=Gs }          -> x2
+    v334 SegLoad { addr=v214, kind=I64, seg=Gs }          -> [spill 3]
     v335 Imm(0)                                           -> x1
     v336 Imm(40)                                          -> x1
     v337 SegLoad { addr=v288, kind=I64, seg=Gs }          -> x8
     v338 Imm(0)                                           -> x1
     v339 Imm(0)                                           -> x1
     v340 Imm(48)                                          -> x1
-    v341 SegLoad { addr=v340, kind=I64, seg=Gs }          -> [spill 3]
+    v341 SegLoad { addr=v292, kind=I64, seg=Gs }          -> x9
     v342 Imm(0)                                           -> x1
     v343 Imm(0)                                           -> x1
     v344 Imm(56)                                          -> x1
-    v345 SegLoad { addr=v344, kind=I64, seg=Gs }          -> [spill 4]
+    v345 SegLoad { addr=v296, kind=I64, seg=Gs }          -> [spill 4]
     v346 Imm(0)                                           -> x1
     v347 Imm(0)                                           -> x1
     v348 Imm(0)                                           -> x1
@@ -827,11 +827,11 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v420 Imm(0)                                           -> x7
     v421 Imm(24)                                          -> x7
     v422 SegLoad { addr=v421, kind=I64, seg=Gs }          -> x7
-    v423 Imm(0)                                           -> [spill 9]
-    v424 Imm(0)                                           -> [spill 9]
-    v425 Imm(0)                                           -> [spill 9]
-    v426 Imm(0)                                           -> [spill 9]
-    v427 Imm(0)                                           -> [spill 9]
+    v423 Imm(0)                                           -> x10
+    v424 Imm(0)                                           -> x10
+    v425 Imm(0)                                           -> x10
+    v426 Imm(0)                                           -> x10
+    v427 Imm(0)                                           -> x10
     v428 BinopI { op=and, lhs=v414, rhs_imm=4294967295 }  -> x1
     v429 Binop { op=add, lhs=v411, rhs=v428 }             -> x0
     v430 Imm(0)                                           -> x1

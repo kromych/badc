@@ -103,7 +103,7 @@ Disassembly of section .text:
                	incq	%rdx
                	cmpl	$0x3, %edx
                	jl	<addr>
-               	xorl	%edx, %edx
+               	xorl	%esi, %esi
                	movsd	0x48(%rsp), %xmm2
                	movsd	0x60(%rsp), %xmm3
                	movsd	0x78(%rsp), %xmm4
@@ -113,17 +113,17 @@ Disassembly of section .text:
                	movsd	0x58(%rsp), %xmm8
                	movsd	0x70(%rsp), %xmm9
                	movsd	0x88(%rsp), %xmm10
-               	movq	%rdx, %rax
+               	movq	%rsi, %rax
                	leaq	(%rsp), %rcx
-               	imulq	$0x18, %rax, %rsi
-               	addq	%rsi, %rcx
-               	movq	%rdx, %xmm0
+               	imulq	$0x18, %rax, %rdx
+               	addq	%rdx, %rcx
+               	movq	%rsi, %xmm0
                	vfmadd231sd	(%rcx), %xmm2, %xmm0 # xmm0 = (xmm2 * mem) + xmm0
                	vfmadd231sd	0x8(%rcx), %xmm3, %xmm0 # xmm0 = (xmm3 * mem) + xmm0
                	vfmadd231sd	0x10(%rcx), %xmm4, %xmm0 # xmm0 = (xmm4 * mem) + xmm0
-               	leaq	(%rsp), %rcx
-               	addq	%rcx, %rsi
-               	vsubsd	(%rsi), %xmm0, %xmm0
+               	leaq	(%rsp), %rdi
+               	leaq	(%rdi,%rdx), %rcx
+               	vsubsd	(%rcx), %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
@@ -131,17 +131,17 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm11
                	comisd	%xmm0, %xmm11
                	jbe	<addr>
-               	imulq	$0x18, %rax, %rsi
-               	addq	%rsi, %rcx
                	movapd	%xmm5, %xmm0
                	vfmadd132sd	(%rcx), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	vfmadd231sd	0x8(%rcx), %xmm6, %xmm0 # xmm0 = (xmm6 * mem) + xmm0
+               	imulq	$0x18, %rax, %rdx
+               	leaq	(%rdi,%rdx), %rcx
                	vfmadd231sd	0x10(%rcx), %xmm7, %xmm0 # xmm0 = (xmm7 * mem) + xmm0
                	leaq	(%rsp), %rcx
-               	addq	%rcx, %rsi
-               	vsubsd	0x8(%rsi), %xmm0, %xmm0
+               	addq	%rdx, %rcx
+               	vsubsd	0x8(%rcx), %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
-               	nopl	(%rax)
+               	nopl	(%rax,%rax)
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	vxorpd	<rip>, %xmm0, %xmm0
@@ -149,22 +149,18 @@ Disassembly of section .text:
                	nopw	(%rax,%rax)
                	comisd	%xmm0, %xmm11
                	jbe	<addr>
-               	imulq	$0x18, %rax, %rsi
-               	addq	%rsi, %rcx
                	movapd	%xmm8, %xmm0
                	vfmadd132sd	(%rcx), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	vfmadd231sd	0x8(%rcx), %xmm9, %xmm0 # xmm0 = (xmm9 * mem) + xmm0
                	vfmadd231sd	0x10(%rcx), %xmm10, %xmm0 # xmm0 = (xmm10 * mem) + xmm0
                	leaq	(%rsp), %rcx
-               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	vsubsd	0x10(%rcx), %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
-               	nopw	(%rax,%rax)
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
-               	nopw	%cs:(%rax,%rax)
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	incq	%rax

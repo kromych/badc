@@ -394,16 +394,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v385 Imm(0)                                           -> x9
     v386 LoadLocal { off=-1, kind=I32, volatile }         -> x9
     v387 BinopI { op=add, lhs=v386, rhs_imm=6 }           -> x9
-    v388 Extend { value=v387, kind=I32, nsw }             -> x3
-    v389 Imm(0)                                           -> x3
-    v390 Imm(0)                                           -> x3
-    v391 Imm(0)                                           -> x3
-    v392 Imm(0)                                           -> x3
-    v393 Imm(0)                                           -> x3
-    v394 Extend { value=v353, kind=I32 }                  -> x3
+    v388 Extend { value=v387, kind=I32, nsw }             -> x10
+    v389 Imm(0)                                           -> x10
+    v390 Imm(0)                                           -> x10
+    v391 Imm(0)                                           -> x10
+    v392 Imm(0)                                           -> x10
+    v393 Imm(0)                                           -> x10
+    v394 Extend { value=v353, kind=I32 }                  -> x10
     v395 BinopI { op=ne, lhs=v353, rhs_imm=10 }           -> x0
-    v396 Imm(1)                                           -> x3
-    v397 Imm(0)                                           -> x3
+    v396 Imm(1)                                           -> x10
+    v397 Imm(0)                                           -> x10
     terminator Bnz { cond=v395, target=b22, fall=b20 }   (exit_acc=v395)
   block 20  start_pc=0
     v398 Imm(0)                                           -> x0

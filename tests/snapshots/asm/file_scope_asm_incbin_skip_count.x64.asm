@@ -33,48 +33,58 @@ Disassembly of section .text:
                	je	<addr>
                	incq	%rax
                	retq
-               	movl	$0x1, %eax
-               	movsbq	0x1(%rcx), %rdx
-               	cmpl	$0x41, %edx
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	movsbq	0x2(%rcx), %rdx
-               	cmpl	$0x59, %edx
-               	jne	<addr>
-               	movl	$0x3, %eax
-               	movsbq	0x3(%rcx), %rdx
-               	cmpl	$0x4c, %edx
-               	jne	<addr>
-               	movl	$0x4, %eax
-               	movsbq	0x4(%rcx), %rdx
-               	cmpl	$0x4f, %edx
-               	jne	<addr>
-               	movl	$0x5, %eax
-               	movsbq	0x5(%rcx), %rdx
-               	cmpl	$0x41, %edx
-               	jne	<addr>
-               	movl	$0x6, %eax
-               	movsbq	0x6(%rcx), %rcx
-               	cmpl	$0x44, %ecx
-               	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	<rip>, %rcx # <addr>
+               	movl	$0x1, %edx
+               	movsbq	0x1(%rcx), %rsi
+               	cmpl	$0x41, %esi
+               	je	<addr>
+               	movq	%rdx, %rax
+               	jmp	<addr>
+               	movl	$0x2, %edx
+               	movsbq	0x2(%rcx), %rsi
+               	cmpl	$0x59, %esi
+               	je	<addr>
+               	movq	%rdx, %rax
+               	jmp	<addr>
+               	movl	$0x3, %edx
+               	movsbq	0x3(%rcx), %rsi
+               	cmpl	$0x4c, %esi
+               	je	<addr>
+               	movq	%rdx, %rax
+               	jmp	<addr>
+               	movl	$0x4, %edx
+               	movsbq	0x4(%rcx), %rsi
+               	cmpl	$0x4f, %esi
+               	je	<addr>
+               	movq	%rdx, %rax
+               	jmp	<addr>
+               	movl	$0x5, %edx
+               	movsbq	0x5(%rcx), %rsi
+               	cmpl	$0x41, %esi
+               	je	<addr>
+               	movq	%rdx, %rax
+               	jmp	<addr>
+               	movl	$0x6, %edx
+               	movsbq	0x6(%rcx), %rsi
+               	cmpl	$0x44, %esi
+               	je	<addr>
+               	movq	%rdx, %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rdx # <addr>
                	addq	$0x7, %rcx
-               	cmpq	%rcx, %rax
+               	cmpq	%rcx, %rdx
                	je	<addr>
                	movl	$0xa, %eax
                	retq
                	leaq	<rip>, %rcx # <addr>
-               	subq	%rax, %rcx
+               	subq	%rdx, %rcx
                	cmpq	$0x2, %rcx
                	jne	<addr>
-               	movsbq	(%rax), %rcx
+               	movsbq	(%rdx), %rcx
                	cmpl	$0x30, %ecx
                	jne	<addr>
-               	movsbq	0x1(%rax), %rax
-               	cmpl	$0x31, %eax
+               	movsbq	0x1(%rdx), %rcx
+               	cmpl	$0x31, %ecx
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	xorl	%eax, %eax
                	retq

@@ -78,11 +78,9 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	0x50(%rsp), %rdi
                	callq	<addr>
-               	movq	0x28(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x28(%rsp)
                	jne	<addr>
-               	movq	0x20(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x20(%rsp)
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx

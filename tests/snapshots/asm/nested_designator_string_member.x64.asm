@@ -65,13 +65,13 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	movl	$0x7a797877, 0x4(%rsp)  # imm = 0x7A797877
-               	leaq	(%rsp), %rax
                	movl	$0x0, 0x8(%rsp)
-               	leaq	0x6(%rdi), %rcx
-               	movl	%ecx, 0xc(%rsp)
-               	leaq	0x4(%rdi), %rcx
-               	movl	%ecx, (%rsp)
-               	addq	$0x4, %rax
+               	leaq	0x6(%rdi), %rax
+               	leaq	(%rsp), %rcx
+               	movl	%eax, 0xc(%rsp)
+               	leaq	0x4(%rdi), %rax
+               	movl	%eax, (%rsp)
+               	leaq	0x4(%rcx), %rax
                	leaq	<rip>, %rcx
                	movsbq	(%rax), %rdx
                	testq	%rdx, %rdx

@@ -94,10 +94,10 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0xb0, %rsp
                	retq
+               	leaq	0x38(%rsp), %rsi
                	movabsq	$0x10000fffe0000, %rax  # imm = 0x10000FFFE0000
                	movq	%rax, 0x38(%rsp)
                	movl	$0x10000001, 0x40(%rsp) # imm = 0x10000001
-               	leaq	0x38(%rsp), %rsi
                	movl	$0x2, %edx
                	movq	%rbx, %rdi
                	callq	<addr>

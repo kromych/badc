@@ -55,7 +55,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=82
     v49  LoadLocal { off=-140, kind=F80 }                 -> d4
     v50  ImmData(64)                                      -> x0
     v51  Imm(113)                                         -> -
-    v52  Imm(0)                                           -> x3
+    v52  Imm(0)                                           -> x10
     v53  LocalAddr(-144)                                  -> x3
     v54  StoreLocal { off=-144, value=v47, kind=F80 }     -> -
     v55  LocalAddr(-145)                                  -> x12

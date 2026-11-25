@@ -143,24 +143,24 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	(%rdi,%rdi,2), %rax
-               	leaq	(%rdi,%rdi,4), %r8
-               	leaq	(%rax,%r8), %rdx
+               	leaq	(%rdi,%rdi,4), %r9
+               	leaq	(%rax,%r9), %rdx
                	imulq	$0x7, %rdi, %rcx
                	addq	%rcx, %rdx
-               	imulq	$0xb, %rdi, %r9
-               	leaq	(%rdx,%r9), %rsi
+               	imulq	$0xb, %rdi, %r10
+               	leaq	(%rdx,%r10), %rsi
                	imulq	$0xd, %rdi, %rdx
                	addq	%rdx, %rsi
-               	imulq	$0x11, %rdi, %rbx
-               	leaq	(%rsi,%rbx), %r12
+               	imulq	$0x11, %rdi, %r11
+               	leaq	(%rsi,%r11), %r8
                	imulq	$0x13, %rdi, %rsi
-               	leaq	(%r12,%rsi), %r13
-               	imulq	$0x17, %rdi, %r12
+               	addq	%rsi, %r8
+               	imulq	$0x17, %rdi, %rbx
+               	leaq	(%r8,%rbx), %r12
+               	imulq	$0x1d, %rdi, %r8
+               	leaq	(%r12,%r8), %r13
+               	imulq	$0x1f, %rdi, %r12
                	addq	%r12, %r13
-               	imulq	$0x1d, %rdi, %r14
-               	addq	%r14, %r13
-               	imulq	$0x1f, %rdi, %r14
-               	addq	%r14, %r13
                	imulq	$0x25, %rdi, %r14
                	addq	%r14, %r13
                	imulq	$0x29, %rdi, %r14
@@ -171,18 +171,16 @@ Disassembly of section .text:
                	addq	%r14, %r13
                	imulq	$0x35, %rdi, %r14
                	addq	%r14, %r13
-               	imulq	%r8, %rax
+               	imulq	%r9, %rax
                	addq	%r13, %rax
-               	imulq	%r9, %rcx
+               	imulq	%r10, %rcx
                	addq	%rcx, %rax
-               	imulq	%rbx, %rdx
+               	imulq	%r11, %rdx
                	addq	%rdx, %rax
-               	imulq	%r12, %rsi
-               	leaq	(%rax,%rsi), %rcx
-               	imulq	$0x1d, %rdi, %rax
-               	imulq	$0x1f, %rdi, %rdx
-               	imulq	%rdx, %rax
-               	addq	%rax, %rcx
+               	imulq	%rbx, %rsi
+               	addq	%rsi, %rax
+               	imulq	%r12, %r8
+               	leaq	(%rax,%r8), %rcx
                	imulq	$0x25, %rdi, %rax
                	imulq	$0x29, %rdi, %rdx
                	imulq	%rdx, %rax

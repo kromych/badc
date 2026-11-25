@@ -42,9 +42,9 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	movl	%ecx, 0x18(%rsp)
                	movl	$0x616c6f68, 0x1c(%rsp) # imm = 0x616C6F68
+               	leaq	0x18(%rsp), %rdi
                	movl	$0x0, 0x20(%rsp)
                	movw	$0x0, 0x24(%rsp)
-               	leaq	0x18(%rsp), %rdi
                	movq	%rax, 0x28(%rsp)
                	callq	<addr>
                	movl	(%rax), %ecx

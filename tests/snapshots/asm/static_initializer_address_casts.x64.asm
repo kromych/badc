@@ -81,30 +81,29 @@ Disassembly of section .text:
                	cmpq	%rdi, %rsi
                	jne	<addr>
                	movq	<rip>, %rsi # <addr>
-               	addq	$0x8, %rdx
-               	cmpq	%rdx, %rsi
+               	leaq	0x8(%rdx), %rdi
+               	cmpq	%rdi, %rsi
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	%rax, %rdx
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	%rax, %rsi
                	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	%rcx, %rdx
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	%rcx, %rsi
                	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	%rax, %rdx
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	%rax, %rsi
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	%rax, %rdx
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	%rax, %rsi
                	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	%rcx, %rdx
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	%rcx, %rsi
                	jne	<addr>
                	movq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
                	cmpq	%rdx, %rcx
                	je	<addr>
                	movl	$0x6, %eax

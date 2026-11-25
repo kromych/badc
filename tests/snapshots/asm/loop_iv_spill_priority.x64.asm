@@ -26,11 +26,9 @@ Disassembly of section .text:
                	int3
 
 <hot>:
-               	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
-               	pushq	%rbp
                	pushq	%rbx
                	xorl	%ecx, %ecx
                	movl	(%rdi), %eax
@@ -38,17 +36,17 @@ Disassembly of section .text:
                	movl	0x4(%rdi), %eax
                	leaq	0x2(%rax), %r9
                	movl	0x8(%rdi), %eax
-               	leaq	0x3(%rax), %rbx
+               	leaq	0x3(%rax), %r10
                	movl	0xc(%rdi), %eax
-               	leaq	0x4(%rax), %r12
+               	leaq	0x4(%rax), %r11
                	movl	0x10(%rdi), %eax
-               	leaq	0x5(%rax), %r13
+               	leaq	0x5(%rax), %rbx
                	movl	0x14(%rdi), %eax
-               	leaq	0x6(%rax), %r14
+               	leaq	0x6(%rax), %r12
                	movl	0x18(%rdi), %eax
-               	leaq	0x7(%rax), %r15
+               	leaq	0x7(%rax), %r13
                	movl	0x1c(%rdi), %eax
-               	leaq	0x8(%rax), %rbp
+               	leaq	0x8(%rax), %r14
                	movq	%rcx, %rax
                	movq	%rcx, %rdx
                	andq	$0x7, %rdx
@@ -65,18 +63,16 @@ Disassembly of section .text:
                	jb	<addr>
                	xorq	%r8, %rax
                	xorq	%r9, %rax
+               	xorq	%r10, %rax
+               	xorq	%r11, %rax
                	xorq	%rbx, %rax
                	xorq	%r12, %rax
                	xorq	%r13, %rax
                	xorq	%r14, %rax
-               	xorq	%r15, %rax
-               	xorq	%rbp, %rax
                	popq	%rbx
-               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	retq
 
 <main>:

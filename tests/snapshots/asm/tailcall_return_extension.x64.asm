@@ -63,8 +63,8 @@ Disassembly of section .text:
 <main>:
                	subq	$0x18, %rsp
                	leaq	0x8(%rsp), %rdi
-               	movl	$0xfebf1000, 0x8(%rsp)  # imm = 0xFEBF1000
                	xorl	%esi, %esi
+               	movl	$0xfebf1000, 0x8(%rsp)  # imm = 0xFEBF1000
                	callq	<addr>
                	cmpl	$0xfebf1000, %eax       # imm = 0xFEBF1000
                	je	<addr>

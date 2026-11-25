@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=divs
 fn ent_pc=0 n_params=6 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -10,7 +10,7 @@ fn ent_pc=0 n_params=6 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   ParamRef(2, kind=I64)                            -> x2
     v6   Imm(0)                                           -> x0
-    v7   ParamRef(3, kind=I64)                            -> x3
+    v7   ParamRef(3, kind=I64)                            -> x10
     v8   Imm(0)                                           -> x0
     v9   ParamRef(4, kind=I64)                            -> x8
     v10  Imm(0)                                           -> x0
@@ -23,14 +23,14 @@ fn ent_pc=0 n_params=6 variadic=false locals=0
     v17  Imm(0)                                           -> x1
     v18  Imm(0)                                           -> x1
     v19  BinopI { op=mul, lhs=v5, rhs_imm=5 }             -> x1
-    v20  Imm(0)                                           -> x12
+    v20  Imm(0)                                           -> x11
     v21  Binop { op=add, lhs=v19, rhs=v7 }                -> x1
-    v22  Imm(0)                                           -> x12
-    v23  Imm(0)                                           -> x12
-    v24  BinopI { op=mul, lhs=v9, rhs_imm=7 }             -> x12
-    v25  Imm(0)                                           -> x13
-    v26  Binop { op=add, lhs=v24, rhs=v11 }               -> x12
-    v27  Imm(0)                                           -> x13
+    v22  Imm(0)                                           -> x11
+    v23  Imm(0)                                           -> x11
+    v24  BinopI { op=mul, lhs=v9, rhs_imm=7 }             -> x11
+    v25  Imm(0)                                           -> x3
+    v26  Binop { op=add, lhs=v24, rhs=v11 }               -> x11
+    v27  Imm(0)                                           -> x3
     v28  Binop { op=xor, lhs=v1, rhs=v5 }                 -> x7
     v29  Imm(0)                                           -> x2
     v30  Binop { op=xor, lhs=v3, rhs=v7 }                 -> x6
@@ -42,22 +42,22 @@ fn ent_pc=0 n_params=6 variadic=false locals=0
     v36  Binop { op=add, lhs=v16, rhs=v21 }               -> x2
     v37  Imm(0)                                           -> x9
     v38  BinopI { op=or, lhs=v26, rhs_imm=1 }             -> x9
-    v39  Binop { op=div, lhs=v36, rhs=v38 }               -> x3
-    v40  Imm(0)                                           -> x2
-    v41  Binop { op=mul, lhs=v16, rhs=v21 }               -> x2
-    v42  Binop { op=div, lhs=v41, rhs=v38 }               -> x13
-    v43  Binop { op=mul, lhs=v42, rhs=v38 }               -> x13
+    v39  Binop { op=div, lhs=v36, rhs=v38 }               -> x2
+    v40  Imm(0)                                           -> x10
+    v41  Binop { op=mul, lhs=v16, rhs=v21 }               -> x10
+    v42  Binop { op=div, lhs=v41, rhs=v38 }               -> x3
+    v43  Binop { op=mul, lhs=v42, rhs=v38 }               -> x3
     v44  Binop { op=mod, lhs=v41, rhs=v38 }               -> x9
-    v45  Imm(0)                                           -> x13
-    v46  BinopI { op=mul, lhs=v41, rhs_imm=977 }          -> x2
-    v47  Imm(0)                                           -> x13
-    v48  BinopI { op=or, lhs=v30, rhs_imm=1 }             -> x13
-    v49  Binop { op=divu, lhs=v46, rhs=v48 }              -> x2
-    v50  Imm(0)                                           -> x13
-    v51  Imm(0)                                           -> x13
-    v52  Imm(0)                                           -> x13
-    v53  Binop { op=add, lhs=v39, rhs=v44 }               -> x9
-    v54  Imm(0)                                           -> x3
+    v45  Imm(0)                                           -> x3
+    v46  BinopI { op=mul, lhs=v41, rhs_imm=977 }          -> x10
+    v47  Imm(0)                                           -> x3
+    v48  BinopI { op=or, lhs=v30, rhs_imm=1 }             -> x3
+    v49  Binop { op=divu, lhs=v46, rhs=v48 }              -> x10
+    v50  Imm(0)                                           -> x3
+    v51  Imm(0)                                           -> x3
+    v52  Imm(0)                                           -> x3
+    v53  Binop { op=add, lhs=v39, rhs=v44 }               -> x2
+    v54  Imm(0)                                           -> x9
     v55  Binop { op=add, lhs=v53, rhs=v49 }               -> x2
     v56  Binop { op=add, lhs=v55, rhs=v16 }               -> x0
     v57  Binop { op=add, lhs=v56, rhs=v21 }               -> x0
@@ -71,7 +71,7 @@ fn ent_pc=0 n_params=6 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=shifts
 fn ent_pc=1 n_params=4 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -89,20 +89,20 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v13  BinopI { op=mul, lhs=v3, rhs_imm=9 }             -> x8
     v14  Imm(0)                                           -> x9
     v15  Binop { op=xor, lhs=v1, rhs=v3 }                 -> x9
-    v16  Imm(0)                                           -> x3
+    v16  Imm(0)                                           -> x10
     v17  Binop { op=add, lhs=v1, rhs=v3 }                 -> x6
     v18  Imm(0)                                           -> x7
     v19  Imm(0)                                           -> x7
     v20  Imm(0)                                           -> x7
     v21  BinopI { op=and, lhs=v5, rhs_imm=63 }            -> x7
     v22  Binop { op=shl, lhs=v10, rhs=v21 }               -> x7
-    v23  Imm(0)                                           -> x3
-    v24  Imm(0)                                           -> x3
-    v25  Imm(0)                                           -> x3
-    v26  BinopI { op=and, lhs=v7, rhs_imm=63 }            -> x3
-    v27  Binop { op=shru, lhs=v13, rhs=v26 }              -> x3
-    v28  Imm(0)                                           -> x12
-    v29  Imm(0)                                           -> x12
+    v23  Imm(0)                                           -> x10
+    v24  Imm(0)                                           -> x10
+    v25  Imm(0)                                           -> x10
+    v26  BinopI { op=and, lhs=v7, rhs_imm=63 }            -> x10
+    v27  Binop { op=shru, lhs=v13, rhs=v26 }              -> x10
+    v28  Imm(0)                                           -> x11
+    v29  Imm(0)                                           -> x11
     v30  Binop { op=add, lhs=v5, rhs=v7 }                 -> x1
     v31  Extend { value=v30, kind=I32, nsw }              -> x2
     v32  BinopI { op=and, lhs=v30, rhs_imm=63 }           -> x1

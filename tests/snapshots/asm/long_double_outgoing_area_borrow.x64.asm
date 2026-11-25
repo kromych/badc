@@ -68,109 +68,111 @@ Disassembly of section .text:
                	imulq	%rsi, %rbx
                	leaq	0x7(%rdi), %r12
                	leaq	0x9(%rsi), %r13
-               	imulq	$0xb, %rdi, %r14
-               	imulq	$0xd, %rsi, %r15
-               	movq	%rdi, %rbp
-               	xorq	%rsi, %rbp
-               	movq	%rdi, %r10
-               	orq	$0x40, %r10
-               	movq	%r10, 0x78(%rsp)
-               	movq	%rsi, %r10
-               	shlq	$0x3, %r10
-               	movq	%r10, 0x70(%rsp)
+               	imulq	$0xb, %rdi, %r10
+               	imulq	$0xd, %rsi, %r11
+               	movq	%rdi, %r14
+               	xorq	%rsi, %r14
+               	movq	%rdi, %r15
+               	orq	$0x40, %r15
+               	movq	%rsi, %rbp
+               	shlq	$0x3, %rbp
                	imulq	%rdi, %rdi
                	movq	%rsi, %rax
                	imulq	%rsi, %rax
+               	movq	%r10, 0x58(%rsp)
                	leaq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x68(%rsp)
+               	movq	%r10, 0x78(%rsp)
                	fldt	(%r10)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movq	%rdx, %r10
                	shlq	%r10
-               	movq	%r10, 0x60(%rsp)
+               	movq	%r10, 0x70(%rsp)
                	movq	%rcx, %r10
-               	addq	0x60(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
+               	addq	0x70(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
                	leaq	(%r8,%r8,2), %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
                	movq	%r9, %r10
                	shlq	$0x2, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	leaq	(%rbx,%rbx,4), %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	imulq	$0x6, %r12, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	imulq	$0x7, %r13, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	movq	%r14, %r10
-               	shlq	$0x3, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	leaq	(%r15,%r15,8), %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	imulq	$0xa, %rbp, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	movq	0x78(%rsp), %r10
-               	imulq	$0xb, %r10, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
+               	movq	%r10, 0x68(%rsp)
                	movq	0x70(%rsp), %r10
-               	imulq	$0xc, %r10, %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
+               	leaq	(%rbx,%rbx,4), %r10
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
+               	imulq	$0x6, %r12, %r10
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
+               	imulq	$0x7, %r13, %r10
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
+               	movq	0x58(%rsp), %r10
+               	movq	%r11, 0x58(%rsp)
+               	movq	%r10, %r11
+               	shlq	$0x3, %r11
+               	movq	%r11, 0x68(%rsp)
+               	movq	0x70(%rsp), %r11
+               	addq	0x68(%rsp), %r11
+               	movq	%r11, 0x70(%rsp)
+               	movq	0x58(%rsp), %r11
                	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
+               	leaq	(%r11,%r11,8), %r10
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
+               	imulq	$0xa, %r14, %r10
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
+               	imulq	$0xb, %r15, %r10
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
+               	imulq	$0xc, %rbp, %r10
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
                	imulq	$0xd, %rdi, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
                	imulq	$0xe, %rax, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	0x60(%rsp), %r10
-               	addq	0x58(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
+               	movq	%r10, 0x68(%rsp)
+               	movq	0x70(%rsp), %r10
+               	addq	0x68(%rsp), %r10
+               	movq	%r10, 0x70(%rsp)
                	vmulsd	<rip>, %xmm0, %xmm1
-               	movq	0x68(%rsp), %r10
+               	movq	0x78(%rsp), %r10
                	movsd	%xmm1, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	0x10(%r10)
                	subq	%rdi, %rax
-               	addq	0x70(%rsp), %rax
-               	subq	0x78(%rsp), %rax
                	addq	%rbp, %rax
                	subq	%r15, %rax
+               	movq	0x58(%rsp), %r10
                	addq	%r14, %rax
+               	subq	%r11, %rax
+               	addq	%r10, %rax
                	movq	<rip>, %r14 # <addr>
-               	movsd	%xmm0, 0x50(%rsp)
+               	movsd	%xmm0, 0x60(%rsp)
                	movq	%r13, (%rsp)
-               	movq	0x60(%rsp), %r10
+               	movq	0x70(%rsp), %r10
                	movq	%r10, 0x8(%rsp)
                	movq	%rax, 0x10(%rsp)
                	movq	%rsi, 0x18(%rsp)
@@ -181,9 +183,9 @@ Disassembly of section .text:
                	movq	%r12, %r9
                	movq	%rbx, %r8
                	callq	*%r14
-               	movsd	0x50(%rsp), %xmm0
+               	movsd	0x60(%rsp), %xmm0
                	leaq	<rip>, %rcx # <addr>
-               	addq	0x60(%rsp), %rax
+               	addq	0x70(%rsp), %rax
                	vmulsd	<rip>, %xmm0, %xmm0
                	cvttsd2si	%xmm0, %rdx
                	addq	%rdx, %rax
@@ -220,122 +222,124 @@ Disassembly of section .text:
                	leaq	(%rdi,%rsi), %r9
                	movq	%rdi, %rdx
                	subq	%rsi, %rdx
-               	movq	%rdi, %rbx
-               	imulq	%rsi, %rbx
-               	leaq	0x7(%rdi), %r12
-               	leaq	0x9(%rsi), %r13
-               	imulq	$0xb, %rdi, %r14
-               	imulq	$0xd, %rsi, %r15
-               	movq	%rdi, %rbp
-               	xorq	%rsi, %rbp
                	movq	%rdi, %r10
-               	orq	$0x40, %r10
-               	movq	%r10, 0x58(%rsp)
-               	movq	%rsi, %r10
-               	shlq	$0x3, %r10
-               	movq	%r10, 0x50(%rsp)
+               	imulq	%rsi, %r10
+               	leaq	0x7(%rdi), %r11
+               	leaq	0x9(%rsi), %rbx
+               	imulq	$0xb, %rdi, %r12
+               	imulq	$0xd, %rsi, %r13
+               	movq	%rdi, %r14
+               	xorq	%rsi, %r14
+               	movq	%rdi, %r15
+               	orq	$0x40, %r15
+               	movq	%rsi, %rbp
+               	shlq	$0x3, %rbp
+               	movq	%r10, 0x40(%rsp)
                	movq	%rdi, %r10
                	imulq	%rdi, %r10
-               	movq	%r10, 0x48(%rsp)
+               	movq	%r10, 0x58(%rsp)
                	movq	%rsi, %rax
                	imulq	%rsi, %rax
                	movq	%rcx, %r10
                	shlq	%r10
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x50(%rsp)
                	movq	%r8, %r10
-               	addq	0x40(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
+               	addq	0x50(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
                	leaq	(%r9,%r9,2), %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
                	movq	%rdx, %r10
                	shlq	$0x2, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	leaq	(%rbx,%rbx,4), %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	imulq	$0x6, %r12, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	imulq	$0x7, %r13, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	movq	%r14, %r10
-               	shlq	$0x3, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	leaq	(%r15,%r15,8), %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	imulq	$0xa, %rbp, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	movq	0x58(%rsp), %r10
-               	imulq	$0xb, %r10, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x48(%rsp)
                	movq	0x50(%rsp), %r10
-               	imulq	$0xc, %r10, %r10
-               	movq	%r10, 0x38(%rsp)
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
                	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
+               	movq	%r11, 0x40(%rsp)
+               	leaq	(%r10,%r10,4), %r11
+               	movq	%r11, 0x48(%rsp)
+               	movq	0x50(%rsp), %r11
+               	addq	0x48(%rsp), %r11
+               	movq	%r11, 0x50(%rsp)
+               	movq	0x40(%rsp), %r11
                	movq	%r10, 0x40(%rsp)
-               	movq	0x48(%rsp), %r10
+               	imulq	$0x6, %r11, %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
+               	imulq	$0x7, %rbx, %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
+               	movq	%r12, %r10
+               	shlq	$0x3, %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
+               	leaq	(%r13,%r13,8), %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
+               	imulq	$0xa, %r14, %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
+               	imulq	$0xb, %r15, %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
+               	imulq	$0xc, %rbp, %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
+               	movq	0x58(%rsp), %r10
                	imulq	$0xd, %r10, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
                	imulq	$0xe, %rax, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x40(%rsp), %r10
-               	addq	0x38(%rsp), %r10
-               	movq	%r10, 0x40(%rsp)
-               	subq	0x48(%rsp), %rax
-               	addq	0x50(%rsp), %rax
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x50(%rsp), %r10
+               	addq	0x48(%rsp), %r10
+               	movq	%r10, 0x50(%rsp)
                	subq	0x58(%rsp), %rax
                	addq	%rbp, %rax
                	subq	%r15, %rax
+               	movq	0x40(%rsp), %r10
                	addq	%r14, %rax
+               	subq	%r13, %rax
+               	addq	%r12, %rax
                	shlq	%rcx
                	addq	%r8, %rcx
                	leaq	(%r9,%r9,2), %r8
                	addq	%r8, %rcx
                	shlq	$0x2, %rdx
                	addq	%rdx, %rcx
-               	leaq	(%rbx,%rbx,4), %rdx
+               	leaq	(%r10,%r10,4), %rdx
                	addq	%rdx, %rcx
-               	imulq	$0x6, %r12, %rdx
+               	imulq	$0x6, %r11, %rdx
                	addq	%rdx, %rcx
-               	imulq	$0x7, %r13, %rdx
+               	imulq	$0x7, %rbx, %rdx
                	addq	%rdx, %rcx
-               	movq	0x40(%rsp), %rdx
+               	movq	0x50(%rsp), %rdx
                	shlq	$0x3, %rdx
                	addq	%rdx, %rcx
                	leaq	(%rax,%rax,8), %rax
                	addq	%rcx, %rax
                	imulq	$0xa, %rsi, %rcx
                	addq	%rcx, %rax
-               	addq	0x40(%rsp), %rax
+               	addq	0x50(%rsp), %rax
                	leaq	0x7(%rax), %rbx
                	callq	<addr>
                	cmpq	%rbx, %rax

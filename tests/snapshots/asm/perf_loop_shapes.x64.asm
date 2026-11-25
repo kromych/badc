@@ -100,23 +100,23 @@ Disassembly of section .text:
 
 <digit_power_sums>:
                	xorl	%edi, %edi
-               	movq	%rdi, %r9
+               	leaq	<rip>, %r8 # <addr>
+               	movq	%rdi, %r10
                	jmp	<addr>
                	incq	%rdi
                	cmpl	$0xfa0, %edi            # imm = 0xFA0
                	jge	<addr>
                	xorl	%ecx, %ecx
                	movq	%rdi, %rax
+               	nop
                	testl	%eax, %eax
                	jle	<addr>
                	imulq	$0x1999999a, %rax, %rdx # imm = 0x1999999A
                	shrq	$0x20, %rdx
-               	imulq	$0xa, %rdx, %r8
-               	subq	%r8, %rax
-               	leaq	<rip>, %r8 # <addr>
-               	movl	(%r8,%rax,4), %r8d
-               	addq	%r8, %rcx
-               	nop
+               	imulq	$0xa, %rdx, %r9
+               	subq	%r9, %rax
+               	movl	(%r8,%rax,4), %r9d
+               	addq	%r9, %rcx
                	cmpl	%edi, %ecx
                	jg	<addr>
                	movq	%rdx, %rax
@@ -124,10 +124,10 @@ Disassembly of section .text:
                	jg	<addr>
                	cmpl	%edi, %ecx
                	jne	<addr>
-               	incq	%r9
+               	incq	%r10
                	addq	%rdi, (%rsi)
                	jmp	<addr>
-               	movq	%r9, %rax
+               	movq	%r10, %rax
                	retq
 
 <lcg>:

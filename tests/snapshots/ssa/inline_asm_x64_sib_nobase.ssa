@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(1)                                           -> x0
-    v5   ImmData(16)                                      -> x0
+    v5   ImmData(16)                                      -> x9
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   BinopI { op=add, lhs=v5, rhs_imm=0 }             -> x0
@@ -99,14 +99,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v93  Imm(7)                                           -> x0
     v94  Imm(7)                                           -> x0
     v95  Imm(1)                                           -> x0
-    v96  ImmData(16)                                      -> x9
+    v96  ImmData(16)                                      -> x0
     v97  Imm(7)                                           -> x0
     v98  Imm(56)                                          -> x0
-    v99  BinopI { op=add, lhs=v96, rhs_imm=56 }           -> x0
+    v99  BinopI { op=add, lhs=v5, rhs_imm=56 }            -> x0
     v100 Imm(8192)                                        -> x0
     v101 Imm(8199)                                        -> x0
     v102 Imm(8199)                                        -> x0
-    v103 Store { addr=v96, disp=56, value=v102, kind=I64 pc_rel } -> -
+    v103 Store { addr=v5, disp=56, value=v102, kind=I64 pc_rel } -> -
     v104 Imm(7)                                           -> x0
     v105 Imm(8)                                           -> x0
     v106 Imm(8)                                           -> x0
@@ -115,7 +115,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v109 ImmData(16)                                      -> x0
     v110 Imm(0)                                           -> x0
     v111 Imm(0)                                           -> x0
-    v112 BinopI { op=and, lhs=v96, rhs_imm=7 }            -> x0
+    v112 BinopI { op=and, lhs=v5, rhs_imm=7 }             -> x0
     terminator Bz { cond=v112, target=b2, fall=b1 }   (exit_acc=v112)
   block 1  start_pc=0
     v113 Imm(1)                                           -> x0
@@ -126,7 +126,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v116 Imm(0)                                           -> x0
     v117 Imm(0)                                           -> x0
     v118 Imm(8)                                           -> x0
-    v119 BinopI { op=shru, lhs=v96, rhs_imm=3 }           -> x0
+    v119 BinopI { op=shru, lhs=v5, rhs_imm=3 }            -> x0
     v120 InlineAsm { template="movq (,%1,8), %0", ops=2, args=[-, v119] } -> x0
     v121 Imm(0)                                           -> x1
     v122 Imm(0)                                           -> x1
@@ -139,7 +139,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v125 Imm(0)                                           -> x0
     v126 Imm(0)                                           -> x0
     v127 Imm(8)                                           -> x0
-    v128 BinopI { op=shru, lhs=v96, rhs_imm=3 }           -> x0
+    v128 BinopI { op=shru, lhs=v5, rhs_imm=3 }            -> x0
     v129 InlineAsm { template="movq 16(,%1,8), %0", ops=2, args=[-, v128] } -> x0
     v130 Imm(0)                                           -> x1
     v131 Imm(0)                                           -> x1
@@ -152,7 +152,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v134 Imm(0)                                           -> x0
     v135 Imm(0)                                           -> x0
     v136 Imm(4)                                           -> x0
-    v137 BinopI { op=shru, lhs=v96, rhs_imm=2 }           -> x0
+    v137 BinopI { op=shru, lhs=v5, rhs_imm=2 }            -> x0
     v138 InlineAsm { template="movq (,%1,4), %0", ops=2, args=[-, v137] } -> x0
     v139 Imm(0)                                           -> x1
     v140 Imm(0)                                           -> x1
@@ -164,7 +164,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v143 Imm(0)                                           -> x0
     v144 Imm(8)                                           -> x0
-    v145 BinopI { op=shru, lhs=v96, rhs_imm=3 }           -> x0
+    v145 BinopI { op=shru, lhs=v5, rhs_imm=3 }            -> x0
     v146 Imm(48879)                                       -> x1
     v147 InlineAsm { template="movq %1, 24(,%0,8)", ops=2, args=[v145, v146] } -> -
     v148 ImmData(16)                                      -> x0
@@ -182,7 +182,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v156 Imm(0)                                           -> x0
     v157 Imm(0)                                           -> x0
     v158 Imm(8)                                           -> x0
-    v159 BinopI { op=shru, lhs=v96, rhs_imm=3 }           -> x0
+    v159 BinopI { op=shru, lhs=v5, rhs_imm=3 }            -> x0
     v160 InlineAsm { template="leaq 8(,%1,8), %0", ops=2, args=[-, v159] } -> x0
     v161 Imm(0)                                           -> x1
     v162 Imm(0)                                           -> x1
@@ -196,7 +196,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 12  start_pc=0
     v167 Imm(0)                                           -> x0
     v168 Imm(2)                                           -> x0
-    v169 BinopI { op=shru, lhs=v96, rhs_imm=1 }           -> x9
+    v169 BinopI { op=shru, lhs=v5, rhs_imm=1 }            -> x9
     v170 Imm(0)                                           -> x0
     v171 Imm(0)                                           -> x0
     v172 Imm(0)                                           -> x0

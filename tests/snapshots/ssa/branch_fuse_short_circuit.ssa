@@ -58,16 +58,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v54  ImmData(16)                                      -> x0
     v55  Load { addr=v13, disp=0, kind=I64, volatile pc_rel } -> x0
     v56  ImmData(24)                                      -> x0
-    v57  Load { addr=v56, disp=0, kind=U32, volatile pc_rel } -> x0
+    v57  Load { addr=v15, disp=0, kind=U32, volatile pc_rel } -> x0
     v58  Imm(0)                                           -> x0
     v59  Imm(0)                                           -> x0
     v60  Imm(3)                                           -> x0
     v61  ImmData(8)                                       -> x0
-    v62  Load { addr=v61, disp=0, kind=I64, volatile pc_rel } -> x0
+    v62  Load { addr=v10, disp=0, kind=I64, volatile pc_rel } -> x0
     v63  Imm(0)                                           -> x1
     v64  Imm(8)                                           -> x1
     v65  ImmData(24)                                      -> x1
-    v66  Load { addr=v56, disp=0, kind=U32, volatile pc_rel } -> x1
+    v66  Load { addr=v65, disp=0, kind=U32, volatile pc_rel } -> x1
     v67  BinopI { op=eq, lhs=v62, rhs_imm=-1 }            -> x1
     v68  Imm(1)                                           -> x1
     v69  Imm(0)                                           -> x1
@@ -78,7 +78,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v94  Imm(2)                                           -> x0
     v95  ImmData(8)                                       -> x0
-    v96  Load { addr=v61, disp=0, kind=I64, volatile pc_rel } -> x0
+    v96  Load { addr=v95, disp=0, kind=I64, volatile pc_rel } -> x0
     v97  Imm(0)                                           -> x1
     v98  ImmData(16)                                      -> x1
     v99  Load { addr=v98, disp=0, kind=I64, volatile pc_rel } -> x1

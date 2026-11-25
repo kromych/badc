@@ -14,10 +14,12 @@ fn emit_phi_predecessor_moves(
     alloc: &Allocation,
     frame: Frame,
 ) -> super::ssa::emit_common::Emit {
-    // The edge's scratch pair and the FP scratch pair hold no value the
-    // moves read or write.
-    let (hold, stage) = (scratch(code, S0), scratch(code, S1));
-    super::ssa::emit_common::emit_phi_predecessor_moves(
+    // The scratch holds no value the moves read or write; one a value lives
+    // across the edge in is borrowed and given back ahead of the branch.
+    let (plan, staged) = edge_plan(self_block, func, alloc, frame, pending_regs(code));
+    begin_site(code, plan);
+    let (hold, stage) = move_scratch(code, staged);
+    let moved = super::ssa::emit_common::emit_phi_predecessor_moves(
         &super::ssa::emit_common::X64Backend,
         code,
         self_block,
@@ -28,6 +30,54 @@ fn emit_phi_predecessor_moves(
         stage.0,
         frame.fp_scratch[1],
         frame.fp_scratch[0],
+    );
+    let ended = end_scratch(code);
+    moved.and(ended)
+}
+
+/// The plan of the moves at the end of block `b`, and whether one of them
+/// stages through scratch ([`moves_stage`]), as a constant feeding a
+/// floating-point phi does: the registers of the phis it feeds and of
+/// their incomes are touched, the rest of what lives out of `b` lives
+/// across.
+fn edge_plan(
+    b: super::super::ir::BlockId,
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    prefer: [Option<u8>; 2],
+) -> (Option<ScratchPlan>, bool) {
+    let block = &func.blocks[b as usize];
+    let succs = super::ssa::mem2reg::successors(
+        &block.terminator,
+        &func.computed_goto_targets,
+        &func.jump_tables,
+    );
+    let staged = succs.iter().any(|&s| {
+        let m = super::ssa::emit_common::edge_moves(func, alloc, b, s);
+        moves_stage(&m.int) || !m.fp_const.is_empty() || !m.pred.is_empty()
+    });
+    let Some(masks) = alloc.scratch_sites.as_ref().map(|s| &s.masks) else {
+        return (None, staged);
+    };
+    let reg = |v: super::super::ir::ValueId| int_reg(place_of(alloc, v)).map_or(0u16, |r| 1 << r.0);
+    let mut moved = 0u16;
+    for s in succs {
+        for id in func.blocks[s as usize].inst_range.clone() {
+            let Inst::Phi { incoming, .. } = &func.insts[id as usize] else {
+                break;
+            };
+            for &(p, src) in incoming {
+                if p == b {
+                    moved |= reg(id) | reg(src);
+                }
+            }
+        }
+    }
+    let end = masks.block_end[b as usize];
+    (
+        plan_site(alloc, frame, (moved, end & !moved), &MOVE_ORDER, prefer),
+        staged,
     )
 }
 
@@ -600,6 +650,10 @@ impl FnEmit<'_, '_> {
     /// emitted again.
     fn run(&mut self, rodata: &mut super::RodataBuild) -> Emit<Result<super::FnUnwind, u32>> {
         let func = self.fcx.func;
+        // Where a value holds the scratch pair, a lowering outside a site
+        // the body plans has no scratch.
+        let between = self.fcx.alloc.scratch_sites.is_some().then_some(NO_PLAN);
+        self.out.cx.code.set_scratch_between(between);
         let mut uw = self.emit_entry();
         uw.begin = self.start as u32;
         // `-pg` without `-mfentry`: `call mcount` once the frame stands, so
@@ -625,7 +679,11 @@ impl FnEmit<'_, '_> {
         let body = self.emit_body()?;
         let frame = self.fcx.frame;
         let kept = self.out.cx.code.take_kept();
-        if !frame.red_zone && kept & !frame.keep != 0 {
+        let borrow = 1 << super::keep::BORROW_AREA;
+        let slots = kept & !borrow;
+        if (!frame.red_zone && slots & !frame.keep != 0)
+            || (kept & borrow != 0 && !frame.borrow_area)
+        {
             return Ok(Err(kept));
         }
         if func.has_seh() {
@@ -662,6 +720,7 @@ impl FnEmit<'_, '_> {
         if !uw.leaf {
             uw.exits = core::mem::take(&mut self.exits);
         }
+        self.out.cx.code.set_scratch_between(None);
         Ok(Ok(uw))
     }
 
@@ -794,6 +853,7 @@ impl FnEmit<'_, '_> {
             func,
             alloc,
             frame,
+            abi,
             param_plan,
             ..
         } = self.fcx;
@@ -835,9 +895,20 @@ impl FnEmit<'_, '_> {
         if moves.is_empty() || !homes_distinct {
             return Ok(());
         }
-        // The entry's scratch pair holds no pending source or target.
-        let (hold, stage) = (scratch(code, S0), scratch(code, S1));
+        // The scratch holds no argument register and no target.
+        let mut touched = abi.int_arg_regs.iter().fold(0u16, |m, &r| m | 1 << r);
+        for m in &moves {
+            if let Place::IntReg(r) = m.dst {
+                touched |= 1 << r;
+            }
+        }
+        begin_site(
+            code,
+            plan_site(alloc, frame, (touched, 0), &MOVE_ORDER, [None; 2]),
+        );
+        let (hold, stage) = move_scratch(code, moves_stage(&moves));
         schedule_place_moves(code, &mut moves, frame, hold, stage)?;
+        end_scratch(code)?;
         for vid in vids {
             self.param_prebatched[vid] = true;
         }
@@ -1009,6 +1080,7 @@ impl FnEmit<'_, '_> {
         }
         // A loop's saves go ahead of the moves into its header's phis, which
         // may take the saved registers.
+        flush_scratch(self.out.cx.code);
         for s in saves.stores_at(b) {
             call_save(self.out.cx.code, frame, s, true);
         }
@@ -1020,13 +1092,37 @@ impl FnEmit<'_, '_> {
             alloc,
             frame,
         )?;
+        flush_scratch(self.out.cx.code);
         for s in saves.loads_at_end_of(b) {
             call_save(self.out.cx.code, frame, s, false);
         }
         self.emit_terminator(block_idx, block, tail_call)
     }
 
+    /// Instruction `v` under its scratch plan.
     fn emit_block_inst(
+        &mut self,
+        block: &super::super::ir::Block,
+        v: super::super::ir::ValueId,
+        tail_call: Option<TailCall<'_>>,
+    ) -> Emit {
+        let FnCtx {
+            func,
+            alloc,
+            frame,
+            target,
+            ..
+        } = self.fcx;
+        let tls = super::ssa::reg_alloc::tls_addr_is_call(target, func);
+        let call = super::ssa::reg_alloc::is_call_site(&func.insts[v as usize], tls);
+        let plan = plan_inst(alloc, frame, v, call, pending_regs(self.out.cx.code));
+        begin_site(self.out.cx.code, plan);
+        let lowered = self.lower_block_inst(block, v, tail_call);
+        let ended = end_scratch(self.out.cx.code);
+        lowered.and(ended)
+    }
+
+    fn lower_block_inst(
         &mut self,
         block: &super::super::ir::Block,
         v: super::super::ir::ValueId,
@@ -1145,7 +1241,6 @@ impl FnEmit<'_, '_> {
                 );
             }
         })?;
-        end_scratch(self.out.cx.code)?;
         for s in saves {
             call_save(self.out.cx.code, self.fcx.frame, s, false);
         }
@@ -1159,7 +1254,43 @@ impl FnEmit<'_, '_> {
         Ok(())
     }
 
+    /// The terminator of `block_idx` under its scratch plan: the registers
+    /// of what lives out of the block or the terminator reads are touched,
+    /// as no code runs past a branch to give a borrowed one back. A tail
+    /// call and a jump through a register take the pair, which none of
+    /// their operands and no value living out holds.
     fn emit_terminator(
+        &mut self,
+        block_idx: usize,
+        block: &super::super::ir::Block,
+        tail_call: Option<TailCall<'_>>,
+    ) -> Emit {
+        let FnCtx { alloc, frame, .. } = self.fcx;
+        let plan = alloc.scratch_sites.as_ref().and_then(|sites| {
+            let masks = &sites.masks;
+            let pair = matches!(
+                block.terminator,
+                Terminator::JumpTable { .. } | Terminator::GotoIndirect { .. }
+            ) || tail_call.is_some();
+            if pair {
+                Some(ScratchPlan::free(SCRATCH_PAIR))
+            } else {
+                plan_site(
+                    alloc,
+                    frame,
+                    (masks.block_end[block_idx], 0),
+                    &SCRATCH_ORDER,
+                    [None; 2],
+                )
+            }
+        });
+        begin_site(self.out.cx.code, plan);
+        let lowered = self.lower_terminator(block_idx, block, tail_call);
+        let ended = end_scratch(self.out.cx.code);
+        lowered.and(ended)
+    }
+
+    fn lower_terminator(
         &mut self,
         block_idx: usize,
         block: &super::super::ir::Block,
@@ -1314,6 +1445,11 @@ impl FnEmit<'_, '_> {
         let FnCtx {
             func, alloc, frame, ..
         } = self.fcx;
+        let plan = alloc.scratch_sites.as_ref().and_then(|s| {
+            let end = s.masks.block_end[owner];
+            plan_site(alloc, frame, (end, 0), &SCRATCH_ORDER, [None; 2])
+        });
+        begin_site(self.out.cx.code, plan);
         let (target, fall_through, negate) =
             match self
                 .plan
@@ -1343,17 +1479,35 @@ impl FnEmit<'_, '_> {
         } else {
             let code = &mut *self.out.cx.code;
             let cond_place = place_of(alloc, cond);
-            let Some(rc) = materialize_int(code, cond_place, S0, frame) else {
-                return fail(if negate {
-                    "Bz: cond Place not int reg / spill / fp"
-                } else {
-                    "Bnz: cond Place not int reg / spill / fp"
-                });
-            };
             let low_word = func.low_word_tests.get(owner).copied().unwrap_or(false);
-            self.open_branch_group(true);
-            let code = &mut *self.out.cx.code;
-            super::encode::emit_rr(code, Mnem::Test, if low_word { 4 } else { 8 }, rc, rc);
+            let width = if low_word { 4 } else { 8 };
+            // A spilled condition no register just stored is compared in its
+            // slot, which takes no scratch.
+            let in_slot = match cond_place {
+                Place::Spill(slot) => {
+                    let (sb, off) = spill_slot_addr(frame, slot);
+                    code.holding(sb.0, off, SpillWidth::Int)
+                        .is_none()
+                        .then_some((sb, off))
+                }
+                _ => None,
+            };
+            if let Some((sb, off)) = in_slot {
+                self.open_branch_group(true);
+                let code = &mut *self.out.cx.code;
+                super::encode::emit_mi(code, Mnem::Cmp, width, sb, off, 0);
+            } else {
+                let Some(rc) = materialize_int(code, cond_place, S0, frame) else {
+                    return fail(if negate {
+                        "Bz: cond Place not int reg / spill / fp"
+                    } else {
+                        "Bnz: cond Place not int reg / spill / fp"
+                    });
+                };
+                self.open_branch_group(true);
+                let code = &mut *self.out.cx.code;
+                super::encode::emit_rr(code, Mnem::Test, width, rc, rc);
+            }
             let cc = if negate { Cc::E } else { Cc::Ne };
             self.emit_local(LocalBranchKind::Jcc(cc), target);
         }
@@ -1415,6 +1569,7 @@ impl FnEmit<'_, '_> {
     /// nothing when its code runs into it, the plan's repeat of a small
     /// test, else a `jmp`.
     fn jump_unless_next(&mut self, block_idx: usize, t: super::super::ir::BlockId) -> Emit {
+        flush_scratch(self.out.cx.code);
         if self.plan.falls_into(block_idx, t) {
             return Ok(());
         }
@@ -1433,6 +1588,14 @@ impl FnEmit<'_, '_> {
             alloc, frame, abi, ..
         } = self.fcx;
         let code = &mut *self.out.cx.code;
+        // No value living out of the block, nor the target, holds the pair.
+        begin_site(
+            code,
+            alloc
+                .scratch_sites
+                .as_ref()
+                .map(|_| ScratchPlan::free(SCRATCH_PAIR)),
+        );
         let tplace = place_of(alloc, target);
         let Some(rt) = materialize_int(code, tplace, S0, frame) else {
             return fail("GotoIndirect: target Place not int reg / spill");

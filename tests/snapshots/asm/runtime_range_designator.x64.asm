@@ -56,10 +56,8 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	movl	$0x2, <rip> # <addr>
-               	movl	$0x0, <rip> # <addr>
+               	movl	$0x2, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	incq	%rax
                	incq	%rax
                	incq	%rax
                	incq	%rax
@@ -106,10 +104,10 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movl	0x8(%rsp,%rax,4), %edx
-               	nopl	(%rax)
                	cmpl	$0x13, %edx
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x11, %eax
                	jl	<addr>
                	movl	<rip>, %eax # <addr>
@@ -133,10 +131,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	movl	0x8(%rsp,%rax,4), %edx
-               	nopl	(%rax,%rax)
                	cmpl	$0xb, %edx
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x11, %eax
                	jl	<addr>
                	xorl	%eax, %eax

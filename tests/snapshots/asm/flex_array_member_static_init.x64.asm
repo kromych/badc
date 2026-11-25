@@ -58,27 +58,27 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%rsi, %rax
                	jmp	<addr>
-               	movl	$0x4, %ecx
-               	movsbq	<rip>, %rdi # <addr>
-               	cmpl	$0x5, %edi
+               	movl	$0x4, %edi
+               	movsbq	<rip>, %rcx # <addr>
+               	cmpl	$0x5, %ecx
                	je	<addr>
-               	movq	%rcx, %rax
+               	movq	%rdi, %rax
                	jmp	<addr>
                	movl	$0x5, %ecx
-               	movsbq	<rip>, %rdi # <addr>
-               	cmpl	$0x6, %edi
+               	movsbq	<rip>, %r8 # <addr>
+               	cmpl	$0x6, %r8d
                	je	<addr>
                	movq	%rcx, %rax
                	jmp	<addr>
                	movl	$0x6, %ecx
-               	movsbq	<rip>, %rdi # <addr>
-               	cmpl	$0x7, %edi
+               	movsbq	<rip>, %r8 # <addr>
+               	cmpl	$0x7, %r8d
                	je	<addr>
                	movq	%rcx, %rax
                	jmp	<addr>
                	movl	$0x7, %ecx
-               	movsbq	<rip>, %rdi # <addr>
-               	cmpl	$0x8, %edi
+               	movsbq	<rip>, %r8 # <addr>
+               	cmpl	$0x8, %r8d
                	je	<addr>
                	movq	%rcx, %rax
                	jmp	<addr>
@@ -88,8 +88,8 @@ Disassembly of section .text:
                	movl	$0x14, %eax
                	retq
                	xorl	%ecx, %ecx
-               	movsbq	<rip>, %rdi # <addr>
-               	cmpl	$0x68, %edi
+               	movsbq	<rip>, %r8 # <addr>
+               	cmpl	$0x68, %r8d
                	je	<addr>
                	leaq	0x1e(%rcx), %rax
                	retq
@@ -108,10 +108,11 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%rsi, %rcx
                	jmp	<addr>
-               	movl	$0x4, %ecx
                	movsbq	<rip>, %rax # <addr>
                	cmpl	$0x6f, %eax
-               	jne	<addr>
+               	je	<addr>
+               	movq	%rdi, %rcx
+               	jmp	<addr>
                	movl	$0x5, %ecx
                	cmpb	$0x0, <rip> # <addr>
                	jne	<addr>
@@ -128,6 +129,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
+               	nopl	(%rax)
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
@@ -182,12 +184,12 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
                	incq	%rcx
                	movsbq	(%rax), %rdx
-               	nopl	(%rax,%rax)
                	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	(%rax), %rax
@@ -212,6 +214,7 @@ Disassembly of section .text:
                	incq	%rax
                	incq	%rcx
                	movsbq	(%rax), %rdx
+               	nop
                	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	(%rax), %rax
@@ -277,12 +280,12 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
+               	nopl	(%rax)
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
                	incq	%rcx
                	movsbq	(%rax), %rdx
-               	nopw	(%rax,%rax)
                	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	(%rax), %rax
@@ -328,7 +331,6 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
-               	nopl	(%rax,%rax)
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
@@ -355,6 +357,7 @@ Disassembly of section .text:
                	incq	%rax
                	incq	%rcx
                	movsbq	(%rax), %rdx
+               	nopl	(%rax)
                	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	(%rax), %rax

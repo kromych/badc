@@ -202,41 +202,30 @@ Disassembly of section .text:
                	shrq	$0x8, %rax
                	movq	%rax, %rdx
                	andq	$0xff, %rdx
-               	movq	0x118(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x118(%rsp)
                	jne	<addr>
-               	movq	0xf0(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0xf0(%rsp)
                	jne	<addr>
-               	movq	0xa0(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0xa0(%rsp)
                	jne	<addr>
-               	movq	0x110(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x110(%rsp)
                	jne	<addr>
-               	movq	0xe8(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0xe8(%rsp)
                	jne	<addr>
-               	movq	0xe0(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0xe0(%rsp)
                	jne	<addr>
-               	movq	0xd8(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0xd8(%rsp)
                	jne	<addr>
-               	movq	0x108(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x108(%rsp)
                	jne	<addr>
                	movl	$0x1, %eax
                	addq	$0x128, %rsp            # imm = 0x128
                	retq
-               	movq	0xe8(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0xe8(%rsp)
                	jne	<addr>
-               	movq	0xe0(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0xe0(%rsp)
                	jne	<addr>
-               	movq	0xd8(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0xd8(%rsp)
                	jne	<addr>
                	movq	0x108(%rsp), %rax
                	testb	$-0x1, %al
@@ -316,17 +305,13 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	addq	$0x128, %rsp            # imm = 0x128
                	retq
-               	movq	0x40(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x40(%rsp)
                	jne	<addr>
-               	movq	0x68(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x68(%rsp)
                	jne	<addr>
-               	movq	0x60(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x60(%rsp)
                	jne	<addr>
-               	movq	0x58(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x58(%rsp)
                	jne	<addr>
                	movq	0x50(%rsp), %rax
                	cmpl	$0xff, %eax
@@ -334,14 +319,11 @@ Disassembly of section .text:
                	movq	0x48(%rsp), %rax
                	cmpl	$0xff, %eax
                	jne	<addr>
-               	movq	0x28(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x28(%rsp)
                	jne	<addr>
-               	movq	0x38(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x38(%rsp)
                	jne	<addr>
-               	movq	0x20(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x20(%rsp)
                	jne	<addr>
                	movq	%rcx, 0x8(%rsp)
                	movq	%rdx, (%rsp)

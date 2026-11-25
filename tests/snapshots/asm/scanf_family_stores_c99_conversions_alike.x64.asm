@@ -222,13 +222,12 @@ Disassembly of section .text:
                	cmpl	$0xaa, %ecx
                	movl	$0x1, %ecx
                	je	<addr>
-               	xorl	%ecx, %ecx
-               	testl	%r13d, %r13d
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpl	$0x4, %ebx
-               	cmovgeq	%rdx, %rcx
                	xorl	%edx, %edx
+               	testl	%r13d, %r13d
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpl	$0x4, %ebx
+               	cmovlq	%rdx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	leaq	-0x1(%r13), %rdx
@@ -238,6 +237,7 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	xorl	%ecx, %ecx
+               	nop
                	testq	%rdx, %rdx
                	je	<addr>
                	movzbq	0x50(%rsp,%rsi), %rcx
@@ -245,7 +245,7 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	movl	0x10(%r14), %edx
-               	nopw	(%rax,%rax)
+               	nopl	(%rax)
                	cmpl	%edx, %r12d
                	jne	<addr>
                	testl	%eax, %eax

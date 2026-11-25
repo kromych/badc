@@ -131,8 +131,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	addq	$0x58, %rsp
                	retq
-               	movq	0x58(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x58(%rsp)
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	fldt	(%rax)
@@ -151,16 +150,14 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	addq	$0x58, %rsp
                	retq
-               	movq	0x58(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x58(%rsp)
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	fldt	(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	vmulsd	<rip>, %xmm0, %xmm0
-               	movq	0x58(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x58(%rsp)
                	je	<addr>
                	movsd	<rip>, %xmm1 # <addr>
                	addsd	%xmm1, %xmm0
@@ -393,16 +390,14 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	addq	$0x58, %rsp
                	retq
-               	movq	0x58(%rsp), %r10
-               	testq	%r10, %r10
+               	cmpq	$0x0, 0x58(%rsp)
                	je	<addr>
                	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
                	movq	%r11, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	0x40(%rsp)
-               	movq	0x58(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x0, 0x58(%rsp)
                	jne	<addr>
                	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
                	movq	%r11, %xmm0

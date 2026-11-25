@@ -1696,7 +1696,7 @@ fn ent_pc=31 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=32 ---
 ; name=main
 fn ent_pc=32 n_params=0 variadic=false locals=12
-  spill_count=3 gpr_used=[3] fp_used=[]
+  spill_count=2 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(305419905)                                   -> x0
@@ -2690,26 +2690,26 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v899 VecExtract { vec=v739, off=12, kind=U16, bytes=16 } -> x1
     v900 Extend { value=v10, kind=I32 }                   -> x2
     v901 BinopI { op=and, lhs=v10, rhs_imm=65535 }        -> x2
-    v902 Binop { op=ne, lhs=v899, rhs=v765 }              -> x0
+    v902 Binop { op=ne, lhs=v899, rhs=v765 }              -> x1
     terminator Bz { cond=v902, target=b46, fall=b39 }   (exit_acc=v902)
   block 46  start_pc=0
-    v903 Imm(6)                                           -> x0
-    v904 Imm(7)                                           -> x0
-    v905 Imm(0)                                           -> x0
-    v906 Imm(7)                                           -> x0
-    v907 Imm(16)                                          -> x0
-    v908 Imm(2)                                           -> x0
-    v909 Imm(8)                                           -> x0
-    v910 Imm(1)                                           -> x0
-    v911 Imm(0)                                           -> x0
-    v912 Imm(7)                                           -> x0
-    v913 Imm(14)                                          -> x0
-    v914 Imm(14)                                          -> x0
-    v915 Imm(0)                                           -> x0
-    v916 VecExtract { vec=v739, off=14, kind=U16, bytes=16 } -> x0
-    v917 Extend { value=v10, kind=I32 }                   -> x1
-    v918 BinopI { op=and, lhs=v10, rhs_imm=65535 }        -> x1
-    v919 Binop { op=ne, lhs=v916, rhs=v918 }              -> x0
+    v903 Imm(6)                                           -> x1
+    v904 Imm(7)                                           -> x1
+    v905 Imm(0)                                           -> x1
+    v906 Imm(7)                                           -> x1
+    v907 Imm(16)                                          -> x1
+    v908 Imm(2)                                           -> x1
+    v909 Imm(8)                                           -> x1
+    v910 Imm(1)                                           -> x1
+    v911 Imm(0)                                           -> x1
+    v912 Imm(7)                                           -> x1
+    v913 Imm(14)                                          -> x1
+    v914 Imm(14)                                          -> x1
+    v915 Imm(0)                                           -> x1
+    v916 VecExtract { vec=v739, off=14, kind=U16, bytes=16 } -> x1
+    v917 Extend { value=v10, kind=I32 }                   -> x2
+    v918 BinopI { op=and, lhs=v10, rhs_imm=65535 }        -> x2
+    v919 Binop { op=ne, lhs=v916, rhs=v765 }              -> x0
     terminator Bz { cond=v919, target=b47, fall=b39 }   (exit_acc=v919)
   block 47  start_pc=0
     v920 Imm(7)                                           -> x0
@@ -3472,7 +3472,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1765 LocalAddr(-12)                                   -> x0
     v1766 Imm(3)                                           -> x0
     v1767 Imm(12)                                          -> x0
-    v1768 BinopI { op=add, lhs=v1765, rhs_imm=12 }         -> x0
+    v1768 BinopI { op=add, lhs=v1676, rhs_imm=12 }         -> x0
     v1769 LoadLocal { off=-343, disp=12, kind=I32 }        -> x0
     v1770 Extend { value=v10, kind=I32 }                   -> x1
     v1771 Binop { op=ne, lhs=v1769, rhs=v10 }              -> x0
@@ -3489,7 +3489,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1780 LocalAddr(-12)                                   -> x0
     v1781 Imm(4)                                           -> x0
     v1782 Imm(16)                                          -> x0
-    v1783 BinopI { op=add, lhs=v1765, rhs_imm=16 }         -> x0
+    v1783 BinopI { op=add, lhs=v1676, rhs_imm=16 }         -> x0
     v1784 LoadLocal { off=-343, disp=16, kind=I32 }        -> x0
     v1785 Extend { value=v10, kind=I32 }                   -> x1
     v1786 Binop { op=ne, lhs=v1784, rhs=v10 }              -> x0
@@ -3506,7 +3506,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1795 LocalAddr(-12)                                   -> x0
     v1796 Imm(5)                                           -> x0
     v1797 Imm(20)                                          -> x0
-    v1798 BinopI { op=add, lhs=v1765, rhs_imm=20 }         -> x0
+    v1798 BinopI { op=add, lhs=v1795, rhs_imm=20 }         -> x0
     v1799 LoadLocal { off=-343, disp=20, kind=I32 }        -> x0
     v1800 Extend { value=v10, kind=I32 }                   -> x1
     v1801 Binop { op=ne, lhs=v1799, rhs=v10 }              -> x0
@@ -3523,7 +3523,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1810 LocalAddr(-12)                                   -> x0
     v1811 Imm(6)                                           -> x0
     v1812 Imm(24)                                          -> x0
-    v1813 BinopI { op=add, lhs=v1765, rhs_imm=24 }         -> x0
+    v1813 BinopI { op=add, lhs=v1795, rhs_imm=24 }         -> x0
     v1814 LoadLocal { off=-343, disp=24, kind=I32 }        -> x0
     v1815 Extend { value=v10, kind=I32 }                   -> x1
     v1816 Binop { op=ne, lhs=v1814, rhs=v10 }              -> x0
@@ -3540,7 +3540,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1825 LocalAddr(-12)                                   -> x0
     v1826 Imm(7)                                           -> x0
     v1827 Imm(28)                                          -> x0
-    v1828 BinopI { op=add, lhs=v1765, rhs_imm=28 }         -> x0
+    v1828 BinopI { op=add, lhs=v1795, rhs_imm=28 }         -> x0
     v1829 LoadLocal { off=-343, disp=28, kind=I32 }        -> x0
     v1830 Extend { value=v10, kind=I32 }                   -> x1
     v1831 Binop { op=ne, lhs=v1829, rhs=v10 }              -> x0
@@ -3557,7 +3557,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1840 LocalAddr(-12)                                   -> x0
     v1841 Imm(8)                                           -> x0
     v1842 Imm(32)                                          -> x0
-    v1843 BinopI { op=add, lhs=v1765, rhs_imm=32 }         -> x0
+    v1843 BinopI { op=add, lhs=v1795, rhs_imm=32 }         -> x0
     v1844 LoadLocal { off=-343, disp=32, kind=I32 }        -> x0
     v1845 Extend { value=v10, kind=I32 }                   -> x1
     v1846 Binop { op=ne, lhs=v1844, rhs=v10 }              -> x0
@@ -3574,7 +3574,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1855 LocalAddr(-12)                                   -> x0
     v1856 Imm(9)                                           -> x0
     v1857 Imm(36)                                          -> x0
-    v1858 BinopI { op=add, lhs=v1855, rhs_imm=36 }         -> x0
+    v1858 BinopI { op=add, lhs=v1795, rhs_imm=36 }         -> x0
     v1859 LoadLocal { off=-343, disp=36, kind=I32 }        -> x0
     v1860 Extend { value=v10, kind=I32 }                   -> x1
     v1861 Binop { op=ne, lhs=v1859, rhs=v10 }              -> x0
@@ -3591,7 +3591,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1870 LocalAddr(-12)                                   -> x0
     v1871 Imm(10)                                          -> x0
     v1872 Imm(40)                                          -> x0
-    v1873 BinopI { op=add, lhs=v1855, rhs_imm=40 }         -> x0
+    v1873 BinopI { op=add, lhs=v1795, rhs_imm=40 }         -> x0
     v1874 LoadLocal { off=-343, disp=40, kind=I32 }        -> x0
     v1875 Extend { value=v10, kind=I32 }                   -> x1
     v1876 Binop { op=ne, lhs=v1874, rhs=v10 }              -> x0
@@ -3608,7 +3608,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1885 LocalAddr(-12)                                   -> x0
     v1886 Imm(11)                                          -> x0
     v1887 Imm(44)                                          -> x0
-    v1888 BinopI { op=add, lhs=v1855, rhs_imm=44 }         -> x0
+    v1888 BinopI { op=add, lhs=v1795, rhs_imm=44 }         -> x0
     v1889 LoadLocal { off=-343, disp=44, kind=I32 }        -> x0
     v1890 Extend { value=v10, kind=I32 }                   -> x1
     v1891 Binop { op=ne, lhs=v1889, rhs=v10 }              -> x0
@@ -3625,7 +3625,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1900 LocalAddr(-12)                                   -> x0
     v1901 Imm(12)                                          -> x0
     v1902 Imm(48)                                          -> x0
-    v1903 BinopI { op=add, lhs=v1855, rhs_imm=48 }         -> x0
+    v1903 BinopI { op=add, lhs=v1795, rhs_imm=48 }         -> x0
     v1904 LoadLocal { off=-343, disp=48, kind=I32 }        -> x0
     v1905 Extend { value=v10, kind=I32 }                   -> x1
     v1906 Binop { op=ne, lhs=v1904, rhs=v10 }              -> x0
@@ -3642,7 +3642,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1915 LocalAddr(-12)                                   -> x0
     v1916 Imm(13)                                          -> x0
     v1917 Imm(52)                                          -> x0
-    v1918 BinopI { op=add, lhs=v1855, rhs_imm=52 }         -> x0
+    v1918 BinopI { op=add, lhs=v1915, rhs_imm=52 }         -> x0
     v1919 LoadLocal { off=-343, disp=52, kind=I32 }        -> x0
     v1920 Extend { value=v10, kind=I32 }                   -> x1
     v1921 Binop { op=ne, lhs=v1919, rhs=v10 }              -> x0
@@ -3659,7 +3659,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1930 LocalAddr(-12)                                   -> x0
     v1931 Imm(14)                                          -> x0
     v1932 Imm(56)                                          -> x0
-    v1933 BinopI { op=add, lhs=v1855, rhs_imm=56 }         -> x0
+    v1933 BinopI { op=add, lhs=v1915, rhs_imm=56 }         -> x0
     v1934 LoadLocal { off=-343, disp=56, kind=I32 }        -> x0
     v1935 Extend { value=v10, kind=I32 }                   -> x1
     v1936 Binop { op=ne, lhs=v1934, rhs=v10 }              -> x0
@@ -3676,7 +3676,7 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1945 LocalAddr(-12)                                   -> x0
     v1946 Imm(15)                                          -> x0
     v1947 Imm(60)                                          -> x0
-    v1948 BinopI { op=add, lhs=v1945, rhs_imm=60 }         -> x0
+    v1948 BinopI { op=add, lhs=v1915, rhs_imm=60 }         -> x0
     v1949 LoadLocal { off=-343, disp=60, kind=I32 }        -> x0
     v1950 Extend { value=v10, kind=I32 }                   -> x1
     v1951 Binop { op=ne, lhs=v1949, rhs=v10 }              -> x0
@@ -3712,40 +3712,40 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
     v1979 LoadLocal { off=-345, disp=40, kind=I64 }        -> x8
     v1980 Imm(0)                                           -> x9
     v1981 LoadLocal { off=-345, disp=48, kind=I64 }        -> x9
-    v1982 Imm(0)                                           -> [spill 2]
-    v1983 LoadLocal { off=-345, disp=56, kind=I64 }        -> [spill 2]
-    v1984 Imm(0)                                           -> [spill 3]
+    v1982 Imm(0)                                           -> x10
+    v1983 LoadLocal { off=-345, disp=56, kind=I64 }        -> x10
+    v1984 Imm(0)                                           -> x11
     v1985 LifetimeEnd(-345)                                -> -
-    v1986 Imm(0)                                           -> [spill 3]
-    v1987 Imm(0)                                           -> [spill 3]
-    v1988 Imm(0)                                           -> [spill 3]
-    v1989 Imm(0)                                           -> [spill 3]
-    v1990 Imm(0)                                           -> [spill 3]
-    v1991 Imm(0)                                           -> [spill 3]
-    v1992 Imm(0)                                           -> [spill 3]
-    v1993 Imm(0)                                           -> [spill 3]
-    v1994 Imm(0)                                           -> [spill 3]
-    v1995 Imm(0)                                           -> [spill 3]
-    v1996 Imm(0)                                           -> [spill 3]
-    v1997 Imm(0)                                           -> [spill 3]
-    v1998 Imm(0)                                           -> [spill 3]
-    v1999 Imm(0)                                           -> [spill 3]
-    v2000 Imm(0)                                           -> [spill 3]
-    v2001 Imm(0)                                           -> [spill 3]
-    v2002 Imm(0)                                           -> [spill 3]
-    v2003 Imm(0)                                           -> [spill 3]
-    v2004 Imm(0)                                           -> [spill 3]
-    v2005 Imm(0)                                           -> [spill 3]
-    v2006 Imm(0)                                           -> [spill 3]
-    v2007 Imm(64)                                          -> [spill 3]
-    v2008 Imm(8)                                           -> [spill 3]
-    v2009 Imm(1)                                           -> [spill 3]
-    v2010 Imm(0)                                           -> [spill 3]
-    v2011 Imm(0)                                           -> [spill 3]
-    v2012 Imm(0)                                           -> [spill 3]
-    v2013 Imm(0)                                           -> [spill 3]
-    v2014 Imm(0)                                           -> [spill 3]
-    v2015 Imm(0)                                           -> [spill 3]
+    v1986 Imm(0)                                           -> x11
+    v1987 Imm(0)                                           -> x11
+    v1988 Imm(0)                                           -> x11
+    v1989 Imm(0)                                           -> x11
+    v1990 Imm(0)                                           -> x11
+    v1991 Imm(0)                                           -> x11
+    v1992 Imm(0)                                           -> x11
+    v1993 Imm(0)                                           -> x11
+    v1994 Imm(0)                                           -> x11
+    v1995 Imm(0)                                           -> x11
+    v1996 Imm(0)                                           -> x11
+    v1997 Imm(0)                                           -> x11
+    v1998 Imm(0)                                           -> x11
+    v1999 Imm(0)                                           -> x11
+    v2000 Imm(0)                                           -> x11
+    v2001 Imm(0)                                           -> x11
+    v2002 Imm(0)                                           -> x11
+    v2003 Imm(0)                                           -> x11
+    v2004 Imm(0)                                           -> x11
+    v2005 Imm(0)                                           -> x11
+    v2006 Imm(0)                                           -> x11
+    v2007 Imm(64)                                          -> x11
+    v2008 Imm(8)                                           -> x11
+    v2009 Imm(1)                                           -> x11
+    v2010 Imm(0)                                           -> x11
+    v2011 Imm(0)                                           -> x11
+    v2012 Imm(0)                                           -> x11
+    v2013 Imm(0)                                           -> x11
+    v2014 Imm(0)                                           -> x11
+    v2015 Imm(0)                                           -> x11
     v2016 Binop { op=ne, lhs=v1969, rhs=v12 }              -> x0
     terminator Bz { cond=v2016, target=b103, fall=b102 }   (exit_acc=v2016)
   block 102  start_pc=0

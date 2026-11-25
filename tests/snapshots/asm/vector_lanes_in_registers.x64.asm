@@ -317,10 +317,10 @@ Disassembly of section .text:
                	movw	$0x1d24, 0x42(%rsp)     # imm = 0x1D24
                	movw	$0xf16, 0x44(%rsp)      # imm = 0xF16
                	movw	$0x108, 0x46(%rsp)      # imm = 0x108
+               	leaq	0x40(%rsp), %r9
                	movw	$0xf3fa, 0x48(%rsp)     # imm = 0xF3FA
                	movw	$0xe5ec, 0x4a(%rsp)     # imm = 0xE5EC
                	movw	$0xd7de, 0x4c(%rsp)     # imm = 0xD7DE
-               	leaq	0x40(%rsp), %r9
                	movw	$0xc9d0, 0x4e(%rsp)     # imm = 0xC9D0
                	movq	$-0x3c, %rdi
                	movq	%r9, %r10
@@ -360,10 +360,10 @@ Disassembly of section .text:
                	movw	$0xcbca, 0x82(%rsp)     # imm = 0xCBCA
                	movw	$0xcdcc, 0x84(%rsp)     # imm = 0xCDCC
                	movw	$0xcfce, 0x86(%rsp)     # imm = 0xCFCE
+               	leaq	0x80(%rsp), %r9
                	movw	$0xd1d0, 0x88(%rsp)     # imm = 0xD1D0
                	movw	$0xd3d2, 0x8a(%rsp)     # imm = 0xD3D2
                	movw	$0xd5d4, 0x8c(%rsp)     # imm = 0xD5D4
-               	leaq	0x80(%rsp), %r9
                	movw	$0xd7d6, 0x8e(%rsp)     # imm = 0xD7D6
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
@@ -375,31 +375,32 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
+               	leaq	0x40(%rsp), %r9
                	movl	$0xa6288ad0, 0x40(%rsp) # imm = 0xA6288AD0
                	movl	$0xdcd8c180, 0x44(%rsp) # imm = 0xDCD8C180
                	movl	$0x1388f830, 0x48(%rsp) # imm = 0x1388F830
-               	leaq	0x40(%rsp), %r8
                	movl	$0x4a382ee0, 0x4c(%rsp) # imm = 0x4A382EE0
-               	movq	$-0x3039, %rdi          # imm = 0xCFC7
-               	movq	%r8, -0x28(%rbp)
-               	movq	%r8, %r10
+               	movq	$-0x3039, %rdx          # imm = 0xCFC7
+               	movq	%rdx, -0x28(%rbp)
+               	movq	%r9, %r10
                	movups	(%r10), %xmm0
+               	movq	%rdx, %rdi
                	vzeroupper
                	callq	<addr>
-               	movq	-0x28(%rbp), %r8
+               	movq	-0x28(%rbp), %rdx
                	movups	%xmm0, 0x80(%rsp)
                	xorl	%eax, %eax
-               	movswq	0x80(%rsp,%rax,2), %rsi
+               	movswq	0x80(%rsp,%rax,2), %rdi
                	testl	%eax, %eax
                	je	<addr>
                	cmpl	$0x7, %eax
                	jne	<addr>
-               	movq	$-0x3039, %rcx          # imm = 0xCFC7
-               	cmpl	%ecx, %esi
+               	movq	%rdx, %rcx
+               	cmpl	%ecx, %edi
                	je	<addr>
                	jmp	<addr>
                	movswq	0x40(%rsp,%rax,2), %rcx
-               	cmpl	%ecx, %esi
+               	cmpl	%ecx, %edi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x8, %eax
@@ -416,10 +417,10 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
+               	leaq	0x80(%rsp), %r9
                	movl	$0xfffeffff, 0x80(%rsp) # imm = 0xFFFEFFFF
                	movl	$0xfffcfffd, 0x84(%rsp) # imm = 0xFFFCFFFD
                	movl	$0xfffafffb, 0x88(%rsp) # imm = 0xFFFAFFFB
-               	leaq	0x80(%rsp), %r9
                	movl	$0xfff8fff9, 0x8c(%rsp) # imm = 0xFFF8FFF9
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
@@ -588,6 +589,7 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
+               	leaq	0x40(%rsp), %r9
                	movabsq	$-0x2dc6bc003d0900, %rax # imm = 0xFFD23943FFC2F700
                	movq	%rax, 0x40(%rsp)
                	movabsq	$-0xf4236001e847a, %rax # imm = 0xFFF0BDC9FFE17B86
@@ -595,7 +597,6 @@ Disassembly of section .text:
                	movabsq	$0xf424f0000000c, %rax  # imm = 0xF424F0000000C
                	movq	%rax, 0x50(%rsp)
                	movabsq	$0x2dc6d5001e8492, %rax # imm = 0x2DC6D5001E8492
-               	leaq	0x40(%rsp), %r9
                	movq	%rax, 0x58(%rsp)
                	movl	$0x4d, %edx
                	movq	%rdx, -0x28(%rbp)
@@ -687,10 +688,10 @@ Disassembly of section .text:
                	movl	$0xf448f830, 0x84(%rsp) # imm = 0xF448F830
                	movl	$0xec78f060, 0x88(%rsp) # imm = 0xEC78F060
                	movl	$0xe4a8e890, 0x8c(%rsp) # imm = 0xE4A8E890
+               	leaq	0x80(%rsp), %r9
                	movl	$0xdcd8e0c0, 0x90(%rsp) # imm = 0xDCD8E0C0
                	movl	$0xd508d8f0, 0x94(%rsp) # imm = 0xD508D8F0
                	movl	$0xcd38d120, 0x98(%rsp) # imm = 0xCD38D120
-               	leaq	0x80(%rsp), %r9
                	movl	$0xc568c950, 0x9c(%rsp) # imm = 0xC568C950
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
@@ -709,12 +710,12 @@ Disassembly of section .text:
                	movq	%rax, 0x10(%rsp)
                	movq	$-0xe, 0x18(%rsp)
                	movabsq	$0x1f0000000e, %rax     # imm = 0x1F0000000E
+               	leaq	(%rsp), %r9
                	movq	%rax, 0x20(%rsp)
                	movabsq	$0x4700000032, %rax     # imm = 0x4700000032
                	movq	%rax, 0x28(%rsp)
                	movabsq	$0x770000005e, %rax     # imm = 0x770000005E
                	movq	%rax, 0x30(%rsp)
-               	leaq	(%rsp), %r9
                	movabsq	$0xaf00000092, %rax     # imm = 0xAF00000092
                	movq	%rax, 0x38(%rsp)
                	leaq	0x80(%rsp), %rdi
@@ -795,6 +796,7 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
+               	leaq	0x80(%rsp), %r9
                	movq	$0x0, 0x80(%rsp)
                	movabsq	$-0x100000000, %rax     # imm = 0xFFFFFFFF00000000
                	movq	%rax, 0x88(%rsp)
@@ -808,7 +810,6 @@ Disassembly of section .text:
                	movq	%rax, 0xa8(%rsp)
                	movabsq	$-0x600000000, %rax     # imm = 0xFFFFFFFA00000000
                	movq	%rax, 0xb0(%rsp)
-               	leaq	0x80(%rsp), %r9
                	movabsq	$-0x700000000, %rax     # imm = 0xFFFFFFF900000000
                	movq	%rax, 0xb8(%rsp)
                	subq	$0x40, %rsp

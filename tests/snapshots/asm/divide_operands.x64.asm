@@ -162,8 +162,6 @@ Disassembly of section .text:
                	retq
 
 <wide_quot>:
-               	subq	$0x20, %rsp
-               	pushq	%rbx
                	movq	%rdx, %r8
                	movq	%rsi, %rax
                	orq	%rcx, %rax
@@ -177,23 +175,19 @@ Disassembly of section .text:
                	xorl	$0x3f, %eax
                	movq	%rax, %r9
                	xorq	$0x3f, %r9
-               	shlxq	%rax, %rcx, %rax
-               	movq	%r8, %rdx
+               	shlxq	%rax, %rcx, %r10
+               	movq	%r8, %rax
+               	shrq	%rax
+               	shrxq	%r9, %rax, %rax
+               	orq	%rax, %r10
+               	movq	%rsi, %rdx
                	shrq	%rdx
-               	shrxq	%r9, %rdx, %rdx
-               	orq	%rdx, %rax
-               	movq	%rsi, %rbx
-               	shrq	%rbx
-               	movq	%rdi, %rdx
-               	shrq	%rdx
-               	movq	%rsi, %r10
-               	shlq	$0x3f, %r10
-               	movq	%r10, 0x18(%rsp)
-               	orq	0x18(%rsp), %rdx
-               	movq	%rax, %r11
-               	movq	%rdx, %rax
-               	movq	%rbx, %rdx
-               	divq	%r11
+               	movq	%rdi, %rax
+               	shrq	%rax
+               	movq	%rsi, %r11
+               	shlq	$0x3f, %r11
+               	orq	%r11, %rax
+               	divq	%r10
                	shrxq	%r9, %rax, %r9
                	testq	%r9, %r9
                	setne	%al
@@ -201,18 +195,18 @@ Disassembly of section .text:
                	subq	%rax, %r9
                	movq	%r9, %rax
                	mulq	%r8
-               	movq	%r9, %rbx
-               	imulq	%rcx, %rbx
+               	movq	%r9, %r10
+               	imulq	%rcx, %r10
                	movq	%r9, %rax
                	imulq	%r8, %rax
-               	addq	%rbx, %rdx
+               	addq	%r10, %rdx
                	cmpq	%rax, %rdi
-               	setb	%bl
-               	movzbq	%bl, %rbx
+               	setb	%r10b
+               	movzbq	%r10b, %r10
                	subq	%rax, %rdi
                	movq	%rsi, %rax
                	subq	%rdx, %rax
-               	subq	%rbx, %rax
+               	subq	%r10, %rax
                	cmpq	%rcx, %rax
                	setb	%dl
                	movzbq	%dl, %rdx
@@ -228,8 +222,6 @@ Disassembly of section .text:
                	leaq	(%r9,%rdx), %rax
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
-               	popq	%rbx
-               	addq	$0x20, %rsp
                	retq
                	xorl	%ecx, %ecx
                	cmpq	%r8, %rsi

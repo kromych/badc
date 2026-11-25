@@ -64,10 +64,11 @@ Disassembly of section .text:
                	addq	$0x1000, %rax           # imm = 0x1000
                	cmpl	$0x100000, %eax         # imm = 0x100000
                	jl	<addr>
-               	leaq	0xfffff(%rcx), %rax
-               	movb	$0x8, (%rax)
-               	movsbq	(%rcx), %rax
-               	leaq	0x8(%rax), %r10
+               	leaq	0xfffff(%rcx), %rdx
+               	movl	$0x8, %eax
+               	movb	%al, (%rdx)
+               	movsbq	(%rcx), %rcx
+               	leaq	0x8(%rcx), %r10
                	movq	%r10, -0x18(%rbp)
                	movl	$0x1, %edi
                	movl	$0x2, %esi
@@ -75,13 +76,15 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %r10 # <addr>
+               	movq	%r10, -0x20(%rbp)
                	subq	$0x20, %rsp
                	movq	$0x7, (%rsp)
-               	movq	$0x8, 0x8(%rsp)
+               	movq	%rax, 0x8(%rsp)
                	movq	$0x9, 0x10(%rsp)
                	movq	$0xa, 0x18(%rsp)
-               	callq	*%rax
+               	movq	-0x20(%rbp), %r10
+               	callq	*%r10
                	addq	$0x20, %rsp
                	movq	-0x18(%rbp), %rcx
                	cmpl	$0xf, %ecx

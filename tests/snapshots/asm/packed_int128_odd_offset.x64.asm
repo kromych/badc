@@ -59,11 +59,6 @@ Disassembly of section .text:
                	movq	$0xa, <rip> # <addr>
                	movq	$0xe, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
-               	cmpq	$0xe, %rax
-               	je	<addr>
-               	movl	$0x9, %eax
-               	retq
-               	movq	<rip>, %rax # <addr>
                	movsbq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
                	retq

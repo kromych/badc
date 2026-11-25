@@ -652,7 +652,6 @@ Disassembly of section .text:
                	movq	%rax, 0x170(%rsp)
                	imulq	$0xb, %rbx, %rax
                	movq	%rax, 0x178(%rsp)
-               	leaq	0x120(%rsp), %rsi
                	imulq	$0xc, %rbx, %rax
                	movq	%rax, 0x180(%rsp)
                	imulq	$0xd, %rbx, %rax
@@ -662,6 +661,7 @@ Disassembly of section .text:
                	imulq	$0xf, %rbx, %rax
                	movq	%rax, 0x198(%rsp)
                	leaq	0x1a0(%rsp), %rdi
+               	leaq	0x120(%rsp), %rsi
                	movl	$0x5, %edx
                	callq	<addr>
                	imulq	$0xf, %rbx, %rcx

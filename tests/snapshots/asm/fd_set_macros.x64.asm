@@ -74,8 +74,8 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	addq	$0x88, %rsp
                	retq
-               	movzbq	0xc(%rsp), %rdx
-               	cmpl	$0x10, %edx
+               	movzbq	0xc(%rsp), %rsi
+               	cmpl	$0x10, %esi
                	je	<addr>
                	movl	$0xd, %eax
                	addq	$0x88, %rsp

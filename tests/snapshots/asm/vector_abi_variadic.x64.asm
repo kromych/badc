@@ -329,16 +329,16 @@ Disassembly of section .text:
                	leaq	0x6(%rax), %rcx
                	andq	$0xff, %rcx
                	vpinsrb	$0x6, %ecx, %xmm0, %xmm0
-               	addq	$0x7, %rax
-               	andq	$0xff, %rax
-               	vpinsrb	$0x7, %eax, %xmm0, %xmm0
-               	andq	$0xff, %rdi
-               	leaq	0x8(%rdi), %rax
-               	andq	$0xff, %rax
-               	vpinsrb	$0x8, %eax, %xmm0, %xmm0
-               	leaq	0x9(%rdi), %rax
+               	leaq	0x7(%rax), %rcx
+               	andq	$0xff, %rcx
+               	vpinsrb	$0x7, %ecx, %xmm0, %xmm0
+               	leaq	0x8(%rax), %rcx
+               	andq	$0xff, %rcx
+               	vpinsrb	$0x8, %ecx, %xmm0, %xmm0
+               	addq	$0x9, %rax
                	andq	$0xff, %rax
                	vpinsrb	$0x9, %eax, %xmm0, %xmm0
+               	andq	$0xff, %rdi
                	leaq	0xa(%rdi), %rax
                	andq	$0xff, %rax
                	vpinsrb	$0xa, %eax, %xmm0, %xmm0
@@ -461,10 +461,10 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	addq	$0x108, %rsp            # imm = 0x108
                	retq
+               	leaq	0x118(%rsp), %r9
                	movw	$0x605, 0x118(%rsp)     # imm = 0x605
                	movw	$0x807, 0x11a(%rsp)     # imm = 0x807
                	movw	$0xa09, 0x11c(%rsp)     # imm = 0xA09
-               	leaq	0x118(%rsp), %r9
                	movw	$0xc0b, 0x11e(%rsp)     # imm = 0xC0B
                	movl	$0x1, %edi
                	movq	%r9, %r10
@@ -513,9 +513,9 @@ Disassembly of section .text:
                	movabsq	$0x908070605040302, %rcx # imm = 0x908070605040302
                	movq	%rcx, 0xf0(%rsp)
                	movsd	<rip>, %xmm4
-               	movabsq	$0xa09080706050403, %rcx # imm = 0xA09080706050403
-               	movq	%rcx, 0xf8(%rsp)
                	leaq	0xf8(%rsp), %rcx
+               	movabsq	$0xa09080706050403, %rdx # imm = 0xA09080706050403
+               	movq	%rdx, 0xf8(%rsp)
                	movsd	<rip>, %xmm6
                	movabsq	$0xb0a090807060504, %rdx # imm = 0xB0A090807060504
                	movq	%rdx, 0x100(%rsp)

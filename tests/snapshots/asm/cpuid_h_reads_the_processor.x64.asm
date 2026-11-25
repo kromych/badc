@@ -66,10 +66,10 @@ Disassembly of section .text:
                	movsbq	-0x20(%rbp,%rsi), %rdi
                	cmpl	$0x20, %edi
                	jl	<addr>
+               	movsbq	-0x20(%rbp,%rsi), %rdi
                	cmpl	$0x7e, %edi
                	jg	<addr>
                	incq	%rsi
-               	nopw	(%rax,%rax)
                	cmpl	$0xc, %esi
                	jl	<addr>
                	leaq	-0x20(%rbp), %rdi

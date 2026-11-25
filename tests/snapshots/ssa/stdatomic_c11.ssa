@@ -201,14 +201,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v160 Imm(0)                                           -> x6
     v161 AtomicStore { addr=v143, value=v81, width=1, order=SeqCst } -> -
     v162 StoreLocal { off=-5, value=v81, kind=I32 }       -> -
-    v163 LocalAddr(-5)                                    -> x0
-    v164 Imm(42)                                          -> x1
+    v163 LocalAddr(-5)                                    -> x1
+    v164 Imm(42)                                          -> x6
     v165 AtomicStore { addr=v163, value=v164, width=4, order=SeqCst } -> -
-    v166 LocalAddr(-5)                                    -> x1
-    v167 AtomicLoad { addr=v163, width=4, order=SeqCst }  -> x0
-    v168 BinopI { op=shl, lhs=v167, rhs_imm=32 }          -> x1
-    v169 Extend { value=v167, kind=I32 }                  -> x1
-    v170 BinopI { op=ne, lhs=v167, rhs_imm=42 }           -> x0
+    v166 LocalAddr(-5)                                    -> x6
+    v167 AtomicLoad { addr=v163, width=4, order=SeqCst }  -> x1
+    v168 BinopI { op=shl, lhs=v167, rhs_imm=32 }          -> x6
+    v169 Extend { value=v167, kind=I32 }                  -> x6
+    v170 BinopI { op=ne, lhs=v167, rhs_imm=42 }           -> x1
     terminator Bz { cond=v170, target=b20, fall=b19 }   (exit_acc=v170)
   block 19  start_pc=0
     v171 Imm(7)                                           -> x0
@@ -221,16 +221,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v178 LifetimeEnd(-9)                                  -> -
     terminator Return(v171)   (exit_acc=v171)
   block 20  start_pc=0
-    v179 LocalAddr(-4)                                    -> x0
-    v180 Imm(100)                                         -> x1
+    v179 LocalAddr(-4)                                    -> x1
+    v180 Imm(100)                                         -> x6
     v181 AtomicStore { addr=v179, value=v180, width=8, order=SeqCst } -> -
-    v182 Imm(0)                                           -> x1
-    v183 LocalAddr(-4)                                    -> x1
-    v184 Imm(1)                                           -> x1
+    v182 Imm(0)                                           -> x6
+    v183 LocalAddr(-4)                                    -> x6
+    v184 Imm(1)                                           -> x6
     v185 AtomicRmw { op=Add, addr=v179, value=v146, width=8, order=SeqCst } -> -
-    v186 LocalAddr(-4)                                    -> x1
-    v187 AtomicLoad { addr=v179, width=8, order=SeqCst }  -> x1
-    v188 BinopI { op=ne, lhs=v187, rhs_imm=101 }          -> x1
+    v186 LocalAddr(-4)                                    -> x6
+    v187 AtomicLoad { addr=v179, width=8, order=SeqCst }  -> x6
+    v188 BinopI { op=ne, lhs=v187, rhs_imm=101 }          -> x6
     terminator Bz { cond=v188, target=b22, fall=b21 }   (exit_acc=v188)
   block 21  start_pc=0
     v189 Imm(8)                                           -> x0
@@ -243,16 +243,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v196 LifetimeEnd(-9)                                  -> -
     terminator Return(v189)   (exit_acc=v189)
   block 22  start_pc=0
-    v197 LocalAddr(-4)                                    -> x1
-    v198 BinopI { op=add, lhs=v179, rhs_imm=8 }           -> x0
-    v199 Imm(1)                                           -> x1
+    v197 LocalAddr(-4)                                    -> x6
+    v198 BinopI { op=add, lhs=v179, rhs_imm=8 }           -> x1
+    v199 Imm(1)                                           -> x6
     v200 AtomicStore { addr=v198, value=v146, width=4, order=SeqCst } -> -
-    v201 LocalAddr(-4)                                    -> x1
-    v202 BinopI { op=add, lhs=v179, rhs_imm=8 }           -> x1
-    v203 AtomicLoad { addr=v198, width=4, order=SeqCst }  -> x0
-    v204 BinopI { op=shl, lhs=v203, rhs_imm=32 }          -> x1
-    v205 Extend { value=v203, kind=I32 }                  -> x1
-    v206 BinopI { op=ne, lhs=v203, rhs_imm=1 }            -> x0
+    v201 LocalAddr(-4)                                    -> x2
+    v202 BinopI { op=add, lhs=v179, rhs_imm=8 }           -> x2
+    v203 AtomicLoad { addr=v198, width=4, order=SeqCst }  -> x1
+    v204 BinopI { op=shl, lhs=v203, rhs_imm=32 }          -> x2
+    v205 Extend { value=v203, kind=I32 }                  -> x2
+    v206 BinopI { op=ne, lhs=v203, rhs_imm=1 }            -> x1
     terminator Bz { cond=v206, target=b24, fall=b23 }   (exit_acc=v206)
   block 23  start_pc=0
     v207 Imm(9)                                           -> x0
@@ -265,19 +265,19 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v214 LifetimeEnd(-9)                                  -> -
     terminator Return(v207)   (exit_acc=v207)
   block 24  start_pc=0
-    v215 Imm(32767)                                       -> x0
-    v216 Imm(0)                                           -> x0
-    v217 Imm(4294967295)                                  -> x0
-    v218 Imm(0)                                           -> x0
-    v219 Imm(0)                                           -> x0
-    v220 Imm(0)                                           -> x0
-    v221 Imm(0)                                           -> x0
-    v222 Imm(0)                                           -> x0
-    v223 Imm(0)                                           -> x0
-    v224 Imm(0)                                           -> x0
-    v225 Imm(0)                                           -> x0
-    v226 Imm(0)                                           -> x0
-    v227 Imm(0)                                           -> x0
+    v215 Imm(32767)                                       -> x1
+    v216 Imm(0)                                           -> x1
+    v217 Imm(4294967295)                                  -> x1
+    v218 Imm(0)                                           -> x1
+    v219 Imm(0)                                           -> x1
+    v220 Imm(0)                                           -> x1
+    v221 Imm(0)                                           -> x1
+    v222 Imm(0)                                           -> x1
+    v223 Imm(0)                                           -> x1
+    v224 Imm(0)                                           -> x1
+    v225 Imm(0)                                           -> x1
+    v226 Imm(0)                                           -> x1
+    v227 Imm(0)                                           -> x1
     v228 LifetimeEnd(-4)                                  -> -
     v229 LifetimeEnd(-5)                                  -> -
     v230 LifetimeEnd(-6)                                  -> -
@@ -285,7 +285,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v232 LifetimeEnd(-8)                                  -> -
     v233 LifetimeEnd(0)                                   -> -
     v234 LifetimeEnd(-9)                                  -> -
-    terminator Return(v227)   (exit_acc=v227)
+    terminator Return(v81)   (exit_acc=v81)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

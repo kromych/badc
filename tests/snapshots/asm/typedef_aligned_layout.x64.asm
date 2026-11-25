@@ -42,6 +42,7 @@ Disassembly of section .text:
                	movl	$0x5, 0x40(%rsp)
                	leaq	0x50(%rsp), %r8
                	movb	$0x6, 0x50(%rsp)
+               	leaq	-0x8(%rbp), %r9
                	movb	$0x7, -0x8(%rbp)
                	movl	$0x8, -0x7(%rbp)
                	leaq	0x10(%rsp), %rax
@@ -75,8 +76,7 @@ Disassembly of section .text:
                	movl	$0x23, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	testb	$0x7, %al
+               	testb	$0x7, %r9b
                	je	<addr>
                	movl	$0x24, %eax
                	leave

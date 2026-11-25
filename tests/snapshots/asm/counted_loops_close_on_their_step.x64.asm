@@ -277,13 +277,13 @@ Disassembly of section .text:
                	movzbq	0x1e(%rsp), %rcx
                	shlq	$0x6, %rcx
                	xorq	%rcx, %rax
-               	leaq	0x18(%rsp), %rdi
                	movzbq	0x1f(%rsp), %rcx
                	shlq	$0x5, %rcx
                	xorq	%rcx, %rax
                	movzbq	0x20(%rsp), %rcx
                	shlq	$0x4, %rcx
                	xorq	%rcx, %rax
+               	leaq	0x18(%rsp), %rdi
                	movzbq	0x21(%rsp), %rcx
                	shlq	$0x3, %rcx
                	xorq	%rcx, %rax

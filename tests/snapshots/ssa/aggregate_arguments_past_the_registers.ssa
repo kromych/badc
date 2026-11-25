@@ -303,8 +303,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=10
     v41  Imm(0)                                           -> x7
     v42  Load { addr=v35, disp=0, kind=F64 pc_rel }       -> d0
     v43  Imm(9)                                           -> x7
-    v44  Imm(0)                                           -> [spill 0]
-    v45  Imm(0)                                           -> [spill 0]
+    v44  Imm(0)                                           -> x10
+    v45  Imm(0)                                           -> x10
     v46  AggParts { desc=0, parts=[v29, v31], fp_mask=0x0 } -> -
     v47  AggParts { desc=1, parts=[v42, v43], fp_mask=0x1 } -> -
     v48  AggParts { desc=2, parts=[v13, v15], fp_mask=0x0 } -> -

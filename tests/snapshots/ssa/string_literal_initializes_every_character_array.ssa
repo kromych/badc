@@ -359,7 +359,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=11
     v270 Imm(0)                                           -> x1
     terminator Bnz { cond=v269, target=b16, fall=b15 }   (exit_acc=v269)
   block 15  start_pc=0
-    v271 BinopI { op=add, lhs=v30, rhs_imm=5 }            -> x0
+    v271 BinopI { op=add, lhs=v27, rhs_imm=5 }            -> x0
     v272 LoadLocal { off=-7, disp=5, kind=I8 }            -> x0
     v273 BinopI { op=ne, lhs=v272, rhs_imm=100 }          -> x0
     v274 Imm(0)                                           -> x1

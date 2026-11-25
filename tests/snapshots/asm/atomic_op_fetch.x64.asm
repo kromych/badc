@@ -27,7 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x18, %rsp
-               	movl	$0xa, 0x8(%rsp)
+               	movl	$0xa, %edi
+               	movl	%edi, 0x8(%rsp)
                	leaq	0x8(%rsp), %rcx
                	movl	$0x5, %esi
                	movq	%rsi, %rax
@@ -50,27 +51,27 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x18, %rsp
                	retq
-               	movl	$0xf, %edi
+               	movl	$0xf, %r8d
                	movl	(%rcx), %eax
                	movq	%rax, %r10
-               	andq	%rdi, %r10
+               	andq	%r8, %r10
                	lock
                	cmpxchgl	%r10d, (%rcx)
                	jne	<addr>
-               	andq	%rdi, %rax
+               	andq	%r8, %rax
                	cmpl	$0xc, %eax
                	je	<addr>
                	movq	%rdx, %rax
                	addq	$0x18, %rsp
                	retq
-               	movl	$0x1, %edi
+               	movl	$0x1, %r8d
                	movl	(%rcx), %eax
                	movq	%rax, %r10
-               	orq	%rdi, %r10
+               	orq	%r8, %r10
                	lock
                	cmpxchgl	%r10d, (%rcx)
                	jne	<addr>
-               	orq	%rdi, %rax
+               	orq	%r8, %rax
                	cmpl	$0xd, %eax
                	je	<addr>
                	movl	$0x4, %eax
@@ -105,7 +106,7 @@ Disassembly of section .text:
                	je	<addr>
                	addq	$0x18, %rsp
                	retq
-               	movl	$0xa, %eax
+               	movq	%rdi, %rax
                	negq	%rax
                	lock
                	xaddq	%rax, (%rcx)

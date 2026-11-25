@@ -164,9 +164,9 @@ fn ent_pc=8 n_params=0 variadic=false locals=6
     v38  Imm(0)                                           -> x9
     v39  Imm(0)                                           -> x9
     v40  Binop { op=add, lhs=v5, rhs=v6 }                 -> x9
-    v41  Imm(0)                                           -> x3
-    v42  Imm(0)                                           -> x3
-    v43  Imm(0)                                           -> x3
+    v41  Imm(0)                                           -> x10
+    v42  Imm(0)                                           -> x10
+    v43  Imm(0)                                           -> x10
     v44  Binop { op=add, lhs=v40, rhs=v22 }               -> x0
     v45  Imm(0)                                           -> x9
     v46  Imm(0)                                           -> x9
@@ -244,9 +244,9 @@ fn ent_pc=8 n_params=0 variadic=false locals=6
     v120 Imm(0)                                           -> x9
     v121 Imm(0)                                           -> x9
     v122 Binop { op=add, lhs=v87, rhs=v88 }               -> x9
-    v123 Imm(0)                                           -> x12
-    v124 Imm(0)                                           -> x12
-    v125 Imm(0)                                           -> x12
+    v123 Imm(0)                                           -> x10
+    v124 Imm(0)                                           -> x10
+    v125 Imm(0)                                           -> x10
     v126 Binop { op=add, lhs=v122, rhs=v104 }             -> x0
     v127 Imm(0)                                           -> x9
     v128 Imm(0)                                           -> x9

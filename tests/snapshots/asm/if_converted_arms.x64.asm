@@ -56,33 +56,29 @@ Disassembly of section .text:
                	retq
 
 <late_operands>:
-               	pushq	%r13
-               	pushq	%r12
                	pushq	%rbx
-               	movq	0x20(%rsp), %rax
-               	movswq	0x38(%rsp), %rbx
-               	movslq	0x40(%rsp), %r12
-               	leaq	(%rbx,%rbx,2), %rbx
-               	decq	%r12
-               	movsbq	0x30(%rsp), %r13
-               	testl	%r13d, %r13d
-               	cmovleq	%r12, %rbx
-               	leaq	(%rbx,%rbx,4), %rbx
-               	movslq	%ebx, %rbx
-               	addq	%rbx, %rax
-               	movsbq	0x30(%rsp), %rbx
-               	addq	%rbx, %rax
+               	movq	0x10(%rsp), %rax
+               	movswq	0x28(%rsp), %r10
+               	movslq	0x30(%rsp), %r11
+               	leaq	(%r10,%r10,2), %r10
+               	decq	%r11
+               	movsbq	0x20(%rsp), %rbx
+               	testl	%ebx, %ebx
+               	cmovleq	%r11, %r10
+               	leaq	(%r10,%r10,4), %r10
+               	movslq	%r10d, %r10
+               	addq	%r10, %rax
+               	movsbq	0x20(%rsp), %r10
+               	addq	%r10, %rax
                	addq	%rdi, %rax
                	addq	%rsi, %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movq	0x28(%rsp), %rcx
+               	movq	0x18(%rsp), %rcx
                	addq	%rcx, %rax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	retq
 
 <swap_if>:

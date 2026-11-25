@@ -405,7 +405,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v76  Imm(1)                                           -> x1
     v77  LocalAddr(-6)                                    -> x1
     v78  Imm(7)                                           -> x1
-    v79  BinopI { op=add, lhs=v77, rhs_imm=7 }            -> x1
+    v79  BinopI { op=add, lhs=v7, rhs_imm=7 }             -> x1
     v80  Imm(7)                                           -> x1
     v81  StoreLocal { off=-6, disp=4, value=v71, kind=I32 } -> -
     v82  Imm(7)                                           -> x0
@@ -415,7 +415,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v86  Imm(1)                                           -> x0
     v87  LocalAddr(-6)                                    -> x0
     v88  Imm(8)                                           -> x0
-    v89  BinopI { op=add, lhs=v77, rhs_imm=8 }            -> x0
+    v89  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x0
     v90  Imm(8)                                           -> x0
     v91  Imm(0)                                           -> x0
     v92  Imm(8)                                           -> x0
@@ -425,7 +425,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v96  Imm(1)                                           -> x0
     v97  LocalAddr(-6)                                    -> x0
     v98  Imm(9)                                           -> x0
-    v99  BinopI { op=add, lhs=v77, rhs_imm=9 }            -> x0
+    v99  BinopI { op=add, lhs=v97, rhs_imm=9 }            -> x0
     v100 Imm(9)                                           -> x0
     v101 Imm(0)                                           -> x0
     v102 Imm(9)                                           -> x0
@@ -435,7 +435,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v106 Imm(1)                                           -> x0
     v107 LocalAddr(-6)                                    -> x0
     v108 Imm(10)                                          -> x0
-    v109 BinopI { op=add, lhs=v77, rhs_imm=10 }           -> x0
+    v109 BinopI { op=add, lhs=v97, rhs_imm=10 }           -> x0
     v110 Imm(10)                                          -> x0
     v111 Imm(185207048)                                   -> x0
     v112 Imm(10)                                          -> x1
@@ -445,7 +445,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v116 Imm(1)                                           -> x1
     v117 LocalAddr(-6)                                    -> x1
     v118 Imm(11)                                          -> x1
-    v119 BinopI { op=add, lhs=v77, rhs_imm=11 }           -> x1
+    v119 BinopI { op=add, lhs=v97, rhs_imm=11 }           -> x1
     v120 Imm(11)                                          -> x1
     v121 StoreLocal { off=-6, disp=8, value=v111, kind=I32 } -> -
     v122 Imm(11)                                          -> x0
@@ -455,7 +455,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v126 Imm(1)                                           -> x0
     v127 LocalAddr(-6)                                    -> x0
     v128 Imm(12)                                          -> x0
-    v129 BinopI { op=add, lhs=v77, rhs_imm=12 }           -> x0
+    v129 BinopI { op=add, lhs=v97, rhs_imm=12 }           -> x0
     v130 Imm(12)                                          -> x0
     v131 Imm(0)                                           -> x0
     v132 Imm(12)                                          -> x0
@@ -465,7 +465,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v136 Imm(1)                                           -> x0
     v137 LocalAddr(-6)                                    -> x0
     v138 Imm(13)                                          -> x0
-    v139 BinopI { op=add, lhs=v77, rhs_imm=13 }           -> x0
+    v139 BinopI { op=add, lhs=v97, rhs_imm=13 }           -> x0
     v140 Imm(13)                                          -> x0
     v141 Imm(0)                                           -> x0
     v142 Imm(13)                                          -> x0
@@ -475,7 +475,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v146 Imm(1)                                           -> x0
     v147 LocalAddr(-6)                                    -> x0
     v148 Imm(14)                                          -> x0
-    v149 BinopI { op=add, lhs=v147, rhs_imm=14 }          -> x0
+    v149 BinopI { op=add, lhs=v97, rhs_imm=14 }           -> x0
     v150 Imm(14)                                          -> x0
     v151 Imm(252579084)                                   -> x0
     v152 Imm(14)                                          -> x1
@@ -485,7 +485,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v156 Imm(1)                                           -> x1
     v157 LocalAddr(-6)                                    -> x1
     v158 Imm(15)                                          -> x1
-    v159 BinopI { op=add, lhs=v147, rhs_imm=15 }          -> x1
+    v159 BinopI { op=add, lhs=v97, rhs_imm=15 }           -> x1
     v160 Imm(15)                                          -> x1
     v161 StoreLocal { off=-6, disp=12, value=v151, kind=I32 } -> -
     v162 Imm(15)                                          -> x0

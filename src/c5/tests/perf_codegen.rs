@@ -2000,23 +2000,41 @@ fn x64_division_saves_nothing_it_does_not_clobber() {
     m.finish();
 }
 
-/// Six values live across a division, one more than the caller-saved
-/// registers outside rdx:rax, leave the sixth in rdx, which the division
-/// saves around itself; nothing is live in rax, which it does not save.
+/// Eight values live across a division, one more than the seven
+/// caller-saved registers outside rdx:rax, leave one in rax or rdx, which
+/// the division keeps around itself -- pushed, or stored below rsp in a
+/// frame with no pointer -- and it keeps nothing in the other.
 #[test]
-fn x64_division_saves_rdx_a_live_value_holds() {
-    const SRC: &str = "long keep(long a, long b, long c, long d, long e, long f) {\n\
+fn x64_division_saves_the_one_of_rdx_rax_a_live_value_holds() {
+    const SRC: &str = "long keep(long a, long b, long c, long d, long e, const long *p) {\n\
+        long x = p[0], y = p[1], z = p[2];\n\
         long q = a / b;\n\
-        return q + a + b + c + d + e + f;\n}\n";
+        return q + a + b + c + d + e + x + y + z;\n}\n";
     let insns = x64(SRC, "keep");
-    let div = insns.iter().position(uses_rdx_rax);
-    let push = insns.iter().position(|i| saves(i, 2) && i.op == 0x52);
-    let pop = insns.iter().position(|i| saves(i, 2) && i.op == 0x5A);
-    let around = div
-        .zip(push.zip(pop))
-        .is_some_and(|(d, (p, q))| p < d && d < q);
-    assert!(around, "{insns:x?}");
-    assert!(!insns.iter().any(|i| saves(i, 0)), "{insns:x?}");
+    let Some(div) = insns.iter().position(uses_rdx_rax) else {
+        panic!("no division: {insns:x?}");
+    };
+    // `mov [rsp + d], r` / `mov r, [rsp + d]` of a low register `r`.
+    let sp_move = |i: &X64Insn, op: u16, r: u8| {
+        i.op == op
+            && i.rex & 4 == 0
+            && i.modrm
+                .is_some_and(|m| (m >> 3) & 7 == r && m & 7 == 4 && m >> 6 != 3)
+            && i.sib.is_some_and(|s| s & 7 == 4)
+    };
+    let kept = |r: u8| {
+        let (before, after) = insns.split_at(div);
+        let pushed = before
+            .iter()
+            .any(|i| i.op == 0x50 + u16::from(r) && i.rex & 1 == 0)
+            && after
+                .iter()
+                .any(|i| i.op == 0x58 + u16::from(r) && i.rex & 1 == 0);
+        let stored =
+            before.iter().any(|i| sp_move(i, 0x89, r)) && after.iter().any(|i| sp_move(i, 0x8B, r));
+        pushed || stored
+    };
+    assert!(kept(0) != kept(2), "{insns:x?}");
 }
 
 /// The parameter's entry extension reads the incoming register.
@@ -3913,6 +3931,36 @@ u f(const unsigned char *ops, long n, const u *o, u *t) {\n\
         || format!("aarch64: {words:08x?}"),
     );
     m.finish();
+}
+
+/// Twelve values carried around a loop with its counter, its bound and one
+/// temporary hold fifteen general registers at once: the x86-64 banks give
+/// r10 and r11 with the rest, so nothing reaches the frame.
+#[test]
+fn a_loop_holding_fifteen_values_keeps_them_in_registers() {
+    const SRC: &str = "typedef unsigned long u;\n\
+u f(const u *p, long n) {\n\
+    u a = p[0], b = p[1], c = p[2], d = p[3], e = p[4], g = p[5];\n\
+    u h = p[6], i = p[7], j = p[8], k = p[9], l = p[10], m = p[11];\n\
+    for (long x = 0; x < n; x++) {\n\
+        u t = a + (b ^ (u)x);\n\
+        a = b + c; b = c ^ d; c = d + e; d = e ^ g; e = g + h; g = h ^ i;\n\
+        h = i + j; i = j ^ k; j = k + l; k = l ^ m; l = m + t; m = t ^ (a >> 1);\n\
+    }\n\
+    return a ^ b ^ c ^ d ^ e ^ g ^ h ^ i ^ j ^ k ^ l ^ m;\n\
+}\n";
+    let insns = x64(SRC, "f");
+    let frame = |i: &X64Insn| {
+        let Some(modrm) = i.modrm.filter(|m| m >> 6 != 3) else {
+            return false;
+        };
+        match modrm & 7 {
+            4 => i.sib.is_some_and(|s| s & 7 == 4) && i.rex & 1 == 0,
+            5 => modrm >> 6 != 0 && i.rex & 1 == 0,
+            _ => false,
+        }
+    };
+    assert!(!insns.iter().any(frame), "{insns:x?}");
 }
 
 /// A member of an element before the pointer is reached through the
@@ -8350,11 +8398,15 @@ fn x64_a_left_branch_group_pads_nothing() {
 /// Under `-mbranches-within-32B-boundaries` no local jump, nor a flag-setting
 /// instruction with the conditional jump it fuses with, crosses or ends on a
 /// 32-byte boundary, and the function starts on one; the same source has such
-/// groups under `-mno-`, and under `-O` with neither the loops' groups alone
-/// keep off the boundaries.
+/// groups under `-mno-` at some entry shift (`-fpatchable-function-entry`),
+/// and under `-O` with neither the loops' groups alone keep off the
+/// boundaries at every shift.
 #[test]
 fn x64_branch_groups_stay_within_32_byte_windows() {
-    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, PatchableEntry,
+        emit_native_with_options,
+    };
     const SRC: &str = "int match(const unsigned char *a, const unsigned char *b, int n, int lim) {\n\
     int best = 0;\n\
     for (int s = 0; s < n; s++) {\n\
@@ -8375,14 +8427,18 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
     )
     .compile()
     .expect("compile");
-    // Per option: the function's start, and the crossing groups and those of
-    // them that close a loop (a backward jump).
-    let groups = |on: Option<bool>| {
+    // Per option and entry shift: the function's start, and the crossing
+    // groups and those of them that close a loop (a backward jump).
+    let groups = |on: Option<bool>, shift: u32| {
         // The frame form is fixed: the premise is a layout with a crossing.
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             branches_within_32b: on,
             omit_frame_pointer: Some(false),
+            patchable_function_entry: PatchableEntry {
+                nops: shift,
+                before: 0,
+            },
             ..NativeOptions::new().with_optimize()
         };
         // The full banks, whatever caps the environment sets.
@@ -8420,18 +8476,19 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
             crossing.iter().filter(|&&b| b).count(),
         )
     };
-    let (_, without, _) = groups(Some(false));
     assert!(
-        without > 0,
+        (0..32).any(|shift| groups(Some(false), shift).1 > 0),
         "no group crosses a boundary without the option"
     );
-    let (start, with, _) = groups(Some(true));
-    assert_eq!(start % 32, 0);
-    assert_eq!(with, 0);
-    // Unset under `-O`: the groups inside loops, the back edges among them.
-    let (start, _, back) = groups(None);
-    assert_eq!(start % 32, 0);
-    assert_eq!(back, 0);
+    for shift in 0..32 {
+        let (start, with, _) = groups(Some(true), shift);
+        assert_eq!(start % 32, 0, "shift {shift}");
+        assert_eq!(with, 0, "shift {shift}");
+        // Unset under `-O`: the groups inside loops, the back edges among them.
+        let (start, _, back) = groups(None, shift);
+        assert_eq!(start % 32, 0, "shift {shift}");
+        assert_eq!(back, 0, "shift {shift}");
+    }
 }
 
 /// A load, an addition, subtraction or bitwise operation on it and the store

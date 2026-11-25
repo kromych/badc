@@ -110,6 +110,9 @@ pub(crate) struct Frame {
     /// zone reserves, slot `k` at bit `k`: the ones its lowerings take,
     /// packed in slot order above the outgoing area and the System V saves.
     pub keep: u32,
+    /// The spill region holds the two slots a borrowed scratch register
+    /// keeps its value in (`reg_alloc::ScratchSites::borrow_slot`).
+    pub borrow_area: bool,
     /// The callee-saved pushes come first and one allocation below them,
     /// then the xmm saves into it, so that each exit is `add rsp`, the pops
     /// and `ret` or `jmp`, the only epilogue the Win64 unwinder recognizes
@@ -296,8 +299,16 @@ pub(crate) fn compute_frame_with_tail_calls(
     keep: u32,
 ) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
+    // A site that borrowed a scratch register asks for two more spill slots
+    // ([`super::keep::BORROW_AREA`]).
+    let borrow_area = keep >> super::keep::BORROW_AREA & 1 != 0;
+    let keep = keep & !(1 << super::keep::BORROW_AREA);
+    let spills = match borrow_area {
+        true => super::ssa::emit_common::slots16(alloc.spill_count + 2),
+        false => base.spills,
+    };
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
-        (base.locals, base.spills, base.saved_gprs);
+        (base.locals, spills, base.saved_gprs);
     // The canary region joins the top of the locals region, so every offset
     // measured down from rbp shifts by it and no other region formula changes.
     let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
@@ -427,6 +438,7 @@ pub(crate) fn compute_frame_with_tail_calls(
         pushed,
         out: 0,
         keep: 0,
+        borrow_area,
         saves_first: false,
         align_region_off: if static_region_bytes > 0 {
             -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes + static_region_bytes)

@@ -496,12 +496,12 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v199 LifetimeEnd(0)                                   -> -
     v200 LocalAddr(-463)                                  -> x0
     v201 Imm(48)                                          -> x0
-    v202 BinopI { op=add, lhs=v200, rhs_imm=48 }          -> x0
+    v202 BinopI { op=add, lhs=v3, rhs_imm=48 }            -> x0
     v203 LocalAddr(-463)                                  -> x0
     v204 Imm(32)                                          -> x0
-    v205 BinopI { op=add, lhs=v200, rhs_imm=32 }          -> x0
+    v205 BinopI { op=add, lhs=v3, rhs_imm=32 }            -> x0
     v206 LocalAddr(-463)                                  -> x0
-    v207 BinopI { op=add, lhs=v200, rhs_imm=32 }          -> x0
+    v207 BinopI { op=add, lhs=v206, rhs_imm=32 }          -> x0
     v208 Imm(0)                                           -> x0
     v209 LoadLocal { off=-463, disp=32, kind=V128 }       -> d1
     v210 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(4), args=[v185] } -> d1
@@ -590,12 +590,12 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v293 LifetimeEnd(0)                                   -> -
     v294 LocalAddr(-463)                                  -> x0
     v295 Imm(64)                                          -> x0
-    v296 BinopI { op=add, lhs=v200, rhs_imm=64 }          -> x0
+    v296 BinopI { op=add, lhs=v206, rhs_imm=64 }          -> x0
     v297 LocalAddr(-463)                                  -> x0
     v298 Imm(48)                                          -> x0
-    v299 BinopI { op=add, lhs=v200, rhs_imm=48 }          -> x0
+    v299 BinopI { op=add, lhs=v206, rhs_imm=48 }          -> x0
     v300 LocalAddr(-463)                                  -> x0
-    v301 BinopI { op=add, lhs=v200, rhs_imm=48 }          -> x0
+    v301 BinopI { op=add, lhs=v206, rhs_imm=48 }          -> x0
     v302 Imm(0)                                           -> x0
     v303 LoadLocal { off=-463, disp=48, kind=V128 }       -> d1
     v304 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(8), args=[v279] } -> d1
@@ -684,12 +684,12 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v387 LifetimeEnd(0)                                   -> -
     v388 LocalAddr(-463)                                  -> x0
     v389 Imm(80)                                          -> x0
-    v390 BinopI { op=add, lhs=v200, rhs_imm=80 }          -> x0
+    v390 BinopI { op=add, lhs=v206, rhs_imm=80 }          -> x0
     v391 LocalAddr(-463)                                  -> x0
     v392 Imm(64)                                          -> x0
-    v393 BinopI { op=add, lhs=v391, rhs_imm=64 }          -> x0
+    v393 BinopI { op=add, lhs=v206, rhs_imm=64 }          -> x0
     v394 LocalAddr(-463)                                  -> x0
-    v395 BinopI { op=add, lhs=v391, rhs_imm=64 }          -> x0
+    v395 BinopI { op=add, lhs=v206, rhs_imm=64 }          -> x0
     v396 Imm(0)                                           -> x0
     v397 LoadLocal { off=-463, disp=64, kind=V128 }       -> d1
     v398 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(16), args=[v373] } -> d1
@@ -778,12 +778,12 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v481 LifetimeEnd(0)                                   -> -
     v482 LocalAddr(-463)                                  -> x0
     v483 Imm(96)                                          -> x0
-    v484 BinopI { op=add, lhs=v391, rhs_imm=96 }          -> x0
+    v484 BinopI { op=add, lhs=v482, rhs_imm=96 }          -> x0
     v485 LocalAddr(-463)                                  -> x0
     v486 Imm(80)                                          -> x0
-    v487 BinopI { op=add, lhs=v391, rhs_imm=80 }          -> x0
+    v487 BinopI { op=add, lhs=v482, rhs_imm=80 }          -> x0
     v488 LocalAddr(-463)                                  -> x0
-    v489 BinopI { op=add, lhs=v391, rhs_imm=80 }          -> x0
+    v489 BinopI { op=add, lhs=v482, rhs_imm=80 }          -> x0
     v490 Imm(0)                                           -> x0
     v491 LoadLocal { off=-463, disp=80, kind=V128 }       -> d1
     v492 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(32), args=[v467] } -> d1
@@ -872,12 +872,12 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v575 LifetimeEnd(0)                                   -> -
     v576 LocalAddr(-463)                                  -> x0
     v577 Imm(112)                                         -> x0
-    v578 BinopI { op=add, lhs=v391, rhs_imm=112 }         -> x0
+    v578 BinopI { op=add, lhs=v482, rhs_imm=112 }         -> x0
     v579 LocalAddr(-463)                                  -> x0
     v580 Imm(96)                                          -> x0
-    v581 BinopI { op=add, lhs=v579, rhs_imm=96 }          -> x0
+    v581 BinopI { op=add, lhs=v482, rhs_imm=96 }          -> x0
     v582 LocalAddr(-463)                                  -> x0
-    v583 BinopI { op=add, lhs=v579, rhs_imm=96 }          -> x0
+    v583 BinopI { op=add, lhs=v482, rhs_imm=96 }          -> x0
     v584 Imm(0)                                           -> x0
     v585 LoadLocal { off=-463, disp=96, kind=V128 }       -> d1
     v586 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(64), args=[v561] } -> d1
@@ -966,12 +966,12 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v669 LifetimeEnd(0)                                   -> -
     v670 LocalAddr(-463)                                  -> x0
     v671 Imm(128)                                         -> x0
-    v672 BinopI { op=add, lhs=v579, rhs_imm=128 }         -> x0
+    v672 BinopI { op=add, lhs=v482, rhs_imm=128 }         -> x0
     v673 LocalAddr(-463)                                  -> x0
     v674 Imm(112)                                         -> x0
-    v675 BinopI { op=add, lhs=v579, rhs_imm=112 }         -> x0
+    v675 BinopI { op=add, lhs=v482, rhs_imm=112 }         -> x0
     v676 LocalAddr(-463)                                  -> x0
-    v677 BinopI { op=add, lhs=v579, rhs_imm=112 }         -> x0
+    v677 BinopI { op=add, lhs=v482, rhs_imm=112 }         -> x0
     v678 Imm(0)                                           -> x0
     v679 LoadLocal { off=-463, disp=112, kind=V128 }      -> d1
     v680 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(128), args=[v655] } -> d1
@@ -1058,14 +1058,14 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v761 Imm(0)                                           -> x0
     v762 StoreLocal { off=-463, disp=128, value=v749, kind=V128 } -> -
     v763 LifetimeEnd(0)                                   -> -
-    v764 LocalAddr(-463)                                  -> x0
+    v764 LocalAddr(-463)                                  -> x1
     v765 Imm(144)                                         -> x0
-    v766 BinopI { op=add, lhs=v579, rhs_imm=144 }         -> x0
+    v766 BinopI { op=add, lhs=v764, rhs_imm=144 }         -> x0
     v767 LocalAddr(-463)                                  -> x0
     v768 Imm(128)                                         -> x0
-    v769 BinopI { op=add, lhs=v767, rhs_imm=128 }         -> x0
+    v769 BinopI { op=add, lhs=v764, rhs_imm=128 }         -> x0
     v770 LocalAddr(-463)                                  -> x0
-    v771 BinopI { op=add, lhs=v767, rhs_imm=128 }         -> x0
+    v771 BinopI { op=add, lhs=v764, rhs_imm=128 }         -> x0
     v772 Imm(0)                                           -> x0
     v773 LoadLocal { off=-463, disp=128, kind=V128 }      -> d1
     v774 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(27), args=[v749] } -> d1
@@ -1154,12 +1154,12 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v857 LifetimeEnd(0)                                   -> -
     v858 LocalAddr(-463)                                  -> x0
     v859 Imm(160)                                         -> x0
-    v860 BinopI { op=add, lhs=v767, rhs_imm=160 }         -> x0
+    v860 BinopI { op=add, lhs=v764, rhs_imm=160 }         -> x0
     v861 LocalAddr(-463)                                  -> x0
     v862 Imm(144)                                         -> x0
-    v863 BinopI { op=add, lhs=v767, rhs_imm=144 }         -> x0
+    v863 BinopI { op=add, lhs=v764, rhs_imm=144 }         -> x0
     v864 LocalAddr(-463)                                  -> x0
-    v865 BinopI { op=add, lhs=v767, rhs_imm=144 }         -> x0
+    v865 BinopI { op=add, lhs=v764, rhs_imm=144 }         -> x0
     v866 Imm(0)                                           -> x0
     v867 LoadLocal { off=-463, disp=144, kind=V128 }      -> d1
     v868 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(54), args=[v843] } -> d1
@@ -1248,7 +1248,7 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v951 LifetimeEnd(0)                                   -> -
     v952 LocalAddr(-464)                                  -> x0
     v953 ImmData(32)                                      -> x0
-    v954 Imm(0)                                           -> x1
+    v954 Imm(0)                                           -> x2
     v955 Load { addr=v953, disp=0, kind=V128, align=1 }   -> d0
     v956 Imm(0)                                           -> x0
     v957 Imm(0)                                           -> x0
@@ -1266,32 +1266,32 @@ fn ent_pc=1360 n_params=0 variadic=false locals=0
     v969 LifetimeEnd(0)                                   -> -
     v970 LifetimeEnd(0)                                   -> -
     v971 Imm(1)                                           -> x0
-    v972 Imm(0)                                           -> x1
+    v972 Imm(0)                                           -> x2
     terminator Jmp(b2)   (exit_acc=v971)
   block 1  start_pc=0
-    v976 LocalAddr(-464)                                  -> x1
-    v977 LocalAddr(-464)                                  -> x1
-    v978 LocalAddr(-463)                                  -> x1
+    v976 LocalAddr(-464)                                  -> x2
+    v977 LocalAddr(-464)                                  -> x2
+    v978 LocalAddr(-463)                                  -> x2
     v979 Extend { value=v973, kind=I32 }                  -> x2
     v980 BinopI { op=shl, lhs=v973, rhs_imm=4 }           -> x2
-    v981 Binop { op=add, lhs=v978, rhs=v980 }             -> x1
-    v982 Imm(0)                                           -> x2
+    v981 Binop { op=add, lhs=v764, rhs=v980 }             -> x2
+    v982 Imm(0)                                           -> x6
     v983 LoadLocal { off=-464, kind=V128 }                -> d0
     v984 Load { addr=v981, disp=0, kind=V128 }            -> d1
     v985 SimdVal { op=__builtin_ia32_aesenc128, imm=None, args=[v983, v984] } -> d0
-    v986 Imm(0)                                           -> x1
-    v987 Imm(0)                                           -> x1
-    v988 Imm(0)                                           -> x1
+    v986 Imm(0)                                           -> x2
+    v987 Imm(0)                                           -> x2
+    v988 Imm(0)                                           -> x2
     v989 StoreLocal { off=-464, value=v985, kind=V128 }   -> -
     v990 LifetimeEnd(0)                                   -> -
-    v991 Extend { value=v973, kind=I32 }                  -> x1
+    v991 Extend { value=v973, kind=I32 }                  -> x2
     v992 BinopI { op=add, lhs=v973, rhs_imm=1 }           -> x0
-    v993 Extend { value=v992, kind=I32, nsw }             -> x1
+    v993 Extend { value=v992, kind=I32, nsw }             -> x2
     terminator Jmp(b2)   (exit_acc=v992)
   block 2  start_pc=0
     v973 Phi { incoming=[b0:v971, b1:v992], kind=I64 }    -> x0
-    v974 Extend { value=v973, kind=I32 }                  -> x1
-    v975 BinopI { op=lt, lhs=v973, rhs_imm=10 }           -> x1
+    v974 Extend { value=v973, kind=I32 }                  -> x2
+    v975 BinopI { op=lt, lhs=v973, rhs_imm=10 }           -> x2
     terminator Bz { cond=v975, target=b3, fall=b1 }   (exit_acc=v975)
   block 3  start_pc=0
     v994 LocalAddr(-464)                                  -> x9

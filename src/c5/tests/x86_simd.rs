@@ -626,6 +626,55 @@ fn natively_on_avx512(src: &str, want: i32) {
     let _ = (src, want);
 }
 
+/// `Imm(0)` stands for a zero vector too. One read as a 128-bit operand,
+/// spilled when the banks are cut to one register each (two general
+/// registers), keeps its whole width in its slot: `_mm_sad_epu8` against it
+/// sums the block natively at -O as at the full register file.
+#[cfg(all(
+    target_arch = "x86_64",
+    any(target_os = "linux", target_os = "windows")
+))]
+#[test]
+fn a_spilled_zero_vector_keeps_its_width() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target, jit_run_with_options};
+    let src = "#include <emmintrin.h>\n\
+        static unsigned char buf[640];\n\
+        static long long sum(const unsigned char *p, const unsigned char *q, int n, int step, int a, int b) {\n\
+            __m128i acc = _mm_setzero_si128(), acc2 = _mm_setzero_si128();\n\
+            for (int i = 0, j = 0, k = n; i < n; i += step, j += a, k -= b) {\n\
+                __m128i x = _mm_loadu_si128((const __m128i *)(p + i));\n\
+                __m128i y = _mm_loadu_si128((const __m128i *)(q + (k & 0x1f0)));\n\
+                acc = _mm_add_epi64(acc, _mm_sad_epu8(x, _mm_setzero_si128()));\n\
+                acc2 = _mm_add_epi64(acc2, _mm_add_epi64(_mm_sad_epu8(y, _mm_setzero_si128()), _mm_cvtsi32_si128(j)));\n\
+            }\n\
+            long long s[2], t[2];\n\
+            _mm_storeu_si128((__m128i *)s, acc);\n\
+            _mm_storeu_si128((__m128i *)t, acc2);\n\
+            return s[0] + s[1] + (t[0] + t[1] > 0 ? 0 : 1);\n\
+        }\n\
+        int main(void) {\n\
+            for (int i = 0; i < 640; i++) buf[i] = (unsigned char)(i * 131 + (i >> 3));\n\
+            long long ref = 0;\n\
+            for (int i = 0; i < 640; i++) ref += buf[i];\n\
+            return sum(buf, buf + 128, 640, 16, 3, 5) == ref ? 0 : 1;\n\
+        }\n";
+    let host = if cfg!(windows) {
+        Target::WindowsX64
+    } else {
+        Target::LinuxX64
+    };
+    for (gpr, fpr) in [(1, 1), (1, 2), (usize::MAX, usize::MAX)] {
+        let code = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(gpr, fpr, || {
+            let program = Compiler::with_options(src.into(), host, CompileOptions::default())
+                .compile()
+                .expect("compile");
+            let opts = NativeOptions::new().with_optimize();
+            jit_run_with_options(&program, &[String::from("p")], opts, &mut |_| {}).expect("run")
+        });
+        assert_eq!(code, 0, "registers per bank: {gpr} general, {fpr} vector");
+    }
+}
+
 /// Each extension's header, under the name gcc and clang give it, compiles
 /// behind `<immintrin.h>` as those compilers require and on its own, and
 /// gives the extension's intrinsics.

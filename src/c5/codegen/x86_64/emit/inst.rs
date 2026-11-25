@@ -340,6 +340,7 @@ pub(super) fn emit_inst(
             };
             emit_mov_r_imm64(code, rd, *value);
             spill_dst_to_slot(code, dst, rd, frame);
+            spill_wide_rest(code, alloc.width(v), dst, rd, frame);
             Ok(())
         }
         Inst::LocalAddr(off) => {

@@ -619,13 +619,15 @@ pub(super) fn wide_args(
     alloc: &Allocation,
 ) -> bool {
     use super::abi_classify::{AggClass, RegClass};
-    args.iter().any(|&a| alloc.width(a) >= VecWidth::V256)
-        || aggs.iter().zip(&plan.placements).any(|(a, p)| {
-            matches!(p, super::ArgPlacement::StructRegs { .. })
-                && a.as_ref().is_some_and(
-                    |a| matches!(&a.class, AggClass::Regs(c) if c[..] == [RegClass::Vector256]),
-                )
-        })
+    // A zero read as a vector is as wide, but an integer register holds it.
+    args.iter().any(|&a| {
+        alloc.width(a) >= VecWidth::V256 && !matches!(place_of(alloc, a), Place::IntReg(_))
+    }) || aggs.iter().zip(&plan.placements).any(|(a, p)| {
+        matches!(p, super::ArgPlacement::StructRegs { .. })
+            && a.as_ref().is_some_and(
+                |a| matches!(&a.class, AggClass::Regs(c) if c[..] == [RegClass::Vector256]),
+            )
+    })
 }
 
 /// A direct call to `target_pc`: opcode E8 with a rel32 the fixup pass

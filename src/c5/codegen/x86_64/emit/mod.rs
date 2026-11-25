@@ -448,6 +448,20 @@ fn spill_dst_to_slot(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) {
     }
 }
 
+/// The cells past the first of the spill slot of an integer value as wide
+/// as `w`, written from `src`: a zero read as a vector keeps all of them
+/// (`reg_alloc::widen_vector_zeros`). Nothing for a scalar or a register.
+fn spill_wide_rest(code: &mut CodeBuf, w: VecWidth, dst: Place, src: Reg, frame: Frame) {
+    if let Place::Spill(slot) = dst {
+        for k in 1..w.units() {
+            let (sb, off) = spill_slot_addr(frame, slot + k);
+            let start = code.len();
+            emit_mov_mem_r(code, sb, off, src);
+            code.spill_stored(start, sb.0, off, src.0, SpillWidth::Int);
+        }
+    }
+}
+
 /// A value's `Place` in a register: `IntReg` in place, `Spill` loaded into
 /// `scratch`; `None` for the other kinds.
 fn materialize_int(code: &mut CodeBuf, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {

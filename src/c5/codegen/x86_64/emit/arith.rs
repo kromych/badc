@@ -284,6 +284,7 @@ pub(super) fn emit_copy(
         }
         (Place::IntReg(r), Place::Spill(_)) if !is_fp => {
             spill_dst_to_slot(code, dst, Reg(r), frame);
+            spill_wide_rest(code, w, dst, Reg(r), frame);
             return Ok(());
         }
         _ => {}
@@ -336,6 +337,7 @@ pub(super) fn emit_copy(
             emit_mov_rr(code, rd, rn);
         }
         spill_dst_to_slot(code, dst, rd, frame);
+        spill_wide_rest(code, w, dst, rd, frame);
     }
     Ok(())
 }

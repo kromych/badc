@@ -1882,7 +1882,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
     let crossings = call_crossings(func, &liveness, target);
     let ret_part_forbid = ret_part_crossing_forbid(func, target, &crossings, &node_of);
-    let wide = wide_values(func);
+    let mut wide = wide_values(func);
+    if target.is_x86_64() {
+        widen_vector_zeros(func, &mut wide);
+    }
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) || produces_pred_result(inst) {
@@ -3947,12 +3950,14 @@ pub(crate) fn color_graph(
         // one spills; Win64 saves the whole xmm register and takes it, but
         // no convention keeps a ymm register's upper half.
         let low64 = banks.callee_fpr_low64_only;
-        let callee =
-            if c.must_callee && (c.wide >= VecWidth::V256 || (c.wide == VecWidth::V128 && low64)) {
-                &callee_full[..0]
-            } else {
-                &callee_full[..callee_full.len().min(cap)]
-            };
+        let callee = if c.is_fp
+            && c.must_callee
+            && (c.wide >= VecWidth::V256 || (c.wide == VecWidth::V128 && low64))
+        {
+            &callee_full[..0]
+        } else {
+            &callee_full[..callee_full.len().min(cap)]
+        };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
         // A callee-saved register another node holds: the prologue saves it
@@ -4695,6 +4700,70 @@ impl VecWidth {
             VecWidth::V128 => 2,
             VecWidth::V256 => 4,
             VecWidth::V512 => 8,
+        }
+    }
+}
+
+/// `Inst::Imm(0)` stands for the zero of every width, a vector's included.
+/// On x86-64 a zero read as a vector operand -- a SIMD row's, a vector
+/// operation's, a vector store's or phi's -- takes the widest such width,
+/// so a spill keeps the whole vector: its slot is that wide, and the
+/// lowering zeroes every cell of it. Readers of the scalar find zero in the
+/// slot's first cell as before; in a register the vector forms extend it
+/// with `vmovq`.
+fn widen_vector_zeros(func: &FunctionSsa, wide: &mut [VecWidth]) {
+    let zero = |v: ValueId| matches!(func.insts.get(v as usize), Some(Inst::Imm(0)));
+    let demand = |v: ValueId, w: VecWidth, wide: &mut [VecWidth]| {
+        if w > VecWidth::Scalar && zero(v) && w > wide[v as usize] {
+            wide[v as usize] = w;
+        }
+    };
+    let store_width = |kind: StoreKind| match kind {
+        StoreKind::V128 => VecWidth::V128,
+        StoreKind::V256 => VecWidth::V256,
+        StoreKind::V512 => VecWidth::V512,
+        _ => VecWidth::Scalar,
+    };
+    for inst in &func.insts {
+        match inst {
+            Inst::SimdVal { op, args, .. } => {
+                let w = VecWidth::of_bytes(crate::c5::simd::get(*op).bytes);
+                for &a in args {
+                    demand(a, w, wide);
+                }
+            }
+            Inst::VecBinop {
+                bytes, lhs, rhs, ..
+            } => {
+                demand(*lhs, VecWidth::of_bytes(*bytes), wide);
+                demand(*rhs, VecWidth::of_bytes(*bytes), wide);
+            }
+            Inst::VecInsert { vec, bytes, .. } | Inst::VecExtract { vec, bytes, .. } => {
+                demand(*vec, VecWidth::of_bytes(*bytes), wide);
+            }
+            Inst::Store { value, kind, .. } | Inst::StoreLocal { value, kind, .. } => {
+                demand(*value, store_width(*kind), wide);
+            }
+            Inst::Phi { incoming, kind } => {
+                for &(_, v) in incoming {
+                    demand(v, VecWidth::of_load(*kind), wide);
+                }
+            }
+            _ => {}
+        }
+    }
+    // A copy of a widened zero is as wide.
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (v, inst) in func.insts.iter().enumerate() {
+            if let Inst::Copy { value, .. } = inst
+                && let Some(&w) = wide.get(*value as usize)
+                && w > wide[v]
+            {
+                wide[v] = w;
+                changed = true;
+            }
         }
     }
 }

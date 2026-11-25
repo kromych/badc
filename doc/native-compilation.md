@@ -616,7 +616,7 @@ branch simplification, loop rotation, unrolling of constant-trip loops,
 common-subexpression elimination, store-to-load forwarding, division by
 constants, rotates and byte reversals spelled with shifts and masks as one
 instruction, tail-call and tail-recursion elimination, and block layout. On
-x86-64 System V targets a function keeps no frame pointer unless it needs one
+x86-64 targets a function keeps no frame pointer unless it needs one
 (`-fomit-frame-pointer` in
 [command-line compatibility](std-conformance.md#command-line-compatibility)),
 and the jumps inside loops keep off 32-byte boundaries

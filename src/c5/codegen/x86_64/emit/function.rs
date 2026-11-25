@@ -231,7 +231,7 @@ pub(crate) fn emit_function(
     let abi = {
         let mut a = target.abi_for(func.conv);
         a.sibling_calls = sibling_calls;
-        a.red_zone = red_zone;
+        a.red_zone = red_zone && target.abi().red_zone;
         a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
@@ -259,161 +259,178 @@ pub(crate) fn emit_function(
         })
         .collect();
     let tail_pcs: Vec<usize> = tail_calls.iter().flatten().map(|t| t.pc).collect();
-    let frame = super::frame::compute_frame_with_tail_calls(func, alloc, abi, target, &tail_pcs);
-    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, target, frame.fp_scratch)
-        .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
-    {
-        return fail(why);
-    }
-    if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
-        return fail(super::ssa::emit_common::NO_REGION_BASE);
-    }
-    if frame.locals_shift() > 0 {
-        cx.local_shift_bytes
-            .insert(func.ent_pc, frame.locals_shift());
-    }
-    if func.n_params > 0 {
-        cx.param_frame_offsets.insert(
-            func.ent_pc,
-            (0..func.n_params)
-                .map(|i| param_home(i, func, frame, abi))
-                .collect(),
-        );
-    }
-    if !func.over_aligned.is_empty() {
-        cx.region_frame_offsets.insert(
-            func.ent_pc,
-            super::ssa::emit_common::region_frame_offsets(func, frame.align_region_off),
-        );
-    }
-    // A filter funclet gets the establisher frame, rbp less FrameOffset.
-    if !func.funclet_slots.is_empty() {
-        let mut offsets = Vec::with_capacity(func.funclet_slots.len());
-        for &slot in &func.funclet_slots {
-            let (base, disp) = super::mem::local_slot_base_disp(slot, func, frame, abi);
-            if base != Reg::RBP {
-                return fail("a filter funclet reaches an object off the frame pointer");
-            }
-            offsets.push(i64::from(frame.saves_top) + disp);
+    // The keep slots the frame reserves: none, then the ones its lowerings
+    // took where the emission found them missing ([`super::keep`]).
+    let mut keep = 0u32;
+    loop {
+        cx.code.take_kept();
+        let frame =
+            super::frame::compute_frame_with_tail_calls(func, alloc, abi, target, &tail_pcs, keep);
+        if let Some(why) =
+            super::ssa::reg_alloc::fp_scratch_shortfall(func, target, frame.fp_scratch)
+                .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
+        {
+            return fail(why);
         }
-        cx.funclet_frames.insert(func.ent_pc, offsets);
-    }
-    if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
-        return fail(super::ssa::emit_common::frame_too_large_msg(
-            frame.frame_bytes as i64,
-        ));
-    }
-    cx.frame_stack
-        .insert(func.ent_pc, frame_stack(func, frame, alloc, abi));
-    let param_from_home = compute_param_from_home(func, alloc, abi);
-    let param_plan = param_placements(func, abi);
-    // `-mno-sse` bars the SSE registers, `-mstrict-align` a store wider than the alignment.
-    let bulk_xmm = (!abi.no_fp_regs && !abi.strict_align)
-        .then(|| super::ssa::reg_alloc::free_fp_register(func, alloc, target, abi.fixed_regs))
-        .flatten();
-    let ends_path = super::ssa::emit_common::calls_ending_paths(func);
-    let fcx = FnCtx {
-        func,
-        alloc,
-        frame,
-        abi,
-        target,
-        bulk_xmm,
-        imports,
-        variadic_targets,
-        extern_tls_names,
-        extern_data_names,
-        extern_code_names,
-        tls_total_size,
-        param_from_home: &param_from_home,
-        param_plan: &param_plan,
-        name2entpc,
-        ends_path: &ends_path,
-    };
-    // A full leaf builds no frame to leave ahead of, and `-pg` without
-    // `-mfentry` calls `mcount` once the frame stands; the evaluation may
-    // need more temporaries than it has.
-    let mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
-    let early_exit = if repeat_tests && !mcount_frame && !is_full_leaf(func, frame, alloc, abi) {
-        super::ssa::early_exit::early_exit(func, &param_plan).filter(|exit| {
-            emit_early_test(&mut CodeBuf::default(), exit, frame.fixed_regs).is_some()
-                && emit_early_return(
-                    &mut CodeBuf::default(),
-                    exit,
-                    abi,
-                    frame.fixed_regs,
-                    &mut Vec::new(),
-                )
-        })
-    } else {
-        None
-    };
-    let plan =
-        super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests, early_exit.as_ref());
-    let endbr_targets = if abi.hardening.cf_protection_branch {
-        plan.landing_pads(func)
-    } else {
-        alloc::collections::BTreeSet::new()
-    };
-    // The absolute table load reads an 8-byte entry.
-    debug_assert!(!abs32_addrs || abs_jump_tables);
-    let out = Out {
-        cx,
-        fixups,
-        asm_section_text_refs,
-        asm_text_abs_refs,
-        asm_text_labels,
-        abs_addr_refs,
-        fp_literals: Vec::new(),
-    };
-    let entry_mark = out.mark();
-    let steps = flag_steps(func, alloc);
-    let mut fe = FnEmit {
-        start: entry_mark.code,
-        out,
-        fcx,
-        ret_tags,
-        tail_calls,
-        entry,
-        early_exit,
-        early_site: (0, 0),
-        abs_jump_tables,
-        abs32_addrs,
-        endbr_targets,
-        param_prebatched: alloc::vec![false; func.insts.len()],
-        mem_dest: memory_destinations(func, alloc, &steps),
-        frame_bases: frame_bases_only(func, alloc),
-        flag_steps: steps,
-        plan,
-        block_offsets: alloc::vec![0; func.blocks.len()],
-        branch_fixups: Vec::new(),
-        branch_short: Vec::new(),
-        windows: BranchWindows {
-            on: padding != super::super::BranchPadding::Off,
-            pad: match padding {
-                super::super::BranchPadding::Loops => {
-                    crate::c5::codegen::passes::layout::loop_depths(func)
-                        .iter()
-                        .map(|&d| d > 0)
-                        .collect()
+        if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
+            return fail(super::ssa::emit_common::NO_REGION_BASE);
+        }
+        if frame.locals_shift() > 0 {
+            cx.local_shift_bytes
+                .insert(func.ent_pc, frame.locals_shift());
+        }
+        if func.n_params > 0 {
+            cx.param_frame_offsets.insert(
+                func.ent_pc,
+                (0..func.n_params)
+                    .map(|i| param_home(i, func, frame, abi))
+                    .collect(),
+            );
+        }
+        if !func.over_aligned.is_empty() {
+            cx.region_frame_offsets.insert(
+                func.ent_pc,
+                super::ssa::emit_common::region_frame_offsets(func, frame.align_region_off),
+            );
+        }
+        // A filter funclet gets the establisher frame, rbp less FrameOffset.
+        if !func.funclet_slots.is_empty() {
+            let mut offsets = Vec::with_capacity(func.funclet_slots.len());
+            for &slot in &func.funclet_slots {
+                let (base, disp) = super::mem::local_slot_base_disp(slot, func, frame, abi);
+                if base != Reg::RBP {
+                    return fail("a filter funclet reaches an object off the frame pointer");
                 }
-                _ => Vec::new(),
-            },
-            ..BranchWindows::default()
-        },
-        seh_placed: Vec::new(),
-        exits: Vec::new(),
-        block_addr_fixups: Vec::new(),
-        jump_table_fixups: Vec::new(),
-    };
-    match fe.run(rodata) {
-        Ok(uw) => {
-            fn_unwind.push(uw);
-            Ok(())
+                offsets.push(i64::from(frame.saves_top) + disp);
+            }
+            cx.funclet_frames.insert(func.ent_pc, offsets);
         }
-        Err(e) => {
-            fe.out.restore(&entry_mark);
-            Err(e)
+        if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
+            return fail(super::ssa::emit_common::frame_too_large_msg(
+                frame.frame_bytes as i64,
+            ));
+        }
+        cx.frame_stack
+            .insert(func.ent_pc, frame_stack(func, frame, alloc, abi));
+        let param_from_home = compute_param_from_home(func, alloc, abi);
+        let param_plan = param_placements(func, abi);
+        // `-mno-sse` bars the SSE registers, `-mstrict-align` a store wider than the alignment.
+        let bulk_xmm = (!abi.no_fp_regs && !abi.strict_align)
+            .then(|| super::ssa::reg_alloc::free_fp_register(func, alloc, target, abi.fixed_regs))
+            .flatten();
+        let ends_path = super::ssa::emit_common::calls_ending_paths(func);
+        let fcx = FnCtx {
+            func,
+            alloc,
+            frame,
+            abi,
+            target,
+            bulk_xmm,
+            imports,
+            variadic_targets,
+            extern_tls_names,
+            extern_data_names,
+            extern_code_names,
+            tls_total_size,
+            param_from_home: &param_from_home,
+            param_plan: &param_plan,
+            name2entpc,
+            ends_path: &ends_path,
+        };
+        // A full leaf builds no frame to leave ahead of, and `-pg` without
+        // `-mfentry` calls `mcount` once the frame stands; the evaluation may
+        // need more temporaries than it has.
+        let mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
+        let early_exit = if repeat_tests && !mcount_frame && !is_full_leaf(func, frame, alloc, abi)
+        {
+            super::ssa::early_exit::early_exit(func, &param_plan).filter(|exit| {
+                emit_early_test(&mut CodeBuf::default(), exit, frame.fixed_regs).is_some()
+                    && emit_early_return(
+                        &mut CodeBuf::default(),
+                        exit,
+                        abi,
+                        frame.fixed_regs,
+                        &mut Vec::new(),
+                    )
+            })
+        } else {
+            None
+        };
+        let plan = super::ssa::block_plan::BlockPlan::build(
+            func,
+            alloc,
+            repeat_tests,
+            early_exit.as_ref(),
+        );
+        let endbr_targets = if abi.hardening.cf_protection_branch {
+            plan.landing_pads(func)
+        } else {
+            alloc::collections::BTreeSet::new()
+        };
+        // The absolute table load reads an 8-byte entry.
+        debug_assert!(!abs32_addrs || abs_jump_tables);
+        let out = Out {
+            cx,
+            fixups,
+            asm_section_text_refs,
+            asm_text_abs_refs,
+            asm_text_labels,
+            abs_addr_refs,
+            fp_literals: Vec::new(),
+        };
+        let entry_mark = out.mark();
+        let steps = flag_steps(func, alloc);
+        let mut fe = FnEmit {
+            start: entry_mark.code,
+            out,
+            fcx,
+            ret_tags,
+            tail_calls: tail_calls.clone(),
+            entry,
+            early_exit,
+            early_site: (0, 0),
+            abs_jump_tables,
+            abs32_addrs,
+            endbr_targets,
+            param_prebatched: alloc::vec![false; func.insts.len()],
+            mem_dest: memory_destinations(func, alloc, &steps),
+            frame_bases: frame_bases_only(func, alloc),
+            flag_steps: steps,
+            plan,
+            block_offsets: alloc::vec![0; func.blocks.len()],
+            branch_fixups: Vec::new(),
+            branch_short: Vec::new(),
+            windows: BranchWindows {
+                on: padding != super::super::BranchPadding::Off,
+                pad: match padding {
+                    super::super::BranchPadding::Loops => {
+                        crate::c5::codegen::passes::layout::loop_depths(func)
+                            .iter()
+                            .map(|&d| d > 0)
+                            .collect()
+                    }
+                    _ => Vec::new(),
+                },
+                ..BranchWindows::default()
+            },
+            seh_placed: Vec::new(),
+            exits: Vec::new(),
+            block_addr_fixups: Vec::new(),
+            jump_table_fixups: Vec::new(),
+        };
+        match fe.run(rodata) {
+            Ok(Ok(uw)) => {
+                fn_unwind.push(uw);
+                return Ok(());
+            }
+            Ok(Err(more)) => {
+                fe.out.restore(&entry_mark);
+                keep |= more;
+            }
+            Err(e) => {
+                fe.out.restore(&entry_mark);
+                return Err(e);
+            }
         }
     }
 }
@@ -577,7 +594,10 @@ struct FnEmit<'a, 'b> {
 
 impl FnEmit<'_, '_> {
     /// Returns the function's unwind record, or `None` on a bail.
-    fn run(&mut self, rodata: &mut super::RodataBuild) -> Emit<super::FnUnwind> {
+    /// The function's code and its unwind record; `Err` with the keep slots
+    /// its lowerings took, which the frame must reserve before it is
+    /// emitted again.
+    fn run(&mut self, rodata: &mut super::RodataBuild) -> Emit<Result<super::FnUnwind, u32>> {
         let func = self.fcx.func;
         let mut uw = self.emit_entry();
         uw.begin = self.start as u32;
@@ -602,6 +622,11 @@ impl FnEmit<'_, '_> {
         );
         self.place_entry_params()?;
         let body = self.emit_body()?;
+        let frame = self.fcx.frame;
+        let kept = self.out.cx.code.take_kept();
+        if !frame.red_zone && kept & !frame.keep != 0 {
+            return Ok(Err(kept));
+        }
         if func.has_seh() {
             let rows = super::ssa::emit_common::seh_rows(
                 func,
@@ -636,7 +661,7 @@ impl FnEmit<'_, '_> {
         if !uw.leaf {
             uw.exits = core::mem::take(&mut self.exits);
         }
-        Ok(uw)
+        Ok(Ok(uw))
     }
 
     /// The function entry: a naked function's body is its whole machine
@@ -1774,20 +1799,21 @@ pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame, alloc: &Alloc
 
 /// Restore what [`save_callee_saved`] saved, with rsp at the frame bottom:
 /// the xmm loads, then the pops, which leave rsp `pushed_gpr_bytes` above it.
-/// The Win64 block's xmm loads go through rbp; its pops are the teardown's.
-/// No rsp-relative access may follow. Every return path routes through this
-/// so the saved-region offsets cannot drift. Each pop goes to `ex` at the
-/// offset past it.
+/// The Win64 block's xmm loads go through rbp, or rsp with no frame pointer;
+/// its pops are the teardown's. No rsp-relative access may follow. Every
+/// return path routes through this so the saved-region offsets cannot
+/// drift. Each pop and xmm reload goes to `ex` at the offset past it.
 pub(super) fn restore_callee_saved(
     code: &mut Vec<u8>,
     frame: Frame,
     alloc: &Allocation,
     ex: &mut Vec<(usize, super::X64ExitStep)>,
 ) {
-    if frame.saves_top > 0 {
-        let base = -(frame.saves_top as i32);
+    if frame.saves_top > 0 || frame.saves_first {
+        let (base, disp) = frame.fp_addr(-(frame.saves_top as i32));
         for (j, &r) in alloc.fp_used.iter().enumerate() {
-            emit_movups_xmm_mem(code, Reg(r), Reg::RBP, base + j as i32 * 16);
+            emit_movups_xmm_mem(code, Reg(r), base, disp + j as i32 * 16);
+            ex.push((code.len(), super::X64ExitStep::LoadXmm(r)));
         }
         return;
     }
@@ -1798,6 +1824,7 @@ pub(super) fn restore_callee_saved(
     let base = saved_xmm_off(alloc);
     for (i, &r) in alloc.fp_used.iter().enumerate() {
         emit_movups_xmm_mem(code, Reg(r), Reg::RSP, base + (i as i32) * 16);
+        ex.push((code.len(), super::X64ExitStep::LoadXmm(r)));
     }
     for &r in alloc.gpr_used.iter() {
         emit_pop_r(code, Reg(r));
@@ -1951,6 +1978,17 @@ fn emit_pointerless_prologue(
     mut uw: super::FnUnwind,
     rel: impl Fn(&Vec<u8>) -> u32,
 ) -> super::FnUnwind {
+    if frame.saves_first {
+        emit_saves_first(code, alloc, frame, &mut uw, rel);
+        // Parameters in the caller's home area alone leave rsp at the return
+        // address, as a full leaf does.
+        uw.leaf = uw.steps.is_empty();
+        emit_canary_store(code, frame, abi, extern_data_refs);
+        emit_param_homes(code, func, alloc, frame, abi);
+        emit_struct_param_scatter(code, func, frame, abi);
+        emit_struct_stack_param_copy(code, func, frame, abi);
+        return uw;
+    }
     match frame.sp_alloc(pushed_gpr_bytes(alloc)) {
         0 => {}
         8 => {
@@ -1988,6 +2026,73 @@ fn emit_pointerless_prologue(
     emit_struct_param_scatter(code, func, frame, abi);
     emit_struct_stack_param_copy(code, func, frame, abi);
     uw
+}
+
+/// The saves of a Win64 frame with no pointer ([`Frame::saves_first`]): the
+/// pushes, one allocation, which past one unprobed step follows probes of
+/// its pages ([`emit_probes_below_rsp`]), and the xmm stores into the block
+/// below the pushes, each a step the unwind codes describe:
+/// `UWOP_PUSH_NONVOL`, `UWOP_ALLOC_SMALL` or `UWOP_ALLOC_LARGE`, and
+/// `UWOP_SAVE_XMM128` at its offset from the body's rsp. Eight bytes alone
+/// are a `push`, as in [`emit_pointerless_prologue`].
+fn emit_saves_first(
+    code: &mut CodeBuf,
+    alloc: &Allocation,
+    frame: Frame,
+    uw: &mut super::FnUnwind,
+    rel: impl Fn(&Vec<u8>) -> u32,
+) {
+    for &r in &alloc.gpr_used {
+        emit_push_r(code, Reg(r));
+        uw.steps.push((rel(code), PrologueStep::Push(r)));
+    }
+    match frame.sp_alloc(pushed_gpr_bytes(alloc)) {
+        0 => {}
+        8 => emit_push_r(code, Reg::RAX),
+        n if n > MAX_UNPROBED_STACK_STEP => {
+            emit_probes_below_rsp(code, n);
+            super::encode::emit_sub_rsp_probed(code, n);
+        }
+        n => emit_sub_rsp(code, n),
+    }
+    if let n @ 1.. = frame.sp_alloc(pushed_gpr_bytes(alloc)) {
+        uw.steps.push((rel(code), PrologueStep::Alloc(n)));
+    }
+    let base = frame.frame_bytes - frame.saves_top;
+    for (j, &x) in alloc.fp_used.iter().enumerate() {
+        let off = base + j as u32 * 16;
+        emit_movups_mem_xmm(code, Reg::RSP, off as i32, Reg(x));
+        uw.steps
+            .push((rel(code), PrologueStep::SaveXmm { xmm: x, off }));
+    }
+}
+
+/// Touch each page an allocation of `bytes` will cover, from rsp down, with
+/// rsp in place, so that one `sub` then takes them all as the stack's guard
+/// page grows it, and that `sub` alone describes the allocation. Past
+/// [`STACK_PROBE_UNROLL_MAX`] pages a loop counts down r11, which holds
+/// nothing in the prologue.
+fn emit_probes_below_rsp(code: &mut CodeBuf, bytes: u32) {
+    let pages = bytes / STACK_PROBE_PAGE;
+    let page = STACK_PROBE_PAGE as i32;
+    if pages <= STACK_PROBE_UNROLL_MAX {
+        for k in 1..=pages as i32 {
+            super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, -k * page, 0);
+        }
+    } else {
+        super::encode::emit_mov_r_imm64(code, Reg::R11, -i64::from(page));
+        let top = code.len();
+        super::encode::emit_mi_sib(code, Mnem::Mov, 8, (Reg::RSP, Reg::R11, 1, 0), 0);
+        super::encode::emit_ri(code, Mnem::Sub, 8, Reg::R11, page);
+        super::encode::emit_ri(code, Mnem::Cmp, 8, Reg::R11, -(pages as i32 + 1) * page);
+        super::encode::emit_jcc_rel32(code, Cc::Ne, 0);
+        let rel = (top as i64 - code.len() as i64) as i32;
+        let at = code.len() - 4;
+        code[at..at + 4].copy_from_slice(&rel.to_le_bytes());
+    }
+    if bytes % STACK_PROBE_PAGE > MAX_UNPROBED_STACK_STEP {
+        super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, -(bytes as i32), 0);
+    }
 }
 
 /// Store each register-passed scalar parameter into its home
@@ -2395,6 +2500,23 @@ pub(super) fn emit_frame_teardown(
 ) {
     use super::X64ExitStep as S;
     if is_full_leaf(func, frame, alloc, abi) {
+        return;
+    }
+    // A Win64 frame with no pointer: `add rsp` up to the pushes, the pops.
+    // r11 holds no return value and no tail call's argument.
+    if frame.saves_first {
+        match frame.sp_alloc(pushed_gpr_bytes(alloc)) {
+            0 => {}
+            8 => emit_pop_r(code, Reg::R11),
+            n => emit_add_rsp(code, n),
+        }
+        if let n @ 1.. = frame.sp_alloc(pushed_gpr_bytes(alloc)) {
+            ex.push((code.len(), S::Dealloc(n)));
+        }
+        for &r in alloc.gpr_used.iter().rev() {
+            emit_pop_r(code, Reg(r));
+            ex.push((code.len(), S::Pop(r)));
+        }
         return;
     }
     // The Win64 block: `lea rsp` onto the last push, the pops, `pop rbp`, the

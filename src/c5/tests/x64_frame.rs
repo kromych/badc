@@ -77,10 +77,10 @@ fn insns_of(obj: &[u8], name: &str) -> Vec<X64Insn> {
 }
 
 /// The registers the target's convention has the callee preserve: rbp is
-/// one where a frame with no pointer saves it as such, on System V.
+/// one where a frame with no pointer saves it as such.
 fn callee_saved(target: Target) -> &'static [u8] {
     match target {
-        Target::WindowsX64 => &[3, 6, 7, 12, 13, 14, 15],
+        Target::WindowsX64 => &[3, 5, 6, 7, 12, 13, 14, 15],
         _ => &[3, 5, 12, 13, 14, 15],
     }
 }
@@ -110,7 +110,9 @@ fn rsp_adjust(i: &X64Insn, modrm: u8) -> Option<u32> {
 /// the entry's test branches to ahead of the frame. A Win64 save block adds
 /// its xmm saves, `(xmm, offset from rsp)`, and its size, rbp's distance
 /// above the rsp it was set from (0 without the block). A frame with no
-/// pointer has its `sub` take the 8 bytes `push rbp` would.
+/// pointer has its `sub` take the 8 bytes `push rbp` would; on Win64 the
+/// `sub` follows the pushes and the xmm saves follow it (`saves_first`), at
+/// their offsets from the body's rsp.
 #[derive(Debug)]
 struct Frame {
     alloc: u32,
@@ -122,6 +124,7 @@ struct Frame {
     pointerless: bool,
     /// A frame with no pointer's outgoing-argument area, below the pushes.
     out: u32,
+    saves_first: bool,
 }
 
 impl Frame {
@@ -140,12 +143,23 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
     let entry = insns
         .iter()
         .position(|x| !matches!(x.op, 0x0F1E | 0x0F1F | 0x90 | 0xE8))?;
-    // The frame record: `push rbp; mov rbp, rsp`, or Win64's `push rbp`.
+    // The frame record: `push rbp; mov rbp, rsp`, or Win64's `push rbp` and
+    // the save block that ends in `lea rbp, [rsp + d]`.
     let record = |k: usize| {
         let sets_rbp = |m: &X64Insn| m.op == 0x89 && m.rex_w() && m.modrm == Some(0xE5);
+        let lea_rbp = |m: &X64Insn| m.op == 0x8D && m.rex_w() && m.regs().0 == 5;
+        let in_block = |m: &&X64Insn| {
+            stack_op(m, 0x50, target).is_some()
+                || rsp_adjust(m, 0xEC).is_some()
+                || (m.op == 0x0F11 && m.mem_base() == Some(4))
+        };
+        let block = || {
+            let mut rest = insns[k + 1..].iter().skip_while(in_block);
+            rest.next().is_some_and(|m| sets_rbp(m) || lea_rbp(m))
+        };
         insns[k].op == 0x55
             && insns[k].rex == 0
-            && (target == Target::WindowsX64 || insns.get(k + 1).is_some_and(sets_rbp))
+            && (insns.get(k + 1).is_some_and(sets_rbp) || target == Target::WindowsX64 && block())
     };
     let opens = |k: usize| {
         record(k)
@@ -172,6 +186,31 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
         );
     }
     let sub = rsp_adjust(&insns[i], 0xEC);
+    if !record(i) && target == Target::WindowsX64 {
+        let mut pushes = Vec::new();
+        while let Some(r) = stack_op(&insns[i], 0x50, target) {
+            pushes.push(r);
+            i += 1;
+        }
+        let alloc = rsp_adjust(&insns[i], 0xEC).unwrap_or(0);
+        i += usize::from(alloc > 0);
+        let mut xmm_saves = Vec::new();
+        while insns[i].op == 0x0F11 && insns[i].mem_base() == Some(4) {
+            xmm_saves.push((insns[i].regs().0, insns[i].disp));
+            i += 1;
+        }
+        return Some(Frame {
+            alloc,
+            pushes,
+            xmm_saves,
+            block: 0,
+            body: i,
+            early,
+            pointerless: true,
+            out: 0,
+            saves_first: true,
+        });
+    }
     if !record(i) {
         let alloc = sub.unwrap_or(0);
         let mut pushes = Vec::new();
@@ -190,6 +229,7 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
             early,
             pointerless: true,
             out,
+            saves_first: false,
         });
     }
     let mov = insns[i + 1];
@@ -252,6 +292,7 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
         early,
         pointerless: false,
         out: 0,
+        saves_first: false,
     })
 }
 
@@ -274,8 +315,9 @@ fn check_exit(insns: &[X64Insn], e: usize, frame: &Frame, target: Target, what: 
     let ctx = || format!("{what}: exit at {:#x}: {insns:x?}", insns[e].at);
     let mut t = e - 1;
     if frame.pointerless {
-        // The pops leave rsp where the `sub` did; with none, the pops end the exit.
-        if frame.alloc == 0 {
+        // The pops leave rsp where the `sub` did; with none, or on Win64, the
+        // pops end the exit.
+        if frame.alloc == 0 || frame.saves_first {
             t = e;
         } else {
             assert_eq!(
@@ -325,6 +367,15 @@ fn check_exit(insns: &[X64Insn], e: usize, frame: &Frame, target: Target, what: 
     }
     // Collected from the teardown backwards, the pops read as the pushes.
     assert_eq!(pops, frame.pushes, "restore order: {}", ctx());
+    if frame.saves_first && frame.alloc > 0 {
+        assert_eq!(
+            rsp_adjust(&insns[j - 1], 0xC4),
+            Some(frame.alloc),
+            "teardown: {}",
+            ctx()
+        );
+        j -= 1;
+    }
     // The outgoing area goes first.
     if frame.out > 0 {
         assert_eq!(
@@ -400,6 +451,53 @@ fn every_exit_mirrors_the_prologue() {
     assert!(
         saving > 100,
         "{saving} functions with saves: the corpus is too thin"
+    );
+}
+
+/// Win64 grants no red zone: a frame with no pointer keeps a register its
+/// lowering borrows -- rax and rdx around a division here -- in a slot
+/// inside the frame, which the store and the reload around the borrow
+/// share, and no instruction addresses below rsp. With the banks full and
+/// capped, so that more values are live across each borrow.
+#[test]
+fn win64_keeps_borrowed_registers_inside_the_frame() {
+    let src = include_str!("../../../tests/fixtures/c/frame_without_pointer_borrows.c");
+    let target = Target::WindowsX64;
+    let mut kept = 0;
+    for caps in [FULL, (2, 2)] {
+        let obj = object(src, target, true, caps, NativeOptions::new());
+        for (name, _) in elf_func_symbols(&obj) {
+            let insns = insns_of(&obj, &name);
+            let Some(frame) = frame_of(&insns, target) else {
+                continue;
+            };
+            for x in &insns {
+                let below = x.mem_base() == Some(4) && x.disp < 0;
+                assert!(!below, "{name} {caps:?}: below rsp: {insns:x?}");
+            }
+            if !frame.saves_first {
+                continue;
+            }
+            // `mov [rsp + d], r` and `mov r, [rsp + d]` of rax or rdx around
+            // a `div` or `idiv`.
+            let slot = |x: &X64Insn, op: u16| {
+                (x.op == op && x.rex_w() && x.mem_base() == Some(4) && x.regs().0 & !2 == 0)
+                    .then_some((x.regs().0, x.disp))
+            };
+            for (i, x) in insns.iter().enumerate() {
+                let divides = |y: &X64Insn| y.op == 0xF7 && y.regs().0 >= 6;
+                let Some(at) = slot(x, 0x89) else { continue };
+                let rest = &insns[i + 1..];
+                let Some(d) = rest.iter().position(divides) else {
+                    continue;
+                };
+                kept += usize::from(rest[d..].iter().any(|y| slot(y, 0x8B) == Some(at)));
+            }
+        }
+    }
+    assert!(
+        kept > 0,
+        "no register kept around a division in a frame slot"
     );
 }
 
@@ -981,7 +1079,7 @@ fn the_prologue_decoder_reads_a_frame_with_pushes_behind_every_entry_form() {
                 .collect();
             let alloc: u32 = allocs.iter().map(|a| a.1).sum();
             assert_eq!(alloc, frame.alloc, "{target:?} {what}: {code:02x?}");
-            if frame.block == 0 {
+            if frame.block == 0 && !frame.saves_first {
                 // The described allocation ends where the System V pushes begin.
                 let push = insns[frame.body - frame.pushes.len()];
                 assert_eq!(allocs[0].0 as usize, push.at, "{target:?} {what}");

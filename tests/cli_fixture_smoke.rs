@@ -513,6 +513,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("seh_context_record.c", 0),
     ("unwind_restores_callee_saved.c", 0),
     ("unwind_from_epilogue.c", 0),
+    ("unwind_from_a_fault_in_each_frame_shape.c", 0),
     ("seh_except_constant_filter.c", 0),
     ("seh_except_filter.c", 0),
     ("seh_finally.c", 0),

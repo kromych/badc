@@ -236,14 +236,18 @@ fn moves_rsp(mnemonic: &str, operands: &str) -> bool {
 
 /// The frame rules over one function's instructions.
 fn check_function(name: &str, insts: &[(String, String)], what: &str) {
-    // The frame record: `push %rbp` and `mov %rsp, %rbp`, or Win64's block.
-    // With no frame pointer, rbp is pushed as any callee-saved register.
+    // The frame record: `push %rbp` and `mov %rsp, %rbp`, or Win64's block,
+    // which ends in `lea d(%rsp), %rbp`. With no frame pointer, rbp is pushed
+    // as any callee-saved register.
     let win64 = what.starts_with("windows");
     let frame_at = (0..insts.len()).find(|&k| {
         let sets_rbp = insts
             .get(k + 1)
             .is_some_and(|(m, o)| m.starts_with("mov") && o == "%rsp, %rbp");
-        insts[k].0.starts_with("push") && insts[k].1 == "%rbp" && (win64 || sets_rbp)
+        let block = insts[k + 1..]
+            .iter()
+            .any(|(m, o)| m.starts_with("lea") && o.ends_with("(%rsp), %rbp"));
+        insts[k].0.starts_with("push") && insts[k].1 == "%rbp" && (win64 && block || sets_rbp)
     });
     match frame_at {
         Some(k) => {
@@ -334,11 +338,11 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
             }
             // The stack-passed parameters are read where the caller left
             // them, above the return address: through rbp, or with no frame
-            // pointer through rsp, past the frame and the return address.
+            // pointer through rsp, past the frame and the return address,
+            // and on Win64 past the four home slots.
             let stack7 = &funcs.iter().find(|(n, _)| n == "stack7").unwrap().1;
-            let sets_rbp = stack7
-                .iter()
-                .any(|(m, o)| m.starts_with("push") && o == "%rbp");
+            let sets_rbp =
+                (stack7.iter()).any(|(_, o)| o == "%rsp, %rbp" || o.ends_with("(%rsp), %rbp"));
             let below = stack7
                 .iter()
                 .take_while(|(m, o)| m.starts_with("push") || moves_rsp(m, o))
@@ -350,7 +354,8 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
             let incoming = match (target, sets_rbp) {
                 ("linux-x64", true) => "0x18(%rbp)".to_string(),
                 ("linux-x64", false) => format!("{:#x}(%rsp)", below + 16),
-                _ => "0x48(%rbp)".to_string(),
+                (_, true) => "0x48(%rbp)".to_string(),
+                (_, false) => format!("{:#x}(%rsp)", below + 64),
             };
             assert!(
                 stack7.iter().any(|(_, o)| o.starts_with(incoming.as_str())),

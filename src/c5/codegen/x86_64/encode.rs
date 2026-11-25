@@ -668,6 +668,13 @@ pub(crate) fn emit_sub_rsp(code: &mut Vec<u8>, imm: u32) {
     emit_ri(code, Mnem::Sub, 8, Reg::RSP, imm as i32);
 }
 
+/// [`emit_sub_rsp`] past one page, for an allocation whose pages the caller
+/// has probed.
+pub(crate) fn emit_sub_rsp_probed(code: &mut Vec<u8>, imm: u32) {
+    let imm = i32::try_from(imm).expect("rsp adjustment within i32");
+    emit_ri(code, Mnem::Sub, 8, Reg::RSP, imm);
+}
+
 /// `leave`: `mov rsp, rbp; pop rbp`.
 pub(crate) fn emit_leave(code: &mut Vec<u8>) {
     emit_byte(code, 0xC9);
@@ -2687,7 +2694,9 @@ fn apply_plt_call_fixups(
 /// `sub` and are not described. A frame with no pointer is `push rax` for 8
 /// bytes or `sub rsp` steps, each with its probe past one unprobed step,
 /// the pushes behind them, rbp among them, and a `sub rsp` for the
-/// outgoing-argument area, each a step. A leaf emits none of the above, and any
+/// outgoing-argument area, each a step; on Win64 the pushes come first, then
+/// `push rax` or a `sub rsp` behind the probes of its pages, then the xmm
+/// saves. A leaf emits none of the above, and any
 /// other shape is described as a frameless leaf -- safe (the unwinder
 /// returns off the top-of-stack RA) rather than codes that do not match the
 /// prologue. The test of a return taken ahead of the frame places `push rbp`
@@ -2753,6 +2762,38 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
     };
     // The probe store, `mov qword [rsp], 0`.
     let probe = [0x48u8, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
+    // `movups [rsp + d], xmm`: 0F 11, ModRM rm=100 with SIB 24, mod 00, 01 or
+    // 10; xmm8..15 behind REX.R (0x44).
+    let xmm_saves = |mut fp: usize, steps: &mut Vec<(u32, S)>| loop {
+        let (high, rest) = match at(fp) {
+            [0x44, rest @ ..] => (8, rest),
+            rest => (0, rest),
+        };
+        let (xmm, off, len) = match *rest {
+            [0x0F, 0x11, m, 0x24, ..] if m & 0xC7 == 0x04 => (high + (m >> 3 & 7), 0, 4),
+            [0x0F, 0x11, m, 0x24, d, ..] if m & 0xC7 == 0x44 && d < 0x80 => {
+                (high + (m >> 3 & 7), u32::from(d), 5)
+            }
+            [0x0F, 0x11, m, 0x24, a, b, c, d, ..] if m & 0xC7 == 0x84 => {
+                (high + (m >> 3 & 7), u32::from_le_bytes([a, b, c, d]), 8)
+            }
+            _ => return fp,
+        };
+        fp += len + usize::from(high > 0);
+        steps.push((fp as u32, S::SaveXmm { xmm, off }));
+    };
+    // The Win64 probes of the pages below rsp: `mov qword [rsp + d32], 0`,
+    // or the loop `mov r11, -4096`, `mov qword [rsp + r11], 0`, `sub r11,
+    // 4096`, `cmp r11, i32`, `jne`.
+    let probes = |mut fp: usize| loop {
+        fp += match *at(fp) {
+            [0x48, 0xC7, 0x84, 0x24, _, _, _, _, 0, 0, 0, 0, ..] => 12,
+            [0x49, 0xC7, 0xC3, ..] | [0x49, 0x81, 0xEB | 0xFB, ..] => 7,
+            [0x4A, 0xC7, 0x04, 0x1C, 0, 0, 0, 0, ..] => 8,
+            [0x0F, 0x85, ..] => 6,
+            _ => return fp,
+        };
+    };
     // A frame record: `push rbp`, then `mov rbp, rsp` or the Win64 block.
     let framed = |mut fp: usize| -> Option<Vec<(u32, S)>> {
         if at(fp).first() != Some(&0x55) {
@@ -2778,26 +2819,7 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
                 fp += len;
                 steps.push((fp as u32, S::Alloc(n)));
             }
-            // `movups [rsp + d], xmm`: 0F 11, ModRM rm=100 with SIB 24, mod 00, 01
-            // or 10; xmm8..15 behind REX.R (0x44).
-            loop {
-                let (high, rest) = match at(fp) {
-                    [0x44, rest @ ..] => (8, rest),
-                    rest => (0, rest),
-                };
-                let (xmm, off, len) = match *rest {
-                    [0x0F, 0x11, m, 0x24, ..] if m & 0xC7 == 0x04 => (high + (m >> 3 & 7), 0, 4),
-                    [0x0F, 0x11, m, 0x24, d, ..] if m & 0xC7 == 0x44 && d < 0x80 => {
-                        (high + (m >> 3 & 7), u32::from(d), 5)
-                    }
-                    [0x0F, 0x11, m, 0x24, a, b, c, d, ..] if m & 0xC7 == 0x84 => {
-                        (high + (m >> 3 & 7), u32::from_le_bytes([a, b, c, d]), 8)
-                    }
-                    _ => break,
-                };
-                fp += len + usize::from(high > 0);
-                steps.push((fp as u32, S::SaveXmm { xmm, off }));
-            }
+            fp = xmm_saves(fp, &mut steps);
             // `lea rbp, [rsp + d]`: 48 8D, ModRM reg=101 rm=100, SIB 24.
             let (off, len) = match *at(fp) {
                 [0x48, 0x8D, 0x6C, 0x24, d, ..] if d < 0x80 => (u32::from(d), 5),
@@ -2824,8 +2846,8 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
             fp += 1;
             steps.push((fp as u32, S::Alloc(8)));
         }
-        while let Some((n, len)) = sub(at(fp)) {
-            fp += len;
+        while let Some((n, len)) = sub(at(probes(fp))) {
+            fp = probes(fp) + len;
             if at(fp).starts_with(&probe) {
                 fp += probe.len();
             }
@@ -2840,10 +2862,21 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
             fp += len;
             steps.push((fp as u32, S::Push(r)));
         }
-        // The outgoing-argument area below the pushes.
-        if let Some((n, len)) = sub(at(fp)).filter(|_| !steps.is_empty()) {
-            fp += len;
+        // The outgoing-argument area below the pushes, or on Win64 the whole
+        // allocation and the xmm saves into it.
+        let alloc = sub(at(probes(fp))).filter(|_| !steps.is_empty());
+        if let Some((n, len)) = alloc {
+            fp = probes(fp) + len;
             steps.push((fp as u32, S::Alloc(n)));
+        } else if at(fp).first() == Some(&0x50) && !steps.is_empty() {
+            fp += 1;
+            steps.push((fp as u32, S::Alloc(8)));
+        }
+        if steps
+            .iter()
+            .all(|s| matches!(s.1, S::Push(_)) || s.0 as usize == fp)
+        {
+            fp = xmm_saves(fp, &mut steps);
         }
         // A `mov rbp, rsp` past pushes is a frame record out of order.
         let record = at(fp).starts_with(&[0x48, 0x89, 0xE5]);

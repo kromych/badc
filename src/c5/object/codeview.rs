@@ -115,8 +115,10 @@ const CV_ARM64_FP: u16 = 79;
 const CV_ARM64_SP: u16 = 81;
 
 /// `S_FRAMEPROC` flags: the locals and the parameters addressed off the
-/// frame pointer (`encodedLocalBasePointer`, `encodedParamBasePointer`).
+/// frame pointer (`encodedLocalBasePointer`, `encodedParamBasePointer`), or
+/// off the stack pointer.
 const FRAMEPROC_FP_BASES: u32 = (2 << 14) | (2 << 16);
+const FRAMEPROC_SP_BASES: u32 = (1 << 14) | (1 << 16);
 
 /// `CV_PFLAG_NOFPO`: the procedure keeps a frame pointer.
 const PROC_FRAME_POINTER: u8 = 0x01;
@@ -857,7 +859,7 @@ impl SymbolWriter {
         let debug_start = (f.prologue_end)
             .filter(|&p| p > f.low && p < f.high)
             .map_or(0, |p| (p - f.low) as u32);
-        let fp = uses_frame_pointer(&f.scope);
+        let fp = based_on(&f.scope, Register::FramePointer);
         let mut r = Rec::default();
         r.u32(0).u32(0).u32(0).u32(len).u32(debug_start).u32(len);
         r.u32(types.index(Some(f.ty))).u32(off).u16(seg);
@@ -867,7 +869,11 @@ impl SymbolWriter {
         let at = self.push(kind, &r.0);
         let mut frame = Rec::default();
         frame.u32(0).u32(0).u32(0).u32(0).u32(0).u16(0);
-        frame.u32(if fp { FRAMEPROC_FP_BASES } else { 0 });
+        frame.u32(match (fp, based_on(&f.scope, Register::StackPointer)) {
+            (true, _) => FRAMEPROC_FP_BASES,
+            (false, true) => FRAMEPROC_SP_BASES,
+            (false, false) => 0,
+        });
         self.push(S_FRAMEPROC, &frame.0);
         self.scope(&f.scope, at, types, map);
         let end = self.push(S_END, &[]);
@@ -918,17 +924,10 @@ impl SymbolWriter {
     }
 }
 
-fn uses_frame_pointer(s: &Scope) -> bool {
-    let fp = |v: &super::debug_model::Variable| {
-        matches!(
-            v.location,
-            Location::RegisterRelative {
-                base: Register::FramePointer,
-                ..
-            }
-        )
-    };
-    s.variables.iter().any(fp) || s.blocks.iter().any(|b| uses_frame_pointer(&b.scope))
+/// Whether a variable of `s` or of a block in it lies at an offset from `reg`.
+fn based_on(s: &Scope, reg: Register) -> bool {
+    let off = |v: &super::debug_model::Variable| matches!(v.location, Location::RegisterRelative { base, .. } if base == reg);
+    s.variables.iter().any(off) || s.blocks.iter().any(|b| based_on(&b.scope, reg))
 }
 
 /// A PDB string table's offset for each string `intern` was given.

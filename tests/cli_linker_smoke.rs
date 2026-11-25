@@ -24163,6 +24163,73 @@ fn a_pe_link_searches_lib_for_a_named_library() {
     }
 }
 
+/// A C++ exception thrown by cl-compiled code below badc functions built at
+/// -O, whose frames keep no frame pointer, reaches the cl caller's `catch`
+/// with the values that caller holds across the call intact: the unwind
+/// codes of each badc frame -- the pushes, the allocation and the xmm
+/// saves -- restore the registers it saved.
+#[cfg(windows)]
+#[test]
+fn a_cpp_throw_crosses_badc_frames_without_a_frame_pointer() {
+    let Some(WindowsCc::Msvc { cl, env }) = msvc_cl() else {
+        eprintln!("skipping a_cpp_throw_crosses_badc_frames_without_a_frame_pointer: no cl.exe");
+        return;
+    };
+    let dir = tempdir("cpp-throw-no-fp");
+    let cpp = write_source(
+        &dir,
+        "eh.cpp",
+        "extern \"C\" long relay(long v);\n\
+         extern \"C\" long thrower(long v) { if (v > 2) throw v; return v; }\n\
+         extern \"C\" long catcher(long v) {\n\
+             long a = v * 3, b = v ^ 5;\n\
+             double d = v * 1.5;\n\
+             long r;\n\
+             try { r = relay(v); } catch (long e) { r = e * 100; }\n\
+             return r + a + b + (long)d;\n\
+         }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "long thrower(long v);\n\
+         long catcher(long v);\n\
+         volatile long seed = 1;\n\
+         __attribute__((noinline)) long inner(long v) {\n\
+             double x = v * 0.5 + seed, y = x * x;\n\
+             long p = v * 7, q = v ^ 9, s = v + 11;\n\
+             long r = thrower(v);\n\
+             return r + p + q + s + (long)(x + y);\n\
+         }\n\
+         long relay(long v) { long k = v * 13 + seed; return inner(v) + k; }\n\
+         int main(void) { return catcher(3) == 300 + 9 + 6 + 4 ? 0 : 1; }\n",
+    );
+    let obj = dir.join("eh.obj");
+    run(
+        Command::new(&cl)
+            .envs(env.iter().map(|(k, v)| (k, v)))
+            // `/EHs`: under `/EHsc` cl takes an `extern "C"` callee to throw
+            // nothing and drops the `catch` around `relay`.
+            .args(["/nologo", "/c", "/O2", "/MT", "/EHs"])
+            .arg(format!("/Fo{}", obj.display()))
+            .arg(&cpp),
+        "compile the throwing unit with cl",
+    );
+    let exe = dir.join("eh.exe");
+    run(
+        Command::new(badc())
+            .envs(env.iter().map(|(k, v)| (k, v)))
+            .args(["--msvc", "-O"])
+            .arg(&main)
+            .arg(&obj)
+            .args(["-llibvcruntime", "-llibcmt", "-lucrt", "-o"])
+            .arg(&exe),
+        "link with the static VC runtime",
+    );
+    let out = Command::new(&exe).output().expect("run the image");
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+}
+
 /// A C++ throw in a cl object linked with MSVC's static VC runtime is
 /// caught: a link naming `libvcruntime` runs its initialization before the
 /// C initializers, as the VC startup code does.

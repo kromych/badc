@@ -3127,7 +3127,10 @@ fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
 /// outgoing-call scratch. The Win64 save block precedes it, so its
 /// `UWOP_SAVE_XMM128` offsets and `UWOP_PUSH_NONVOL` pops apply to the RSP
 /// it recovers. A frame of a page or more lowers to a stack-probe loop with
-/// no single `sub`, which runs after rbp is set and is left out.
+/// no single `sub`, which runs after rbp is set and is left out. A frame
+/// with no pointer states no frame register: its xmm saves follow the
+/// allocation, so their offsets are from the body's RSP, where the codes
+/// start.
 fn build_unwind_codes(uw: &super::FnUnwind, frame_start: u32) -> (Vec<u8>, u8, u8) {
     use super::PrologueStep as S;
     if uw.leaf {
@@ -3209,6 +3212,15 @@ fn build_x86_64_pdata(
                 })
         })
         .collect();
+    // CodeOffset and SizeOfProlog are bytes from the entry's start.
+    let long = (entries.iter().zip(&spans))
+        .find(|(uw, (begin, _))| (uw.steps.last()).is_some_and(|s| uw.begin + s.0 - begin > 255));
+    if let Some((uw, _)) = long {
+        return Err(C5Error::internal(format!(
+            "the prologue of the function at {:#x} runs past the 255 bytes its unwind codes reach",
+            uw.begin
+        )));
+    }
     let array_size = (entries.len() + foreign.len() + 1) as u32 * RUNTIME_FUNCTION_SIZE;
     let mut blobs: Vec<u8> = Vec::new();
     // An UNWIND_INFO, version 1, with the handler flags where a language
@@ -4497,8 +4509,9 @@ mod tests {
     }
 
     /// A return taken ahead of the frame and its test are left out of the
-    /// function's `RUNTIME_FUNCTION`, which spans the frame path from
-    /// `push rbp` to the early return; its codes count from `push rbp`.
+    /// function's `RUNTIME_FUNCTION`, which spans the frame path from its
+    /// first push, `push rbp` or with no frame pointer a callee-saved
+    /// register's, to the early return; its codes count from that push.
     #[test]
     fn pdata_entry_begins_at_the_frame_past_an_early_return_x64() {
         use crate::Compiler;
@@ -4510,62 +4523,70 @@ mod tests {
             .compile()
             .expect("compile");
         let target = super::super::Target::WindowsX64;
-        let options = super::super::NativeOptions {
-            optimize: true,
-            ..Default::default()
-        };
-        let build = lower_for(&program, target, options).expect("lower");
-        let early = build.early_returns[0];
-        let uw = build
-            .fn_unwind
-            .iter()
-            .find(|uw| uw.begin == early.begin)
-            .expect("fib's unwind record");
-        let begin = early.begin as usize;
-        let (frame, exit) = (begin + early.frame as usize, begin + early.exit as usize);
-        assert_eq!(build.text[frame], 0x55, "the frame opens with `push rbp`");
-        assert_eq!(build.text[exit - 1], 0xC3, "the frame path ends in `ret`");
-        assert_eq!(
-            build.text[uw.end as usize - 1],
-            0xC3,
-            "so does the early return"
-        );
-        let bytes = write(&program, &build, Machine::X86_64, target).expect("write PE");
-        let body = &build.text[begin..uw.end as usize];
-        let at = bytes
-            .windows(body.len())
-            .position(|w| w == body)
-            .expect("fib in the image");
-        let (exc_rva, exc_size) = read_data_directory(&bytes, DATA_DIRECTORY_EXCEPTION);
-        let pdata_off = rva_to_file_off(&bytes, exc_rva).expect("the exception directory");
-        let field = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
-        let entry = (0..exc_size as usize / 12)
-            .map(|i| pdata_off + i * 12)
-            .find(|&e| rva_to_file_off(&bytes, field(e)) == Some(at + early.frame as usize))
-            .expect("a RUNTIME_FUNCTION begins at the frame");
-        assert_eq!(
-            rva_to_file_off(&bytes, field(entry + 4)),
-            Some(at + early.exit as usize),
-            "and ends at the early return"
-        );
-        let info_rva = u32::from_le_bytes(bytes[entry + 8..entry + 12].try_into().unwrap());
-        let info = rva_to_file_off(&bytes, info_rva).expect("UNWIND_INFO");
-        let count = bytes[info + 2] as usize;
-        let codes = &bytes[info + 4..info + 4 + 2 * count];
-        assert_eq!(
-            &codes[2 * count - 2..],
-            &[1, UWOP_PUSH_NONVOL | (UNWIND_REG_RBP << 4)],
-            "`push rbp` ends one byte into the entry"
-        );
+        for (omit, pushed) in [(Some(false), UNWIND_REG_RBP), (None, 3)] {
+            let options = super::super::NativeOptions {
+                optimize: true,
+                omit_frame_pointer: omit,
+                ..Default::default()
+            };
+            let build = lower_for(&program, target, options).expect("lower");
+            let early = build.early_returns[0];
+            let uw = build
+                .fn_unwind
+                .iter()
+                .find(|uw| uw.begin == early.begin)
+                .expect("fib's unwind record");
+            let begin = early.begin as usize;
+            let (frame, exit) = (begin + early.frame as usize, begin + early.exit as usize);
+            assert_eq!(
+                build.text[frame],
+                0x50 + pushed,
+                "{omit:?}: the frame opens with the push"
+            );
+            assert_eq!(build.text[exit - 1], 0xC3, "the frame path ends in `ret`");
+            assert_eq!(
+                build.text[uw.end as usize - 1],
+                0xC3,
+                "so does the early return"
+            );
+            let bytes = write(&program, &build, Machine::X86_64, target).expect("write PE");
+            let body = &build.text[begin..uw.end as usize];
+            let at = bytes
+                .windows(body.len())
+                .position(|w| w == body)
+                .expect("fib in the image");
+            let (exc_rva, exc_size) = read_data_directory(&bytes, DATA_DIRECTORY_EXCEPTION);
+            let pdata_off = rva_to_file_off(&bytes, exc_rva).expect("the exception directory");
+            let field = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+            let entry = (0..exc_size as usize / 12)
+                .map(|i| pdata_off + i * 12)
+                .find(|&e| rva_to_file_off(&bytes, field(e)) == Some(at + early.frame as usize))
+                .expect("a RUNTIME_FUNCTION begins at the frame");
+            assert_eq!(
+                rva_to_file_off(&bytes, field(entry + 4)),
+                Some(at + early.exit as usize),
+                "and ends at the early return"
+            );
+            let info_rva = u32::from_le_bytes(bytes[entry + 8..entry + 12].try_into().unwrap());
+            let info = rva_to_file_off(&bytes, info_rva).expect("UNWIND_INFO");
+            let count = bytes[info + 2] as usize;
+            let codes = &bytes[info + 4..info + 4 + 2 * count];
+            assert_eq!(
+                &codes[2 * count - 2..],
+                &[1, UWOP_PUSH_NONVOL | (pushed << 4)],
+                "{omit:?}: the push ends one byte into the entry"
+            );
+        }
     }
 
     /// The steps `emit_prologue` records agree with what the prologue
     /// decoder (`decode_x86_64_prologue_unwind`) reads back from the
     /// instructions, up to the post-prologue anchor, on both x86-64 link
-    /// targets. The functions cover a leaf, the pushes as the whole frame (`saves`), an
-    /// imm8 and an imm32 `sub` ahead of pushes (`small`, `wide`), a probed
-    /// allocation, and FP work, which on Win64 saves xmm scratch; System V
-    /// under `-O` with and without the frame pointer.
+    /// targets. The functions cover a leaf, the pushes as the whole frame
+    /// (`saves`), an imm8 and an imm32 `sub` beside the pushes (`small`,
+    /// `wide`), a probed allocation and, with no frame pointer, one past a
+    /// page (`paged`), and FP work, which on Win64 saves xmm scratch; under
+    /// `-O` with and without the frame pointer.
     #[test]
     fn structured_and_decoded_unwind_agree_x64() {
         use crate::Compiler;
@@ -4576,6 +4597,7 @@ mod tests {
             long small(long a) { char buf[48]; snk(buf); return ext(a) + a + buf[0]; }
             long wide(long a) { char buf[1000]; snk(buf); return ext(a) + a + buf[0]; }
             int probed(int n) { char buf[8192]; buf[n & 4095] = (char)n; return buf[(n + 1) & 4095]; }
+            long paged(long a) { char buf[4064]; snk(buf); return ext(a) + a + buf[0]; }
             double fpwork(double x, long n) { return fext(x) * x + (double)(ext(n) + n); }
             double every(double x) {
                 double a = x * 1.5, b = a + 2, c = b * x, d = c - a, e = d * 0.5, f = e + b;
@@ -4585,7 +4607,7 @@ mod tests {
             int main(int argc, char **argv) {
                 (void)argv;
                 return add(argc, 2) + (int)saves(argc, 3) + (int)small(argc) + (int)wide(argc)
-                    + probed(argc) + (int)fpwork(1.5, argc) + (int)every(argc);
+                    + probed(argc) + (int)paged(argc) + (int)fpwork(1.5, argc) + (int)every(argc);
             }
         ";
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
@@ -4652,7 +4674,7 @@ mod tests {
             // Described allocations and frames without one (probed, and
             // under `-O` the pushes alone) are both present; with no frame
             // pointer every frame but the probed one allocates.
-            let pointerless = target == super::super::Target::LinuxX64 && optimize && omit;
+            let pointerless = optimize && omit;
             let (least_bare, least_no_fp) = match pointerless {
                 true => (1, 4),
                 false => (1 + usize::from(optimize), 0),
@@ -4908,12 +4930,18 @@ mod tests {
     }
 
     /// Replay of `codes` as `RtlVirtualUnwind` processes them from the body:
-    /// in array order, from the RSP the frame register gives, recording where
-    /// each register is read. Returns `(saved, rsp)`: each register's slot as
-    /// a byte offset from the entry RSP, and the RSP the replay leaves, which
-    /// must be the entry RSP, where the return address is.
-    fn replay(codes: &[u8], frame: u8, rbp: i64) -> (Vec<(u8, bool, i64)>, i64) {
-        let mut rsp = rbp;
+    /// in array order, from the RSP the frame register gives, or the body's
+    /// RSP, `body`, with none, recording where each register is read; an xmm
+    /// save's offset counts from that RSP. Returns `(saved, rsp)`: each
+    /// register's slot as a byte offset from the entry RSP, and the RSP the
+    /// replay leaves, which must be the entry RSP, where the return address
+    /// is.
+    fn replay(codes: &[u8], frame: u8, rbp: i64, body: i64) -> (Vec<(u8, bool, i64)>, i64) {
+        let base = match frame & 0x0F {
+            0 => body,
+            _ => rbp - 16 * i64::from(frame >> 4),
+        };
+        let mut rsp = base;
         let mut saved = Vec::new();
         let mut i = 0;
         while i < codes.len() {
@@ -4929,9 +4957,9 @@ mod tests {
                     rsp += 8 * i64::from(next(1));
                     i += 2;
                 }
-                UWOP_SET_FPREG => rsp = rbp - 16 * i64::from(frame >> 4),
+                UWOP_SET_FPREG => rsp = base,
                 UWOP_SAVE_XMM128 => {
-                    saved.push((info, true, rsp + 16 * i64::from(next(1))));
+                    saved.push((info, true, base + 16 * i64::from(next(1))));
                     i += 2;
                 }
                 other => panic!("unexpected unwind code {other}"),
@@ -4945,37 +4973,72 @@ mod tests {
     /// replaying its codes reads each callee-saved GPR and xmm the prologue
     /// saved from the slot the prologue stored it to, and returns RSP to the
     /// return address. The codes include no `UWOP_SAVE_NONVOL`, the pushes
-    /// being `UWOP_PUSH_NONVOL`s.
+    /// being `UWOP_PUSH_NONVOL`s. Under `-O` the frames keep no frame
+    /// register, and their shapes are each present: the pushes alone, pushes
+    /// and a small allocation, a large one, one past a page whose probes
+    /// precede it, and xmm saves.
     #[test]
     fn win64_unwind_codes_describe_every_save() {
         use crate::Compiler;
-        let src = "
-            long g(long); double h(double);
-            long f(long a, long b, long c, long d, long e, long k, long i) {
+        // `spills` holds more values across its call than a page of slots.
+        let spilled = (0..600)
+            .map(|i| format!("v{i} = q[{i}] ^ a"))
+            .collect::<Vec<_>>();
+        let summed = (0..600).map(|i| format!("r += v{i};")).collect::<Vec<_>>();
+        let src = format!(
+            "
+            long g(long); double h(double); void snk(char *);
+            long f(long a, long b, long c, long d, long e, long k, long i) {{
                 long r = g(a) + g(b);
                 return r + a * b + c * d + e * k + i * a + b * c + d * e;
-            }
-            double fp(double x, double y, double z, double w) {
+            }}
+            double fp(double x, double y, double z, double w) {{
                 double t = h(x) * y;
                 double u = h(t) * z;
                 return t + u + h(y) * w + x * y * z * w;
-            }
-            int main(void) { return (int)(f(1, 2, 3, 4, 5, 6, 7) + fp(1, 2, 3, 4)); }
-        ";
-        let program = Compiler::new(super::super::super::tests::with_prelude(src))
+            }}
+            long pushes(long a, long b, long c, long n) {{
+                long x = a * b, y = b * c, z = a ^ c, w = a + c, v = b - a;
+                while (n-- > 0) {{ x += y; y ^= z; z += w; w ^= v; v += x; }}
+                return x + y + z + w + v;
+            }}
+            long wide(long a) {{ char buf[600]; snk(buf); return g(a) + a + buf[a & 63]; }}
+            volatile long q[600];
+            long spills(long a) {{
+                long {};
+                long r = g(a);
+                {}
+                return r;
+            }}
+            int main(void) {{
+                return (int)(f(1, 2, 3, 4, 5, 6, 7) + fp(1, 2, 3, 4) + pushes(1, 2, 3, 4)
+                    + wide(5) + spills(6));
+            }}
+        ",
+            spilled.join(", "),
+            summed.join(" ")
+        );
+        let program = Compiler::new(super::super::super::tests::with_prelude(&src))
             .compile()
             .expect("compile");
-        let (mut gprs, mut xmms) = (0, 0);
+        let (mut gprs, mut xmms, mut shapes) = (0, 0, [0usize; 5]);
         for optimize in [false, true] {
             let options = super::super::NativeOptions {
                 optimize,
                 ..Default::default()
             };
-            let build =
-                lower_for(&program, super::super::Target::WindowsX64, options).expect("lower");
+            // The full register pool, so the pressure caps leave `pushes` its
+            // callee-saved registers rather than spill slots.
+            let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+                usize::MAX,
+                usize::MAX,
+                || lower_for(&program, super::super::Target::WindowsX64, options),
+            )
+            .expect("lower");
             for uw in build.fn_unwind.iter().filter(|u| !u.leaf) {
                 let (codes, _, frame) = build_unwind_codes(uw, 0);
-                assert_eq!(frame & 0x0F, UNWIND_REG_RBP);
+                let want = if optimize { 0 } else { UNWIND_REG_RBP };
+                assert_eq!(frame & 0x0F, want, "the function at {:#x}", uw.begin);
                 assert!(codes.chunks(2).all(|c| c[1] & 0x0F != UWOP_SAVE_NONVOL));
                 // The prologue's own account of each slot, from the entry
                 // RSP: a push stores at the RSP it leaves, an xmm store at
@@ -4994,16 +5057,32 @@ mod tests {
                         PrologueStep::SetFrame(off) => rbp = rsp + i64::from(off),
                     }
                 }
-                let (mut saved, rsp) = replay(&codes, frame, rbp);
+                let (mut saved, rsp) = replay(&codes, frame, rbp, rsp);
                 saved.sort();
                 want.sort();
                 assert_eq!(saved, want, "the function at {:#x}", uw.begin);
                 assert_eq!(rsp, 0, "RSP back at the return address");
                 gprs += want.iter().filter(|w| !w.1 && w.0 != 5).count();
                 xmms += want.iter().filter(|w| w.1).count();
+                if optimize {
+                    let alloc = (uw.steps.iter())
+                        .find_map(|s| matches!(s.1, PrologueStep::Alloc(_)).then_some(s.1));
+                    let shape = match alloc {
+                        None => 0,
+                        Some(PrologueStep::Alloc(n)) if n > 4096 => 3,
+                        Some(PrologueStep::Alloc(n)) if n > 128 => 2,
+                        _ => 1,
+                    };
+                    shapes[shape] += 1;
+                    shapes[4] += usize::from(want.iter().any(|w| w.1));
+                }
             }
         }
         assert!(gprs >= 4 && xmms >= 2, "{gprs} GPR and {xmms} xmm saves");
+        assert!(
+            shapes.iter().all(|&n| n > 0),
+            "frame shapes under -O: {shapes:?}"
+        );
     }
 
     /// `DYNAMIC_BASE` / `HIGH_ENTROPY_VA` stay on for every image we emit,

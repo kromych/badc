@@ -1465,6 +1465,11 @@ pub(crate) fn x64_frame_ops(u: &crate::c5::codegen::FnUnwind, early: Option<u32>
                     sp_cfa -= i64::from(n);
                     out.push((at, CfiOp::DefCfaOffset(sp_cfa)));
                 }
+                E::LoadXmm(x) => {
+                    let reg = number(x, true);
+                    kept.retain(|&k| k != reg);
+                    out.push((at, CfiOp::Restore(CfiReg::Num(reg))));
+                }
                 E::Pop(_) | E::Leave => {
                     entry(&mut out, at, &kept);
                     kept.clear();

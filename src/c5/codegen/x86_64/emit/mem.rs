@@ -454,7 +454,7 @@ fn emit_store_fp_mem(
             code.push(p);
         }
     };
-    let narrowed = |code: &mut Vec<u8>, src: Reg, width: u32, a: u32| {
+    let narrowed = |code: &mut CodeBuf, src: Reg, width: u32, a: u32| {
         super::encode::emit_movq_r_xmm(code, SCRATCH_R11, src);
         emit_narrow_store(code, frame, SCRATCH_R11, (base, disp), width, a);
     };
@@ -1511,12 +1511,12 @@ pub(super) fn emit_copy_unit(
 }
 
 /// The rsp displacement of the eight bytes an x87 conversion passes a value
-/// through: the red zone's first slot ([`super::keep`]), or with no red zone
-/// a slot the conversion reserves, ended by [`x87_round_trip_end`]. `lea`
-/// moves rsp and leaves the flags alone.
-fn x87_round_trip(code: &mut Vec<u8>, frame: Frame) -> i32 {
-    if frame.red_zone {
-        return -8;
+/// through: keep slot [`super::keep::X87`] in a frame with no pointer or a
+/// red zone, else a slot the conversion reserves, ended by
+/// [`x87_round_trip_end`]. `lea` moves rsp and leaves the flags alone.
+fn x87_round_trip(code: &mut CodeBuf, frame: Frame) -> i32 {
+    if frame.red_zone || frame.omit_fp {
+        return super::keep_slot(code, frame, super::keep::X87).1;
     }
     emit_lea_r_mem(code, Reg::RSP, Reg::RSP, -8);
     0
@@ -1524,14 +1524,14 @@ fn x87_round_trip(code: &mut Vec<u8>, frame: Frame) -> i32 {
 
 /// Release what [`x87_round_trip`] reserved.
 fn x87_round_trip_end(code: &mut Vec<u8>, frame: Frame) {
-    if !frame.red_zone {
+    if !frame.red_zone && !frame.omit_fp {
         emit_lea_r_mem(code, Reg::RSP, Reg::RSP, 8);
     }
 }
 
 /// Registers a lowering borrows at one site: the free ones of its
 /// candidate list (`site_registers`) first, then ones holding a live
-/// value, each pushed, or kept in the red zone in a frame with no pointer
+/// value, each pushed, or kept in keep slots in a frame with no pointer
 /// ([`super::keep`]), and restored by [`Self::restore`]. No call
 /// intervenes, so the transient stack misalignment is harmless.
 pub(super) struct SiteRegs {
@@ -1539,8 +1539,9 @@ pub(super) struct SiteRegs {
     held: Vec<u8>,
     next_free: usize,
     saved: Vec<Reg>,
-    /// The first red-zone slot, in a frame with no pointer.
+    /// The first keep slot, in a frame with no pointer.
     keep: Option<i32>,
+    frame: Frame,
 }
 
 impl SiteRegs {
@@ -1559,10 +1560,11 @@ impl SiteRegs {
             next_free: 0,
             saved: Vec::new(),
             keep: frame.omit_fp.then_some(super::keep::SITE),
+            frame,
         }
     }
 
-    /// Keep borrowed registers from red-zone slot `k` on, past the slots
+    /// Keep borrowed registers from keep slot `k` on, past the slots
     /// another instance at the same site holds.
     pub(super) fn keeping_from(mut self, k: i32) -> Self {
         self.keep = self.keep.map(|_| k);
@@ -1578,7 +1580,7 @@ impl SiteRegs {
 
     /// The next free register, else one pushed on the stack; none once the
     /// candidates are exhausted.
-    pub(super) fn take(&mut self, code: &mut Vec<u8>) -> Option<Reg> {
+    pub(super) fn take(&mut self, code: &mut CodeBuf) -> Option<Reg> {
         if let Some(r) = self.free() {
             return Some(r);
         }
@@ -1589,7 +1591,7 @@ impl SiteRegs {
                 if k > super::keep::LAST {
                     return None;
                 }
-                let (base, disp) = super::keep_slot(k);
+                let (base, disp) = super::keep_slot(code, self.frame, k);
                 emit_mov_mem_r(code, base, disp, r);
             }
             None => emit_push_r(code, r),
@@ -1599,11 +1601,11 @@ impl SiteRegs {
     }
 
     /// Restore the saved registers, the last saved first.
-    pub(super) fn restore(&self, code: &mut Vec<u8>) {
+    pub(super) fn restore(&self, code: &mut CodeBuf) {
         for (i, &r) in self.saved.iter().enumerate().rev() {
             match self.keep {
                 Some(k) => {
-                    let (base, disp) = super::keep_slot(k + i as i32);
+                    let (base, disp) = super::keep_slot(code, self.frame, k + i as i32);
                     emit_mov_r_mem(code, r, base, disp);
                 }
                 None => emit_pop_r(code, r),
@@ -1685,7 +1687,7 @@ pub(super) fn emit_agg_load_int(
 /// are never `rax`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_sse(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Reg,
     base: Reg,
     disp: i32,
@@ -1717,7 +1719,7 @@ pub(super) fn emit_agg_load_sse(
 /// `width` bytes, the eightbyte or what of it the aggregate holds.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_slot_sse(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     class: super::abi_classify::RegClass,
     dst: Reg,
     base: Reg,
@@ -1832,7 +1834,7 @@ fn int_store_width(kind: StoreKind) -> u32 {
 /// only `align`-aligned, into SCRATCH_R11 and return it. The caller
 /// must not have `base` in r11.
 fn emit_narrow_compose(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     base: Reg,
     disp: i32,
@@ -1853,7 +1855,7 @@ fn emit_narrow_compose(
 /// Lower an integer load bounded by `align` into `rd`, sign-extending
 /// the composed value when the kind is signed.
 fn emit_narrow_load(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     rd: Reg,
     (base, disp): (Reg, i32),
@@ -1874,7 +1876,7 @@ fn emit_narrow_load(
 /// Store companion to [`emit_narrow_load`]: write the low `width`
 /// bytes of `rs` to `[base + disp]` in `align`-wide pieces.
 fn emit_narrow_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     rs: Reg,
     (base, disp): (Reg, i32),

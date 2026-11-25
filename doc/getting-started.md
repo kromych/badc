@@ -203,14 +203,14 @@ Process 52314 stopped
 On the Windows targets the DWARF sections are in the PE image, and a `-g` link
 also writes the program database beside it (`hello.exe` gets `hello.pdb`),
 which the image's debug directory names by its absolute path. The PDB holds
-the CodeView types, the procedures with their frame-pointer-relative locals,
-the line tables, and the global and public symbols of every unit the image
-carries DWARF for. `--strip-debug` (`-Wl,-S`) drops both; badc writes no
-assembly, so the driver's own `-S` is refused.
+the CodeView types, the procedures with their locals relative to the frame or
+stack pointer, the line tables, and the global and public symbols of every
+unit the image carries DWARF for. `--strip-debug` (`-Wl,-S`) drops both; badc
+writes no assembly, so the driver's own `-S` is refused.
 
-Under `-O`, x86-64 Linux code keeps no frame pointer: debuggers unwind through
-the call-frame information, and a profiler that follows frame-pointer chains
-needs `-fno-omit-frame-pointer`.
+Under `-O`, x86-64 code keeps no frame pointer: debuggers unwind through the
+call-frame information, on Windows through the unwind codes, and a profiler
+that follows frame-pointer chains needs `-fno-omit-frame-pointer`.
 
 When the program is the suspect, `-fsanitize=undefined` reports undefined
 behavior where it happens, and `-fcrash-report` prints the registers and the

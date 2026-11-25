@@ -383,14 +383,16 @@ fn spill_slot_addr_shifted(frame: Frame, slot: u32, sp_shift: u32) -> (Reg, i32)
     }
 }
 
-/// Red-zone slots (System V AMD64 3.2.2: the 128 bytes below rsp, which
-/// signal and interrupt handlers leave alone) where a lowering in a frame
-/// with no pointer keeps a register it borrows within one instruction, as a
-/// framed one pushes it: rsp stays where the prologue left it, as the
-/// frame's addressing and call-frame information assume. Each lowering owns
-/// its slots, so one running inside another's borrow keeps it. Slot `k` is
-/// `[rsp - 8 * (k + 1)]`; slot 0 is the x87 round trip's.
+/// Keep slots, where a lowering in a frame with no pointer keeps a register
+/// it borrows within one instruction, as a framed one pushes it: rsp stays
+/// where the prologue left it, as the frame's addressing and the unwind
+/// information assume. Each lowering owns its slots, so one running inside
+/// another's borrow keeps it. Slot `k` is `[rsp - 8 * (k + 1)]` in the red
+/// zone (System V AMD64 3.2.2: the 128 bytes below rsp, which signal and
+/// interrupt handlers leave alone), else in the frame's keep area
+/// ([`Frame::keep`]); slot 0 is the x87 round trip's.
 pub(super) mod keep {
+    pub(crate) const X87: i32 = 0;
     pub(crate) const CALL_TARGET: i32 = 1;
     pub(crate) const RAX: i32 = 2;
     pub(crate) const RDX: i32 = 3;
@@ -404,16 +406,20 @@ pub(super) mod keep {
     pub(crate) const LAST: i32 = 15;
 }
 
-/// The address of red-zone slot `k` ([`keep`]).
-pub(super) const fn keep_slot(k: i32) -> (Reg, i32) {
-    (Reg::RSP, -8 * (k + 1))
+/// The address of keep slot `k` ([`keep`]), which `code` records as taken.
+pub(super) fn keep_slot(code: &mut CodeBuf, frame: Frame, k: i32) -> (Reg, i32) {
+    code.note_kept(k as u32);
+    match frame.red_zone {
+        true => (Reg::RSP, -8 * (k + 1)),
+        false => (Reg::RSP, frame.keep_disp(k)),
+    }
 }
 
-/// Keep `r` across a sequence that writes it: in red-zone slot `k` in a
-/// frame with no pointer ([`keep`]), else `push r`.
-fn save_across(code: &mut Vec<u8>, frame: Frame, r: Reg, k: i32) {
+/// Keep `r` across a sequence that writes it: in keep slot `k` in a frame
+/// with no pointer ([`keep`]), else `push r`.
+fn save_across(code: &mut CodeBuf, frame: Frame, r: Reg, k: i32) {
     if frame.omit_fp {
-        let (base, disp) = keep_slot(k);
+        let (base, disp) = keep_slot(code, frame, k);
         emit_mov_mem_r(code, base, disp, r);
     } else {
         emit_push_r(code, r);
@@ -427,9 +433,9 @@ fn saved_shift(frame: Frame, saves: u32) -> u32 {
 }
 
 /// Undo [`save_across`].
-fn restore_across(code: &mut Vec<u8>, frame: Frame, r: Reg, k: i32) {
+fn restore_across(code: &mut CodeBuf, frame: Frame, r: Reg, k: i32) {
     if frame.omit_fp {
-        let (base, disp) = keep_slot(k);
+        let (base, disp) = keep_slot(code, frame, k);
         emit_mov_r_mem(code, r, base, disp);
     } else {
         emit_pop_r(code, r);

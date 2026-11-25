@@ -6,7 +6,8 @@
 //! can take the register instead of a load. That holds while nothing was
 //! emitted after the store, no block starts there, and no branch the storing
 //! instruction emitted lands there; the buffer records the store and every
-//! branch so the emitters can tell.
+//! branch so the emitters can tell. It also records the frame slots the
+//! lowerings borrowed, which the frame then reserves.
 
 use alloc::vec::Vec;
 
@@ -43,6 +44,8 @@ pub(crate) struct CodeBuf {
     branched: bool,
     /// Where the current instruction's bytes begin.
     inst_start: usize,
+    /// The keep slots the lowerings took since [`Self::take_kept`], one bit each.
+    kept: u32,
 }
 
 impl CodeBuf {
@@ -74,6 +77,16 @@ impl CodeBuf {
 
     pub(crate) fn note_branch(&mut self) {
         self.branched = true;
+    }
+
+    /// A lowering keeps a register in keep slot `k`.
+    pub(crate) fn note_kept(&mut self, k: u32) {
+        self.kept |= 1 << k;
+    }
+
+    /// The keep slots taken since the last call, which it clears.
+    pub(crate) fn take_kept(&mut self) -> u32 {
+        core::mem::take(&mut self.kept)
     }
 
     /// The bytes from `start` to the end are a store of register `reg` to

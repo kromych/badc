@@ -1835,7 +1835,7 @@ fn off_rax(code: &mut Vec<u8>, r: Reg, scratch: Reg) -> Reg {
 /// Write the atomic result `r` to `dst` and pop what `regs` pushed, the
 /// last first. A result in a pushed register leaves through r10, which
 /// the consumed operands no longer need.
-fn finish_atomic(code: &mut Vec<u8>, regs: &[&SiteRegs], dst: Place, r: Reg, frame: Frame) {
+fn finish_atomic(code: &mut CodeBuf, regs: &[&SiteRegs], dst: Place, r: Reg, frame: Frame) {
     let r = if regs.iter().any(|s| s.borrowed(r)) {
         emit_mov_rr(code, SCRATCH_R10, r);
         SCRATCH_R10
@@ -2007,7 +2007,7 @@ pub(super) fn emit_atomic_cas16(
     emit_mov_r_mem(code, Reg::RBX, SCRATCH_R10, 0);
     emit_mov_r_mem(code, Reg::RCX, SCRATCH_R10, 8);
     let parked = if frame.omit_fp {
-        keep_slot(keep::CAS16)
+        keep_slot(code, frame, keep::CAS16)
     } else {
         (Reg::RSP, acc.saved_bytes() as i32 + 8)
     };

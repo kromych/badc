@@ -2841,6 +2841,8 @@ pub(crate) enum X64ExitStep {
     Leave,
     /// `add rsp, n`, dropping a frame with no pointer.
     Dealloc(u32),
+    /// `movups xmm, [...]`, the reload of a saved non-volatile xmm register.
+    LoadXmm(u8),
 }
 
 /// One x86_64 prologue instruction an unwinder replays.
@@ -2983,6 +2985,7 @@ impl UnwindSteps {
                             X64ExitStep::Pop(r) => step(at, 0, r, 0, 0, 0),
                             X64ExitStep::Leave => step(at, 1, 0, 0, 0, 0),
                             X64ExitStep::Dealloc(n) => step(at, 2, 0, 0, 0, n),
+                            X64ExitStep::LoadXmm(x) => step(at, 3, x, 0, 0, 0),
                         }
                     }
                 }
@@ -3117,6 +3120,7 @@ impl UnwindSteps {
                                 0 => Some((at, X64ExitStep::Pop(reg))),
                                 1 => Some((at, X64ExitStep::Leave)),
                                 2 => Some((at, X64ExitStep::Dealloc(value))),
+                                3 => Some((at, X64ExitStep::LoadXmm(reg))),
                                 _ => None,
                             }
                         })
@@ -4837,14 +4841,14 @@ pub struct NativeOptions {
     /// walking the call chain relies on.
     pub sibling_calls: bool,
     /// `-fomit-frame-pointer` (`Some(true)`) or `-fno-omit-frame-pointer`
-    /// (`Some(false)`); `None` omits it under `-O`. An x86-64 System V
-    /// function whose body keeps rsp fixed then addresses its frame from
-    /// rsp and keeps no rbp record (`x86_64::emit::frame`).
+    /// (`Some(false)`); `None` omits it under `-O`. An x86-64 System V or
+    /// Win64 function whose body keeps rsp fixed then addresses its frame
+    /// from rsp and keeps no rbp record (`x86_64::emit::frame`).
     pub omit_frame_pointer: Option<bool>,
     /// `-mno-red-zone` (false): x86-64 code stores nothing below rsp, as
     /// code that runs where an interrupt or exception pushes onto the
     /// current stack must (System V AMD64 3.2.2 grants the 128 bytes below
-    /// rsp to the function). Every frame then keeps its pointer.
+    /// rsp to the function). Every System V frame then keeps its pointer.
     pub red_zone: bool,
     /// `-fno-plt`: a call to a function the link resolves loads the
     /// callee's address from its GOT entry and calls through it, with no
@@ -5412,9 +5416,6 @@ impl NativeOptions {
         cfg!(feature = "optimizer") && self.optimize
     }
 
-    /// Whether a function may keep no frame pointer: as
-    /// [`Self::omit_frame_pointer`] says, else under `-O`. Such a frame keeps
-    /// the registers a lowering borrows in the red zone.
     pub(crate) const fn branch_padding(&self) -> BranchPadding {
         match self.branches_within_32b {
             Some(true) => BranchPadding::All,
@@ -5424,12 +5425,13 @@ impl NativeOptions {
         }
     }
 
+    /// Whether a function may keep no frame pointer: as
+    /// [`Self::omit_frame_pointer`] says, else under `-O`.
     pub(crate) const fn omits_frame_pointer(&self) -> bool {
-        let asked = match self.omit_frame_pointer {
+        match self.omit_frame_pointer {
             Some(on) => on,
             None => self.optimizes(),
-        };
-        asked && self.red_zone
+        }
     }
 
     /// Set [`Self::output_kind`] = [`OutputKind::SharedLibrary`]
@@ -6125,7 +6127,8 @@ pub(crate) struct Abi {
     /// A call whose result the function returns unchanged may become a
     /// jump. Per-run (from [`NativeOptions::sibling_calls`]).
     pub sibling_calls: bool,
-    /// Code may store below rsp. Per-run (from [`NativeOptions::red_zone`]).
+    /// Code may store below rsp: the target grants a red zone, which
+    /// Win64 does not, and [`NativeOptions::red_zone`] leaves it.
     pub red_zone: bool,
     /// Registers the emitters may not pick as scratch or inline-asm
     /// operands. Per-run (from [`NativeOptions::fixed_regs`]).
@@ -6334,7 +6337,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
-                red_zone: true,
+                red_zone: false,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },

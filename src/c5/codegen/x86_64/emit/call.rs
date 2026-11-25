@@ -400,7 +400,7 @@ impl Marshal<'_> {
     /// tiling reaches here: a whole-vector-register class is the aggregate's
     /// sole slot, which leaves no integer register to carry the base, so
     /// `sse_aggs` takes it.
-    fn agg_eightbytes(&self, code: &mut Vec<u8>) {
+    fn agg_eightbytes(&self, code: &mut CodeBuf) {
         let strict = self.abi.strict_align;
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
@@ -1031,9 +1031,9 @@ pub(super) fn emit_call_indirect(
         let Some(target_r) = materialize_int(code, target_place, SCRATCH_R10, frame) else {
             return fail("CallIndirect: target not int reg / spill");
         };
-        // A frame with no pointer keeps rsp: the target waits in the red zone.
+        // A frame with no pointer keeps rsp: the target waits in a keep slot.
         if frame.omit_fp {
-            let (base, disp) = super::keep_slot(super::keep::CALL_TARGET);
+            let (base, disp) = super::keep_slot(code, frame, super::keep::CALL_TARGET);
             emit_mov_mem_r(code, base, disp, target_r);
             let site = "CallIndirect";
             marshal_args(

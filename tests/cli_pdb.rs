@@ -493,6 +493,41 @@ fn an_embedded_source_module_is_named_by_a_relative_path() {
     }
 }
 
+/// Under `-O` a Win64 function keeps no frame pointer: an object its frame
+/// holds is described off rsp (cvconst.h `CV_AMD64_RSP`), and its
+/// `S_FRAMEPROC` states the stack pointer as the base of its locals and its
+/// parameters (`encodedLocalBasePointer`, `encodedParamBasePointer`).
+#[test]
+fn a_frame_with_no_pointer_describes_its_locals_off_the_stack_pointer() {
+    const S_FRAMEPROC: u16 = 0x1012;
+    const CV_AMD64_RSP: u16 = 335;
+    let source = "__attribute__((noinline)) void snk(char *b) { b[0] = 1; }\n\
+        int main(void) {\n\
+            char buf[24];\n\
+            snk(buf);\n\
+            return buf[0] - 1;\n\
+        }\n";
+    let dir = TempDir::new("badc-pdb-no-frame-pointer");
+    link_source(&dir, "windows-x64", &["-g", "-O"], source);
+    let s = streams(&std::fs::read(dir.join("a.pdb")).expect("a.pdb"));
+    let (_, mods) = modules(&s[3]);
+    let m = mods.iter().find(|m| m.name.ends_with("a.c")).expect("a.c");
+    let syms = symbols(&s[m.stream], m.sym_bytes);
+    let main = (syms.iter())
+        .position(|(_, kind, body)| *kind == S_GPROC32 && cstr(body, 35) == "main")
+        .expect("main");
+    let end = u32le(syms[main].2, 4) as usize;
+    let inside: Vec<&(usize, u16, &[u8])> = syms[main..].iter().take_while(|s| s.0 < end).collect();
+    let (_, _, frame) = (inside.iter())
+        .find(|s| s.1 == S_FRAMEPROC)
+        .expect("S_FRAMEPROC");
+    assert_eq!(u32le(frame, 22) & (0xf << 14), (1 << 14) | (1 << 16));
+    let buf = (inside.iter())
+        .find(|s| s.1 == S_REGREL32 && cstr(s.2, 10) == "buf")
+        .unwrap_or_else(|| panic!("no `buf` off a register in {inside:?}"));
+    assert_eq!(u16le(buf.2, 8), CV_AMD64_RSP);
+}
+
 #[test]
 fn no_pdb_without_debug_info() {
     for (target, ..) in TARGETS {

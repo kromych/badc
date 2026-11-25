@@ -1817,7 +1817,7 @@ pub(super) fn restore_callee_saved(
         }
         return;
     }
-    if frame.out > 0 {
+    if frame.omit_fp && frame.out > 0 {
         emit_add_rsp(code, frame.out);
         ex.push((code.len(), super::X64ExitStep::Dealloc(frame.out)));
     }

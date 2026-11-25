@@ -100,9 +100,11 @@ pub(crate) struct Frame {
     /// The bytes the callee-saved pushes take, the area for them in
     /// `frame_bytes` rounded up to 16.
     pub pushed: u32,
-    /// A frame with no pointer's outgoing-argument area, below the pushes
-    /// and part of `frame_bytes`: the largest stack-argument window of its
-    /// calls, which store their arguments there with rsp left in place.
+    /// The outgoing-argument area at the bottom of the frame, part of
+    /// `frame_bytes`: the largest stack-argument window of its calls, which
+    /// store their arguments there with rsp left in place. A frame with no
+    /// pointer has one below its pushes, and so does a framed Win64 frame
+    /// whose rsp no allocation moves.
     pub out: u32,
     /// The keep slots ([`super::keep`]) a frame with no pointer and no red
     /// zone reserves, slot `k` at bit `k`: the ones its lowerings take,
@@ -462,6 +464,17 @@ pub(crate) fn compute_frame_with_tail_calls(
         frame.pushes_alone = frame.parts.total() == frame.parts.saved_regs
             && alloc.fp_used.is_empty()
             && (!frame.keeps_record || frame.pushed % 16 == 8);
+    }
+    // Every Win64 call takes a window, its home area at least, so a framed
+    // Win64 frame keeps the largest at its bottom too, where no allocation
+    // moves rsp between the calls. A tail call takes none.
+    if win64 && !frame.omit_fp && !frame.dynamic_sp && !func.is_naked {
+        let windows = (func.insts.iter().enumerate())
+            .filter(|(pc, _)| !tail_calls.contains(pc))
+            .filter_map(|(_, i)| call_stack_bytes(func, i, abi, target));
+        frame.out = windows.max().unwrap_or(0);
+        frame.frame_bytes += frame.out;
+        frame.parts.outgoing += frame.out;
     }
     frame
 }

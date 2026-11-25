@@ -165,7 +165,7 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     ("data_calls", "linux-x64", 0x1d6de96381f8b515, 1472),
     ("data_calls", "linux-arm64", 0x05c489b213ee8d81, 1744),
     ("data_calls", "macos-arm64", 0xfc1a6deb8f9ed957, 1488),
-    ("data_calls", "win-x64", 0x1fc3c3503716a225, 1320),
+    ("data_calls", "win-x64", 0x6b9daecc7f1846ec, 1320),
     ("data_calls", "win-arm64", 0xfc1a6deb8f9ed957, 1488),
     ("struct_param_spill", "linux-x64", 0xeefcfd2210468925, 1320),
     (
@@ -200,7 +200,7 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
         0x57570116315fa01a,
         1440,
     ),
-    ("fp_across_struct_call", "win-x64", 0xa138c390b1fc881a, 1296),
+    ("fp_across_struct_call", "win-x64", 0x077263ca4ea5337c, 1288),
     (
         "fp_across_struct_call",
         "win-arm64",

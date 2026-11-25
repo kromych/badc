@@ -699,6 +699,43 @@ fn an_odd_push_count_keeps_the_frame_aligned() {
     }
 }
 
+/// A framed Win64 frame keeps its calls' windows -- the home area and the
+/// stack arguments -- in an outgoing area its prologue reserves, as a frame
+/// with no pointer does: no instruction past the prologue moves rsp by an
+/// immediate, at -O0 and with the frame pointer kept under -O. A frame a VLA
+/// moves rsp in opens a window around each call.
+#[test]
+fn a_framed_win64_frame_reserves_its_outgoing_area() {
+    const SRC: &str = "long h(long); long six(long, long, long, long, long, long);\n\
+        long calls(long a, long b) {\n\
+            long t = h(a), u = six(a, b, t, a, b, t);\n\
+            return h(t + u) + a + b;\n\
+        }\n\
+        long vla(long n) { long a[n]; a[0] = n; return h(a[0]) + h(n); }\n";
+    let target = Target::WindowsX64;
+    let moves = |x: &X64Insn| {
+        matches!(x.op, 0x81 | 0x83) && x.rex_w() && matches!(x.modrm, Some(0xEC | 0xC4))
+    };
+    for (optimize, form) in [(false, None), (true, Some(false))] {
+        let obj = object(SRC, target, optimize, FULL, with_form(form));
+        let insns = insns_of(&obj, "calls");
+        let frame = frame_of(&insns, target).expect("a frame");
+        assert!(!frame.pointerless, "{insns:x?}");
+        assert!(
+            !insns[frame.body..].iter().any(moves),
+            "-O={optimize}: {insns:x?}"
+        );
+        // The home area and `six`'s two stack arguments.
+        assert!(frame.alloc >= 48, "-O={optimize}: {frame:?}");
+        let insns = insns_of(&obj, "vla");
+        let frame = frame_of(&insns, target).expect("a frame");
+        assert!(
+            insns[frame.body..].iter().any(moves),
+            "-O={optimize}: {insns:x?}"
+        );
+    }
+}
+
 /// A frame whose rsp moves re-establishes rsp ahead of the pops: on System V
 /// `rsp = rbp - frame`, the `sub` plus the pushes below rbp; on Win64 the
 /// last push, `rbp - 8 * pushes`, as every Win64 exit does.

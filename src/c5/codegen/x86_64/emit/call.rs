@@ -642,15 +642,17 @@ fn emit_call_to(code: &mut Vec<u8>, fixups: &mut Vec<Fixup>, target_pc: usize) {
 }
 
 /// The plan a call marshals by: `plan`, whose window rsp descends by and
-/// whose spilled sources the marshal reads that much higher; in a frame with
-/// no pointer the window is the frame's outgoing area (`Frame::out`), which
-/// rsp already points at, so nothing moves.
+/// whose spilled sources the marshal reads that much higher; where the frame
+/// has an outgoing area that holds the window (`Frame::out`), the window is
+/// that area, which rsp already points at, so nothing moves. A frame with no
+/// pointer has room for every call's.
 fn windowed(plan: &super::CallPlan, frame: Frame) -> Emit<super::CallPlan> {
     let mut plan = plan.clone();
-    if frame.omit_fp {
-        if plan.scratch_bytes > frame.out {
-            return fail("a call's stack arguments pass the outgoing area");
-        }
+    let fits = plan.scratch_bytes <= frame.out;
+    if frame.omit_fp && !fits {
+        return fail("a call's stack arguments pass the outgoing area");
+    }
+    if frame.omit_fp || (frame.out > 0 && fits) {
         plan.scratch_bytes = 0;
     }
     Ok(plan)

@@ -7,7 +7,8 @@
 // registers, stack pointer and frame pointer, then opens the page and the
 // read resumes. The shapes: no frame, the pushes alone, the pushes and a
 // small allocation, xmm saves, an allocation past 128 bytes and one past a
-// page, each built with or without a frame pointer as the options say.
+// page, each built with or without a frame pointer as the options say, and
+// a frame that keeps its pointer and its calls' windows in an outgoing area.
 // Elsewhere the program exits 0.
 
 #if defined(_WIN32) && defined(__x86_64__)
@@ -197,7 +198,24 @@ __attribute__((noinline)) static long paged(long a)
     return r + b + t;
 }
 
-static long (*const shapes[])(long) = {bare, pushes, small, xmms, large, paged};
+// Reads its frame address, so it keeps the frame pointer; `six` takes two
+// stack arguments past the home area.
+__attribute__((noinline)) static long six(long a, long b, long c, long d, long e, long f)
+{
+    return a + b * c + d * e + f + sink;
+}
+
+__attribute__((noinline)) static long framed(long a)
+{
+    char *fp = __builtin_frame_address(0);
+    long b = a * 3 + 1;
+    double x = (double)a * 1.5;
+    long t = *poke;
+    long r = six(a, b, t, a, b, fp != 0);
+    return r + b + t + (long)x;
+}
+
+static long (*const shapes[])(long) = {bare, pushes, small, xmms, large, paged, framed};
 
 int main(void)
 {

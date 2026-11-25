@@ -48,6 +48,7 @@ Disassembly of section .text:
                	je	<addr>
                	incq	%rbx
                	leaq	<rip>, %r12
+               	nopl	(%rax)
                	callq	<addr>
                	movq	%rax, %rcx
                	movq	%r12, %rdx
@@ -63,7 +64,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movq	%rax, %r12
-               	nopl	(%rax,%rax)
                	cmpl	$-0x1, %r12d
                	je	<addr>
                	cmpl	$-0x1, %r12d

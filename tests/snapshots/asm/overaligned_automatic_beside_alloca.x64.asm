@@ -181,6 +181,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%r14, %rdi
                	movq	%r12, %rsi
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	leaq	(%rbx), %rcx
                	testb	$0x7f, %cl
@@ -190,7 +191,6 @@ Disassembly of section .text:
                	cmpl	$0x31, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	nopl	(%rax,%rax)
                	testq	%rcx, %rcx
                	jne	<addr>
                	movq	%r15, %rax

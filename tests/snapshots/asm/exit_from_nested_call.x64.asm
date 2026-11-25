@@ -36,13 +36,19 @@ Disassembly of section .text:
                	movb	%dil, (%rsp)
                	testl	%edi, %edi
                	je	<addr>
+               	nopw	%cs:(%rax,%rax)
+               	nop
                	movq	%rdi, %rax
                	subl	$0x1, %eax
                	movb	%al, 0x40(%rsp)
                	je	<addr>
+               	nopw	%cs:(%rax,%rax)
+               	nopl	(%rax)
                	subl	$0x1, %eax
                	movb	%al, 0x80(%rsp)
                	je	<addr>
+               	nopw	%cs:(%rax,%rax)
+               	nopl	(%rax)
                	subl	$0x1, %eax
                	movb	%al, 0xc0(%rsp)
                	je	<addr>

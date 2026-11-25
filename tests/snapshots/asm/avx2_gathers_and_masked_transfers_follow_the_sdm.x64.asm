@@ -7044,6 +7044,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdx
                	leaq	-0xa8(%rbp), %rdi
                	vzeroupper
+               	nopl	(%rax)
                	callq	<addr>
                	movq	-0xa8(%rbp), %rsi
                	movq	%rbx, %rdi
@@ -7060,7 +7061,7 @@ Disassembly of section .text:
                	andq	$0xff, %rdx
                	movb	%dl, -0x40(%rbp,%r8)
                	incq	%rcx
-               	nopl	(%rax,%rax)
+               	nop
                	cmpl	%ebx, %ecx
                	jl	<addr>
                	jmp	<addr>
@@ -10035,6 +10036,7 @@ Disassembly of section .text:
                	callq	<addr>
                	orq	%rax, %rbx
                	movl	$0x1, %edi
+               	nopl	(%rax)
                	callq	<addr>
                	orq	%rax, %rbx
                	callq	<addr>
@@ -10048,6 +10050,8 @@ Disassembly of section .text:
                	callq	<addr>
                	orq	%rax, %rbx
                	incq	%r12
+               	nopw	%cs:(%rax,%rax)
+               	nop
                	cmpl	$0xc8, %r12d
                	jl	<addr>
                	movq	%rbx, %rax

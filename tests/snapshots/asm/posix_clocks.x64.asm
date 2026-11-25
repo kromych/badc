@@ -58,6 +58,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax,%rbx,4), %edi
                	leaq	0x40(%rsp), %rsi
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -66,7 +67,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jl	<addr>
                	movq	0x48(%rsp), %rax
-               	nopw	(%rax,%rax)
+               	nopl	(%rax)
                	testq	%rax, %rax
                	jl	<addr>
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00

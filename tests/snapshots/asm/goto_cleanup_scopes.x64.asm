@@ -1010,13 +1010,14 @@ Disassembly of section .text:
                	testq	%r15, %r15
                	je	<addr>
                	movq	%r15, %rdi
+               	nopl	(%rax)
                	callq	<addr>
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	testq	%r13, %r13
                	je	<addr>
-               	nopw	%cs:(%rax,%rax)
+               	nopl	(%rax)
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x0, <rip> # <addr>

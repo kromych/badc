@@ -1346,7 +1346,8 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
 
 /// Which x86-64 branch groups keep off 32-byte boundaries, which a core with
 /// the update for Intel erratum SKX102 otherwise decodes on every pass
-/// through: none, those of blocks inside a loop, or all.
+/// through: none, those of blocks inside a loop or of a function that calls
+/// itself, or all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BranchPadding {
     Off,

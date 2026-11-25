@@ -41,6 +41,7 @@ Disassembly of section .text:
                	jg	<addr>
                	incq	%rbx
                	callq	<addr>
+               	nopl	(%rax)
                	testq	%rax, %rax
                	jne	<addr>
                	callq	<addr>

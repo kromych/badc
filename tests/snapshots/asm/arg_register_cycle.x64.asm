@@ -36,6 +36,7 @@ Disassembly of section .text:
                	subq	%rdi, %rax
                	popq	%r11
                	retq
+               	nopw	(%rax,%rax)
                	subl	$0x1, %eax
                	jne	<addr>
                	movq	%rdi, %rax

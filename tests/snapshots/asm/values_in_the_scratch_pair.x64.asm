@@ -315,6 +315,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	0x20(%rsp), %rdi
                	movq	0x28(%rsp), %rsi
+               	nopl	(%rax)
                	callq	<addr>
                	xorq	%rax, %r12
                	jmp	<addr>
@@ -322,7 +323,7 @@ Disassembly of section .text:
                	movq	0x78(%rsp), %rcx
                	subq	%rcx, %rax
                	movq	%rax, 0x38(%rsp)
-               	nopl	(%rax)
+               	nop
                	jmp	<addr>
                	movq	0x40(%rsp), %rcx
                	movq	0x78(%rsp), %rax
@@ -346,6 +347,7 @@ Disassembly of section .text:
                	movq	(%rdx), %rdx
                	xorq	%rdx, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, %rax

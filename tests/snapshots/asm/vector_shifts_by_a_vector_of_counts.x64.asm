@@ -2102,6 +2102,7 @@ Disassembly of section .text:
                	leaq	0x50(%rsp), %rdi
                	leaq	0x30(%rsp), %rsi
                	leaq	0x40(%rsp), %rdx
+               	nop
                	callq	<addr>
                	movq	0x88(%rsp), %rcx
                	movq	0x80(%rsp), %r8
@@ -2122,7 +2123,7 @@ Disassembly of section .text:
                	cmpl	%eax, %esi
                	jne	<addr>
                	movl	0x64(%rsp), %eax
-               	nopw	(%rax,%rax)
+               	nopl	(%rax)
                	cmpl	%edx, %eax
                	jne	<addr>
                	shlxq	%rcx, %rbp, %rax

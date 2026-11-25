@@ -162,7 +162,7 @@ Disassembly of section .text:
                	movq	0x70(%rsp), %rcx
                	movq	0x68(%rsp), %r8
                	addq	%rax, %r15
-               	nopl	(%rax,%rax)
+               	nop
                	jmp	<addr>
                	movq	%rax, 0x60(%rsp)
                	movq	%rbx, 0x58(%rsp)

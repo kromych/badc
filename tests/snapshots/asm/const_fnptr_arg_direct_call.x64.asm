@@ -29,6 +29,7 @@ Disassembly of section .text:
 		R_X86_64_PC32	cache_dirty-0x5
                	movq	%r12, %rsi
                	movl	$0x1a, %edi
+               	nopl	(%rax)
                	callq	<addr>
 		R_X86_64_PLT32	entry_ret-0x4
                	subl	$0x1, (%rip)            # <addr>
@@ -37,7 +38,7 @@ Disassembly of section .text:
                	callq	<addr>
 		R_X86_64_PLT32	resched_thunk-0x4
                	nopw	%cs:(%rax,%rax)
-               	nopl	(%rax,%rax)
+               	nop
                	movabsq	$-0x7ffffdfd00000000, %r11 # imm = 0x8000020300000000
                	movq	%rax, %rcx
                	cmpq	%r11, %rax

@@ -675,6 +675,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	shlxq	%rbx, %rax, %r12
                	movq	%r12, %rdi
+               	nop
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -684,7 +685,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%r12, %rdi
                	callq	<addr>
-               	nopl	(%rax,%rax)
+               	nopl	(%rax)
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	-0x1(%r12), %r13
@@ -750,6 +751,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movq	%r12, %rdi
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	jmp	<addr>
                	testl	%eax, %eax
@@ -768,7 +770,7 @@ Disassembly of section .text:
                	bsfl	%edx, %r8d
                	xorl	%eax, %eax
                	shrxq	%rax, %rdx, %rcx
-               	nopw	(%rax,%rax)
+               	nopl	(%rax)
                	testb	$0x1, %cl
                	jne	<addr>
                	incq	%rax

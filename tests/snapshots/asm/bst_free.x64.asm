@@ -35,6 +35,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movq	0x10(%rbx), %rcx
+               	nop
                	testq	%rcx, %rcx
                	jne	<addr>
                	movq	%rbx, %rdi
@@ -43,6 +44,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x8(%rcx), %rdi
                	movq	%rcx, 0x18(%rsp)
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	movq	0x18(%rsp), %rcx
                	movq	0x10(%rcx), %rdi
@@ -83,6 +85,7 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	movq	(%rbx), %rax
+               	nopw	(%rax,%rax)
                	cmpq	%rax, %r12
                	jge	<addr>
                	movq	0x8(%rbx), %rcx
@@ -116,6 +119,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x18(%rsp), %rcx
                	movq	%rax, 0x10(%rcx)
+               	nop
                	jmp	<addr>
                	movq	0x10(%rbx), %rcx
                	testq	%rcx, %rcx
@@ -129,6 +133,7 @@ Disassembly of section .text:
                	movq	%rcx, 0x10(%rbx)
                	jmp	<addr>
                	movq	(%rcx), %rax
+               	nopw	(%rax,%rax)
                	cmpq	%rax, %r12
                	jge	<addr>
                	movq	0x8(%rcx), %rdi
@@ -137,6 +142,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x18(%rsp), %rcx
                	movq	%rax, 0x8(%rcx)
+               	nop
                	jmp	<addr>
                	movq	0x10(%rcx), %rdi
                	movq	%rcx, 0x18(%rsp)
@@ -144,6 +150,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x18(%rsp), %rcx
                	movq	%rax, 0x10(%rcx)
+               	nopl	(%rax)
                	jmp	<addr>
 
 <main>:

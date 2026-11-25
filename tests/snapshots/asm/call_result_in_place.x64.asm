@@ -380,6 +380,7 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	je	<addr>
                	leaq	0x40(%rsp), %rdi
+               	nop
                	callq	<addr>
                	leaq	0x40(%rsp), %rax
                	movups	(%rax), %xmm14
@@ -480,6 +481,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	0x60(%rsp), %rdi
                	movl	$0x1, %esi
+               	nop
                	callq	<addr>
                	leaq	0x60(%rsp), %rax
                	jmp	<addr>

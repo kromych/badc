@@ -73,6 +73,7 @@ Disassembly of section .text:
                	addq	$0x808, %rsp            # imm = 0x808
                	retq
                	xorl	%eax, %eax
+               	nopl	(%rax)
                	jmp	<addr>
 
 <uses_stack>:

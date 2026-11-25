@@ -223,6 +223,7 @@ Disassembly of section .text:
                	leaq	0x83(%rbx), %r12
                	movq	%r12, %rsi
                	leaq	0x220(%rsp), %rdi
+               	nop
                	callq	<addr>
                	movq	%r12, %rsi
                	leaq	0x220(%rsp), %rdi
@@ -464,6 +465,7 @@ Disassembly of section .text:
                	testb	$0x1, %bl
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rsp
                	popq	%rbx

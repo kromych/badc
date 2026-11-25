@@ -421,6 +421,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	0xb0(%rsp), %rdi
                	leaq	0xc0(%rsp), %rsi
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>

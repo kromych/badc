@@ -284,6 +284,7 @@ Disassembly of section .text:
                	movsd	%xmm2, 0x58(%rsp)
                	movsd	%xmm1, 0x60(%rsp)
                	movsd	%xmm11, 0x68(%rsp)
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	movsd	0x18(%rsp), %xmm10
                	movsd	0x20(%rsp), %xmm9
@@ -360,6 +361,7 @@ Disassembly of section .text:
                	movsd	%xmm9, 0x28(%rsp)
                	movsd	%xmm10, 0x20(%rsp)
                	movsd	%xmm11, 0x18(%rsp)
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	movsd	0x68(%rsp), %xmm1
                	movsd	0x60(%rsp), %xmm2

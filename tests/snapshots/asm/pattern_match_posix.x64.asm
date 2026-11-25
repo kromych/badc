@@ -52,6 +52,7 @@ Disassembly of section .text:
                	xorl	%ebx, %ebx
                	jmp	<addr>
                	leaq	0x20(%rsp), %rdi
+               	nopl	(%rax)
                	callq	<addr>
                	incq	%rbx
                	cmpl	$0x2f, %ebx
@@ -86,7 +87,7 @@ Disassembly of section .text:
                	imulq	$0x30, %rbx, %rdx
                	addq	%rdx, %rax
                	movl	0x1c(%rax), %esi
-               	nopw	(%rax,%rax)
+               	nopl	(%rax)
                	cmpl	%esi, %ecx
                	jne	<addr>
                	testl	%ecx, %ecx

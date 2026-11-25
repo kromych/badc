@@ -302,6 +302,7 @@ Disassembly of section .text:
                	leaq	0x30(%rsp), %rdi
                	movl	$0x1, %esi
                	leaq	0x48(%rsp), %rdx
+               	nopl	(%rax)
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -311,6 +312,7 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jne	<addr>
                	movq	%rbx, %rdi
+               	nopl	(%rax)
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0x73, %rax

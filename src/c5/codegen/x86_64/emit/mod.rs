@@ -61,7 +61,7 @@ use super::encode::{
     emit_vex_fma_mem, emit_vex_fp_arith, emit_vex_fp_arith_mem, emit_xchg_mem_r, emit_xchg_rr,
     emit_xorps,
 };
-use super::ssa::code_buf::{CodeBuf, ScratchPlan, SpillWidth};
+use super::ssa::code_buf::{BranchWindows, CodeBuf, ScratchPlan, SpillWidth};
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
     Unsupported, build_arg_aggs, c5_slot_to_fp_offset, param_entry_ext, place_same_loc,

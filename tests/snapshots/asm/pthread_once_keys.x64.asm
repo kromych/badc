@@ -326,6 +326,7 @@ Disassembly of section .text:
                	shlq	$0x2, %rcx
                	addq	%rax, %rcx
                	xorl	%esi, %esi
+               	nopl	(%rax)
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -340,6 +341,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
+               	nopw	%cs:(%rax,%rax)
                	cmpq	$0x0, 0x18(%rsp)
                	jne	<addr>
                	incq	%rbx

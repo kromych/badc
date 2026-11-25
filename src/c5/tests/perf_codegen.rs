@@ -8561,6 +8561,84 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
     }
 }
 
+/// Under `-O` a call inside a loop, and every call, return and jump of a
+/// function that calls itself, its entry's test included, keeps off 32-byte
+/// boundaries as a loop's jumps do, at every entry shift; under
+/// `-mno-branches-within-32B-boundaries` some call crosses or ends on one.
+#[test]
+fn x64_calls_and_returns_that_repeat_stay_within_32_byte_windows() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, PatchableEntry,
+        emit_native_with_options,
+    };
+    const SRC: &str = "int leaf(int);\n\
+int sum(const int *a, int n) {\n\
+    int s = 0;\n\
+    for (int i = 0; i < n; i++) s += leaf(a[i]) + leaf(i);\n\
+    return s;\n\
+}\n\
+int walk(int n, int k) {\n\
+    if (n < 2) return n + k;\n\
+    return walk(n - 1, k ^ n) + walk(n - 2, k + 3) * 3;\n\
+}\n";
+    let program = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .expect("compile");
+    // Per option, entry shift and function: the calls, returns and jumps
+    // that cross or end on a boundary, a conditional jump with the
+    // flag-setting instruction ahead of it; in `sum` only the calls.
+    let crossing = |on: Option<bool>, shift: u32, name: &str| {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            branches_within_32b: on,
+            patchable_function_entry: PatchableEntry {
+                nops: shift,
+                before: 0,
+            },
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || emit_native_with_options(&program, Target::LinuxX64, opts),
+        )
+        .expect("emit");
+        let start = elf_func_value(&obj, name).expect(name) as usize;
+        let insns = x64_insns(&function_bytes(&obj, name));
+        let call = |i: &X64Insn| {
+            i.op == 0xE8 || (i.op == 0xFF && i.modrm.is_some_and(|m| (m >> 3) & 7 == 2))
+        };
+        let transfer = |i: &X64Insn| call(i) || i.op == 0xC3 || i.is_jmp() || i.is_jcc();
+        (insns.iter().enumerate())
+            .filter(|(_, i)| if name == "sum" { call(i) } else { transfer(i) })
+            .filter(|&(k, i)| {
+                let from = match k.checked_sub(1).map(|p| &insns[p]) {
+                    Some(p) if i.is_jcc() && matches!(p.op, 0x38..=0x3D | 0x83 | 0x84 | 0x85) => {
+                        p.at
+                    }
+                    _ => i.at,
+                };
+                let (lo, end) = (start + from, start + i.at + i.len);
+                lo / 32 != (end - 1) / 32 || end % 32 == 0
+            })
+            .count()
+    };
+    assert!(
+        (0..32).any(|shift| crossing(Some(false), shift, "sum") > 0),
+        "no call crosses a boundary without padding"
+    );
+    for shift in 0..32 {
+        assert_eq!(crossing(None, shift, "sum"), 0, "sum, shift {shift}");
+        assert_eq!(crossing(None, shift, "walk"), 0, "walk, shift {shift}");
+    }
+}
+
 /// A load, an addition, subtraction or bitwise operation on it and the store
 /// of the result to the same bytes -- through a pointer or in a frame
 /// object -- is one memory-destination instruction at the store's width, an

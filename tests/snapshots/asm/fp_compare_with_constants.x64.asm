@@ -492,6 +492,7 @@ Disassembly of section .text:
                	movq	%rax, %r14
                	orq	%r8, %r14
                	movsd	0x28(%rsp), %xmm0
+               	nopl	(%rax)
                	callq	<addr>
                	movq	%rax, %rbx
                	movsd	0x28(%rsp), %xmm0
@@ -499,6 +500,7 @@ Disassembly of section .text:
                	shlq	%rax
                	orq	%rax, %rbx
                	movsd	0x28(%rsp), %xmm0
+               	nop
                	callq	<addr>
                	shlq	$0x2, %rax
                	orq	%rax, %rbx
@@ -527,6 +529,7 @@ Disassembly of section .text:
                	shlq	$0x8, %rax
                	orq	%rax, %rbx
                	movsd	0x28(%rsp), %xmm0
+               	nop
                	callq	<addr>
                	shlq	$0x9, %rax
                	orq	%rax, %rbx
@@ -562,6 +565,7 @@ Disassembly of section .text:
                	shlq	$0x7, %rax
                	orq	%rax, %r12
                	movsd	0x28(%rsp), %xmm0
+               	nopl	(%rax)
                	callq	<addr>
                	shlq	$0x8, %rax
                	orq	%rax, %r12
@@ -578,7 +582,6 @@ Disassembly of section .text:
                	imulq	$0x18, %r13, %rcx
                	addq	%rcx, %rax
                	movsd	(%rax), %xmm0
-               	nop
                	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -604,6 +607,7 @@ Disassembly of section .text:
                	shlq	$0x4, %rax
                	orq	%rax, %rbx
                	movsd	0x28(%rsp), %xmm0
+               	nop
                	callq	<addr>
                	shlq	$0x5, %rax
                	orq	%rax, %rbx
@@ -639,6 +643,7 @@ Disassembly of section .text:
                	shlq	$0x3, %rax
                	orq	%rax, %r12
                	movsd	0x28(%rsp), %xmm0
+               	nopl	(%rax)
                	callq	<addr>
                	shlq	$0x4, %rax
                	orq	%rax, %r12
@@ -667,10 +672,10 @@ Disassembly of section .text:
                	cmoveq	%rbx, %rcx
                	cmpl	%r14d, %ecx
                	je	<addr>
+               	nopl	(%rax)
                	jmp	<addr>
                	movsd	(%rax), %xmm14
                	movsd	%xmm14, 0x28(%rsp)
-               	nop
                	jmp	<addr>
                	leaq	0x14(%r13), %rax
                	popq	%rbx

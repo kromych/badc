@@ -372,6 +372,7 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	leaq	-0x58(%rbp), %rcx
                	vzeroupper
+               	nopl	(%rax)
                	callq	<addr>
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	movw	%ax, -0x80(%rbp)
@@ -379,7 +380,7 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	jl	<addr>
                	movl	-0x58(%rbp), %eax
-               	nopl	(%rax,%rax)
+               	nopl	(%rax)
                	testq	%rax, %rax
                	je	<addr>
                	orq	%r12, %rax
@@ -574,11 +575,13 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	leaq	-0x40(%rbp), %rcx
                	vzeroupper
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	movups	-0xd0(%rbp), %xmm0
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	movw	%ax, -0x10(%rbp,%rbx,2)
                	incq	%rbx
+               	nopw	(%rax,%rax)
                	cmpl	$0x4, %ebx
                	jl	<addr>
                	movl	-0x40(%rbp), %eax
@@ -595,6 +598,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r8 # <addr>
                	movzwq	-0x10(%rbp,%rax,2), %rdx
                	movzwq	(%r8,%rax,2), %rcx
+               	nopw	(%rax,%rax)
                	cmpl	%ecx, %edx
                	jne	<addr>
                	movzwq	-0x20(%rbp,%rax,2), %rdx
@@ -908,6 +912,7 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rcx, %xmm0
+               	nopl	(%rax)
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
@@ -915,6 +920,7 @@ Disassembly of section .text:
                	jge	<addr>
                	leaq	0x20(%rsp), %rcx
                	movss	0x20(%rsp,%rax,4), %xmm1
+               	nopw	(%rax,%rax)
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>

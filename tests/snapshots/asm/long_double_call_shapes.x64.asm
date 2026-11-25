@@ -546,6 +546,7 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rsp)
                	movq	0x68(%rsp), %r10
                	movq	%r10, 0x18(%rsp)
+               	nopl	(%rax)
                	testl	%edi, %edi
                	je	<addr>
                	decq	%rdi

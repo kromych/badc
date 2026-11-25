@@ -237,6 +237,7 @@ Disassembly of section .text:
                	sarq	$0x2, %r13
                	jmp	<addr>
                	movq	(%r12), %rdi
+               	nopl	(%rax)
                	callq	<addr>
                	jmp	<addr>
                	leaq	0x1(%rbx), %rax
@@ -245,7 +246,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	incq	%r14
-               	nopw	(%rax,%rax)
+               	nopl	(%rax)
                	cmpl	$0x24, %r14d
                	jb	<addr>
                	callq	<addr>

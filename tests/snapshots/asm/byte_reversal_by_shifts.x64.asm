@@ -134,6 +134,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movq	%rbx, %rdi
+               	nop
                	callq	<addr>
                	movl	%eax, %r8d
                	movl	%ebx, %esi
@@ -152,7 +153,6 @@ Disassembly of section .text:
                	movzbq	0x30(%rsp,%rcx), %rdx
                	orq	%rdx, %rax
                	incq	%rcx
-               	nop
                	cmpl	$0x4, %ecx
                	jl	<addr>
                	cmpq	%rax, %r8

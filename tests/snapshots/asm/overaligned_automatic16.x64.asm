@@ -255,6 +255,7 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
+               	nop
                	addq	$0x80, %rsp
                	retq
 

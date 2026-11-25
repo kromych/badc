@@ -93,6 +93,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movq	(%rbx,%rax,8), %r9
                	movq	%r10, %rax
+               	nop
                	jmpq	*%r9
                	movq	-0x8(%rsi), %r9
                	movq	%r9, (%rsi)
@@ -328,6 +329,7 @@ Disassembly of section .text:
                	movq	%r9, 0x88(%rsp)
                	movq	0x38(%rsp), %r9
                	movq	0x88(%rsp), %r10
+               	nop
                	jmpq	*%r10
                	movq	%rsi, 0x58(%rsp)
                	movq	%rdi, 0x48(%rsp)

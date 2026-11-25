@@ -2604,6 +2604,7 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	divl	%edi
                	leaq	(%rsi,%rdx), %rax
+               	nopl	(%rax,%rax)
                	cmpl	%eax, %ecx
                	jne	<addr>
                	movslq	0x28(%rsp), %rax
@@ -2615,6 +2616,7 @@ Disassembly of section .text:
                	idivq	%rcx
                	addq	%r13, %rax
                	addq	%rax, %rbx
+               	nop
                	jmp	<addr>
                	movl	<rip>, %ebx # <addr>
                	movq	%rbx, %rax

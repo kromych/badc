@@ -32,6 +32,7 @@ Disassembly of section .text:
                	cmpl	$0x3e8, %r8d            # imm = 0x3E8
                	jle	<addr>
                	decq	%r8
+               	nopl	(%rax,%rax)
                	jmp	<addr>
                	cmpl	$0x40001, %edi          # imm = 0x40001
                	jne	<addr>
@@ -39,6 +40,7 @@ Disassembly of section .text:
                	jne	<addr>
                	testq	%rdx, %rdx
                	jne	<addr>
+               	nopw	(%rax,%rax)
                	cmpq	$0x7, %rcx
                	jne	<addr>
                	cmpl	$0x3, %r8d

@@ -182,6 +182,7 @@ Disassembly of section .text:
                	leaq	0x64(%r12), %r15
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	nop
                	callq	<addr>
                	testl	%ebx, %ebx
                	jl	<addr>
@@ -189,7 +190,7 @@ Disassembly of section .text:
                	jge	<addr>
                	leaq	(%rbx,%rbx,2), %rcx
                	leaq	0x2(%rcx), %rsi
-               	nopl	(%rax)
+               	nop
                	testl	%r12d, %r12d
                	jl	<addr>
                	cmpl	$0xc, %r12d

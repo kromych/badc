@@ -81,6 +81,46 @@ pub(crate) struct CodeBuf {
     /// The registers ended sites borrowed and did not reload yet: their
     /// values are in the slots until a later site or a flush reloads them.
     pending: [Option<Borrowed>; 2],
+    /// The x86-64 function being emitted keeps its control transfers off
+    /// 32-byte boundaries.
+    pub(crate) windows: BranchWindows,
+}
+
+/// x86-64 `-mbranches-within-32B-boundaries`, and under `-O` in the blocks
+/// that run repeatedly: a branch group -- a jump, a call, a return, or the
+/// flag-setting instruction a conditional jump fuses with through the jump
+/// -- padded so that it neither crosses nor ends on a 32-byte boundary, which
+/// a core with the update for Intel erratum SKX102 otherwise decodes on every
+/// pass through. Function entries are 32-byte aligned, so the offset in the
+/// buffer places the boundaries.
+#[derive(Default)]
+pub(crate) struct BranchWindows {
+    pub(crate) on: bool,
+    /// Per local-branch group, keyed by its first branch's emission index,
+    /// its length in the previous pass, 0 where unknown. A pass shortens
+    /// branches only, so the length bounds the group's length in the next
+    /// pass. A call, a return or a jump out of the function has one length.
+    pub(crate) prev: Vec<u8>,
+    pub(crate) now: Vec<u8>,
+    /// Each group's start and the padding it can take ahead of it, in this
+    /// pass's layout, in order.
+    pub(crate) starts: Vec<(usize, usize)>,
+    /// Where the open group starts, and its index among this pass's opens.
+    pub(crate) open: Option<usize>,
+    pub(crate) open_index: usize,
+    /// This pass's opens so far.
+    pub(crate) opens: usize,
+    /// Per open, in the order the pass opens them, whether a branch closed
+    /// it: a group opened at a flag-setting instruction is left when its
+    /// block ends without the jump. Only an open the previous pass closed
+    /// pads, so every padding is one `relax_branches` counted, where it
+    /// counted it.
+    pub(crate) closed_prev: Vec<bool>,
+    pub(crate) closed_now: Vec<bool>,
+    /// Per block, whether its groups are padded; empty pads every block.
+    pub(crate) pad: Vec<bool>,
+    /// Whether the code being emitted pads.
+    pub(crate) here: bool,
 }
 
 impl CodeBuf {

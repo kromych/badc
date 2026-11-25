@@ -41,6 +41,7 @@ Disassembly of section .text:
                	decq	%rdi
                	callq	<addr>
                	movsbq	(%rsp), %rax
+               	nop
                	addq	$0x108, %rsp            # imm = 0x108
                	retq
 

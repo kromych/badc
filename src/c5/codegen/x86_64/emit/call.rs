@@ -649,7 +649,8 @@ pub(super) fn wide_args(
 
 /// A direct call to `target_pc`: opcode E8 with a rel32 the fixup pass
 /// patches once the callee's native offset is known.
-fn emit_call_to(code: &mut Vec<u8>, fixups: &mut Vec<Fixup>, target_pc: usize) {
+fn emit_call_to(code: &mut CodeBuf, fixups: &mut Vec<Fixup>, target_pc: usize) {
+    pad_group(code, 0, 5);
     fixups.push(Fixup {
         native_offset: code.len(),
         target_ent_pc: target_pc,
@@ -847,6 +848,7 @@ pub(super) fn emit_call_ext(
         super::encode::emit_mov_al_imm8(code, xmm_used);
     }
     clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
+    pad_group(code, 0, 5);
     let call_site = code.len();
     plt_call_fixups.push(PltCallFixup {
         instr_offset: call_site,
@@ -1487,6 +1489,7 @@ pub(super) fn emit_tail_call(
     restore_dynamic_sp(code, frame, alloc);
     restore_callee_saved(code, frame, alloc, ex);
     clear_upper(code, frame, wide_args(args, &[], &plan, alloc));
+    let here = pad_epilogue(code, (func, frame, alloc, abi), 5);
     emit_frame_teardown(code, func, frame, alloc, abi, ex);
     // A Call-kind fixup resolves the rel32 like an intra-unit call, an import
     // fixup as a call through the import's trampoline; the opcode is `jmp`.
@@ -1505,6 +1508,7 @@ pub(super) fn emit_tail_call(
         }),
     }
     super::encode::emit_jmp_rel32(code, 0);
+    code.windows.here = here;
     Ok(())
 }
 

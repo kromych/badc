@@ -124,6 +124,7 @@ Disassembly of section .text:
                	jae	<addr>
                	leaq	<rip>, %r11
                	movq	(%r11,%rcx,8), %r10
+               	nop
                	jmpq	*%r10
                	leaq	0x2(%rdx), %rsi
                	xchgq	%rsi, %rdx
@@ -140,7 +141,7 @@ Disassembly of section .text:
                	leaq	(%rdi,%rdx), %rsi
                	movl	$0x2, %edx
                	imulq	$0x21, %rsi, %rsi
-               	nopl	(%rax)
+               	nop
                	cmpq	$0xc, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
@@ -246,6 +247,7 @@ Disassembly of section .text:
                	jae	<addr>
                	leaq	<rip>, %r11
                	movq	(%r11,%rcx,8), %r10
+               	nop
                	jmpq	*%r10
                	movl	$0x3, %esi
                	leaq	0x2(%rsi), %rdx
@@ -262,7 +264,6 @@ Disassembly of section .text:
                	leaq	(%rdi,%rdx), %rsi
                	movl	$0x2, %edx
                	imulq	$0x21, %rsi, %rsi
-               	nop
                	cmpq	$0xc, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11

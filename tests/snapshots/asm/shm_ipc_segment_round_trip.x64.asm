@@ -79,6 +79,7 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	%rcx, 0x8(%rsp)
                	movl	$0x3e8, %edi            # imm = 0x3E8
+               	nop
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x8(%rsp), %rcx
@@ -91,6 +92,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	0x8(%rsp), %rcx
+               	nopw	(%rax,%rax)
                	testq	%rax, %rax
                	jne	<addr>
                	incq	%rcx

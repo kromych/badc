@@ -5625,12 +5625,14 @@ Disassembly of section .text:
                	movups	%xmm14, -0x10(%rbp)
                	movl	$0x1, %edi
                	vzeroupper
+               	nopl	(%rax)
                	callq	<addr>
                	vmovd	%xmm0, %r11d
                	vmovd	%r11d, %xmm14
                	movups	%xmm14, -0x20(%rbp)
                	movl	$0x1, %edi
                	vzeroupper
+               	nopl	(%rax)
                	callq	<addr>
                	movups	-0x10(%rbp), %xmm1
                	vmovd	%xmm0, %r11d
@@ -5774,6 +5776,7 @@ Disassembly of section .text:
                	movups	%xmm14, -0x90(%rbp)
                	movl	$0x1, %edi
                	vzeroupper
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	vmovq	%xmm0, %xmm14           # xmm14 = xmm0[0],zero
                	movups	%xmm14, -0xa0(%rbp)
@@ -5814,6 +5817,7 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%edi, %edi
                	vzeroupper
+               	nop
                	callq	<addr>
                	vmovd	%xmm0, %r11d
                	vmovd	%r11d, %xmm14
@@ -5880,6 +5884,7 @@ Disassembly of section .text:
                	movups	%xmm14, -0x30(%rbp)
                	xorl	%edi, %edi
                	vzeroupper
+               	nopl	(%rax)
                	callq	<addr>
                	movups	-0x10(%rbp), %xmm1
                	vmovd	%xmm0, %r11d
@@ -5973,6 +5978,7 @@ Disassembly of section .text:
                	movups	%xmm14, -0x90(%rbp)
                	xorl	%edi, %edi
                	vzeroupper
+               	nop
                	callq	<addr>
                	movups	-0x30(%rbp), %xmm1
                	vmovd	%xmm0, %r11d
@@ -6008,6 +6014,7 @@ Disassembly of section .text:
                	movups	%xmm14, -0x70(%rbp)
                	xorl	%edi, %edi
                	vzeroupper
+               	nopl	(%rax)
                	callq	<addr>
                	vmovq	%xmm0, %xmm14           # xmm14 = xmm0[0],zero
                	movups	%xmm14, -0x80(%rbp)
@@ -6106,10 +6113,10 @@ Disassembly of section .text:
                	vmovups	(%r10), %ymm5
                	callq	<addr>
                	incq	%rbx
-               	nopl	(%rax,%rax)
                	cmpl	$0x96, %ebx
                	jl	<addr>
                	incq	%r15
+               	nopl	(%rax)
                	cmpl	$0x4, %r15d
                	jl	<addr>
                	xorl	%edi, %edi

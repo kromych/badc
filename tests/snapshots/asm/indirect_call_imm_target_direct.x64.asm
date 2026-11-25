@@ -33,6 +33,7 @@ Disassembly of section .text:
                	addq	$0x28, %rsp
                	retq
                	leaq	-0x1(%rdi), %rcx
+               	nopw	(%rax,%rax)
                	cmpl	$0x2, %ecx
                	jge	<addr>
                	movl	$0x1, %eax

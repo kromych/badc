@@ -173,6 +173,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %rsi
                	xorl	%edi, %edi
+               	nop
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -195,7 +196,7 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	leaq	0x78(%rsp), %rdx
                	callq	<addr>
-               	nopl	(%rax)
+               	nop
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	0x88(%rsp), %rdi

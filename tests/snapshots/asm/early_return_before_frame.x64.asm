@@ -130,6 +130,7 @@ Disassembly of section .text:
                	xorl	%r12d, %r12d
                	movq	0x10(%rbx), %r13
                	movq	(%rbx), %rdi
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	addq	%r13, %rax
                	movq	0x8(%rbx), %rbx
@@ -142,6 +143,7 @@ Disassembly of section .text:
                	popq	%r13
                	retq
                	xorl	%eax, %eax
+               	nop
                	retq
 
 <narrow>:
@@ -561,6 +563,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movq	<rip>, %rax # <addr>
                	movq	%rcx, 0x20(%rsp)
+               	nop
                	callq	*%rax
                	movq	0x20(%rsp), %rcx
                	movsbq	(%rcx), %rax

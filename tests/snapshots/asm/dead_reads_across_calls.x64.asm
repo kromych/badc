@@ -114,6 +114,7 @@ Disassembly of section .text:
                	imulq	$0xa, %rbx, %rax
                	subq	%rax, %rdi
                	imulq	$0x7, %rcx, %r12
+               	nop
                	callq	<addr>
                	leaq	(%r12,%rax), %rcx
                	movq	%rbx, %rdi

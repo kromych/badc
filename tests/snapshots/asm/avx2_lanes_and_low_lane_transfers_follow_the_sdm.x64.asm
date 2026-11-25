@@ -751,6 +751,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	-0xb0(%rbp), %rdi
                	vzeroupper
+               	nopl	(%rax)
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>

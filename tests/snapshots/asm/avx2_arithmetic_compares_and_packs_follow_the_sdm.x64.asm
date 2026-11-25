@@ -628,6 +628,7 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rsi
                	movl	$0x20, %edx
                	vzeroupper
+               	nop
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -840,6 +841,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	incq	%r15
+               	nopl	(%rax,%rax)
                	cmpl	$0x3, %r15d
                	jl	<addr>
                	xorl	%eax, %eax
@@ -1312,6 +1314,7 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rsi
                	movl	$0x20, %edx
                	vzeroupper
+               	nop
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -1746,6 +1749,7 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	leaq	-0x60(%rbp), %rsi
                	vzeroupper
+               	nopl	(%rax,%rax)
                	callq	<addr>
                	movq	-0x90(%rbp), %r10
                	orq	%rax, %r10
@@ -1772,7 +1776,6 @@ Disassembly of section .text:
                	orq	%rax, %r10
                	movq	%r10, -0x90(%rbp)
                	addq	$0x1, -0x98(%rbp)
-               	nopl	(%rax)
                	movq	-0x98(%rbp), %rax
                	cmpl	$0x12c, %eax            # imm = 0x12C
                	jge	<addr>
@@ -1780,7 +1783,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movb	%al, -0x80(%rbp,%rcx)
                	incq	%rcx
-               	nopl	(%rax)
+               	nop
                	cmpl	$0x20, %ecx
                	jge	<addr>
                	movq	<rip>, %rax # <addr>
@@ -2004,6 +2007,7 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rsi
                	movl	$0x20, %edx
                	vzeroupper
+               	nop
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -2012,7 +2016,7 @@ Disassembly of section .text:
                	cmpl	$0x8, %r15d
                	jl	<addr>
                	xorl	%eax, %eax
-               	nopl	(%rax,%rax)
+               	nopl	(%rax)
                	jmp	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>

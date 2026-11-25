@@ -127,11 +127,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	addq	$0x180, %rsi            # imm = 0x180
                	addq	%rsi, %rdx
-               	movq	0x10(%rdx), %rdx
-               	leaq	<rip>, %rdi # <addr>
-               	movslq	(%rdi,%rax,4), %rdi
-               	shlq	$0x8, %rdi
-               	cmpq	%rdi, %rdx
+               	movq	0x10(%rdx), %rdi
+               	leaq	<rip>, %rdx # <addr>
+               	movslq	(%rdx,%rax,4), %rdx
+               	shlq	$0x8, %rdx
+               	cmpq	%rdx, %rdi
                	jne	<addr>
                	imulq	$0x30, %rax, %rdx
                	addq	%rsi, %rdx

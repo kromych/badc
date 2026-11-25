@@ -26,8 +26,8 @@ Disassembly of section .text:
                	int3
 
 <touch>:
+               	xorq	$0x5a5a, %rdi           # imm = 0x5A5A
                	movq	%rdi, %rax
-               	xorq	$0x5a5a, %rax           # imm = 0x5A5A
                	retq
 
 <scale>:
@@ -203,15 +203,15 @@ Disassembly of section .text:
                	jge	<addr>
                	testb	$0x1, %al
                	je	<addr>
-               	movq	0x10(%rsp,%rax,8), %rdi
+               	movq	0x10(%rsp,%rax,8), %rcx
                	leaq	-0x1(%rax), %r8
-               	movq	0x10(%rsp,%r8,8), %rcx
-               	xorq	%rdi, %rcx
+               	movq	0x10(%rsp,%r8,8), %rdx
+               	xorq	%rdx, %rcx
                	jmp	<addr>
-               	movq	0x10(%rsp,%rax,8), %rdi
+               	movq	0x10(%rsp,%rax,8), %rdx
                	leaq	-0x1(%rax), %r8
                	movq	0x10(%rsp,%r8,8), %rcx
-               	addq	%rdi, %rcx
+               	addq	%rdx, %rcx
                	jmp	<addr>
                	nopw	(%rax,%rax)
                	testb	$0x7, %bl
@@ -556,65 +556,65 @@ Disassembly of section .text:
                	jge	<addr>
                	vmovd	%xmm1, %ecx
                	movslq	%ecx, %rcx
-               	addq	%rax, %rcx
+               	leaq	(%rcx,%rax), %r8
                	movapd	%xmm1, %xmm4
-               	vpinsrd	$0x0, %ecx, %xmm4, %xmm4
-               	vpextrd	$0x1, %xmm1, %edx
-               	movslq	%edx, %rdx
-               	incq	%rdx
-               	vpinsrd	$0x1, %edx, %xmm4, %xmm4
-               	vpextrd	$0x2, %xmm1, %esi
-               	movslq	%esi, %rsi
-               	addq	$0x2, %rsi
-               	vpinsrd	$0x2, %esi, %xmm4, %xmm4
-               	vpextrd	$0x3, %xmm1, %edi
-               	movslq	%edi, %rdi
-               	addq	$0x3, %rdi
-               	movapd	%xmm4, %xmm1
-               	vpinsrd	$0x3, %edi, %xmm1, %xmm1
-               	vmovd	%xmm3, %r8d
-               	movslq	%r8d, %r8
-               	xorq	%rcx, %r8
-               	movapd	%xmm3, %xmm4
                	vpinsrd	$0x0, %r8d, %xmm4, %xmm4
-               	vpextrd	$0x1, %xmm3, %r9d
-               	movslq	%r9d, %r9
-               	xorq	%rdx, %r9
+               	vpextrd	$0x1, %xmm1, %ecx
+               	movslq	%ecx, %rcx
+               	leaq	0x1(%rcx), %r9
                	vpinsrd	$0x1, %r9d, %xmm4, %xmm4
-               	vpextrd	$0x2, %xmm3, %ebx
-               	movslq	%ebx, %rbx
-               	xorq	%rsi, %rbx
+               	vpextrd	$0x2, %xmm1, %ecx
+               	movslq	%ecx, %rcx
+               	leaq	0x2(%rcx), %rbx
                	vpinsrd	$0x2, %ebx, %xmm4, %xmm4
-               	vpextrd	$0x3, %xmm3, %r12d
-               	movslq	%r12d, %r12
-               	xorq	%rdi, %r12
+               	vpextrd	$0x3, %xmm1, %ecx
+               	movslq	%ecx, %rcx
+               	leaq	0x3(%rcx), %r12
+               	movapd	%xmm4, %xmm1
+               	vpinsrd	$0x3, %r12d, %xmm1, %xmm1
+               	vmovd	%xmm3, %ecx
+               	movslq	%ecx, %rcx
+               	xorq	%r8, %rcx
+               	movapd	%xmm3, %xmm4
+               	vpinsrd	$0x0, %ecx, %xmm4, %xmm4
+               	vpextrd	$0x1, %xmm3, %edx
+               	movslq	%edx, %rdx
+               	xorq	%r9, %rdx
+               	vpinsrd	$0x1, %edx, %xmm4, %xmm4
+               	vpextrd	$0x2, %xmm3, %esi
+               	movslq	%esi, %rsi
+               	xorq	%rbx, %rsi
+               	vpinsrd	$0x2, %esi, %xmm4, %xmm4
+               	vpextrd	$0x3, %xmm3, %edi
+               	movslq	%edi, %rdi
+               	xorq	%r12, %rdi
                	movapd	%xmm4, %xmm3
-               	vpinsrd	$0x3, %r12d, %xmm3, %xmm3
+               	vpinsrd	$0x3, %edi, %xmm3, %xmm3
                	vmovd	%xmm2, %r13d
                	movslq	%r13d, %r13
-               	addq	%r13, %r8
+               	addq	%r13, %rcx
                	movapd	%xmm2, %xmm4
-               	vpinsrd	$0x0, %r8d, %xmm4, %xmm4
-               	vpextrd	$0x1, %xmm2, %r8d
-               	movslq	%r8d, %r8
-               	addq	%r9, %r8
-               	vpinsrd	$0x1, %r8d, %xmm4, %xmm4
-               	vpextrd	$0x2, %xmm2, %r8d
-               	movslq	%r8d, %r8
-               	addq	%rbx, %r8
-               	vpinsrd	$0x2, %r8d, %xmm4, %xmm4
-               	vpextrd	$0x3, %xmm2, %r8d
-               	movslq	%r8d, %r8
-               	addq	%r12, %r8
+               	vpinsrd	$0x0, %ecx, %xmm4, %xmm4
+               	vpextrd	$0x1, %xmm2, %ecx
+               	movslq	%ecx, %rcx
+               	addq	%rdx, %rcx
+               	vpinsrd	$0x1, %ecx, %xmm4, %xmm4
+               	vpextrd	$0x2, %xmm2, %ecx
+               	movslq	%ecx, %rcx
+               	addq	%rsi, %rcx
+               	vpinsrd	$0x2, %ecx, %xmm4, %xmm4
+               	vpextrd	$0x3, %xmm2, %ecx
+               	movslq	%ecx, %rcx
+               	addq	%rdi, %rcx
                	movapd	%xmm4, %xmm2
-               	vpinsrd	$0x3, %r8d, %xmm2, %xmm2
-               	nopl	(%rax)
+               	vpinsrd	$0x3, %ecx, %xmm2, %xmm2
+               	nopw	(%rax,%rax)
                	testb	$0x1, %al
                	jne	<addr>
-               	vmovd	%edi, %xmm1
-               	vpinsrd	$0x1, %esi, %xmm1, %xmm1
-               	vpinsrd	$0x2, %edx, %xmm1, %xmm1
-               	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
+               	vmovd	%r12d, %xmm1
+               	vpinsrd	$0x1, %ebx, %xmm1, %xmm1
+               	vpinsrd	$0x2, %r9d, %xmm1, %xmm1
+               	vpinsrd	$0x3, %r8d, %xmm1, %xmm1
                	nop
                	jmp	<addr>
                	vmovd	%xmm0, %eax

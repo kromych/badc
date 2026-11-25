@@ -2987,7 +2987,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
   block 38  start_pc=0
     v973 LocalAddr(-1)                                    -> x0
     v974 InlineAsm { template="stmxcsr %0", ops=1, args=[v973] } -> -
-    v975 LoadLocal { off=-1, kind=U32 }                   -> x1
+    v975 LoadLocal { off=-1, kind=U32 }                   -> x2
     v976 LifetimeEnd(-1)                                  -> -
     v977 BinopI { op=and, lhs=v975, rhs_imm=4294967295 }  -> x0
     v978 Imm(0)                                           -> x0
@@ -2995,8 +2995,8 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v980 InlineAsm { template="stmxcsr %0", ops=1, args=[v979] } -> -
     v981 LoadLocal { off=-1, kind=U32 }                   -> x0
     v982 LifetimeEnd(-1)                                  -> -
-    v983 BinopI { op=and, lhs=v981, rhs_imm=4294967295 }  -> x2
-    v984 Imm(-65)                                         -> x2
+    v983 BinopI { op=and, lhs=v981, rhs_imm=4294967295 }  -> x1
+    v984 Imm(-65)                                         -> x1
     v985 BinopI { op=and, lhs=v981, rhs_imm=4294967231 }  -> x0
     v986 BinopI { op=or, lhs=v985, rhs_imm=64 }           -> x0
     v987 StoreLocal { off=-1, value=v986, kind=I32 }      -> -
@@ -3005,11 +3005,11 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v990 LifetimeEnd(-1)                                  -> -
     v991 LocalAddr(-1)                                    -> x0
     v992 InlineAsm { template="stmxcsr %0", ops=1, args=[v991] } -> -
-    v993 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v993 LoadLocal { off=-1, kind=U32 }                   -> x1
     v994 LifetimeEnd(-1)                                  -> -
-    v995 BinopI { op=and, lhs=v993, rhs_imm=4294967295 }  -> x2
-    v996 BinopI { op=and, lhs=v993, rhs_imm=64 }          -> x0
-    v997 BinopI { op=xor, lhs=v996, rhs_imm=64 }          -> x2
+    v995 BinopI { op=and, lhs=v993, rhs_imm=4294967295 }  -> x0
+    v996 BinopI { op=and, lhs=v993, rhs_imm=64 }          -> x1
+    v997 BinopI { op=xor, lhs=v996, rhs_imm=64 }          -> x1
     v998 BinopI { op=and, lhs=v997, rhs_imm=4294967295 }  -> x0
     v999 BinopI { op=eq, lhs=v996, rhs_imm=64 }           -> x0
     v1000 Imm(0)                                           -> x0
@@ -3027,8 +3027,8 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v1010 InlineAsm { template="stmxcsr %0", ops=1, args=[v1009] } -> -
     v1011 LoadLocal { off=-1, kind=U32 }                   -> x0
     v1012 LifetimeEnd(-1)                                  -> -
-    v1013 BinopI { op=and, lhs=v1011, rhs_imm=4294967295 } -> x2
-    v1014 BinopI { op=and, lhs=v975, rhs_imm=4294967295 }  -> x2
+    v1013 BinopI { op=and, lhs=v1011, rhs_imm=4294967295 } -> x1
+    v1014 BinopI { op=and, lhs=v975, rhs_imm=4294967295 }  -> x1
     v1015 Binop { op=ne, lhs=v1011, rhs=v975 }             -> x0
     v1016 Imm(0)                                           -> x1
     v1017 Imm(0)                                           -> x1

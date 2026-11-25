@@ -169,7 +169,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(2)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x0
+    v5   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x7
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=keep_pointer

@@ -67,10 +67,10 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpl	$0x80, %eax
                	jae	<addr>
-               	movq	%rax, %rdx
-               	andq	$0xff, %rdx
+               	andq	$0xff, %rax
                	leaq	<rip>, %rdi
                	movl	$0x1, %esi
+               	movq	%rax, %rdx
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax

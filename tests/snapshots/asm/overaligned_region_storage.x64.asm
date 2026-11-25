@@ -49,11 +49,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	%esi, %eax
                	jge	<addr>
-               	movzbq	(%rdi,%rax), %rcx
-               	leaq	(%rax,%rax,2), %r8
-               	addq	%rdx, %r8
-               	andq	$0xff, %r8
-               	cmpl	%r8d, %ecx
+               	movzbq	(%rdi,%rax), %r8
+               	leaq	(%rax,%rax,2), %rcx
+               	addq	%rdx, %rcx
+               	andq	$0xff, %rcx
+               	cmpl	%ecx, %r8d
                	jne	<addr>
                	incq	%rax
                	cmpl	%esi, %eax

@@ -31,15 +31,15 @@ Disassembly of section .text:
                	retq
 
 <narrow48>:
+               	shlq	$0x30, %rdi
+               	xorq	$0x1, %rdi
                	movq	%rdi, %rax
-               	shlq	$0x30, %rax
-               	xorq	$0x1, %rax
                	retq
 
 <narrow56>:
+               	shlq	$0x38, %rdi
+               	orq	$0x1, %rdi
                	movq	%rdi, %rax
-               	shlq	$0x38, %rax
-               	orq	$0x1, %rax
                	retq
 
 <main>:

@@ -37,13 +37,13 @@ Disassembly of section .text:
                	retq
 
 <sub>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
                	retq
 
 <twice>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <where>:

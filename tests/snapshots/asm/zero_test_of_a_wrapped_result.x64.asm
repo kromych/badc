@@ -44,8 +44,8 @@ Disassembly of section .text:
                	retq
 
 <mul_nz>:
-               	imulq	%rdi, %rsi
-               	testl	%esi, %esi
+               	imulq	%rsi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -62,8 +62,8 @@ Disassembly of section .text:
                	retq
 
 <umul_z>:
-               	imulq	%rdi, %rsi
-               	testl	%esi, %esi
+               	imulq	%rsi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	movl	$0x1, %eax
                	retq

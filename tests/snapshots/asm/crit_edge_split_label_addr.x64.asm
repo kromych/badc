@@ -33,15 +33,14 @@ Disassembly of section .text:
                	movq	%rax, <rip> # <addr>
                	movq	$-0x1, %rax
                	retq
-               	movq	%rdi, %rcx
-               	andq	$0xf, %rcx
-               	xorq	$0x5, %rcx
-               	testl	%ecx, %ecx
+               	andq	$0xf, %rdi
+               	xorq	$0x5, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	testb	$0x1, %sil
                	je	<addr>
                	movl	$0xb, %eax
-               	testl	%ecx, %ecx
+               	testl	%edi, %edi
                	jne	<addr>
                	testb	$0x2, %sil
                	je	<addr>

@@ -33,15 +33,15 @@ Disassembly of section .text:
                	shrq	$0x3d, %rcx
                	addq	%rcx, %rax
                	sarq	$0x3, %rax
-               	movq	%rdx, %rcx
-               	shrq	$0x3d, %rcx
-               	addq	%rcx, %rdx
-               	andq	$0x7, %rdx
-               	subq	%rcx, %rdx
-               	cmpq	$0x8, %rdx
+               	movq	%rdx, %r8
+               	shrq	$0x3d, %r8
+               	leaq	(%rdx,%r8), %rcx
+               	andq	$0x7, %rcx
+               	subq	%r8, %rcx
+               	cmpq	$0x8, %rcx
                	jae	<addr>
                	leaq	<rip>, %r11
-               	movq	(%r11,%rdx,8), %r10
+               	movq	(%r11,%rcx,8), %r10
                	jmpq	*%r10
                	incq	%rdi
                	incq	%rsi

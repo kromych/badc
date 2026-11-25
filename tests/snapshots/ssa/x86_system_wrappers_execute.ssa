@@ -43,8 +43,8 @@ fn ent_pc=1358 n_params=0 variadic=false locals=1
     v35  AsmOut(1, kind=I64)                              -> x2
     v36  BinopI { op=and, lhs=v34, rhs_imm=4294967295 }   -> x1
     v37  BinopI { op=shl, lhs=v35, rhs_imm=32 }           -> x2
-    v38  Binop { op=or, lhs=v37, rhs=v34 }                -> x0
-    v39  BinopI { op=and, lhs=v38, rhs_imm=3 }            -> x0
+    v38  Binop { op=or, lhs=v37, rhs=v34 }                -> x2
+    v39  BinopI { op=and, lhs=v38, rhs_imm=3 }            -> x2
     v40  BinopI { op=ne, lhs=v39, rhs_imm=3 }             -> x0
     v41  Imm(0)                                           -> x1
     v42  Imm(0)                                           -> x1
@@ -114,9 +114,9 @@ fn ent_pc=1358 n_params=0 variadic=false locals=1
     v98  Imm(0)                                           -> x0
     v99  LocalAddr(-1)                                    -> x0
     v100 InlineAsm { template="rdtscp", ops=3, args=[-, -, v99] } -> x0
-    v101 AsmOut(1, kind=I64)                              -> x2
+    v101 AsmOut(1, kind=I64)                              -> x6
     v102 BinopI { op=and, lhs=v100, rhs_imm=4294967295 }  -> x0
-    v103 BinopI { op=shl, lhs=v101, rhs_imm=32 }          -> x2
+    v103 BinopI { op=shl, lhs=v101, rhs_imm=32 }          -> x6
     v104 Binop { op=or, lhs=v103, rhs=v102 }              -> x6
     v105 Imm(0)                                           -> x0
     v106 Imm(0)                                           -> x0
@@ -221,12 +221,12 @@ fn ent_pc=1358 n_params=0 variadic=false locals=1
   block 15  start_pc=0
     v192 InlineAsm { template="pushfq\n\tpopq %0", ops=1, args=[-] } -> x1
     v193 Imm(0)                                           -> x2
-    v194 Binop { op=xor, lhs=v192, rhs=v185 }             -> x0
-    v195 Imm(2097152)                                     -> x1
-    v196 BinopI { op=and, lhs=v194, rhs_imm=2097152 }     -> x0
-    v197 Imm(0)                                           -> x1
-    v198 Imm(0)                                           -> x1
-    v199 Imm(0)                                           -> x1
+    v194 Binop { op=xor, lhs=v192, rhs=v185 }             -> x1
+    v195 Imm(2097152)                                     -> x0
+    v196 BinopI { op=and, lhs=v194, rhs_imm=2097152 }     -> x1
+    v197 Imm(0)                                           -> x0
+    v198 Imm(0)                                           -> x0
+    v199 Imm(0)                                           -> x0
     terminator Bz { cond=v196, target=b17, fall=b16 }   (exit_acc=v196)
   block 16  start_pc=0
     v181 Imm(4)                                           -> x0

@@ -149,11 +149,10 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	movq	0x10(%rsp), %rax
                	addq	%rax, %rcx
-               	movq	%rcx, %rdx
-               	subq	%rax, %rdx
-               	movq	0x18(%rsp), %rcx
-               	leaq	(%rdx,%rcx), %rax
-               	subq	%rcx, %rax
+               	subq	%rax, %rcx
+               	movq	0x18(%rsp), %rdx
+               	leaq	(%rcx,%rdx), %rax
+               	subq	%rdx, %rax
                	retq
 
 <make>:

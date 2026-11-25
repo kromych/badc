@@ -990,16 +990,15 @@ Disassembly of section .text:
                	shlxq	%rdx, %rcx, %rsi
                	andq	$0xff, %rsi
                	shrxq	%rdx, %rcx, %rcx
-               	movq	%rcx, %rdx
-               	andq	$0xff, %rdx
-               	leaq	0x30(%rsp), %rcx
+               	andq	$0xff, %rcx
+               	leaq	0x30(%rsp), %rdx
                	movzbq	0x30(%rsp,%rax), %rdi
                	cmpl	%esi, %edi
                	jne	<addr>
-               	addq	$0x10, %rcx
-               	movzbq	(%rcx,%rax), %rcx
+               	addq	$0x10, %rdx
+               	movzbq	(%rdx,%rax), %rdx
                	nopl	(%rax)
-               	cmpl	%edx, %ecx
+               	cmpl	%ecx, %edx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax
@@ -1772,16 +1771,15 @@ Disassembly of section .text:
                	shlxq	%rdx, %rcx, %rsi
                	andq	$0xffff, %rsi           # imm = 0xFFFF
                	shrxq	%rdx, %rcx, %rcx
-               	movq	%rcx, %rdx
-               	andq	$0xffff, %rdx           # imm = 0xFFFF
-               	leaq	0x40(%rsp), %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	leaq	0x40(%rsp), %rdx
                	movzwq	0x40(%rsp,%rax,2), %rdi
                	nopl	(%rax,%rax)
                	cmpl	%esi, %edi
                	jne	<addr>
-               	addq	$0x20, %rcx
-               	movzwq	(%rcx,%rax,2), %rcx
-               	cmpl	%edx, %ecx
+               	addq	$0x20, %rdx
+               	movzwq	(%rdx,%rax,2), %rdx
+               	cmpl	%ecx, %edx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax

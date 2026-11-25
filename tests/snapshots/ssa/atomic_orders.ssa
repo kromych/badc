@@ -6103,23 +6103,23 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ImmData(51)                                      -> x0
     v4   Imm(0)                                           -> x0
-    v5   ImmData(50)                                      -> x0
-    v6   Imm(250)                                         -> x1
+    v5   ImmData(50)                                      -> x1
+    v6   Imm(250)                                         -> x2
     v7   Store { addr=v5, disp=0, value=v6, kind=I8 pc_rel } -> -
-    v8   ImmData(50)                                      -> x2
-    v9   Imm(3)                                           -> x2
-    v10  AtomicRmw { op=Add, addr=v5, value=v9, width=1, order=Acquire } -> x6
-    v11  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x6
+    v8   ImmData(50)                                      -> x0
+    v9   Imm(3)                                           -> x6
+    v10  AtomicRmw { op=Add, addr=v5, value=v9, width=1, order=Acquire } -> x0
+    v11  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x0
     v12  Imm(250)                                         -> x7
-    v13  BinopI { op=eq, lhs=v11, rhs_imm=250 }           -> x6
+    v13  BinopI { op=eq, lhs=v11, rhs_imm=250 }           -> x0
     v14  Imm(0)                                           -> x7
     v15  Imm(0)                                           -> x7
     terminator Bz { cond=v13, target=b2, fall=b1 }   (exit_acc=v13)
   block 1  start_pc=0
-    v28  ImmData(50)                                      -> x6
-    v29  Load { addr=v5, disp=0, kind=U8 pc_rel }         -> x6
+    v28  ImmData(50)                                      -> x0
+    v29  Load { addr=v5, disp=0, kind=U8 pc_rel }         -> x0
     v30  Imm(253)                                         -> x7
-    v31  BinopI { op=eq, lhs=v29, rhs_imm=253 }           -> x6
+    v31  BinopI { op=eq, lhs=v29, rhs_imm=253 }           -> x0
     v32  BinopI { op=ne, lhs=v31, rhs_imm=0 }             -> x7
     v33  Imm(0)                                           -> x7
     v34  Imm(0)                                           -> x7
@@ -6131,15 +6131,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v38  LifetimeEnd(0)                                   -> -
     terminator Return(v37)   (exit_acc=v37)
   block 3  start_pc=0
-    v16  Imm(0)                                           -> x6
-    v17  ImmData(50)                                      -> x6
-    v18  Imm(250)                                         -> x6
+    v16  Imm(0)                                           -> x0
+    v17  ImmData(50)                                      -> x0
+    v18  Imm(250)                                         -> x0
     v19  Store { addr=v5, disp=0, value=v6, kind=I8 pc_rel } -> -
-    v20  ImmData(50)                                      -> x1
-    v21  Imm(3)                                           -> x1
-    v22  AtomicRmw { op=Sub, addr=v5, value=v9, width=1, order=Acquire } -> x1
-    v23  BinopI { op=and, lhs=v22, rhs_imm=255 }          -> x1
-    v24  Imm(250)                                         -> x0
+    v20  ImmData(50)                                      -> x0
+    v21  Imm(3)                                           -> x0
+    v22  AtomicRmw { op=Sub, addr=v5, value=v9, width=1, order=Acquire } -> x0
+    v23  BinopI { op=and, lhs=v22, rhs_imm=255 }          -> x0
+    v24  Imm(250)                                         -> x1
     v25  BinopI { op=eq, lhs=v23, rhs_imm=250 }           -> x0
     v26  Imm(0)                                           -> x1
     v27  Imm(0)                                           -> x1
@@ -8005,23 +8005,23 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ImmData(58)                                      -> x0
     v4   Imm(0)                                           -> x0
-    v5   ImmData(56)                                      -> x0
-    v6   Imm(65000)                                       -> x1
+    v5   ImmData(56)                                      -> x1
+    v6   Imm(65000)                                       -> x2
     v7   Store { addr=v5, disp=0, value=v6, kind=I16 pc_rel } -> -
-    v8   ImmData(56)                                      -> x2
-    v9   Imm(3)                                           -> x2
-    v10  AtomicRmw { op=Add, addr=v5, value=v9, width=2, order=AcqRel } -> x6
-    v11  BinopI { op=and, lhs=v10, rhs_imm=65535 }        -> x6
+    v8   ImmData(56)                                      -> x0
+    v9   Imm(3)                                           -> x6
+    v10  AtomicRmw { op=Add, addr=v5, value=v9, width=2, order=AcqRel } -> x0
+    v11  BinopI { op=and, lhs=v10, rhs_imm=65535 }        -> x0
     v12  Imm(65000)                                       -> x7
-    v13  BinopI { op=eq, lhs=v11, rhs_imm=65000 }         -> x6
+    v13  BinopI { op=eq, lhs=v11, rhs_imm=65000 }         -> x0
     v14  Imm(0)                                           -> x7
     v15  Imm(0)                                           -> x7
     terminator Bz { cond=v13, target=b2, fall=b1 }   (exit_acc=v13)
   block 1  start_pc=0
-    v28  ImmData(56)                                      -> x6
-    v29  Load { addr=v5, disp=0, kind=U16 pc_rel }        -> x6
+    v28  ImmData(56)                                      -> x0
+    v29  Load { addr=v5, disp=0, kind=U16 pc_rel }        -> x0
     v30  Imm(65003)                                       -> x7
-    v31  BinopI { op=eq, lhs=v29, rhs_imm=65003 }         -> x6
+    v31  BinopI { op=eq, lhs=v29, rhs_imm=65003 }         -> x0
     v32  BinopI { op=ne, lhs=v31, rhs_imm=0 }             -> x7
     v33  Imm(0)                                           -> x7
     v34  Imm(0)                                           -> x7
@@ -8033,15 +8033,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v38  LifetimeEnd(0)                                   -> -
     terminator Return(v37)   (exit_acc=v37)
   block 3  start_pc=0
-    v16  Imm(0)                                           -> x6
-    v17  ImmData(56)                                      -> x6
-    v18  Imm(65000)                                       -> x6
+    v16  Imm(0)                                           -> x0
+    v17  ImmData(56)                                      -> x0
+    v18  Imm(65000)                                       -> x0
     v19  Store { addr=v5, disp=0, value=v6, kind=I16 pc_rel } -> -
-    v20  ImmData(56)                                      -> x1
-    v21  Imm(3)                                           -> x1
-    v22  AtomicRmw { op=Sub, addr=v5, value=v9, width=2, order=AcqRel } -> x1
-    v23  BinopI { op=and, lhs=v22, rhs_imm=65535 }        -> x1
-    v24  Imm(65000)                                       -> x0
+    v20  ImmData(56)                                      -> x0
+    v21  Imm(3)                                           -> x0
+    v22  AtomicRmw { op=Sub, addr=v5, value=v9, width=2, order=AcqRel } -> x0
+    v23  BinopI { op=and, lhs=v22, rhs_imm=65535 }        -> x0
+    v24  Imm(65000)                                       -> x1
     v25  BinopI { op=eq, lhs=v23, rhs_imm=65000 }         -> x0
     v26  Imm(0)                                           -> x1
     v27  Imm(0)                                           -> x1

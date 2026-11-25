@@ -60,27 +60,27 @@ Disassembly of section .text:
                	callq	*%rax
                	cmpq	$0x2, %rax
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	leaq	-<rip>, %rax # <addr>
-               	subq	%rax, %rcx
-               	cmpq	$0x8, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	-<rip>, %rcx # <addr>
+               	subq	%rcx, %rax
+               	cmpq	$0x8, %rax
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	subq	%rax, %rcx
-               	cmpq	$0x8, %rcx
+               	movq	<rip>, %rax # <addr>
+               	subq	%rcx, %rax
+               	cmpq	$0x8, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%r11
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	leaq	-<rip>, %rax # <addr>
-               	subq	%rax, %rcx
-               	cmpq	$0xc, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	-<rip>, %rcx # <addr>
+               	subq	%rcx, %rax
+               	cmpq	$0xc, %rax
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	callq	*%rcx
+               	callq	*%rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x3, %eax

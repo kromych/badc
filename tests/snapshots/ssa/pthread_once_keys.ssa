@@ -588,14 +588,14 @@ fn ent_pc=19 n_params=0 variadic=false locals=9
   block 42  start_pc=0
     v271 Imm(0)                                           -> x0
     v272 ImmData(180)                                     -> x0
-    v273 Load { addr=v272, disp=0, kind=I32 pc_rel }      -> x0
-    v274 ImmData(160)                                     -> x1
-    v275 Imm(0)                                           -> x1
-    v276 Load { addr=v274, disp=0, kind=I32 pc_rel }      -> x1
+    v273 Load { addr=v272, disp=0, kind=I32 pc_rel }      -> x1
+    v274 ImmData(160)                                     -> x0
+    v275 Imm(0)                                           -> x0
+    v276 Load { addr=v274, disp=0, kind=I32 pc_rel }      -> x0
     v277 Imm(4)                                           -> x2
     v278 BinopI { op=add, lhs=v274, rhs_imm=4 }           -> x2
     v279 Load { addr=v274, disp=4, kind=I32 pc_rel }      -> x2
-    v280 Binop { op=or, lhs=v276, rhs=v279 }              -> x1
+    v280 Binop { op=or, lhs=v276, rhs=v279 }              -> x0
     v281 Binop { op=eq, lhs=v273, rhs=v280 }              -> x0
     v282 BinopI { op=eq, lhs=v281, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v281, target=b44, fall=b43 }   (low word)   (exit_acc=v282)

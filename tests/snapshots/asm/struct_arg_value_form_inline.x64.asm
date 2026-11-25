@@ -37,10 +37,11 @@ Disassembly of section .text:
                	andq	$0xff, %rdi
                	andq	$0xff, %rax
                	shlq	$0x8, %rax
-               	orq	%rdi, %rax
+               	orq	%rax, %rdi
                	andq	$0xff, %rcx
                	shlq	$0x10, %rcx
-               	orq	%rcx, %rax
+               	orq	%rcx, %rdi
+               	movq	%rdi, %rax
                	retq
 
 <take_pair>:

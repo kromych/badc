@@ -140,16 +140,16 @@ Disassembly of section .text:
                	leaq	(%rsp), %rdi
                	movl	$0x6, %esi
                	callq	<addr>
-               	leaq	(%rbx,%r12), %rax
-               	leaq	(%rsp), %rcx
+               	leaq	(%rbx,%r12), %rcx
+               	leaq	(%rsp), %rax
                	movsbq	(%rsp), %rdx
-               	addq	%rdx, %rax
-               	andq	$0x3f, %rcx
+               	addq	%rdx, %rcx
+               	andq	$0x3f, %rax
                	xorl	%edx, %edx
                	movl	$0x3e8, %esi            # imm = 0x3E8
-               	testl	%ecx, %ecx
+               	testl	%eax, %eax
                	cmovneq	%rsi, %rdx
-               	addq	%rdx, %rax
+               	leaq	(%rcx,%rdx), %rax
                	leaq	-0x10(%rbp), %rsp
                	popq	%rbx
                	popq	%r12

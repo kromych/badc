@@ -26,10 +26,10 @@ Disassembly of section .text:
                	int3
 
 <make>:
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	movl	%edi, %ecx
-               	shlq	$0x20, %rax
+               	movq	%rdi, %rcx
+               	shlq	%rcx
+               	movl	%edi, %eax
+               	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	retq
 

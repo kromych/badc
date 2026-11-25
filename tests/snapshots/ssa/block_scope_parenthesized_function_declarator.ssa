@@ -60,7 +60,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Binop { op=sub, lhs=v1, rhs=v3 }                 -> x0
+    v7   Binop { op=sub, lhs=v1, rhs=v3 }                 -> x7
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=twice
@@ -72,7 +72,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(2)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x0
+    v5   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x7
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=where

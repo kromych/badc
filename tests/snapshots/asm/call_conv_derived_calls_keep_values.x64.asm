@@ -205,7 +205,7 @@ Disassembly of section .text:
                	movsd	0x40(%rsp), %xmm1
                	callq	*%r11
                	movsd	0x30(%rsp), %xmm14
-               	vaddsd	%xmm0, %xmm14, %xmm0
+               	vaddsd	%xmm0, %xmm14, %xmm1
                	shlq	%r12
                	leaq	(%rbx,%r12), %rax
                	leaq	(%r13,%r13,2), %rcx
@@ -223,18 +223,18 @@ Disassembly of section .text:
                	shlq	$0x3, %rcx
                	addq	%rcx, %rax
                	movsd	0x60(%rsp), %xmm14
-               	vmulsd	<rip>, %xmm14, %xmm1
+               	vmulsd	<rip>, %xmm14, %xmm0
                	movsd	0x68(%rsp), %xmm14
-               	vfmadd231sd	<rip>, %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
+               	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
                	movsd	0x58(%rsp), %xmm14
-               	vfmadd231sd	<rip>, %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
+               	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
                	movsd	0x50(%rsp), %xmm14
-               	vfmadd231sd	<rip>, %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
-               	cvttsd2si	%xmm1, %rcx
+               	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
+               	cvttsd2si	%xmm0, %rcx
                	addq	%rcx, %rax
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rax, %xmm1
-               	addsd	%xmm1, %xmm0
+               	xorps	%xmm0, %xmm0
+               	cvtsi2sd	%rax, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	popq	%rbx
                	popq	%rbp
                	popq	%r12
@@ -581,32 +581,32 @@ Disassembly of section .text:
 <main>:
                	subq	$0x80, %rsp
                	pushq	%rbx
-               	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %r8 # <addr>
                	movq	<rip>, %r9 # <addr>
                	movq	<rip>, %rbx # <addr>
+               	movq	<rip>, %rdx # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	movsd	<rip>, %xmm2 # <addr>
                	movsd	<rip>, %xmm3 # <addr>
-               	shlq	%rcx
-               	addq	%rcx, %rax
-               	leaq	(%rdx,%rdx,2), %rcx
-               	addq	%rcx, %rax
-               	shlq	$0x2, %rsi
+               	shlq	%rax
                	addq	%rsi, %rax
-               	leaq	(%rdi,%rdi,4), %rcx
+               	leaq	(%rdi,%rdi,2), %rsi
+               	addq	%rsi, %rax
+               	shlq	$0x2, %rcx
                	addq	%rcx, %rax
-               	imulq	$0x6, %r8, %rcx
+               	leaq	(%r8,%r8,4), %rcx
                	addq	%rcx, %rax
-               	imulq	$0x7, %r9, %rcx
+               	imulq	$0x6, %r9, %rcx
                	addq	%rcx, %rax
-               	shlq	$0x3, %rbx
-               	addq	%rbx, %rax
+               	imulq	$0x7, %rbx, %rcx
+               	addq	%rcx, %rax
+               	shlq	$0x3, %rdx
+               	addq	%rdx, %rax
                	vmulsd	<rip>, %xmm1, %xmm1
                	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	vfmadd231sd	<rip>, %xmm2, %xmm0 # xmm0 = (xmm2 * mem) + xmm0

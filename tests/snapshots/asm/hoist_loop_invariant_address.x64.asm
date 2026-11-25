@@ -74,22 +74,22 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	jmp	<addr>
                	xorl	%esi, %esi
-               	xorl	%eax, %eax
-               	movq	%rsi, %rcx
-               	testl	%ecx, %ecx
+               	xorl	%ecx, %ecx
+               	movq	%rsi, %rax
+               	testl	%eax, %eax
                	jle	<addr>
                	leaq	<rip>, %rdi # <addr>
-               	imulq	$0x1999999a, %rcx, %rdx # imm = 0x1999999A
+               	imulq	$0x1999999a, %rax, %rdx # imm = 0x1999999A
                	shrq	$0x20, %rdx
                	imulq	$0xa, %rdx, %r8
-               	subq	%r8, %rcx
-               	movl	(%rdi,%rcx,4), %ecx
-               	addq	%rcx, %rax
-               	movq	%rdx, %rcx
+               	subq	%r8, %rax
+               	movl	(%rdi,%rax,4), %eax
+               	addq	%rax, %rcx
+               	movq	%rdx, %rax
                	nopw	(%rax,%rax)
-               	testl	%ecx, %ecx
+               	testl	%eax, %eax
                	jg	<addr>
-               	movslq	%eax, %rax
+               	movslq	%ecx, %rax
                	addq	%rax, %r9
                	incq	%rsi
                	cmpl	$0x1f4, %esi            # imm = 0x1F4

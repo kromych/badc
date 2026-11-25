@@ -232,26 +232,22 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x50, %rsp
                	retq
-               	movl	$0x1, %edi
-               	movzwq	-0x3(%rax), %r8
+               	movl	$0x1, %r10d
+               	movq	%r10, 0x38(%rsp)
+               	movzwq	-0x3(%rax), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x10, %rsi
-               	orq	%r8, %rsi
-               	movl	-0x5(%rax), %edx
+               	orq	%rdx, %rsi
+               	movl	-0x5(%rax), %edi
                	shlq	$0x20, %rcx
-               	orq	%rcx, %rdx
+               	orq	%rcx, %rdi
                	movl	-0x6(%rax), %ecx
-               	movzwq	-0x2(%rax), %r10
-               	movq	%r10, 0x38(%rsp)
-               	shlq	$0x20, %r10
-               	movq	%r10, 0x38(%rsp)
-               	orq	0x38(%rsp), %rcx
-               	movl	-0x7(%rax), %r10d
-               	movq	%r10, 0x38(%rsp)
+               	movzwq	-0x2(%rax), %r8
                	shlq	$0x20, %r8
-               	movq	%r8, %r10
-               	movq	0x38(%rsp), %r8
-               	orq	%r10, %r8
+               	orq	%r8, %rcx
+               	movl	-0x7(%rax), %r8d
+               	shlq	$0x20, %rdx
+               	orq	%rdx, %r8
                	movzbq	-0x1(%rax), %rax
                	shlq	$0x30, %rax
                	orq	%rax, %r8
@@ -264,6 +260,8 @@ Disassembly of section .text:
                	movb	%r11b, 0x9(%rsp)
                	movzbq	0xa(%r10), %r11
                	movb	%r11b, 0xa(%rsp)
+               	movq	%rdi, %rdx
+               	movq	0x38(%rsp), %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	cmpl	$0xc3c, %eax            # imm = 0xC3C

@@ -101,9 +101,9 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	addq	%rdx, %rcx
-               	movl	0x10(%rsp), %edx
-               	andq	$0x7f, %rdx
+               	addq	%rcx, %rdx
+               	movl	0x10(%rsp), %ecx
+               	andq	$0x7f, %rcx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	movl	0x10(%rsp), %ecx

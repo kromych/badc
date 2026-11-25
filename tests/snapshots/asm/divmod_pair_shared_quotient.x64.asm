@@ -61,10 +61,10 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	addq	$0x18, %rsp
                	retq
-               	imulq	%r8, %rsi
+               	imulq	%rsi, %r8
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	addq	%rsi, %rax
+               	subq	%r8, %rax
+               	addq	%r8, %rax
                	cmpl	%edi, %eax
                	je	<addr>
                	movl	$0x5, %eax
@@ -83,13 +83,13 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	shlq	$0x4, %rdx
                	addq	%rax, %rdx
-               	movl	(%rdx), %edi
-               	movl	0x4(%rdx), %r8d
+               	movl	(%rdx), %r8d
+               	movl	0x4(%rdx), %edi
                	movl	0x8(%rdx), %r9d
                	movl	0xc(%rdx), %ebx
-               	movl	%edi, %eax
+               	movl	%r8d, %eax
                	cltd
-               	idivl	%r8d
+               	idivl	%edi
                	movq	%rax, %rsi
                	cmpl	%r9d, %esi
                	je	<addr>
@@ -99,8 +99,8 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	movq	%rsi, %rax
-               	imulq	%r8, %rax
-               	movq	%rdi, %r12
+               	imulq	%rdi, %rax
+               	movq	%r8, %r12
                	subq	%rax, %r12
                	nopl	(%rax,%rax)
                	cmpl	%ebx, %r12d
@@ -114,24 +114,24 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	nopl	(%rax)
                	jmp	<addr>
-               	imulq	%rsi, %r8
-               	movq	%rdi, %rax
-               	subq	%r8, %rax
+               	imulq	%rsi, %rdi
+               	movq	%r8, %rax
+               	subq	%rdi, %rax
                	addq	%rsi, %rax
                	cmpl	%r9d, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
-               	movq	%rdi, %rax
-               	subq	%r8, %rax
-               	addq	%r8, %rax
-               	cmpl	%edi, %eax
+               	movq	%r8, %rax
+               	subq	%rdi, %rax
+               	addq	%rdi, %rax
+               	cmpl	%r8d, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	jmp	<addr>
                	xorl	%eax, %eax
                	incq	%rcx
-               	nopw	(%rax,%rax)
+               	nopl	(%rax,%rax)
                	cmpl	$0xc, %ecx
                	jb	<addr>
                	movl	$0x11, %edi

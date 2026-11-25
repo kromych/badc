@@ -67,12 +67,12 @@ Disassembly of section .text:
 
 <by_computed_goto>:
                	movslq	%edi, %rdi
-               	leaq	<rip>, %rax # <addr>
-               	imulq	$0x55555556, %rdi, %rcx # imm = 0x55555556
-               	shrq	$0x20, %rcx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	subq	%rcx, %rdi
-               	movq	(%rax,%rdi,8), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	imulq	$0x55555556, %rdi, %rax # imm = 0x55555556
+               	shrq	$0x20, %rax
+               	leaq	(%rax,%rax,2), %rax
+               	subq	%rax, %rdi
+               	movq	(%rcx,%rdi,8), %rax
                	jmpq	*%rax
                	movl	%esi, %eax
                	leaq	(%rax,%rax,2), %rax

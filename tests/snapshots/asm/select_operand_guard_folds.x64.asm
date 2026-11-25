@@ -39,17 +39,17 @@ Disassembly of section .text:
 
 <main>:
                	movq	$0x0, <rip> # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rcx
-               	testl	$0x400000, %ecx         # imm = 0x400000
+               	movq	<rip>, %rax # <addr>
+               	movq	(%rax), %rax
+               	testl	$0x400000, %eax         # imm = 0x400000
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movq	$0x400000, <rip> # imm = 0x400000
                                                 # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rcx
-               	testl	$0x400000, %ecx         # imm = 0x400000
+               	movq	<rip>, %rax # <addr>
+               	movq	(%rax), %rax
+               	testl	$0x400000, %eax         # imm = 0x400000
                	je	<addr>
                	movl	$0x0, <rip> # <addr>
                	movq	$0x1000, <rip> # imm = 0x1000

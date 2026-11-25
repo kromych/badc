@@ -70,10 +70,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rdx, %rcx
-               	xchgb	%cl, (%rax)
-               	testb	$-0x1, %cl
+               	leaq	<rip>, %rcx # <addr>
+               	movq	%rdx, %rax
+               	xchgb	%al, (%rcx)
+               	testb	$-0x1, %al
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
                	incq	%rax

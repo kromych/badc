@@ -498,18 +498,18 @@ fn ent_pc=14 n_params=0 variadic=false locals=5
     v225 RetPart(0, kind=I64)                             -> x0
     v226 Imm(0)                                           -> x1
     v227 Imm(0)                                           -> x1
-    v228 BinopI { op=shru, lhs=v225, rhs_imm=8 }          -> x1
-    v229 Imm(0)                                           -> x2
-    v230 BinopI { op=shru, lhs=v225, rhs_imm=16 }         -> x2
-    v231 Imm(0)                                           -> x6
-    v232 BinopI { op=shru, lhs=v225, rhs_imm=24 }         -> x6
+    v228 BinopI { op=shru, lhs=v225, rhs_imm=8 }          -> x2
+    v229 Imm(0)                                           -> x1
+    v230 BinopI { op=shru, lhs=v225, rhs_imm=16 }         -> x6
+    v231 Imm(0)                                           -> x1
+    v232 BinopI { op=shru, lhs=v225, rhs_imm=24 }         -> x1
     v233 Imm(0)                                           -> x7
     v234 Imm(0)                                           -> x7
     v235 BinopI { op=and, lhs=v225, rhs_imm=255 }         -> x0
     v236 StoreLocal { off=-4, value=v235, kind=I8 }       -> -
-    v237 BinopI { op=and, lhs=v228, rhs_imm=255 }         -> x1
+    v237 BinopI { op=and, lhs=v228, rhs_imm=255 }         -> x2
     v238 StoreLocal { off=-4, disp=1, value=v237, kind=I8 } -> -
-    v239 BinopI { op=and, lhs=v230, rhs_imm=255 }         -> x2
+    v239 BinopI { op=and, lhs=v230, rhs_imm=255 }         -> x6
     v240 StoreLocal { off=-4, disp=2, value=v239, kind=I8 } -> -
     v241 BinopI { op=and, lhs=v232, rhs_imm=255 }         -> x1
     v242 StoreLocal { off=-4, disp=3, value=v241, kind=I8 } -> -

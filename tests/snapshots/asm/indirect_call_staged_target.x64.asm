@@ -38,9 +38,9 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movq	0x8(%rsp), %rcx
                	imulq	$0x7, %rcx, %rcx
-               	addq	%rcx, %rax
-               	movq	0x10(%rsp), %rcx
-               	shlq	$0x3, %rcx
+               	addq	%rax, %rcx
+               	movq	0x10(%rsp), %rax
+               	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	movq	0x18(%rsp), %rcx
                	leaq	(%rcx,%rcx,8), %rcx
@@ -62,9 +62,9 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movq	0x48(%rsp), %rcx
                	imulq	$0xf, %rcx, %rcx
-               	addq	%rcx, %rax
-               	movq	0x50(%rsp), %rcx
-               	shlq	$0x4, %rcx
+               	addq	%rax, %rcx
+               	movq	0x50(%rsp), %rax
+               	shlq	$0x4, %rax
                	addq	%rcx, %rax
                	movq	0x58(%rsp), %rcx
                	imulq	$0x11, %rcx, %rcx

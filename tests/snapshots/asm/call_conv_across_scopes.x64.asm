@@ -137,8 +137,8 @@ Disassembly of section .text:
                	pushq	%rsi
                	movq	$-0x1, %rsi
                	movq	$-0x1, %rdi
+               	shlq	%rcx
                	movq	%rcx, %rax
-               	shlq	%rax
                	popq	%rsi
                	popq	%rdi
                	popq	%rbp

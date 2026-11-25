@@ -127,16 +127,16 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rax
-               	movl	(%rax), %eax
-               	leaq	-0x18(%rbp), %rcx
-               	leaq	(%rsp), %rcx
-               	movb	%al, (%rsp)
-               	movq	%rcx, <rip> # <addr>
-               	andq	$0x3f, %rcx
+               	movl	(%rax), %ecx
+               	leaq	-0x18(%rbp), %rax
+               	leaq	(%rsp), %rax
+               	movb	%cl, (%rsp)
+               	movq	%rax, <rip> # <addr>
+               	andq	$0x3f, %rax
                	movsbq	(%rsp), %rdx
-               	addq	%rdx, %rcx
-               	subq	%rax, %rcx
-               	movl	-0xd0(%rbp), %eax
+               	addq	%rdx, %rax
+               	subq	%rcx, %rax
+               	movl	-0xd0(%rbp), %ecx
                	addq	%rcx, %rax
                	subq	$0x4, %rax
                	leave

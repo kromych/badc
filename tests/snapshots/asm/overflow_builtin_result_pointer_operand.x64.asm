@@ -36,16 +36,16 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	movq	<rip>, %rcx # <addr>
-               	leaq	0x29(%rcx), %rax
-               	movq	%rax, <rip> # <addr>
-               	xorq	%rax, %rcx
-               	movq	%rax, %rdx
+               	movq	<rip>, %rax # <addr>
+               	leaq	0x29(%rax), %rcx
+               	movq	%rcx, <rip> # <addr>
+               	xorq	%rcx, %rax
+               	movq	%rcx, %rdx
                	xorq	$0x29, %rdx
-               	andq	%rdx, %rcx
-               	testq	%rcx, %rcx
+               	andq	%rdx, %rax
+               	testq	%rax, %rax
                	jl	<addr>
-               	cmpq	$0x2a, %rax
+               	cmpq	$0x2a, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%r11
@@ -53,14 +53,14 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	leaq	-<rip>, %rcx # <addr>
                	movq	%rcx, <rip> # <addr>
-               	leaq	-0x1(%rax), %rcx
-               	movq	%rax, %rdx
-               	xorq	$0x1, %rdx
-               	xorq	%rcx, %rax
-               	andq	%rdx, %rax
-               	testq	%rax, %rax
-               	jl	<addr>
+               	leaq	-0x1(%rax), %rdx
+               	movq	%rax, %rcx
+               	xorq	$0x1, %rcx
+               	xorq	%rdx, %rax
+               	andq	%rax, %rcx
                	testq	%rcx, %rcx
+               	jl	<addr>
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%r11
@@ -76,34 +76,34 @@ Disassembly of section .text:
                	movq	<rip>, %rcx # <addr>
                	leaq	<rip>, %rax # <addr>
                	movq	%rax, <rip> # <addr>
-               	leaq	(%rcx,%rcx,4), %rsi
-               	movq	%rsi, <rip> # <addr>
+               	leaq	(%rcx,%rcx,4), %rdi
+               	movq	%rdi, <rip> # <addr>
                	testq	%rcx, %rcx
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$-0x1, %rcx
-               	sete	%dil
-               	movzbq	%dil, %rdi
-               	orq	%rdi, %rax
-               	movq	%rax, %r8
-               	xorq	$0x1, %r8
-               	imulq	%r8, %rcx
+               	sete	%r8b
+               	movzbq	%r8b, %r8
+               	orq	%r8, %rax
+               	movq	%rax, %rsi
+               	xorq	$0x1, %rsi
+               	imulq	%rsi, %rcx
                	addq	%rax, %rcx
-               	movq	%rsi, %rax
+               	movq	%rdi, %rax
                	cqto
                	idivq	%rcx
                	cmpq	$0x5, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	andq	%r8, %rax
+               	andq	%rax, %rsi
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	movq	%rsi, %rcx
-               	cmpq	%r11, %rsi
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	andq	%rdi, %rcx
-               	orq	%rcx, %rax
-               	testq	%rax, %rax
+               	movq	%rdi, %rax
+               	cmpq	%r11, %rdi
+               	sete	%al
+               	movzbq	%al, %rax
+               	andq	%rax, %r8
+               	orq	%r8, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%r11

@@ -40,15 +40,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v26  Binop { op=and, lhs=v23, rhs=v24 }               -> x1
     v27  BinopI { op=xor, lhs=v23, rhs_imm=-1 }           -> x0
     v28  Binop { op=and, lhs=v27, rhs=v25 }               -> x0
-    v29  Binop { op=xor, lhs=v26, rhs=v28 }               -> x0
-    v30  LoadLocal { off=-3, kind=I64, volatile }         -> x1
+    v29  Binop { op=xor, lhs=v26, rhs=v28 }               -> x1
+    v30  LoadLocal { off=-3, kind=I64, volatile }         -> x0
     v31  LoadLocal { off=-2, kind=I64, volatile }         -> x2
-    v32  Binop { op=and, lhs=v30, rhs=v31 }               -> x1
+    v32  Binop { op=and, lhs=v30, rhs=v31 }               -> x0
     v33  LoadLocal { off=-3, kind=I64, volatile }         -> x2
     v34  BinopI { op=xor, lhs=v33, rhs_imm=-1 }           -> x2
     v35  LoadLocal { off=-1, kind=I64, volatile }         -> x6
     v36  Binop { op=and, lhs=v34, rhs=v35 }               -> x2
-    v37  Binop { op=xor, lhs=v32, rhs=v36 }               -> x1
+    v37  Binop { op=xor, lhs=v32, rhs=v36 }               -> x0
     v38  Binop { op=ne, lhs=v29, rhs=v37 }                -> x0
     terminator Bz { cond=v38, target=b6, fall=b5 }   (exit_acc=v38)
   block 5  start_pc=0

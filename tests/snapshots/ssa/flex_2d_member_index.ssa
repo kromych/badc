@@ -551,12 +551,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v545 Imm(0)                                           -> x0
     v546 Imm(0)                                           -> x0
     v547 Imm(0)                                           -> x0
-    v548 BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x0
-    v549 Imm(18)                                          -> x2
-    v550 BinopI { op=add, lhs=v1, rhs_imm=22 }            -> x1
-    v551 Imm(0)                                           -> x2
-    v552 Binop { op=sub, lhs=v550, rhs=v548 }             -> x1
-    v553 BinopI { op=ne, lhs=v552, rhs_imm=18 }           -> x1
+    v548 BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x2
+    v549 Imm(18)                                          -> x0
+    v550 BinopI { op=add, lhs=v1, rhs_imm=22 }            -> x0
+    v551 Imm(0)                                           -> x1
+    v552 Binop { op=sub, lhs=v550, rhs=v548 }             -> x0
+    v553 BinopI { op=ne, lhs=v552, rhs_imm=18 }           -> x0
     terminator Bz { cond=v553, target=b2, fall=b1 }   (exit_acc=v553)
   block 1  start_pc=0
     v563 Imm(4)                                           -> x0
@@ -564,10 +564,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v565 LifetimeEnd(-4)                                  -> -
     terminator Return(v563)   (exit_acc=v563)
   block 2  start_pc=0
-    v566 Imm(0)                                           -> x1
-    v567 BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
-    v568 Imm(4)                                           -> x1
-    v569 Imm(24)                                          -> x1
+    v566 Imm(0)                                           -> x0
+    v567 BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x0
+    v568 Imm(4)                                           -> x0
+    v569 Imm(24)                                          -> x0
     v570 BinopI { op=add, lhs=v548, rhs_imm=24 }          -> x1
     v571 Imm(0)                                           -> x0
     v572 LocalAddr(-4)                                    -> x0

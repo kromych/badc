@@ -34,9 +34,10 @@ Disassembly of section .text:
                	rorxq	$0x22, %rax, %rdx
                	xorq	%rdx, %rcx
                	rorq	$0x27, %rax
-               	xorq	%rcx, %rax
+               	xorq	%rax, %rcx
                	movabsq	$-0x483a85eff3813e55, %r11 # imm = 0xB7C57A100C7EC1AB
-               	cmpq	%r11, %rax
+               	movq	%rcx, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x18, %rsp

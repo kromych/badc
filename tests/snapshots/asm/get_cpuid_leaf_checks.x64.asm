@@ -36,9 +36,9 @@ Disassembly of section .text:
                	je	<addr>
                	xorl	%eax, %eax
                	cpuid
-               	orq	%rbx, %rcx
-               	orq	%rdx, %rcx
-               	testl	%ecx, %ecx
+               	orq	%rcx, %rbx
+               	orq	%rdx, %rbx
+               	testl	%ebx, %ebx
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx

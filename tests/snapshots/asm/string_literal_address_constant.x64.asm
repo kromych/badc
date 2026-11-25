@@ -188,11 +188,11 @@ Disassembly of section .text:
                	movl	(%rax,%rcx,4), %eax
                	cmpl	$0x62, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rsp), %ecx
-               	shlq	%rcx
-               	movslq	%ecx, %rcx
-               	movl	(%rax,%rcx,4), %eax
+               	leaq	<rip>, %rcx # <addr>
+               	movl	(%rsp), %eax
+               	shlq	%rax
+               	movslq	%eax, %rax
+               	movl	(%rcx,%rax,4), %eax
                	cmpl	$0x7a, %eax
                	je	<addr>
                	movl	$0xb, %eax

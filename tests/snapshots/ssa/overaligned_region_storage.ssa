@@ -68,14 +68,14 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v24  Imm(0)                                           -> x1
     v25  Extend { value=v17, kind=I32 }                   -> x1
     v26  Binop { op=add, lhs=v1, rhs=v17 }                -> x1
-    v27  LoadIndexed { base=v1, index=v17, scale=1, kind=U8 } -> x1
-    v28  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x8
-    v29  Imm(3)                                           -> x8
-    v30  BinopI { op=mul, lhs=v17, rhs_imm=3 }            -> x8
+    v27  LoadIndexed { base=v1, index=v17, scale=1, kind=U8 } -> x8
+    v28  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x1
+    v29  Imm(3)                                           -> x1
+    v30  BinopI { op=mul, lhs=v17, rhs_imm=3 }            -> x1
     v31  Extend { value=v30, kind=I32, nsw }              -> x9
-    v32  Binop { op=add, lhs=v5, rhs=v30 }                -> x8
+    v32  Binop { op=add, lhs=v5, rhs=v30 }                -> x1
     v33  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x9
-    v34  BinopI { op=and, lhs=v32, rhs_imm=255 }          -> x8
+    v34  BinopI { op=and, lhs=v32, rhs_imm=255 }          -> x1
     v35  Binop { op=ne, lhs=v27, rhs=v34 }                -> x1
     terminator Bz { cond=v35, target=b4, fall=b7 }   (exit_acc=v35)
   block 4  start_pc=0

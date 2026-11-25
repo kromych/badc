@@ -31,7 +31,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v11  Binop { op=lt, lhs=v7, rhs=v3 }                  -> x1
     terminator Bz { cond=v11, target=b3, fall=b1 }   (exit_acc=v11)
   block 3  start_pc=0
-    v22  BinopI { op=and, lhs=v8, rhs_imm=255 }           -> x0
+    v22  BinopI { op=and, lhs=v8, rhs_imm=255 }           -> x7
     terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=step_u16
@@ -66,7 +66,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v11  Binop { op=lt, lhs=v7, rhs=v3 }                  -> x1
     terminator Bz { cond=v11, target=b3, fall=b1 }   (exit_acc=v11)
   block 3  start_pc=0
-    v22  BinopI { op=and, lhs=v8, rhs_imm=65535 }         -> x0
+    v22  BinopI { op=and, lhs=v8, rhs_imm=65535 }         -> x7
     terminator Return(v22)   (exit_acc=v22)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=step_u32
@@ -264,7 +264,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v11  Binop { op=lt, lhs=v7, rhs=v3 }                  -> x1
     terminator Bz { cond=v11, target=b3, fall=b1 }   (exit_acc=v11)
   block 3  start_pc=0
-    v19  BinopI { op=and, lhs=v8, rhs_imm=255 }           -> x0
+    v19  BinopI { op=and, lhs=v8, rhs_imm=255 }           -> x7
     terminator Return(v19)   (exit_acc=v19)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=toggle

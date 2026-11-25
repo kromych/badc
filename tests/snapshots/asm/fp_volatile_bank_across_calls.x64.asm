@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <spread>:
-               	subq	$0x18, %rsp
+               	subq	$0x28, %rsp
                	vaddsd	<rip>, %xmm0, %xmm3
                	vaddsd	<rip>, %xmm0, %xmm4
                	vaddsd	<rip>, %xmm0, %xmm5
@@ -40,21 +40,22 @@ Disassembly of section .text:
                	vmulsd	<rip>, %xmm0, %xmm12
                	vmulsd	<rip>, %xmm1, %xmm13
                	vaddsd	%xmm1, %xmm0, %xmm14
-               	movsd	%xmm14, 0x8(%rsp)
+               	movsd	%xmm14, 0x18(%rsp)
                	vsubsd	%xmm0, %xmm1, %xmm14
-               	movsd	%xmm14, (%rsp)
-               	vmulsd	<rip>, %xmm0, %xmm0
+               	movsd	%xmm14, 0x10(%rsp)
+               	vmulsd	<rip>, %xmm0, %xmm14
+               	movsd	%xmm14, 0x8(%rsp)
                	vmulsd	<rip>, %xmm1, %xmm1
-               	mulsd	%xmm6, %xmm5
-               	vfmadd213sd	%xmm5, %xmm4, %xmm3 # xmm3 = (xmm4 * xmm3) + xmm5
-               	vfmadd231sd	%xmm8, %xmm7, %xmm3 # xmm3 = (xmm7 * xmm8) + xmm3
-               	vfmadd213sd	%xmm3, %xmm9, %xmm2 # xmm2 = (xmm9 * xmm2) + xmm3
-               	vfmadd231sd	%xmm11, %xmm10, %xmm2 # xmm2 = (xmm10 * xmm11) + xmm2
-               	vfmadd231sd	%xmm13, %xmm12, %xmm2 # xmm2 = (xmm12 * xmm13) + xmm2
-               	movsd	0x8(%rsp), %xmm14
-               	vfmadd231sd	(%rsp), %xmm14, %xmm2 # xmm2 = (xmm14 * mem) + xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
-               	addq	$0x18, %rsp
+               	vmulsd	%xmm6, %xmm5, %xmm0
+               	vfmadd231sd	%xmm4, %xmm3, %xmm0 # xmm0 = (xmm3 * xmm4) + xmm0
+               	vfmadd231sd	%xmm8, %xmm7, %xmm0 # xmm0 = (xmm7 * xmm8) + xmm0
+               	vfmadd231sd	%xmm9, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm9) + xmm0
+               	vfmadd231sd	%xmm11, %xmm10, %xmm0 # xmm0 = (xmm10 * xmm11) + xmm0
+               	vfmadd231sd	%xmm13, %xmm12, %xmm0 # xmm0 = (xmm12 * xmm13) + xmm0
+               	movsd	0x18(%rsp), %xmm14
+               	vfmadd231sd	0x10(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
+               	vfmadd231sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
+               	addq	$0x28, %rsp
                	retq
 
 <across>:
@@ -132,88 +133,88 @@ Disassembly of section .text:
                	leaq	0x3(%rdi), %rcx
                	leaq	0x4(%rdi), %rdx
                	imulq	%rdx, %rcx
-               	addq	%rcx, %rax
-               	leaq	0x5(%rsi), %rcx
+               	addq	%rax, %rcx
+               	leaq	0x5(%rsi), %rax
                	leaq	0x6(%rsi), %rdx
-               	imulq	%rdx, %rcx
-               	addq	%rcx, %rax
-               	leaq	0x7(%rsi), %rcx
+               	imulq	%rdx, %rax
+               	addq	%rax, %rcx
+               	leaq	0x7(%rsi), %rax
                	leaq	0x8(%rsi), %rdx
-               	imulq	%rdx, %rcx
-               	leaq	(%rax,%rcx), %rdx
+               	imulq	%rdx, %rax
+               	addq	%rax, %rcx
                	movq	%rdi, %rax
                	imulq	%rsi, %rax
-               	movq	%rdi, %rcx
-               	subq	%rsi, %rcx
-               	movq	%rax, %r8
-               	imulq	%rcx, %r8
-               	addq	%rdx, %r8
+               	movq	%rdi, %r8
+               	subq	%rsi, %r8
+               	movq	%rax, %rdx
+               	imulq	%r8, %rdx
+               	addq	%rdx, %rcx
                	leaq	(%rdi,%rdi,2), %rdx
                	movq	%rdx, %r9
                	imulq	%rsi, %r9
                	leaq	(%r9,%r9,4), %r9
-               	leaq	(%r8,%r9), %rbx
-               	leaq	(%rdi,%rsi), %r8
+               	leaq	(%rcx,%r9), %rbx
+               	leaq	(%rdi,%rsi), %rcx
                	movq	%rsi, %r9
                	subq	%rdi, %r9
-               	movq	%r8, %r12
+               	movq	%rcx, %r12
                	imulq	%r9, %r12
-               	addq	%r12, %rbx
-               	imulq	$0x7, %rdi, %r12
-               	imulq	%rsi, %r12
-               	leaq	(%r12,%r12,8), %r12
-               	addq	%r12, %rbx
-               	leaq	0x1(%rsi), %r12
-               	leaq	0x2(%rsi), %r13
-               	imulq	%r13, %r12
-               	leaq	0x3(%rsi), %r13
+               	addq	%rbx, %r12
+               	imulq	$0x7, %rdi, %rbx
+               	imulq	%rsi, %rbx
+               	leaq	(%rbx,%rbx,8), %rbx
+               	leaq	(%r12,%rbx), %r13
+               	leaq	0x1(%rsi), %rbx
+               	leaq	0x2(%rsi), %r12
+               	imulq	%r12, %rbx
+               	leaq	0x3(%rsi), %r12
                	leaq	0x4(%rsi), %r14
-               	imulq	%r14, %r13
-               	addq	%r13, %r12
-               	leaq	0x5(%rdi), %r13
+               	imulq	%r14, %r12
+               	addq	%rbx, %r12
+               	leaq	0x5(%rdi), %rbx
                	leaq	0x6(%rdi), %r14
-               	imulq	%r14, %r13
-               	addq	%r13, %r12
-               	leaq	0x7(%rdi), %r13
+               	imulq	%r14, %rbx
+               	addq	%rbx, %r12
+               	leaq	0x7(%rdi), %rbx
                	leaq	0x8(%rdi), %r14
-               	imulq	%r14, %r13
-               	addq	%r13, %r12
+               	imulq	%r14, %rbx
+               	addq	%r12, %rbx
                	imulq	%r9, %rax
-               	leaq	(%r12,%rax), %r9
-               	leaq	(%rsi,%rsi,2), %rax
-               	movq	%rax, %r12
-               	imulq	%rdi, %r12
-               	leaq	(%r12,%r12,4), %r12
-               	addq	%r12, %r9
+               	addq	%rbx, %rax
+               	leaq	(%rsi,%rsi,2), %r9
+               	movq	%r9, %rbx
+               	imulq	%rdi, %rbx
+               	leaq	(%rbx,%rbx,4), %rbx
+               	addq	%rbx, %rax
                	imulq	%r8, %rcx
-               	leaq	(%r9,%rcx), %r8
-               	imulq	$0x7, %rsi, %rcx
-               	movq	%rcx, %r9
-               	imulq	%rdi, %r9
-               	leaq	(%r9,%r9,8), %r9
-               	addq	%r9, %r8
-               	addq	%rbx, %r8
-               	movq	%rdi, %r9
-               	shlq	%r9
-               	addq	%r9, %r8
-               	shlq	%rdx
-               	addq	%r8, %rdx
-               	leaq	(%rdi,%rdi,4), %r8
-               	leaq	(%r8,%r8,2), %r8
-               	addq	%r8, %rdx
-               	imulq	$0x7, %rdi, %r8
-               	shlq	$0x2, %r8
-               	addq	%r8, %rdx
-               	movq	%rsi, %r8
+               	addq	%rax, %rcx
+               	imulq	$0x7, %rsi, %rax
+               	movq	%rax, %r8
+               	imulq	%rdi, %r8
+               	leaq	(%r8,%r8,8), %r8
+               	addq	%r8, %rcx
+               	addq	%r13, %rcx
+               	movq	%rdi, %r8
                	shlq	%r8
-               	leaq	(%r8,%r8,4), %r8
-               	addq	%r8, %rdx
-               	imulq	$0x6, %rax, %rax
-               	addq	%rdx, %rax
+               	addq	%r8, %rcx
+               	shlq	%rdx
+               	addq	%rdx, %rcx
+               	leaq	(%rdi,%rdi,4), %rdx
+               	leaq	(%rdx,%rdx,2), %rdx
+               	addq	%rcx, %rdx
+               	imulq	$0x7, %rdi, %rcx
+               	shlq	$0x2, %rcx
+               	addq	%rdx, %rcx
+               	movq	%rsi, %rdx
+               	shlq	%rdx
+               	leaq	(%rdx,%rdx,4), %rdx
+               	addq	%rdx, %rcx
+               	imulq	$0x6, %r9, %rdx
+               	addq	%rdx, %rcx
                	leaq	(%rsi,%rsi,4), %rdx
                	imulq	$0x7, %rdx, %rdx
-               	addq	%rdx, %rax
-               	shlq	$0x3, %rcx
+               	addq	%rdx, %rcx
+               	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	leaq	(%rdi,%rsi), %rcx
                	leaq	(%rcx,%rcx,8), %rcx

@@ -27,12 +27,12 @@ Disassembly of section .text:
 
 <relay_out_of_line>:
                	subq	$0x38, %rsp
+               	movq	%rcx, 0x28(%rsp)
                	movswq	%r8w, %r8
                	andq	$0xff, %r9
                	movsbq	0x40(%rsp), %r10
-               	movq	%r10, 0x28(%rsp)
-               	movq	0x48(%rsp), %r10
                	movq	%r10, 0x20(%rsp)
+               	movq	0x48(%rsp), %rcx
                	movl	0x50(%rsp), %r10d
                	movq	%r10, 0x18(%rsp)
                	movq	0x58(%rsp), %r10
@@ -61,7 +61,9 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	jmp	<addr>
                	movl	<rip>, %eax # <addr>
-               	cmpl	%eax, %ecx
+               	movq	%rax, %r10
+               	movq	0x28(%rsp), %rax
+               	cmpl	%r10d, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
@@ -77,15 +79,14 @@ Disassembly of section .text:
                	jmp	<addr>
                	movsbq	<rip>, %rax # <addr>
                	movq	%rax, %r10
-               	movq	0x28(%rsp), %rax
+               	movq	0x20(%rsp), %rax
                	cmpl	%r10d, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	jmp	<addr>
-               	movq	0x20(%rsp), %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movzwq	<rip>, %rcx # <addr>
-               	cmpl	%ecx, %eax
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	movzwq	<rip>, %rax # <addr>
+               	cmpl	%eax, %ecx
                	je	<addr>
                	movl	$0x8, %eax
                	jmp	<addr>

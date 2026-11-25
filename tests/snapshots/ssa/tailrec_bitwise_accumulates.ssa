@@ -116,14 +116,14 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     terminator Jmp(b2)
   block 1  start_pc=0
-    v6   Imm(1)                                           -> x2
-    v7   Imm(0)                                           -> x6
-    v8   Imm(7)                                           -> x6
-    v9   BinopI { op=mul, lhs=v22, rhs_imm=613566757 }    -> x6
-    v10  BinopI { op=shru, lhs=v9, rhs_imm=32 }           -> x6
-    v11  BinopI { op=mul, lhs=v10, rhs_imm=7 }            -> x6
+    v6   Imm(1)                                           -> x6
+    v7   Imm(0)                                           -> x2
+    v8   Imm(7)                                           -> x2
+    v9   BinopI { op=mul, lhs=v22, rhs_imm=613566757 }    -> x2
+    v10  BinopI { op=shru, lhs=v9, rhs_imm=32 }           -> x2
+    v11  BinopI { op=mul, lhs=v10, rhs_imm=7 }            -> x2
     v12  Binop { op=sub, lhs=v22, rhs=v11 }               -> x7
-    v13  Extend { value=v12, kind=I32, nsw }              -> x6
+    v13  Extend { value=v12, kind=I32, nsw }              -> x2
     v14  Binop { op=shl, lhs=v6, rhs=v12 }                -> x2
     v15  Extend { value=v14, kind=I32 }                   -> x6
     v16  Extend { value=v14, kind=I8 }                    -> x2
@@ -203,32 +203,32 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
   block 7  start_pc=0
     v37  Imm(65535)                                       -> x1
     v38  Imm(0)                                           -> x0
-    v39  Imm(1)                                           -> x2
+    v39  Imm(1)                                           -> x6
     v40  Imm(0)                                           -> x0
     terminator Jmp(b9)   (exit_acc=v39)
   block 8  start_pc=0
-    v45  BinopI { op=and, lhs=v42, rhs_imm=65535 }        -> x6
-    v46  Imm(1)                                           -> x6
-    v47  BinopI { op=and, lhs=v41, rhs_imm=4294967295 }   -> x6
-    v48  Imm(16)                                          -> x6
-    v49  BinopI { op=and, lhs=v41, rhs_imm=15 }           -> x6
-    v50  Binop { op=shl, lhs=v39, rhs=v49 }               -> x6
+    v45  BinopI { op=and, lhs=v42, rhs_imm=65535 }        -> x2
+    v46  Imm(1)                                           -> x2
+    v47  BinopI { op=and, lhs=v41, rhs_imm=4294967295 }   -> x2
+    v48  Imm(16)                                          -> x2
+    v49  BinopI { op=and, lhs=v41, rhs_imm=15 }           -> x2
+    v50  Binop { op=shl, lhs=v39, rhs=v49 }               -> x2
     v51  BinopI { op=and, lhs=v50, rhs_imm=4294967295 }   -> x7
-    v52  BinopI { op=xor, lhs=v50, rhs_imm=-1 }           -> x6
+    v52  BinopI { op=xor, lhs=v50, rhs_imm=-1 }           -> x2
     v53  BinopI { op=and, lhs=v52, rhs_imm=4294967295 }   -> x7
-    v54  BinopI { op=and, lhs=v52, rhs_imm=65535 }        -> x6
+    v54  BinopI { op=and, lhs=v52, rhs_imm=65535 }        -> x2
     v55  Binop { op=and, lhs=v42, rhs=v54 }               -> x1
-    v56  Imm(0)                                           -> x6
-    v57  BinopI { op=and, lhs=v55, rhs_imm=65535 }        -> x6
-    v58  BinopI { op=and, lhs=v41, rhs_imm=4294967295 }   -> x6
+    v56  Imm(0)                                           -> x2
+    v57  BinopI { op=and, lhs=v55, rhs_imm=65535 }        -> x2
+    v58  BinopI { op=and, lhs=v41, rhs_imm=4294967295 }   -> x2
     v59  BinopI { op=add, lhs=v41, rhs_imm=1 }            -> x0
-    v60  Imm(0)                                           -> x6
+    v60  Imm(0)                                           -> x2
     terminator Jmp(b9)   (exit_acc=v59)
   block 9  start_pc=0
     v41  Phi { incoming=[b7:v39, b8:v59], kind=I64 }      -> x0
     v42  Phi { incoming=[b7:v37, b8:v55], kind=I64 }      -> x1
-    v43  BinopI { op=and, lhs=v41, rhs_imm=4294967295 }   -> x6
-    v44  BinopI { op=ule, lhs=v41, rhs_imm=20 }           -> x6
+    v43  BinopI { op=and, lhs=v41, rhs_imm=4294967295 }   -> x2
+    v44  BinopI { op=ule, lhs=v41, rhs_imm=20 }           -> x2
     terminator Bz { cond=v44, target=b10, fall=b8 }   (exit_acc=v44)
   block 10  start_pc=0
     v61  Imm(20)                                          -> x7

@@ -61,16 +61,16 @@ Disassembly of section .text:
                	andq	%rax, %rcx
                	xorq	$-0x1, %rax
                	andq	%rdx, %rax
-               	xorq	%rcx, %rax
-               	movq	0x8(%rsp), %rcx
+               	xorq	%rax, %rcx
+               	movq	0x8(%rsp), %rax
                	movq	0x10(%rsp), %rdx
-               	andq	%rdx, %rcx
+               	andq	%rdx, %rax
                	movq	0x8(%rsp), %rdx
                	xorq	$-0x1, %rdx
                	movq	0x18(%rsp), %rsi
                	andq	%rsi, %rdx
-               	xorq	%rdx, %rcx
-               	cmpq	%rcx, %rax
+               	xorq	%rdx, %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x28, %rsp

@@ -45,9 +45,9 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	movq	%rax, %rcx
                	shlq	$0xd, %rcx
-               	addq	%rcx, %rax
-               	movq	%rax, %rcx
-               	shrq	$0x11, %rcx
+               	addq	%rax, %rcx
+               	movq	%rcx, %rax
+               	shrq	$0x11, %rax
                	xorq	%rax, %rcx
                	leaq	0x1(%rdi), %rax
                	leaq	(%rax,%rax,4), %rax

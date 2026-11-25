@@ -50,8 +50,8 @@ Disassembly of section .text:
                	retq
 
 <doubler>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <take_slot>:

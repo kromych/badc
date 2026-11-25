@@ -39,18 +39,18 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rsi
-               	leaq	<rip>, %rdx
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rsi)
-               	movups	0x10(%rdx), %xmm14
-               	movups	%xmm14, 0x10(%rsi)
-               	leaq	0x30(%rsp), %rdx
+               	leaq	(%rsp), %rdx
+               	leaq	<rip>, %rsi
+               	movups	(%rsi), %xmm14
+               	movups	%xmm14, (%rdx)
+               	movups	0x10(%rsi), %xmm14
+               	movups	%xmm14, 0x10(%rdx)
+               	leaq	0x30(%rsp), %rsi
                	leaq	<rip>, %rdi
                	movups	(%rdi), %xmm14
-               	movups	%xmm14, (%rdx)
+               	movups	%xmm14, (%rsi)
                	movups	0x10(%rdi), %xmm14
-               	movups	%xmm14, 0x10(%rdx)
+               	movups	%xmm14, 0x10(%rsi)
                	leaq	0x50(%rsp), %rdi
                	leaq	<rip>, %r8
                	movups	(%r8), %xmm14
@@ -73,14 +73,14 @@ Disassembly of section .text:
                	movl	$0x1e, %eax
                	leave
                	retq
-               	testb	$0x1f, %sil
+               	testb	$0x1f, %dl
                	je	<addr>
                	movl	$0x1f, %eax
                	leave
                	retq
-               	testb	$0xf, %dl
+               	testb	$0xf, %sil
                	jne	<addr>
-               	leaq	0x10(%rdx), %rax
+               	leaq	0x10(%rsi), %rax
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x20, %eax
@@ -130,34 +130,34 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	leaq	0x20(%rsp), %rcx
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
+               	leaq	0x20(%rsp), %rax
+               	leaq	<rip>, %rcx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	(%rsp), %rcx
+               	leaq	<rip>, %rdx
+               	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdx)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rdx)
-               	leaq	0x30(%rsp), %rax
+               	movups	0x10(%rdx), %xmm14
+               	movups	%xmm14, 0x10(%rcx)
+               	leaq	0x30(%rsp), %rdx
                	leaq	<rip>, %rsi
                	movups	(%rsi), %xmm14
-               	movups	%xmm14, (%rax)
+               	movups	%xmm14, (%rdx)
                	movups	0x10(%rsi), %xmm14
-               	movups	%xmm14, 0x10(%rax)
-               	testb	$0xf, %cl
+               	movups	%xmm14, 0x10(%rdx)
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x25, %eax
                	leave
                	retq
-               	testb	$0x1f, %dl
+               	testb	$0x1f, %cl
                	je	<addr>
                	movl	$0x26, %eax
                	jmp	<addr>
-               	testb	$0xf, %al
+               	testb	$0xf, %dl
                	jne	<addr>
-               	addq	$0x10, %rax
+               	leaq	0x10(%rdx), %rax
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x27, %eax

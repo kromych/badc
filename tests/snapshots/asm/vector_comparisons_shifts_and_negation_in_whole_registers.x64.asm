@@ -691,10 +691,10 @@ Disassembly of section .text:
                	sarq	$0x2, %rcx
                	cmpl	%ecx, %r8d
                	jne	<addr>
-               	movzbq	0x70(%rsp,%rax), %rcx
-               	movzbq	0x90(%rsp,%rax), %r8
-               	shrq	$0x3, %r8
-               	cmpl	%r8d, %ecx
+               	movzbq	0x70(%rsp,%rax), %r8
+               	movzbq	0x90(%rsp,%rax), %rcx
+               	shrq	$0x3, %rcx
+               	cmpl	%ecx, %r8d
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax

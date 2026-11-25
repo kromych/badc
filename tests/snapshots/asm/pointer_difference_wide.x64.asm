@@ -26,9 +26,9 @@ Disassembly of section .text:
                	int3
 
 <d12>:
-               	movq	%rdi, %rax
-               	subq	%rsi, %rax
+               	subq	%rsi, %rdi
                	movabsq	$0x2aaaaaaaaaaaaaab, %rcx # imm = 0x2AAAAAAAAAAAAAAB
+               	movq	%rdi, %rax
                	imulq	%rcx
                	sarq	%rdx
                	movq	%rdx, %rax
@@ -84,9 +84,9 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	retq
                	leaq	0x38(%rsp), %rax
-               	leaq	0x24(%rax), %rdx
+               	addq	$0x24, %rax
+               	subq	%rax, %rcx
                	movq	%rcx, %rax
-               	subq	%rdx, %rax
                	imulq	%rsi
                	sarq	%rdx
                	movq	%rdx, %rax

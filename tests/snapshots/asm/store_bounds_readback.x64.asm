@@ -43,13 +43,13 @@ Disassembly of section .text:
                	movl	%eax, 0x8(%rsp)
                	movl	0x8(%rsp), %eax
                	testl	%eax, %eax
-               	setge	%al
-               	movzbq	%al, %rax
-               	movl	0x8(%rsp), %ecx
-               	cmpl	$0x1ff, %ecx            # imm = 0x1FF
-               	setle	%cl
+               	setge	%cl
                	movzbq	%cl, %rcx
-               	shlq	%rcx
+               	movl	0x8(%rsp), %eax
+               	cmpl	$0x1ff, %eax            # imm = 0x1FF
+               	setle	%al
+               	movzbq	%al, %rax
+               	shlq	%rax
                	addq	%rcx, %rax
                	addq	$0x18, %rsp
                	retq
@@ -78,52 +78,51 @@ Disassembly of section .text:
                	movl	$0x2, %ecx
                	xorl	%edx, %edx
                	cmpl	$0x3, %eax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x1ff, %rcx            # imm = 0x1FF
-               	andq	$0xff, %rcx
-               	cmpl	$0xc8, %ecx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	shlq	%rcx
-               	incq	%rcx
-               	movq	%rax, %rdx
+               	cmoveq	%rdx, %rcx
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x1ff, %rax            # imm = 0x1FF
+               	andq	$0xff, %rax
+               	cmpl	$0xc8, %eax
+               	sete	%al
+               	movzbq	%al, %rax
+               	shlq	%rax
+               	incq	%rax
+               	movq	%rcx, %rdx
                	orq	$0x4, %rdx
-               	cmpl	$0x3, %ecx
-               	cmovneq	%rdx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x1ff, %rcx            # imm = 0x1FF
-               	imulq	$0xc8, %rcx, %rcx
-               	movswq	%cx, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x3, %eax
+               	cmovneq	%rdx, %rcx
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x1ff, %rax            # imm = 0x1FF
+               	imulq	$0xc8, %rax, %rax
+               	movswq	%ax, %rax
+               	testl	%eax, %eax
                	setl	%dl
                	movzbq	%dl, %rdx
-               	cmpl	$0xffff9c40, %ecx       # imm = 0xFFFF9C40
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	shlq	%rcx
-               	addq	%rdx, %rcx
-               	movq	%rax, %rdx
+               	cmpl	$0xffff9c40, %eax       # imm = 0xFFFF9C40
+               	sete	%al
+               	movzbq	%al, %rax
+               	shlq	%rax
+               	addq	%rdx, %rax
+               	movq	%rcx, %rdx
                	orq	$0x8, %rdx
-               	cmpl	$0x3, %ecx
-               	cmovneq	%rdx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x1ff, %rcx            # imm = 0x1FF
-               	andq	$0x7, %rcx
-               	xorq	$-0x1, %rcx
-               	cmpl	$0x7fffffff, %ecx       # imm = 0x7FFFFFFF
+               	cmpl	$0x3, %eax
+               	cmovneq	%rdx, %rcx
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x1ff, %rax            # imm = 0x1FF
+               	andq	$0x7, %rax
+               	xorq	$-0x1, %rax
+               	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
                	seta	%dl
                	movzbq	%dl, %rdx
-               	cmpl	$-0x1, %ecx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	shlq	%rcx
-               	addq	%rdx, %rcx
-               	movq	%rax, %rbx
+               	cmpl	$-0x1, %eax
+               	sete	%al
+               	movzbq	%al, %rax
+               	shlq	%rax
+               	addq	%rdx, %rax
+               	movq	%rcx, %rbx
                	orq	$0x10, %rbx
-               	cmpl	$0x3, %ecx
-               	cmoveq	%rax, %rbx
+               	cmpl	$0x3, %eax
+               	cmoveq	%rcx, %rbx
                	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movl	<rip>, %eax # <addr>

@@ -95,10 +95,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v42, target=b7, fall=b5 }   (exit_acc=v42)
   block 5  start_pc=0
     v49  ImmData(48)                                      -> x0
-    v50  Load { addr=v49, disp=0, kind=I64 pc_rel }       -> x1
-    v51  ImmCode(ent_pc=2)                                -> x0
-    v52  Binop { op=sub, lhs=v50, rhs=v51 }               -> x1
-    v53  BinopI { op=ne, lhs=v52, rhs_imm=8 }             -> x1
+    v50  Load { addr=v49, disp=0, kind=I64 pc_rel }       -> x0
+    v51  ImmCode(ent_pc=2)                                -> x1
+    v52  Binop { op=sub, lhs=v50, rhs=v51 }               -> x0
+    v53  BinopI { op=ne, lhs=v52, rhs_imm=8 }             -> x0
     v54  BinopI { op=ne, lhs=v53, rhs_imm=0 }             -> x2
     v55  Imm(0)                                           -> x2
     v56  Imm(0)                                           -> x2
@@ -106,10 +106,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v58  Imm(0)                                           -> x2
     terminator Bnz { cond=v53, target=b7, fall=b6 }   (exit_acc=v53)
   block 6  start_pc=0
-    v59  ImmData(8)                                       -> x1
-    v60  Load { addr=v59, disp=0, kind=I64 pc_rel }       -> x1
+    v59  ImmData(8)                                       -> x0
+    v60  Load { addr=v59, disp=0, kind=I64 pc_rel }       -> x0
     v61  ImmCode(ent_pc=2)                                -> x2
-    v62  Binop { op=sub, lhs=v60, rhs=v51 }               -> x1
+    v62  Binop { op=sub, lhs=v60, rhs=v51 }               -> x0
     v63  BinopI { op=ne, lhs=v62, rhs_imm=8 }             -> x0
     v64  Imm(0)                                           -> x1
     v65  Imm(0)                                           -> x1
@@ -120,18 +120,18 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     terminator Return(v67)   (exit_acc=v67)
   block 8  start_pc=0
     v68  ImmData(56)                                      -> x0
-    v69  Load { addr=v68, disp=0, kind=I64 pc_rel }       -> x1
-    v70  ImmCode(ent_pc=3)                                -> x0
-    v71  Binop { op=sub, lhs=v69, rhs=v70 }               -> x1
-    v72  BinopI { op=ne, lhs=v71, rhs_imm=12 }            -> x1
+    v69  Load { addr=v68, disp=0, kind=I64 pc_rel }       -> x0
+    v70  ImmCode(ent_pc=3)                                -> x1
+    v71  Binop { op=sub, lhs=v69, rhs=v70 }               -> x0
+    v72  BinopI { op=ne, lhs=v71, rhs_imm=12 }            -> x0
     v73  Imm(1)                                           -> x2
     v74  Imm(0)                                           -> x2
     terminator Bnz { cond=v72, target=b11, fall=b9 }   (exit_acc=v72)
   block 9  start_pc=0
-    v75  ImmData(64)                                      -> x1
-    v76  Load { addr=v75, disp=0, kind=I64 pc_rel }       -> x1
+    v75  ImmData(64)                                      -> x0
+    v76  Load { addr=v75, disp=0, kind=I64 pc_rel }       -> x0
     v77  ImmCode(ent_pc=3)                                -> x2
-    v78  Binop { op=ne, lhs=v76, rhs=v70 }                -> x0
+    v78  Binop { op=ne, lhs=v76, rhs=v70 }                -> x1
     v79  BinopI { op=ne, lhs=v78, rhs_imm=0 }             -> x2
     v80  Imm(0)                                           -> x2
     v81  Imm(0)                                           -> x2
@@ -139,8 +139,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v83  Imm(0)                                           -> x2
     terminator Bnz { cond=v78, target=b11, fall=b10 }   (exit_acc=v78)
   block 10  start_pc=0
-    v84  ImmData(64)                                      -> x0
-    v85  Load { addr=v75, disp=0, kind=I64 pc_rel }       -> x0
+    v84  ImmData(64)                                      -> x1
+    v85  Load { addr=v75, disp=0, kind=I64 pc_rel }       -> x1
     v86  CallIndirect { target=v76, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v87  BinopI { op=ne, lhs=v86, rhs_imm=3 }             -> x0
     v88  Imm(0)                                           -> x1

@@ -27,18 +27,18 @@ Disassembly of section .text:
 
 <on_usr1>:
                	movslq	%edi, %rdi
-               	movq	0xa0(%rdx), %rax
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
-               	movq	$-0x1, %rcx
+               	movq	0xa0(%rdx), %rcx
+               	movl	<rip>, %eax # <addr>
+               	incq	%rax
+               	movl	%eax, <rip> # <addr>
+               	movq	$-0x1, %rax
                	movl	(%rsi), %edx
                	cmpl	%edi, %edx
-               	cmoveq	%rdi, %rcx
-               	movl	%ecx, <rip> # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	subq	%rax, %rcx
-               	cmpq	$0x100000, %rcx         # imm = 0x100000
+               	cmoveq	%rdi, %rax
+               	movl	%eax, <rip> # <addr>
+               	movq	<rip>, %rax # <addr>
+               	subq	%rcx, %rax
+               	cmpq	$0x100000, %rax         # imm = 0x100000
                	setb	%al
                	movzbq	%al, %rax
                	movl	%eax, <rip> # <addr>

@@ -335,10 +335,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   block 39  start_pc=0
     v254 Imm(200)                                         -> x0
     v255 StoreLocal { off=-3, value=v254, kind=I8 }       -> -
-    v256 LocalAddr(-3)                                    -> x0
-    v257 Imm(100)                                         -> x1
-    v258 AtomicRmw { op=Add, addr=v256, value=v257, width=1, order=SeqCst } -> x1
-    v259 BinopI { op=and, lhs=v258, rhs_imm=255 }         -> x1
+    v256 LocalAddr(-3)                                    -> x1
+    v257 Imm(100)                                         -> x0
+    v258 AtomicRmw { op=Add, addr=v256, value=v257, width=1, order=SeqCst } -> x0
+    v259 BinopI { op=and, lhs=v258, rhs_imm=255 }         -> x0
     v260 BinopI { op=ne, lhs=v259, rhs_imm=200 }          -> x0
     v261 BinopI { op=and, lhs=v260, rhs_imm=4294967295 }  -> x1
     v262 BinopI { op=ne, lhs=v259, rhs_imm=200 }          -> x1
@@ -369,10 +369,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   block 43  start_pc=0
     v280 Imm(40000)                                       -> x0
     v281 StoreLocal { off=-2, value=v280, kind=I16 }      -> -
-    v282 LocalAddr(-2)                                    -> x0
-    v283 Imm(30000)                                       -> x1
-    v284 AtomicRmw { op=Add, addr=v282, value=v283, width=2, order=SeqCst } -> x1
-    v285 BinopI { op=and, lhs=v284, rhs_imm=65535 }       -> x1
+    v282 LocalAddr(-2)                                    -> x1
+    v283 Imm(30000)                                       -> x0
+    v284 AtomicRmw { op=Add, addr=v282, value=v283, width=2, order=SeqCst } -> x0
+    v285 BinopI { op=and, lhs=v284, rhs_imm=65535 }       -> x0
     v286 BinopI { op=ne, lhs=v285, rhs_imm=40000 }        -> x0
     v287 BinopI { op=and, lhs=v286, rhs_imm=4294967295 }  -> x1
     v288 BinopI { op=ne, lhs=v285, rhs_imm=40000 }        -> x1

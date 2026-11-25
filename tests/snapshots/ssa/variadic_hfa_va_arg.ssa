@@ -154,10 +154,10 @@ fn ent_pc=2 n_params=1 variadic=true locals=6
     v27  Imm(100)                                         -> x2
     v28  Imm(4636737291354636288)                         -> d2
     v29  Binop { op=fmul.c, lhs=v26, rhs=v28 }            -> d1
-    v30  Fma { a=v12, b=v23, c=v29, neg_product=false, neg_addend=false } -> d1
+    v30  Fma { a=v12, b=v23, c=v29, neg_product=false, neg_addend=false } -> d0
     v31  LocalAddr(-3)                                    -> x2
     v32  BinopI { op=add, lhs=v19, rhs_imm=8 }            -> x2
-    v33  Load { addr=v18, disp=8, kind=F64 }              -> d0
+    v33  Load { addr=v18, disp=8, kind=F64 }              -> d1
     v34  Imm(10)                                          -> x2
     v35  Imm(4621819117588971520)                         -> d2
     v36  Undef                                            -> x2

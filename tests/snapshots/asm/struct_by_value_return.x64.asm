@@ -48,9 +48,9 @@ Disassembly of section .text:
                	movq	%rsi, %rcx
                	shrq	$0x20, %rcx
                	leaq	(%rdi,%rsi), %rdx
-               	addq	%rcx, %rax
-               	movl	%edx, %ecx
-               	shlq	$0x20, %rax
+               	addq	%rax, %rcx
+               	movl	%edx, %eax
+               	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	retq
 

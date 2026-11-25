@@ -1520,12 +1520,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v1397 Imm(0)                                           -> x1
     terminator Jmp(b69)   (exit_acc=v1396)
   block 68  start_pc=0
-    v1407 LocalAddr(-128)                                  -> x1
-    v1408 Extend { value=v1404, kind=I32 }                 -> x2
-    v1409 Binop { op=add, lhs=v1407, rhs=v1404 }           -> x2
-    v1410 BinopI { op=mul, lhs=v1404, rhs_imm=3 }          -> x2
+    v1407 LocalAddr(-128)                                  -> x2
+    v1408 Extend { value=v1404, kind=I32 }                 -> x1
+    v1409 Binop { op=add, lhs=v1407, rhs=v1404 }           -> x1
+    v1410 BinopI { op=mul, lhs=v1404, rhs_imm=3 }          -> x1
     v1411 Extend { value=v1410, kind=I32, nsw }            -> x6
-    v1412 BinopI { op=and, lhs=v1410, rhs_imm=255 }        -> x2
+    v1412 BinopI { op=and, lhs=v1410, rhs_imm=255 }        -> x1
     v1413 StoreIndexed { base=v1407, index=v1404, scale=1, value=v1412, kind=I8 } -> -
     v1414 Extend { value=v1404, kind=I32 }                 -> x1
     v1415 BinopI { op=add, lhs=v1404, rhs_imm=1 }          -> x0
@@ -1548,10 +1548,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=131
     v1429 LocalAddr(-64)                                   -> x1
     v1430 Extend { value=v1423, kind=I32 }                 -> x2
     v1431 Binop { op=add, lhs=v1429, rhs=v1423 }           -> x2
-    v1432 LoadIndexed { base=v1429, index=v1423, scale=1, kind=U8 } -> x1
-    v1433 BinopI { op=mul, lhs=v1423, rhs_imm=3 }          -> x2
+    v1432 LoadIndexed { base=v1429, index=v1423, scale=1, kind=U8 } -> x2
+    v1433 BinopI { op=mul, lhs=v1423, rhs_imm=3 }          -> x1
     v1434 Extend { value=v1433, kind=I32, nsw }            -> x6
-    v1435 BinopI { op=and, lhs=v1433, rhs_imm=255 }        -> x2
+    v1435 BinopI { op=and, lhs=v1433, rhs_imm=255 }        -> x1
     v1436 Binop { op=ne, lhs=v1432, rhs=v1435 }            -> x1
     terminator Bz { cond=v1436, target=b72, fall=b82 }   (exit_acc=v1436)
   block 72  start_pc=0

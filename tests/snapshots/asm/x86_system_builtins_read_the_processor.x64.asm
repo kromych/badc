@@ -35,17 +35,17 @@ Disassembly of section .text:
                	mfence
                	pause
                	rdtsc
-               	movl	%eax, %eax
-               	shlq	$0x20, %rdx
                	movq	%rdx, %rcx
+               	movl	%eax, %eax
+               	shlq	$0x20, %rcx
                	orq	%rax, %rcx
                	rdtsc
                	movl	%eax, %eax
                	shlq	$0x20, %rdx
-               	orq	%rdx, %rax
+               	orq	%rax, %rdx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	testq	%rax, %rax
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -59,9 +59,9 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	xgetbv
                	shlq	$0x20, %rdx
-               	orq	%rdx, %rax
-               	andq	$0x3, %rax
-               	cmpl	$0x3, %eax
+               	orq	%rax, %rdx
+               	andq	$0x3, %rdx
+               	cmpl	$0x3, %edx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx

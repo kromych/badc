@@ -36,7 +36,8 @@ Disassembly of section .text:
                	retq
 
 <swapq>:
-               	rorxq	$0x20, %rdi, %rax
+               	rorq	$0x20, %rdi
+               	movq	%rdi, %rax
                	retq
 
 <tail>:
@@ -47,46 +48,45 @@ Disassembly of section .text:
                	retq
 
 <bytes>:
-               	movq	%rdi, %rax
-               	shrq	$0x8, %rax
                	movq	%rdi, %rcx
-               	shrq	$0x10, %rcx
-               	movsbq	%dil, %rdx
-               	incq	%rdx
-               	movsbq	%al, %rax
-               	addq	$0x2, %rax
+               	shrq	$0x8, %rcx
+               	movq	%rdi, %rdx
+               	shrq	$0x10, %rdx
+               	movsbq	%dil, %rax
+               	incq	%rax
                	movsbq	%cl, %rcx
-               	addq	$0x3, %rcx
-               	andq	$0xff, %rdx
+               	addq	$0x2, %rcx
+               	movsbq	%dl, %rdx
+               	addq	$0x3, %rdx
                	andq	$0xff, %rax
-               	shlq	$0x8, %rax
-               	orq	%rdx, %rax
                	andq	$0xff, %rcx
-               	shlq	$0x10, %rcx
+               	shlq	$0x8, %rcx
                	orq	%rcx, %rax
+               	andq	$0xff, %rdx
+               	shlq	$0x10, %rdx
+               	orq	%rdx, %rax
                	retq
 
 <mixed>:
+               	movq	%rdi, %r8
+               	shrq	$0x10, %r8
                	movq	%rdi, %rdx
-               	shrq	$0x10, %rdx
-               	movq	%rdi, %rax
-               	shrq	$0x20, %rax
+               	shrq	$0x20, %rdx
                	movsbq	%dil, %rcx
-               	leaq	0x1(%rcx), %rdi
-               	movsbq	%dil, %rdi
-               	movswq	%dx, %rdx
-               	addq	%rdx, %rcx
+               	leaq	0x1(%rcx), %rax
+               	movsbq	%al, %rax
+               	movswq	%r8w, %rdi
+               	addq	%rdi, %rcx
                	movswq	%cx, %rcx
-               	leaq	(%rax,%rdx), %r8
-               	movslq	%eax, %rax
-               	leaq	(%rsi,%rax), %rdx
-               	andq	$0xff, %rdi
+               	addq	%rdx, %rdi
+               	movslq	%edx, %rdx
+               	addq	%rsi, %rdx
+               	andq	$0xff, %rax
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	shlq	$0x10, %rcx
-               	movq	%rdi, %rax
                	orq	%rcx, %rax
-               	shlq	$0x20, %r8
-               	orq	%r8, %rax
+               	shlq	$0x20, %rdi
+               	orq	%rdi, %rax
                	retq
 
 <dsum>:
@@ -160,7 +160,8 @@ Disassembly of section .text:
 <nested>:
                	movslq	%edi, %rax
                	leaq	(%rsi,%rax), %rdx
-               	rorxq	$0x20, %rdi, %rax
+               	rorq	$0x20, %rdi
+               	movq	%rdi, %rax
                	retq
 
 <pp>:

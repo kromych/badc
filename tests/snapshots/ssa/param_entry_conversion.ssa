@@ -129,7 +129,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Binop { op=mul, lhs=v1, rhs=v3 }                 -> x6
+    v7   Binop { op=mul, lhs=v1, rhs=v3 }                 -> x7
     v8   Extend { value=v7, kind=I32, nsw }               -> x0
     v9   BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x0
     v10  Extend { value=v9, kind=I32, nsw }               -> x1

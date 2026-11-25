@@ -234,9 +234,9 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rdx)
                	movsd	(%rcx), %xmm1
                	vmulsd	<rip>, %xmm1, %xmm1
-               	vfmadd231sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
-               	movsd	0x8(%rcx), %xmm0
                	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
+               	movsd	0x8(%rcx), %xmm1
+               	vfmadd231sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
                	vaddsd	0x10(%rcx), %xmm0, %xmm0
                	incq	%rax
                	movl	-0xe0(%rbp), %ecx

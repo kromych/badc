@@ -99,39 +99,35 @@ Disassembly of section .text:
                	retq
 
 <digit_power_sums>:
-               	pushq	%rbx
-               	movq	%rsi, %rbx
-               	xorl	%edx, %edx
-               	leaq	<rip>, %r8 # <addr>
-               	movq	%rdx, %rsi
+               	xorl	%edi, %edi
+               	movq	%rdi, %r9
                	jmp	<addr>
-               	incq	%rdx
-               	nopw	%cs:(%rax,%rax)
-               	cmpl	$0xfa0, %edx            # imm = 0xFA0
+               	incq	%rdi
+               	cmpl	$0xfa0, %edi            # imm = 0xFA0
                	jge	<addr>
                	xorl	%ecx, %ecx
-               	movq	%rdx, %rax
-               	testl	%eax, %eax
-               	jle	<addr>
-               	imulq	$0x1999999a, %rax, %rdi # imm = 0x1999999A
-               	shrq	$0x20, %rdi
-               	imulq	$0xa, %rdi, %r9
-               	subq	%r9, %rax
-               	movl	(%r8,%rax,4), %r9d
-               	addq	%r9, %rcx
-               	cmpl	%edx, %ecx
-               	jg	<addr>
                	movq	%rdi, %rax
                	testl	%eax, %eax
+               	jle	<addr>
+               	imulq	$0x1999999a, %rax, %rdx # imm = 0x1999999A
+               	shrq	$0x20, %rdx
+               	imulq	$0xa, %rdx, %r8
+               	subq	%r8, %rax
+               	leaq	<rip>, %r8 # <addr>
+               	movl	(%r8,%rax,4), %r8d
+               	addq	%r8, %rcx
+               	nop
+               	cmpl	%edi, %ecx
                	jg	<addr>
-               	nopl	(%rax,%rax)
-               	cmpl	%edx, %ecx
+               	movq	%rdx, %rax
+               	testl	%eax, %eax
+               	jg	<addr>
+               	cmpl	%edi, %ecx
                	jne	<addr>
-               	incq	%rsi
-               	addq	%rdx, (%rbx)
+               	incq	%r9
+               	addq	%rdi, (%rsi)
                	jmp	<addr>
-               	movq	%rsi, %rax
-               	popq	%rbx
+               	movq	%r9, %rax
                	retq
 
 <lcg>:
@@ -198,9 +194,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
-               	imulq	$0xa, %rax, %rcx
+               	imulq	$0xa, %rax, %rax
+               	subq	%rax, %rdi
                	movq	%rdi, %rax
-               	subq	%rcx, %rax
                	retq
 
 <mid>:
@@ -256,8 +252,8 @@ Disassembly of section .text:
                	retq
 
 <neg_minus_one>:
+               	xorq	$-0x1, %rdi
                	movq	%rdi, %rax
-               	xorq	$-0x1, %rax
                	retq
 
 <zero_minus>:

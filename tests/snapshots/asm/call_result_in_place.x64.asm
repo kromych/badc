@@ -46,10 +46,10 @@ Disassembly of section .text:
                	retq
 
 <makeq>:
-               	movq	%rdi, %rax
-               	negq	%rax
-               	movl	%edi, %ecx
-               	shlq	$0x20, %rax
+               	movq	%rdi, %rcx
+               	negq	%rcx
+               	movl	%edi, %eax
+               	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	retq
 

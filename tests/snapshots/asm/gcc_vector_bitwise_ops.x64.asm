@@ -106,18 +106,18 @@ Disassembly of section .text:
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdx)
                	xorl	%eax, %eax
-               	movzbq	(%rsp,%rax), %rdi
+               	movzbq	(%rsp,%rax), %rsi
                	movzbq	0x10(%rsp,%rax), %r8
-               	xorq	%r8, %rdi
-               	movb	%dil, 0x40(%rsp,%rax)
-               	movzbq	(%rsp,%rax), %rdi
+               	xorq	%r8, %rsi
+               	movb	%sil, 0x40(%rsp,%rax)
+               	movzbq	(%rsp,%rax), %rsi
                	movzbq	0x10(%rsp,%rax), %r8
-               	andq	%r8, %rdi
-               	movb	%dil, 0x50(%rsp,%rax)
-               	movzbq	(%rsp,%rax), %rdi
+               	andq	%r8, %rsi
+               	movb	%sil, 0x50(%rsp,%rax)
+               	movzbq	(%rsp,%rax), %rsi
                	movzbq	0x10(%rsp,%rax), %r8
-               	orq	%r8, %rdi
-               	movb	%dil, 0x60(%rsp,%rax)
+               	orq	%r8, %rsi
+               	movb	%sil, 0x60(%rsp,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -264,12 +264,12 @@ Disassembly of section .text:
                	vpxor	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, 0x20(%rsp)
                	xorl	%eax, %eax
-               	movzbq	0x20(%rsp,%rax), %rdi
-               	movzbq	0x30(%rsp,%rax), %r8
+               	movzbq	0x20(%rsp,%rax), %r8
+               	movzbq	0x30(%rsp,%rax), %rcx
                	movzbq	0x10(%rsp,%rax), %r9
-               	xorq	%r9, %r8
+               	xorq	%r9, %rcx
                	nop
-               	cmpl	%r8d, %edi
+               	cmpl	%ecx, %r8d
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax

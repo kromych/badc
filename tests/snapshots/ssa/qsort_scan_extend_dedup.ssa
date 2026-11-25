@@ -143,14 +143,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=32
     v12  BinopI { op=add, lhs=v10, rhs_imm=12345 }        -> x1
     v13  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x2
     v14  Imm(0)                                           -> x2
-    v15  LocalAddr(-32)                                   -> x2
-    v16  Extend { value=v5, kind=I32 }                    -> x6
-    v17  BinopI { op=shl, lhs=v5, rhs_imm=2 }             -> x6
-    v18  Binop { op=add, lhs=v15, rhs=v17 }               -> x6
-    v19  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x6
-    v20  BinopI { op=shru, lhs=v19, rhs_imm=16 }          -> x6
+    v15  LocalAddr(-32)                                   -> x6
+    v16  Extend { value=v5, kind=I32 }                    -> x2
+    v17  BinopI { op=shl, lhs=v5, rhs_imm=2 }             -> x2
+    v18  Binop { op=add, lhs=v15, rhs=v17 }               -> x2
+    v19  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x2
+    v20  BinopI { op=shru, lhs=v19, rhs_imm=16 }          -> x2
     v21  Extend { value=v20, kind=I32 }                   -> x7
-    v22  BinopI { op=sub, lhs=v20, rhs_imm=16384 }        -> x6
+    v22  BinopI { op=sub, lhs=v20, rhs_imm=16384 }        -> x2
     v23  Extend { value=v22, kind=I32, nsw }              -> x7
     v24  StoreIndexed { base=v15, index=v5, scale=4, value=v22, kind=I32 } -> -
     v25  Extend { value=v5, kind=I32 }                    -> x2

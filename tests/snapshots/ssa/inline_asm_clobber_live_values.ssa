@@ -7,52 +7,52 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> [spill 0]
+    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> [spill 7]
     v5   Imm(0)                                           -> x0
-    v6   BinopI { op=add, lhs=v1, rhs_imm=2 }             -> [spill 1]
+    v6   BinopI { op=add, lhs=v1, rhs_imm=2 }             -> [spill 0]
     v7   Imm(0)                                           -> x0
-    v8   BinopI { op=add, lhs=v1, rhs_imm=3 }             -> [spill 2]
+    v8   BinopI { op=add, lhs=v1, rhs_imm=3 }             -> [spill 1]
     v9   Imm(0)                                           -> x0
-    v10  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> [spill 3]
+    v10  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> [spill 2]
     v11  Imm(0)                                           -> x0
-    v12  BinopI { op=add, lhs=v1, rhs_imm=5 }             -> [spill 4]
+    v12  BinopI { op=add, lhs=v1, rhs_imm=5 }             -> [spill 3]
     v13  Imm(0)                                           -> x0
-    v14  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> [spill 5]
+    v14  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> [spill 4]
     v15  Imm(0)                                           -> x0
-    v16  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> [spill 6]
+    v16  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> [spill 5]
     v17  Imm(0)                                           -> x0
-    v18  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> [spill 7]
+    v18  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> [spill 6]
     v19  Imm(0)                                           -> x0
     v20  InlineAsm { template="xorl %%eax, %%eax\n\txorl %%ecx, %%ecx\n\txorl %%edx, %%edx\n\txorl %%esi, %%esi\n\txorl %%edi, %%edi\n\txorq %%r8, %%r8\n\txorq %%r9, %%r9\n\txorq %%r10, %%r10\n\txorq %%r11, %%r11", ops=0, args=[] } -> -
     v21  InlineAsm { template="xorl %%ebx, %%ebx\n\txorq %%r12, %%r12\n\txorq %%r13, %%r13\n\txorq %%r14, %%r14\n\txorq %%r15, %%r15", ops=0, args=[] } -> -
     v22  Imm(0)                                           -> x0
     v23  Imm(2)                                           -> x0
     v24  Imm(0)                                           -> x0
-    v25  BinopI { op=shl, lhs=v6, rhs_imm=1 }             -> x0
+    v25  BinopI { op=shl, lhs=v6, rhs_imm=1 }             -> [spill 0]
     v26  Binop { op=add, lhs=v4, rhs=v25 }                -> x0
     v27  Imm(4)                                           -> x1
     v28  Imm(0)                                           -> x1
-    v29  BinopI { op=shl, lhs=v8, rhs_imm=2 }             -> x1
+    v29  BinopI { op=shl, lhs=v8, rhs_imm=2 }             -> [spill 1]
     v30  Binop { op=add, lhs=v26, rhs=v29 }               -> x0
     v31  Imm(8)                                           -> x1
     v32  Imm(0)                                           -> x1
-    v33  BinopI { op=shl, lhs=v10, rhs_imm=3 }            -> x1
+    v33  BinopI { op=shl, lhs=v10, rhs_imm=3 }            -> [spill 2]
     v34  Binop { op=add, lhs=v30, rhs=v33 }               -> x0
     v35  Imm(16)                                          -> x1
     v36  Imm(0)                                           -> x1
-    v37  BinopI { op=shl, lhs=v12, rhs_imm=4 }            -> x1
+    v37  BinopI { op=shl, lhs=v12, rhs_imm=4 }            -> [spill 3]
     v38  Binop { op=add, lhs=v34, rhs=v37 }               -> x0
     v39  Imm(32)                                          -> x1
     v40  Imm(0)                                           -> x1
-    v41  BinopI { op=shl, lhs=v14, rhs_imm=5 }            -> x1
+    v41  BinopI { op=shl, lhs=v14, rhs_imm=5 }            -> [spill 4]
     v42  Binop { op=add, lhs=v38, rhs=v41 }               -> x0
     v43  Imm(64)                                          -> x1
     v44  Imm(0)                                           -> x1
-    v45  BinopI { op=shl, lhs=v16, rhs_imm=6 }            -> x1
+    v45  BinopI { op=shl, lhs=v16, rhs_imm=6 }            -> [spill 5]
     v46  Binop { op=add, lhs=v42, rhs=v45 }               -> x0
     v47  Imm(128)                                         -> x1
     v48  Imm(0)                                           -> x1
-    v49  BinopI { op=shl, lhs=v18, rhs_imm=7 }            -> x1
+    v49  BinopI { op=shl, lhs=v18, rhs_imm=7 }            -> [spill 6]
     v50  Binop { op=add, lhs=v46, rhs=v49 }               -> x0
     terminator Return(v50)   (exit_acc=v50)
 ; --- SSA dump (ok=true) ent_pc=1 ---

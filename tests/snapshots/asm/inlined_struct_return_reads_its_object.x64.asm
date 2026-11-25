@@ -34,8 +34,8 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	orq	$0x1, %rsi
+               	xorq	%rsi, %rdi
                	movq	%rdi, %rax
-               	xorq	%rsi, %rax
                	retq
                	incq	%rax
                	movq	%rax, (%rsi)
@@ -46,27 +46,27 @@ Disassembly of section .text:
 
 <walk>:
                	xorl	%eax, %eax
-               	movq	%rax, %rdx
+               	movq	%rax, %rsi
                	jmp	<addr>
-               	subq	%rcx, %rsi
-               	addq	%rsi, %rdx
+               	subq	%rcx, %rdx
+               	addq	%rdx, %rsi
                	incq	%rax
                	cmpl	$0x4, %eax
                	jge	<addr>
                	movq	%rax, %rcx
                	shlq	$0x3, %rcx
                	addq	%rdi, %rcx
-               	movq	(%rcx), %rsi
-               	testb	$0x1, %sil
+               	movq	(%rcx), %rdx
+               	testb	$0x1, %dl
                	je	<addr>
-               	movq	%rcx, %rsi
-               	orq	$0x1, %rsi
+               	movq	%rcx, %rdx
+               	orq	$0x1, %rdx
                	jmp	<addr>
-               	incq	%rsi
-               	movq	%rsi, (%rcx)
-               	movq	%rcx, %rsi
+               	incq	%rdx
+               	movq	%rdx, (%rcx)
+               	movq	%rcx, %rdx
                	jmp	<addr>
-               	movq	%rdx, %rax
+               	movq	%rsi, %rax
                	retq
 
 <main>:

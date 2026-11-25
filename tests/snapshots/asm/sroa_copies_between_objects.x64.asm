@@ -26,19 +26,18 @@ Disassembly of section .text:
                	int3
 
 <swap_loop>:
-               	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rax # <addr>
-               	leaq	(%rax,%rax,2), %rcx
-               	xorl	%eax, %eax
-               	cmpq	%rdi, %rax
+               	movq	<rip>, %rcx # <addr>
+               	leaq	(%rcx,%rcx,2), %rdx
+               	xorl	%ecx, %ecx
+               	cmpq	%rdi, %rcx
                	jge	<addr>
-               	addq	%rax, %rdx
-               	incq	%rax
-               	xchgq	%rdx, %rcx
-               	cmpq	%rdi, %rax
+               	addq	%rcx, %rax
+               	incq	%rcx
+               	xchgq	%rax, %rdx
+               	cmpq	%rdi, %rcx
                	jl	<addr>
-               	movq	%rdx, %rax
-               	subq	%rcx, %rax
+               	subq	%rdx, %rax
                	retq
 
 <rotate>:
@@ -99,20 +98,20 @@ Disassembly of section .text:
 <two_widths>:
                	movq	<rip>, %rax # <addr>
                	xorl	%ecx, %ecx
-               	movabsq	$-0x100000000, %rdx     # imm = 0xFFFFFFFF00000000
+               	movabsq	$-0x100000000, %rsi     # imm = 0xFFFFFFFF00000000
                	cmpq	%rdi, %rcx
                	jge	<addr>
-               	movq	%rax, %rsi
-               	shrq	$0x20, %rsi
-               	addq	%rcx, %rsi
-               	movq	%rax, %r8
-               	andq	%rdx, %r8
-               	orq	%r8, %rsi
-               	movl	%esi, %esi
+               	movq	%rax, %rdx
+               	shrq	$0x20, %rdx
+               	leaq	(%rdx,%rcx), %r8
+               	movq	%rax, %rdx
+               	andq	%rsi, %rdx
+               	orq	%r8, %rdx
+               	movl	%edx, %edx
                	shlq	$0x20, %rax
-               	orq	%rsi, %rax
+               	orq	%rdx, %rax
                	incq	%rcx
-               	nopw	(%rax,%rax)
+               	nopl	(%rax,%rax)
                	cmpq	%rdi, %rcx
                	jl	<addr>
                	retq

@@ -153,20 +153,20 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v114 Load { addr=v109, disp=0, kind=I32 }             -> x0
     v115 BinopI { op=shl, lhs=v114, rhs_imm=1 }           -> x0
     v116 Store { addr=v109, disp=0, value=v115, kind=I32 } -> -
-    v117 LoadLocal { off=-1, kind=I32 }                   -> x0
+    v117 LoadLocal { off=-1, kind=I32 }                   -> x2
     v118 LifetimeEnd(-1)                                  -> -
-    v119 Imm(1234605616436508552)                         -> x2
+    v119 Imm(1234605616436508552)                         -> x0
     v120 StoreLocal { off=-1, value=v119, kind=I64 }      -> -
-    v121 LocalAddr(-1)                                    -> x2
-    v122 ImmData(24)                                      -> x2
+    v121 LocalAddr(-1)                                    -> x0
+    v122 ImmData(24)                                      -> x0
     v123 Store { addr=v122, disp=0, value=v109, kind=I64 pc_rel } -> -
-    v124 ImmData(24)                                      -> x2
-    v125 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x2
-    v126 Load { addr=v109, disp=0, kind=I64 }             -> x2
-    v127 BinopI { op=xor, lhs=v126, rhs_imm=1 }           -> x2
+    v124 ImmData(24)                                      -> x0
+    v125 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x0
+    v126 Load { addr=v109, disp=0, kind=I64 }             -> x0
+    v127 BinopI { op=xor, lhs=v126, rhs_imm=1 }           -> x0
     v128 Store { addr=v109, disp=0, value=v127, kind=I64 } -> -
-    v129 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x2
-    v130 Load { addr=v129, disp=0, kind=I64 }             -> x2
+    v129 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x0
+    v130 Load { addr=v129, disp=0, kind=I64 }             -> x0
     v131 Binop { op=add, lhs=v117, rhs=v130 }             -> x2
     v132 LifetimeEnd(-1)                                  -> -
     v133 Imm(9)                                           -> x0

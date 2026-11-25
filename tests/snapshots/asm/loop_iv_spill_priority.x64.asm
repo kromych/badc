@@ -32,44 +32,43 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbp
                	pushq	%rbx
-               	xorl	%eax, %eax
-               	movl	(%rdi), %ecx
-               	leaq	0x1(%rcx), %r8
-               	movl	0x4(%rdi), %ecx
-               	leaq	0x2(%rcx), %r9
-               	movl	0x8(%rdi), %ecx
-               	leaq	0x3(%rcx), %rbx
-               	movl	0xc(%rdi), %ecx
-               	leaq	0x4(%rcx), %r12
-               	movl	0x10(%rdi), %ecx
-               	leaq	0x5(%rcx), %r13
-               	movl	0x14(%rdi), %ecx
-               	leaq	0x6(%rcx), %r14
-               	movl	0x18(%rdi), %ecx
-               	leaq	0x7(%rcx), %r15
-               	movl	0x1c(%rdi), %ecx
-               	leaq	0x8(%rcx), %rbp
-               	movq	%rax, %rcx
-               	movq	%rax, %rdx
+               	xorl	%ecx, %ecx
+               	movl	(%rdi), %eax
+               	leaq	0x1(%rax), %r8
+               	movl	0x4(%rdi), %eax
+               	leaq	0x2(%rax), %r9
+               	movl	0x8(%rdi), %eax
+               	leaq	0x3(%rax), %rbx
+               	movl	0xc(%rdi), %eax
+               	leaq	0x4(%rax), %r12
+               	movl	0x10(%rdi), %eax
+               	leaq	0x5(%rax), %r13
+               	movl	0x14(%rdi), %eax
+               	leaq	0x6(%rax), %r14
+               	movl	0x18(%rdi), %eax
+               	leaq	0x7(%rax), %r15
+               	movl	0x1c(%rdi), %eax
+               	leaq	0x8(%rax), %rbp
+               	movq	%rcx, %rax
+               	movq	%rcx, %rdx
                	andq	$0x7, %rdx
                	movl	(%rdi,%rdx,4), %edx
-               	leaq	0x1(%rax), %rsi
+               	leaq	0x1(%rcx), %rsi
                	imulq	%rsi, %rdx
-               	addq	%rdx, %rcx
-               	movq	%rcx, %rdx
+               	addq	%rdx, %rax
+               	movq	%rax, %rdx
                	shlq	%rdx
-               	xorq	%rdx, %rcx
-               	addq	%rax, %rcx
-               	incq	%rax
-               	cmpl	$0x3e8, %eax            # imm = 0x3E8
+               	xorq	%rdx, %rax
+               	addq	%rcx, %rax
+               	incq	%rcx
+               	cmpl	$0x3e8, %ecx            # imm = 0x3E8
                	jb	<addr>
-               	xorq	%r8, %rcx
-               	xorq	%r9, %rcx
-               	xorq	%rbx, %rcx
-               	xorq	%r12, %rcx
-               	xorq	%r13, %rcx
-               	xorq	%r14, %rcx
-               	movq	%rcx, %rax
+               	xorq	%r8, %rax
+               	xorq	%r9, %rax
+               	xorq	%rbx, %rax
+               	xorq	%r12, %rax
+               	xorq	%r13, %rax
+               	xorq	%r14, %rax
                	xorq	%r15, %rax
                	xorq	%rbp, %rax
                	popq	%rbx

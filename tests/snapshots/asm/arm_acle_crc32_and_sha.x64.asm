@@ -36,55 +36,55 @@ Disassembly of section .text:
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
-               	movq	%rax, %rdi
-               	shrq	%rdi
-               	andq	$0x1, %rax
-               	negq	%rax
-               	andq	%rcx, %rax
+               	xorq	%rax, %rdi
+               	movl	%edi, %edi
+               	movq	%rdi, %rax
+               	shrq	%rax
+               	andq	$0x1, %rdi
+               	negq	%rdi
+               	andq	%rcx, %rdi
                	xorq	%rdi, %rax
                	incq	%rdx
                	nopw	(%rax,%rax)
@@ -95,10 +95,10 @@ Disassembly of section .text:
 <main>:
                	subq	$0x48, %rsp
                	xorl	%eax, %eax
-               	imulq	$0x25, %rax, %rdx
-               	addq	$0xb, %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rsp,%rax)
+               	imulq	$0x25, %rax, %rcx
+               	addq	$0xb, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rsp,%rax)
                	incq	%rax
                	nop
                	cmpl	$0x3d, %eax

@@ -52,8 +52,8 @@ Disassembly of section .text:
                	movl	%r8d, (%rsp,%rax,4)
                	movl	%edi, 0x20(%rsp,%rax,4)
                	movl	(%rsp,%rax,4), %r8d
-               	imulq	%r8, %rdi
-               	addq	%rdi, %rcx
+               	imulq	%rdi, %r8
+               	addq	%r8, %rcx
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>

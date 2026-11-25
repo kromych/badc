@@ -256,10 +256,10 @@ Disassembly of section .text:
                	movq	0x38(%rsp), %rax
                	movq	0x28(%rsp), %rcx
                	subq	%rcx, %rax
-               	imulq	$0x3b9aca00, %rax, %rax # imm = 0x3B9ACA00
-               	movq	0x40(%rsp), %rcx
+               	imulq	$0x3b9aca00, %rax, %rcx # imm = 0x3B9ACA00
+               	movq	0x40(%rsp), %rax
                	movq	0x30(%rsp), %rdx
-               	subq	%rdx, %rcx
+               	subq	%rdx, %rax
                	addq	%rcx, %rax
                	movl	$0xe, %ecx
                	xorl	%edx, %edx

@@ -70,10 +70,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v57  AtomicStore { addr=v55, value=v56, width=4, order=Release } -> -
     terminator Jmp(b7)   (exit_acc=v57)
   block 7  start_pc=0
-    v58  ImmData(76)                                      -> x0
-    v59  Imm(1)                                           -> x1
-    v60  AtomicRmw { op=Xchg, addr=v58, value=v20, width=1, order=Acquire } -> x1
-    v61  BinopI { op=and, lhs=v60, rhs_imm=255 }          -> x1
+    v58  ImmData(76)                                      -> x1
+    v59  Imm(1)                                           -> x0
+    v60  AtomicRmw { op=Xchg, addr=v58, value=v20, width=1, order=Acquire } -> x0
+    v61  BinopI { op=and, lhs=v60, rhs_imm=255 }          -> x0
     terminator Bz { cond=v61, target=b8, fall=b7 }   (exit_acc=v61)
   block 8  start_pc=0
     v62  ImmData(88)                                      -> x0

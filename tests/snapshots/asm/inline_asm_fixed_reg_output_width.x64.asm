@@ -38,8 +38,7 @@ Disassembly of section .text:
                	shlq	$0x20, %rdx
                	orq	%rdx, %rax
                	movq	%rax, (%rdi)
-               	movq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
+               	movq	-0x10(%rbp), %rcx
                	shrq	$0x20, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -56,7 +55,8 @@ Disassembly of section .text:
                	rdtsc
                	shlq	$0x20, %rdx
                	movl	%eax, %eax
-               	orq	%rdx, %rax
+               	orq	%rax, %rdx
+               	movq	%rdx, %rax
                	retq
 
 <long_output_fills_all_bytes>:

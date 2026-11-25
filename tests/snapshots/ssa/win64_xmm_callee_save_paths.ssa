@@ -32,15 +32,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v14  Binop { op=fmul.c, lhs=v6, rhs=v8 }              -> d1
     v15  Fma { a=v2, b=v4, c=v14, neg_product=false, neg_addend=false } -> d1
     v16  Undef                                            -> x0
-    v17  Fma { a=v10, b=v12, c=v15, neg_product=false, neg_addend=false } -> d0
+    v17  Fma { a=v10, b=v12, c=v15, neg_product=false, neg_addend=false } -> d1
     v18  Imm(0)                                           -> x0
     v19  FpCast { kind=FpToInt, value=v17 }               -> x0
     v20  Imm(0)                                           -> x1
     v21  Imm(0)                                           -> x1
     v22  Imm(0)                                           -> x1
-    v23  Imm(4611686018427387904)                         -> d1
+    v23  Imm(4611686018427387904)                         -> d0
     v24  Undef                                            -> x1
-    v25  Fma { a=v17, b=v23, c=v2, neg_product=false, neg_addend=false } -> d0
+    v25  Fma { a=v17, b=v23, c=v2, neg_product=false, neg_addend=false } -> d1
     v26  FpCast { kind=FpToInt, value=v25 }               -> x1
     v27  Imm(0)                                           -> x2
     v28  Imm(0)                                           -> x2
@@ -85,15 +85,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v59  Binop { op=fmul.c, lhs=v51, rhs=v53 }            -> d1
     v60  Fma { a=v47, b=v49, c=v59, neg_product=false, neg_addend=false } -> d1
     v61  Undef                                            -> x0
-    v62  Fma { a=v55, b=v57, c=v60, neg_product=false, neg_addend=false } -> d0
+    v62  Fma { a=v55, b=v57, c=v60, neg_product=false, neg_addend=false } -> d1
     v63  Imm(0)                                           -> x0
     v64  FpCast { kind=FpToInt, value=v62 }               -> x0
     v65  Imm(0)                                           -> x1
     v66  Imm(0)                                           -> x1
     v67  Imm(0)                                           -> x1
-    v68  Imm(4611686018427387904)                         -> d1
+    v68  Imm(4611686018427387904)                         -> d0
     v69  Undef                                            -> x1
-    v70  Fma { a=v62, b=v68, c=v47, neg_product=false, neg_addend=false } -> d0
+    v70  Fma { a=v62, b=v68, c=v47, neg_product=false, neg_addend=false } -> d1
     v71  FpCast { kind=FpToInt, value=v70 }               -> x1
     v72  Imm(0)                                           -> x2
     v73  Imm(0)                                           -> x2

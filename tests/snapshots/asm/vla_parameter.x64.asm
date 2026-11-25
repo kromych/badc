@@ -94,18 +94,17 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	testl	%ecx, %ecx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	leaq	0x5(%rax), %rdx
-               	subq	%rax, %rdx
-               	cmpq	$0x5, %rdx
+               	sete	%r9b
+               	movzbq	%r9b, %r9
+               	leaq	0x5(%rax), %rcx
+               	subq	%rax, %rcx
+               	cmpq	$0x5, %rcx
                	sete	%al
                	movzbq	%al, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
                	shlq	%rax
-               	movq	%rcx, %r9
                	orq	%rax, %r9
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -115,7 +114,7 @@ Disassembly of section .text:
                	movl	(%rdx,%rax,4), %esi
                	addq	%rsi, %rcx
                	incq	%rax
-               	nop
+               	nopl	(%rax)
                	cmpl	$0x3, %eax
                	jl	<addr>
                	incq	%rdi
@@ -126,24 +125,23 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	shlq	$0x2, %rax
-               	movq	%r9, %rdi
-               	orq	%rax, %rdi
-               	leaq	0x18(%rsp), %rdx
-               	xorl	%eax, %eax
-               	movq	%rax, %rcx
-               	imulq	$0x18, %rax, %rsi
-               	addq	%rdx, %rsi
-               	movq	(%rsi,%rax,8), %rsi
-               	addq	%rsi, %rcx
-               	incq	%rax
-               	cmpl	$0x3, %eax
+               	orq	%r9, %rax
+               	leaq	0x18(%rsp), %rsi
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rdx
+               	imulq	$0x18, %rcx, %rdi
+               	addq	%rsi, %rdi
+               	movq	(%rdi,%rcx,8), %rdi
+               	addq	%rdi, %rdx
+               	incq	%rcx
+               	cmpl	$0x3, %ecx
                	jl	<addr>
-               	leaq	0xc8(%rcx), %rax
-               	addq	$0x7530, %rax           # imm = 0x7530
-               	cmpl	$0x75fe, %eax           # imm = 0x75FE
-               	setne	%al
-               	movzbq	%al, %rax
-               	shlq	$0x3, %rax
-               	orq	%rdi, %rax
+               	leaq	0xc8(%rdx), %rcx
+               	addq	$0x7530, %rcx           # imm = 0x7530
+               	cmpl	$0x75fe, %ecx           # imm = 0x75FE
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	shlq	$0x3, %rcx
+               	orq	%rcx, %rax
                	addq	$0x68, %rsp
                	retq

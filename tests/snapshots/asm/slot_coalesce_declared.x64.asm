@@ -31,10 +31,10 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	leaq	(%rax,%rax,2), %rdx
                	leaq	0x7(%rdx), %rsi
-               	addq	%rsi, %rcx
-               	leaq	(%rax,%rax), %rsi
-               	addq	%rax, %rsi
-               	subq	%rdx, %rsi
+               	addq	%rcx, %rsi
+               	leaq	(%rax,%rax), %rcx
+               	addq	%rax, %rcx
+               	subq	%rdx, %rcx
                	addq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x32, %eax

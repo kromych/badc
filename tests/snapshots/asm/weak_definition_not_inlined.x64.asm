@@ -30,8 +30,8 @@ Disassembly of section .text:
                	retq
 
 <weak_scale>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <main>:

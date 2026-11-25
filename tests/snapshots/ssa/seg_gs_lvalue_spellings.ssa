@@ -148,7 +148,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=0
     v8   BinopI { op=and, lhs=v7, rhs_imm=7 }             -> x2
     v9   SegLoad { addr=v4, kind=U32, seg=Gs }            -> x2
     v10  BinopI { op=and, lhs=v9, rhs_imm=-8 }            -> x2
-    v11  Binop { op=or, lhs=v10, rhs=v7 }                 -> x1
+    v11  Binop { op=or, lhs=v10, rhs=v7 }                 -> x2
     v12  SegStore { addr=v4, value=v11, kind=I32, seg=Gs } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=11 ---
@@ -184,7 +184,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=main
 fn ent_pc=14 n_params=0 variadic=false locals=0
-  spill_count=1 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(40)                                          -> x0
@@ -228,7 +228,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v29  Imm(3)                                           -> x0
     terminator Return(v29)   (exit_acc=v29)
   block 6  start_pc=0
-    v30  Imm(0)                                           -> x2
+    v30  Imm(0)                                           -> x7
     v31  Imm(0)                                           -> x0
     v32  Imm(8)                                           -> x0
     v33  Imm(0)                                           -> x0
@@ -252,12 +252,12 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v51  SegStore { addr=v49, value=v50, kind=I32, seg=Gs } -> -
     v52  Imm(0)                                           -> x1
     v53  Imm(28)                                          -> x1
-    v54  SegLoad { addr=v53, kind=U32, seg=Gs }           -> x6
-    v55  BinopI { op=and, lhs=v54, rhs_imm=7 }            -> x6
-    v56  BinopI { op=or, lhs=v55, rhs_imm=5 }             -> x6
-    v57  BinopI { op=and, lhs=v56, rhs_imm=7 }            -> x7
-    v58  SegLoad { addr=v53, kind=U32, seg=Gs }           -> x7
-    v59  BinopI { op=and, lhs=v58, rhs_imm=-8 }           -> x7
+    v54  SegLoad { addr=v53, kind=U32, seg=Gs }           -> x2
+    v55  BinopI { op=and, lhs=v54, rhs_imm=7 }            -> x2
+    v56  BinopI { op=or, lhs=v55, rhs_imm=5 }             -> x2
+    v57  BinopI { op=and, lhs=v56, rhs_imm=7 }            -> x6
+    v58  SegLoad { addr=v53, kind=U32, seg=Gs }           -> x6
+    v59  BinopI { op=and, lhs=v58, rhs_imm=-8 }           -> x6
     v60  Binop { op=or, lhs=v59, rhs=v56 }                -> x6
     v61  SegStore { addr=v53, value=v60, kind=I32, seg=Gs } -> -
     v62  Imm(0)                                           -> x1
@@ -265,18 +265,18 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v64  Imm(2)                                           -> x1
     v65  Imm(8)                                           -> x1
     v66  Imm(16)                                          -> x1
-    v67  SegLoad { addr=v49, kind=U32, seg=Gs }           -> x8
+    v67  SegLoad { addr=v49, kind=U32, seg=Gs }           -> x2
     v68  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x1
     v69  BinopI { op=and, lhs=v67, rhs_imm=4294967295 }   -> x1
     v70  Imm(0)                                           -> x1
     v71  Imm(0)                                           -> x1
     v72  Imm(16)                                          -> x1
-    v73  SegLoad { addr=v49, kind=U32, seg=Gs }           -> x9
+    v73  SegLoad { addr=v49, kind=U32, seg=Gs }           -> x8
     v74  BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x0
     v75  BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x0
     v76  Imm(0)                                           -> x0
     v77  Imm(0)                                           -> x0
-    v78  SegLoad { addr=v30, kind=I64, seg=Gs }           -> [spill 0]
+    v78  SegLoad { addr=v30, kind=I64, seg=Gs }           -> x9
     v79  Imm(0)                                           -> x0
     v80  Imm(0)                                           -> x0
     v81  ImmData(64)                                      -> x0

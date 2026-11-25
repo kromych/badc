@@ -26,8 +26,8 @@ Disassembly of section .text:
                	int3
 
 <real_double>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <real_negate>:

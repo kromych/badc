@@ -142,8 +142,8 @@ Disassembly of section .text:
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%r12, %xmm2
                	vfmadd231sd	<rip>, %xmm2, %xmm1 # xmm1 = (xmm2 * mem) + xmm1
-               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
-               	ucomisd	<rip>, %xmm0
+               	vfmadd231sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax

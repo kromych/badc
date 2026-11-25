@@ -183,8 +183,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
-               	movq	%rdi, %rsi
+               	movslq	%edi, %rsi
                	shlq	$0x3, %rsi
                	movq	%rsi, %r11
                	addq	$0xf, %r11

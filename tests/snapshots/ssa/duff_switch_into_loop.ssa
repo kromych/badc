@@ -25,12 +25,12 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v13  BinopI { op=shr, lhs=v12, rhs_imm=3 }            -> x0
     v14  Extend { value=v13, kind=I32, nsw }              -> x1
     v15  Imm(0)                                           -> x1
-    v16  BinopI { op=shru, lhs=v5, rhs_imm=61 }           -> x1
-    v17  Binop { op=add, lhs=v5, rhs=v16 }                -> x2
-    v18  BinopI { op=and, lhs=v17, rhs_imm=7 }            -> x2
-    v19  Binop { op=sub, lhs=v18, rhs=v16 }               -> x2
-    v20  Extend { value=v19, kind=I32, nsw }              -> x1
-    v21  BinopI { op=ult, lhs=v19, rhs_imm=8 }            -> x1
+    v16  BinopI { op=shru, lhs=v5, rhs_imm=61 }           -> x8
+    v17  Binop { op=add, lhs=v5, rhs=v16 }                -> x1
+    v18  BinopI { op=and, lhs=v17, rhs_imm=7 }            -> x1
+    v19  Binop { op=sub, lhs=v18, rhs=v16 }               -> x1
+    v20  Extend { value=v19, kind=I32, nsw }              -> x2
+    v21  BinopI { op=ult, lhs=v19, rhs_imm=8 }            -> x2
     terminator Bz { cond=v21, target=b11, fall=b1 }   (exit_acc=v21)
   block 1  start_pc=0
     terminator JumpTable { idx=v19, table=0 }   [b2, b13, b14, b15, b16, b17, b18, b19]   (exit_acc=v19)

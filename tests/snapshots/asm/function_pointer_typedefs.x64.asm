@@ -30,8 +30,8 @@ Disassembly of section .text:
                	retq
 
 <do_sub>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
                	retq
 
 <do_cmp>:

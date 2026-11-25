@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <ch>:
-               	movq	%rdi, %rax
-               	andq	%rsi, %rax
+               	andq	%rdi, %rsi
                	xorq	$-0x1, %rdi
-               	andq	%rdi, %rdx
-               	xorq	%rdx, %rax
+               	andq	%rdx, %rdi
+               	xorq	%rdi, %rsi
+               	movq	%rsi, %rax
                	retq
 
 <bs1>:

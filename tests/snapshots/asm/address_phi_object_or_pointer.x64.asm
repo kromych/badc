@@ -45,12 +45,12 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <pick_scalar>:
-               	movq	%rdx, %rax
-               	shlq	%rax
+               	shlq	%rdx
                	testl	%esi, %esi
                	je	<addr>
+               	movq	%rdx, %rax
                	retq
-               	movq	(%rdi), %rax
+               	movq	(%rdi), %rdx
                	jmp	<addr>
 
 <sum_some>:

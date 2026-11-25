@@ -86,9 +86,9 @@ Disassembly of section .text:
                	leaq	(%r8,%r8,4), %rcx
                	addq	%rcx, %rax
                	imulq	$0x6, %r9, %rcx
-               	addq	%rcx, %rax
-               	movq	0x30(%rsp), %rcx
-               	shlq	$0x3, %rcx
+               	addq	%rax, %rcx
+               	movq	0x30(%rsp), %rax
+               	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	popq	%rbx
                	addq	$0x20, %rsp

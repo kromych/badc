@@ -159,15 +159,15 @@ Disassembly of section .text:
                	retq
 
 <length>:
-               	movq	%rdi, %rcx
-               	movq	%rcx, %rdi
+               	movq	%rdi, %rax
+               	movq	%rax, %rdi
                	cmpb	$0x0, (%rdi)
                	je	<addr>
                	incq	%rdi
                	cmpb	$0x0, (%rdi)
                	jne	<addr>
+               	subq	%rax, %rdi
                	movq	%rdi, %rax
-               	subq	%rcx, %rax
                	retq
 
 <main>:

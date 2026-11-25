@@ -41,19 +41,19 @@ Disassembly of section .text:
                	testb	$0x7f, %cl
                	movl	$0x1, %esi
                	cmovneq	%rax, %rsi
-               	leaq	(%rdx,%rsi), %rcx
-               	leaq	(%rsp), %rdx
+               	addq	%rsi, %rdx
+               	leaq	(%rsp), %rcx
                	movb	$0x7, (%rsp)
-               	testb	$0x3f, %dl
+               	testb	$0x3f, %cl
                	movl	$0x1, %esi
                	cmovneq	%rax, %rsi
-               	addq	%rsi, %rcx
-               	leaq	(%rsp), %rdx
+               	addq	%rsi, %rdx
+               	leaq	(%rsp), %rcx
                	movl	$0x9, (%rsp)
-               	testb	$0x3f, %dl
+               	testb	$0x3f, %cl
                	movl	$0x1, %esi
                	cmoveq	%rsi, %rax
-               	addq	%rcx, %rax
+               	addq	%rdx, %rax
                	movl	$0x2a, %ecx
                	cmpl	$0x4, %eax
                	cmoveq	%rcx, %rax

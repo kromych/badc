@@ -26,10 +26,10 @@ Disassembly of section .text:
                	int3
 
 <use_decode>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	shrq	$0x3e, %rcx
-               	shlq	$0x2, %rcx
+               	leaq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rax # <addr>
+               	shrq	$0x3e, %rax
+               	shlq	$0x2, %rax
                	addq	%rcx, %rax
                	movzwq	(%rax), %r10
                	movw	%r10w, (%rdi)

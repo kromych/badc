@@ -233,14 +233,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v177 Imm(2)                                           -> x0
     v178 Imm(2)                                           -> x0
     v179 Imm(1)                                           -> x0
-    v180 ImmData(128)                                     -> x0
-    v181 Imm(2)                                           -> x1
-    v182 Imm(128)                                         -> x1
-    v183 BinopI { op=add, lhs=v180, rhs_imm=128 }         -> x1
+    v180 ImmData(128)                                     -> x1
+    v181 Imm(2)                                           -> x0
+    v182 Imm(128)                                         -> x0
+    v183 BinopI { op=add, lhs=v180, rhs_imm=128 }         -> x0
     v184 Imm(64)                                          -> x2
     v185 Imm(64)                                          -> x2
     v186 Imm(63)                                          -> x2
-    v187 BinopI { op=and, lhs=v183, rhs_imm=63 }          -> x1
+    v187 BinopI { op=and, lhs=v183, rhs_imm=63 }          -> x0
     v188 BinopI { op=ne, lhs=v187, rhs_imm=0 }            -> x2
     v189 Extend { value=v188, kind=I32 }                  -> x2
     v190 Extend { value=v188, kind=I32 }                  -> x2
@@ -259,14 +259,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v201 Extend { value=v199, kind=I32 }                  -> x2
     terminator Bz { cond=v187, target=b26, fall=b21 }   (low word)   (exit_acc=v199)
   block 26  start_pc=0
-    v202 Imm(2)                                           -> x1
-    v203 Imm(3)                                           -> x1
-    v204 Imm(3)                                           -> x1
-    v205 Imm(3)                                           -> x1
-    v206 Imm(1)                                           -> x1
-    v207 ImmData(128)                                     -> x1
-    v208 Imm(3)                                           -> x1
-    v209 Imm(192)                                         -> x1
+    v202 Imm(2)                                           -> x0
+    v203 Imm(3)                                           -> x0
+    v204 Imm(3)                                           -> x0
+    v205 Imm(3)                                           -> x0
+    v206 Imm(1)                                           -> x0
+    v207 ImmData(128)                                     -> x0
+    v208 Imm(3)                                           -> x0
+    v209 Imm(192)                                         -> x0
     v210 BinopI { op=add, lhs=v180, rhs_imm=192 }         -> x0
     v211 Imm(64)                                          -> x1
     v212 Imm(64)                                          -> x1

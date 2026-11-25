@@ -65,15 +65,15 @@ Disassembly of section .text:
                	retq
 
 <port_out_one>:
+               	andq	$0xffff, %rsi           # imm = 0xFFFF
                	movq	%rsi, %rdx
-               	andq	$0xffff, %rdx           # imm = 0xFFFF
                	movq	%rdi, %rsi
                	outsb	(%rsi), %dx
                	retq
 
 <port_in_one>:
+               	andq	$0xffff, %rsi           # imm = 0xFFFF
                	movq	%rsi, %rdx
-               	andq	$0xffff, %rdx           # imm = 0xFFFF
                	insb	%dx, %es:(%rdi)
                	retq
 

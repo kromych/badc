@@ -258,56 +258,56 @@ fn ent_pc=0 n_params=5 variadic=false locals=0
     v252 Imm(0)                                           -> x0
     v253 Imm(0)                                           -> x0
     v254 Imm(0)                                           -> x0
-    v255 BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
-    v256 Imm(0)                                           -> x7
-    v257 Imm(0)                                           -> x7
-    v258 BinopI { op=and, lhs=v255, rhs_imm=255 }         -> x7
-    v259 BinopI { op=or, lhs=v255, rhs_imm=0 }            -> x7
-    v260 Imm(0)                                           -> x7
-    v261 Imm(0)                                           -> x7
-    v262 Imm(1)                                           -> x7
-    v263 Imm(0)                                           -> x7
+    v255 BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x7
+    v256 Imm(0)                                           -> x0
+    v257 Imm(0)                                           -> x0
+    v258 BinopI { op=and, lhs=v255, rhs_imm=255 }         -> x0
+    v259 BinopI { op=or, lhs=v255, rhs_imm=0 }            -> x0
+    v260 Imm(0)                                           -> x0
+    v261 Imm(0)                                           -> x0
+    v262 Imm(1)                                           -> x0
+    v263 Imm(0)                                           -> x0
     v264 BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x6
-    v265 Imm(0)                                           -> x7
-    v266 BinopI { op=and, lhs=v255, rhs_imm=-65281 }      -> x7
-    v267 BinopI { op=and, lhs=v264, rhs_imm=255 }         -> x7
+    v265 Imm(0)                                           -> x0
+    v266 BinopI { op=and, lhs=v255, rhs_imm=-65281 }      -> x0
+    v267 BinopI { op=and, lhs=v264, rhs_imm=255 }         -> x0
     v268 BinopI { op=shl, lhs=v264, rhs_imm=8 }           -> x6
-    v269 Binop { op=or, lhs=v255, rhs=v268 }              -> x0
-    v270 Imm(0)                                           -> x6
-    v271 Imm(0)                                           -> x6
-    v272 Imm(10)                                          -> x6
-    v273 Imm(0)                                           -> x6
+    v269 Binop { op=or, lhs=v255, rhs=v268 }              -> x7
+    v270 Imm(0)                                           -> x0
+    v271 Imm(0)                                           -> x0
+    v272 Imm(10)                                          -> x0
+    v273 Imm(0)                                           -> x0
     v274 BinopI { op=and, lhs=v5, rhs_imm=255 }           -> x2
-    v275 Imm(0)                                           -> x6
-    v276 Imm(0)                                           -> x6
-    v277 BinopI { op=and, lhs=v274, rhs_imm=255 }         -> x6
+    v275 Imm(0)                                           -> x0
+    v276 Imm(0)                                           -> x0
+    v277 BinopI { op=and, lhs=v274, rhs_imm=255 }         -> x0
     v278 BinopI { op=shl, lhs=v274, rhs_imm=16 }          -> x2
-    v279 BinopI { op=or, lhs=v278, rhs_imm=0 }            -> x6
-    v280 Imm(0)                                           -> x6
-    v281 Imm(0)                                           -> x6
-    v282 Imm(11)                                          -> x6
-    v283 Imm(0)                                           -> x6
+    v279 BinopI { op=or, lhs=v278, rhs_imm=0 }            -> x0
+    v280 Imm(0)                                           -> x0
+    v281 Imm(0)                                           -> x0
+    v282 Imm(11)                                          -> x0
+    v283 Imm(0)                                           -> x0
     v284 BinopI { op=and, lhs=v7, rhs_imm=255 }           -> x1
-    v285 Imm(0)                                           -> x6
-    v286 BinopI { op=and, lhs=v278, rhs_imm=-4278190081 } -> x6
-    v287 BinopI { op=and, lhs=v284, rhs_imm=255 }         -> x6
+    v285 Imm(0)                                           -> x0
+    v286 BinopI { op=and, lhs=v278, rhs_imm=-4278190081 } -> x0
+    v287 BinopI { op=and, lhs=v284, rhs_imm=255 }         -> x0
     v288 BinopI { op=shl, lhs=v284, rhs_imm=24 }          -> x1
-    v289 Binop { op=or, lhs=v278, rhs=v288 }              -> x1
-    v290 Imm(0)                                           -> x2
-    v291 Imm(0)                                           -> x2
-    v292 Imm(15)                                          -> x2
-    v293 Imm(0)                                           -> x2
-    v294 BinopI { op=and, lhs=v9, rhs_imm=255 }           -> x2
-    v295 Imm(0)                                           -> x2
-    v296 BinopI { op=and, lhs=v289, rhs_imm=72057594037927935 } -> x2
-    v297 BinopI { op=and, lhs=v294, rhs_imm=255 }         -> x2
-    v298 BinopI { op=shl, lhs=v9, rhs_imm=56 }            -> x2
+    v289 Binop { op=or, lhs=v278, rhs=v288 }              -> x2
+    v290 Imm(0)                                           -> x0
+    v291 Imm(0)                                           -> x0
+    v292 Imm(15)                                          -> x0
+    v293 Imm(0)                                           -> x0
+    v294 BinopI { op=and, lhs=v9, rhs_imm=255 }           -> x0
+    v295 Imm(0)                                           -> x0
+    v296 BinopI { op=and, lhs=v289, rhs_imm=72057594037927935 } -> x0
+    v297 BinopI { op=and, lhs=v294, rhs_imm=255 }         -> x0
+    v298 BinopI { op=shl, lhs=v9, rhs_imm=56 }            -> x8
     v299 Binop { op=or, lhs=v289, rhs=v298 }              -> x2
-    v300 Imm(0)                                           -> x1
-    v301 Imm(0)                                           -> x1
+    v300 Imm(0)                                           -> x0
+    v301 Imm(0)                                           -> x0
     v302 LifetimeEnd(0)                                   -> -
-    v303 Imm(0)                                           -> x1
-    v304 Imm(0)                                           -> x1
+    v303 Imm(0)                                           -> x0
+    v304 Imm(0)                                           -> x0
     v305 AggParts { desc=0, parts=[v269, v299], fp_mask=0x0 } -> -
     terminator Return(v305)   (exit_acc=v301)
 ; --- SSA dump (ok=true) ent_pc=1 ---

@@ -75,13 +75,13 @@ Disassembly of section .text:
 <set_down>:
                	movl	$0x9, %ecx
                	xorl	%eax, %eax
-               	movl	$0x1, %edx
-               	imulq	$0x24924925, %rcx, %rsi # imm = 0x24924925
-               	shrq	$0x20, %rsi
-               	imulq	$0x7, %rsi, %rsi
+               	movl	$0x1, %esi
+               	imulq	$0x24924925, %rcx, %rdx # imm = 0x24924925
+               	shrq	$0x20, %rdx
+               	imulq	$0x7, %rdx, %rdx
                	movq	%rcx, %rdi
-               	subq	%rsi, %rdi
-               	shlxq	%rdi, %rdx, %rdx
+               	subq	%rdx, %rdi
+               	shlxq	%rdi, %rsi, %rdx
                	movsbq	%dl, %rdx
                	decq	%rcx
                	orq	%rdx, %rax
@@ -121,14 +121,14 @@ Disassembly of section .text:
                	addq	$0x28, %rsp
                	retq
                	movl	$0xffff, %ecx           # imm = 0xFFFF
-               	movl	$0x1, %edx
-               	movq	%rdx, %rax
-               	movq	%rax, %rsi
-               	andq	$0xf, %rsi
-               	shlxq	%rsi, %rdx, %rsi
-               	xorq	$-0x1, %rsi
-               	andq	$0xffff, %rsi           # imm = 0xFFFF
-               	andq	%rsi, %rcx
+               	movl	$0x1, %esi
+               	movq	%rsi, %rax
+               	movq	%rax, %rdx
+               	andq	$0xf, %rdx
+               	shlxq	%rdx, %rsi, %rdx
+               	xorq	$-0x1, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	andq	%rdx, %rcx
                	incq	%rax
                	nopl	(%rax,%rax)
                	cmpl	$0x14, %eax

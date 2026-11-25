@@ -34,8 +34,8 @@ Disassembly of section .text:
                	retq
 
 <hot_decl>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <main>:

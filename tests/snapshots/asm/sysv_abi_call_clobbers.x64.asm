@@ -120,8 +120,8 @@ Disassembly of section .text:
                	retq
 
 <twice>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <keep_pointer>:

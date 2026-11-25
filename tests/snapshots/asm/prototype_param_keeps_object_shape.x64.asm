@@ -26,12 +26,12 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x10(%rax), %rcx
-               	subq	%rax, %rcx
-               	movq	%rcx, %rax
-               	sarq	$0x3f, %rax
-               	shrq	$0x3e, %rax
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x10(%rcx), %rax
+               	subq	%rcx, %rax
+               	movq	%rax, %rcx
+               	sarq	$0x3f, %rcx
+               	shrq	$0x3e, %rcx
                	addq	%rcx, %rax
                	sarq	$0x2, %rax
                	cmpq	$0x4, %rax
@@ -55,11 +55,11 @@ Disassembly of section .text:
                	sarq	$0x2, %rax
                	cmpq	$0x4, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x6(%rax), %rcx
-               	subq	%rax, %rcx
-               	movq	%rcx, %rax
-               	shrq	$0x3f, %rax
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x6(%rcx), %rax
+               	subq	%rcx, %rax
+               	movq	%rax, %rcx
+               	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
                	sarq	%rax
                	cmpq	$0x3, %rax

@@ -368,11 +368,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v234 Imm(0)                                           -> x1
     terminator Bnz { cond=v233, target=b48, fall=b47 }   (exit_acc=v233)
   block 47  start_pc=0
-    v235 ImmData(140)                                     -> x0
-    v236 Imm(2)                                           -> x1
-    v237 LoadLocal { off=-2, kind=I32, volatile }         -> x1
-    v238 BinopI { op=shl, lhs=v237, rhs_imm=1 }           -> x1
-    v239 Extend { value=v238, kind=I32, nsw }             -> x1
+    v235 ImmData(140)                                     -> x1
+    v236 Imm(2)                                           -> x0
+    v237 LoadLocal { off=-2, kind=I32, volatile }         -> x0
+    v238 BinopI { op=shl, lhs=v237, rhs_imm=1 }           -> x0
+    v239 Extend { value=v238, kind=I32, nsw }             -> x0
     v240 BinopI { op=shl, lhs=v239, rhs_imm=2 }           -> x2
     v241 Binop { op=add, lhs=v235, rhs=v240 }             -> x2
     v242 LoadIndexed { base=v235, index=v239, scale=4, kind=I32 } -> x0

@@ -26,13 +26,13 @@ Disassembly of section .text:
                	int3
 
 <square>:
+               	imulq	%rdi, %rdi
                	movq	%rdi, %rax
-               	imulq	%rdi, %rax
                	retq
 
 <usquare>:
+               	imulq	%rdi, %rdi
                	movq	%rdi, %rax
-               	imulq	%rdi, %rax
                	retq
 
 <sum_min>:
@@ -53,8 +53,8 @@ Disassembly of section .text:
                	retq
 
 <zero_if>:
+               	andq	$0x1, %rdi
                	movq	%rdi, %rax
-               	andq	$0x1, %rax
                	retq
 
 <as_long>:

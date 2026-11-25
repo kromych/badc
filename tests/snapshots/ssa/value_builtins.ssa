@@ -173,10 +173,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v140 LoadLocal { off=-2, kind=I32, volatile }         -> x2
     v141 BinopI { op=and, lhs=v140, rhs_imm=-128 }        -> x2
     v142 BinopI { op=eq, lhs=v141, rhs_imm=0 }            -> x2
-    v143 Binop { op=add, lhs=v138, rhs=v142 }             -> x1
-    v144 Extend { value=v143, kind=I32, nsw }             -> x2
-    v145 LoadLocal { off=-2, kind=I32, volatile }         -> x2
-    v146 BinopI { op=and, lhs=v145, rhs_imm=127 }         -> x2
+    v143 Binop { op=add, lhs=v138, rhs=v142 }             -> x2
+    v144 Extend { value=v143, kind=I32, nsw }             -> x1
+    v145 LoadLocal { off=-2, kind=I32, volatile }         -> x1
+    v146 BinopI { op=and, lhs=v145, rhs_imm=127 }         -> x1
     v147 Binop { op=add, lhs=v143, rhs=v146 }             -> x1
     v148 Extend { value=v147, kind=I32, nsw }             -> x2
     v149 Binop { op=add, lhs=v130, rhs=v147 }             -> x0

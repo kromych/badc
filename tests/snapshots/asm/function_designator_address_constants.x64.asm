@@ -56,40 +56,40 @@ Disassembly of section .text:
                	popq	%rbx
                	retq
                	xorl	%edx, %edx
-               	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %r8 # <addr>
+               	leaq	<rip>, %r9 # <addr>
                	leaq	-<rip>, %rsi # <addr>
-               	leaq	-<rip>, %r9 # <addr>
+               	leaq	-<rip>, %rbx # <addr>
                	imulq	$0x38, %rdx, %rax
-               	addq	%r8, %rax
-               	movq	(%rdi,%rdx,8), %rcx
-               	movq	(%rax), %rbx
-               	subq	%rsi, %rbx
+               	addq	%r9, %rax
+               	movq	(%r8,%rdx,8), %rcx
+               	movq	(%rax), %rdi
+               	subq	%rsi, %rdi
                	nopl	(%rax,%rax)
-               	cmpq	%rcx, %rbx
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x8(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x8(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x10(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x10(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x18(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x18(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x20(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x20(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x28(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x28(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	movq	0x30(%rax), %rax
-               	subq	%r9, %rax
+               	subq	%rbx, %rax
                	cmpq	%rcx, %rax
                	jne	<addr>
                	incq	%rdx

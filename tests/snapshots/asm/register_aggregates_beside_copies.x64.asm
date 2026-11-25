@@ -47,9 +47,9 @@ Disassembly of section .text:
                	movsbq	%dil, %rdi
                	andq	$0xff, %rdi
                	orq	$0x100, %rdi            # imm = 0x100
+               	orq	$0x20000, %rdi          # imm = 0x20000
+               	orq	$0x3000000, %rdi        # imm = 0x3000000
                	movq	%rdi, %rax
-               	orq	$0x20000, %rax          # imm = 0x20000
-               	orq	$0x3000000, %rax        # imm = 0x3000000
                	retq
 
 <param_beside>:
@@ -99,10 +99,10 @@ Disassembly of section .text:
                	addq	%r12, %rdx
                	movslq	%r13d, %rsi
                	addq	%rsi, %rdx
-               	addq	%r15, %rdx
-               	subq	%rbp, %rdx
+               	leaq	(%rdx,%r15), %rsi
+               	subq	%rbp, %rsi
                	movsbq	%al, %rax
-               	addq	%rdx, %rax
+               	addq	%rsi, %rax
                	movsbq	%cl, %rcx
                	addq	%rcx, %rax
                	movq	0x8(%rbx), %rcx

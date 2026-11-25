@@ -26,17 +26,17 @@ Disassembly of section .text:
                	int3
 
 <compute>:
-               	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rdx
+               	leaq	0x1(%rdi), %rcx
+               	movslq	%ecx, %rdx
                	testq	%rdi, %rdi
                	je	<addr>
-               	movq	%rdi, %rcx
-               	addq	$0x64, %rcx
+               	movq	%rdi, %rax
+               	addq	$0x64, %rax
                	jne	<addr>
                	movq	$-0x1, %rax
                	retq
-               	shlq	%rcx
-               	leaq	0x1(%rcx), %rsi
+               	shlq	%rax
+               	leaq	0x1(%rax), %rsi
                	movl	%esi, <rip> # <addr>
                	addq	%rcx, %rax
                	addq	%rdx, %rax

@@ -32,19 +32,19 @@ Disassembly of section .text:
                	leaq	<rip>, %r10 # <addr>
                	movq	%gs:<rip>, %rax
                	movq	%gs:<rip>, %rcx
-               	addq	%rcx, %rax
-               	movb	%gs:0x10, %cl
-               	movw	%gs:0x12, %dx
+               	leaq	(%rax,%rcx), %rdx
+               	movb	%gs:0x10, %al
+               	movw	%gs:0x12, %cx
                	movl	%gs:0x14, %esi
                	movq	%gs:0x18, %rdi
-               	andq	$0xff, %rcx
-               	andq	$0xffff, %rdx           # imm = 0xFFFF
-               	addq	%rdx, %rcx
-               	movl	%esi, %edx
-               	addq	%rdx, %rcx
-               	addq	%rdi, %rcx
-               	incq	%rcx
+               	andq	$0xff, %rax
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	addq	%rcx, %rax
+               	movl	%esi, %ecx
+               	addq	%rcx, %rax
+               	addq	%rdi, %rax
+               	incq	%rax
+               	addq	%rdx, %rax
                	movq	%fs:0x28, %rcx
                	addq	%rcx, %rax
                	movq	%rax, %gs:0x20

@@ -90,10 +90,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v68  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x1
     v69  Load { addr=v1, disp=32, kind=U32, volatile pc_rel } -> x1
     v70  BinopI { op=and, lhs=v69, rhs_imm=31 }           -> x1
-    v71  BinopI { op=add, lhs=v70, rhs_imm=1 }            -> x1
-    v72  BinopI { op=and, lhs=v71, rhs_imm=31 }           -> x1
-    v73  Load { addr=v1, disp=32, kind=U32, volatile pc_rel } -> x2
-    v74  BinopI { op=and, lhs=v73, rhs_imm=-32 }          -> x2
+    v71  BinopI { op=add, lhs=v70, rhs_imm=1 }            -> x2
+    v72  BinopI { op=and, lhs=v71, rhs_imm=31 }           -> x2
+    v73  Load { addr=v1, disp=32, kind=U32, volatile pc_rel } -> x1
+    v74  BinopI { op=and, lhs=v73, rhs_imm=-32 }          -> x1
     v75  Binop { op=or, lhs=v74, rhs=v72 }                -> x1
     v76  Store { addr=v1, disp=32, value=v75, kind=I32, volatile pc_rel } -> -
     v77  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x1

@@ -91,10 +91,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	addq	$0x3039, %rcx           # imm = 0x3039
-               	movl	%ecx, %esi
-               	shrq	$0x10, %rsi
-               	subq	$0x4000, %rsi           # imm = 0x4000
-               	movl	%esi, 0x10(%rsp,%rax,4)
+               	movl	%ecx, %edx
+               	shrq	$0x10, %rdx
+               	subq	$0x4000, %rdx           # imm = 0x4000
+               	movl	%edx, 0x10(%rsp,%rax,4)
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>

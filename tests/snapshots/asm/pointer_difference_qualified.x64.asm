@@ -46,8 +46,8 @@ Disassembly of section .text:
                	retq
 
 <volatile_right>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
                	retq
 
 <wide_elements>:
@@ -61,8 +61,8 @@ Disassembly of section .text:
 
 <back>:
                	shlq	$0x2, %rsi
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
                	retq
 
 <main>:
@@ -76,21 +76,21 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	sarq	$0x2, %rcx
                	decq	%rcx
-               	leaq	-0x5(%rcx), %rdx
+               	leaq	-0x5(%rcx), %rsi
                	leaq	0xc(%rax), %rcx
                	subq	%rax, %rcx
-               	movq	%rcx, %rsi
-               	sarq	$0x3f, %rsi
-               	shrq	$0x3e, %rsi
-               	addq	%rsi, %rcx
+               	movq	%rcx, %rdx
+               	sarq	$0x3f, %rdx
+               	shrq	$0x3e, %rdx
+               	addq	%rdx, %rcx
                	sarq	$0x2, %rcx
                	subq	$0x3, %rcx
-               	addq	%rcx, %rdx
+               	addq	%rcx, %rsi
                	leaq	0x18(%rsp), %rcx
-               	leaq	0x5(%rcx), %rsi
-               	subq	%rcx, %rsi
-               	leaq	-0x5(%rsi), %rcx
-               	leaq	(%rdx,%rcx), %rsi
+               	leaq	0x5(%rcx), %rdx
+               	subq	%rcx, %rdx
+               	leaq	-0x5(%rdx), %rcx
+               	addq	%rcx, %rsi
                	leaq	0x10(%rax), %rcx
                	movq	%rcx, %rdx
                	subq	%rax, %rdx

@@ -35,8 +35,8 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rcx
                	shrq	$0x5, %rax
                	decq	%rax
-               	andq	%rcx, %rax
-               	cmpl	$0x11, %eax
+               	andq	%rax, %rcx
+               	cmpl	$0x11, %ecx
                	je	<addr>
                	movl	$0xe, %eax
                	addq	$0x18, %rsp
@@ -50,8 +50,8 @@ Disassembly of section .text:
                	leaq	0x1(%rcx), %rdx
                	shrq	$0x5, %rcx
                	decq	%rcx
-               	andq	%rdx, %rcx
-               	testl	%ecx, %ecx
+               	andq	%rcx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0xf, %eax
                	addq	$0x18, %rsp

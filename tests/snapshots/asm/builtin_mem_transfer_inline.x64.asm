@@ -252,9 +252,9 @@ Disassembly of section .text:
                	cmpl	$0x13, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	leaq	(%rax,%rax,2), %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, 0x20(%rsp,%rax)
+               	leaq	(%rax,%rax,2), %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, 0x20(%rsp,%rax)
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
@@ -263,10 +263,10 @@ Disassembly of section .text:
                	movl	$0x200, %edx            # imm = 0x200
                	callq	<addr>
                	xorl	%eax, %eax
-               	movzbq	0x220(%rsp,%rax), %rcx
-               	leaq	(%rax,%rax,2), %rdx
-               	andq	$0xff, %rdx
-               	cmpl	%edx, %ecx
+               	movzbq	0x220(%rsp,%rax), %rdx
+               	leaq	(%rax,%rax,2), %rcx
+               	andq	$0xff, %rcx
+               	cmpl	%ecx, %edx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200

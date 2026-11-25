@@ -30,8 +30,8 @@ Disassembly of section .text:
                	retq
 
 <g>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <main>:

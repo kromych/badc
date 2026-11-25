@@ -31,34 +31,34 @@ fn ent_pc=0 n_params=6 variadic=false locals=0
     v25  Imm(0)                                           -> x13
     v26  Binop { op=add, lhs=v24, rhs=v11 }               -> x12
     v27  Imm(0)                                           -> x13
-    v28  Binop { op=xor, lhs=v1, rhs=v5 }                 -> x2
-    v29  Imm(0)                                           -> x7
+    v28  Binop { op=xor, lhs=v1, rhs=v5 }                 -> x7
+    v29  Imm(0)                                           -> x2
     v30  Binop { op=xor, lhs=v3, rhs=v7 }                 -> x6
-    v31  Imm(0)                                           -> x7
-    v32  Binop { op=xor, lhs=v9, rhs=v11 }                -> x9
-    v33  Imm(0)                                           -> x7
-    v34  Imm(0)                                           -> x7
-    v35  Imm(0)                                           -> x7
-    v36  Binop { op=add, lhs=v16, rhs=v21 }               -> x8
-    v37  Imm(0)                                           -> x7
-    v38  BinopI { op=or, lhs=v26, rhs_imm=1 }             -> x7
+    v31  Imm(0)                                           -> x2
+    v32  Binop { op=xor, lhs=v9, rhs=v11 }                -> x8
+    v33  Imm(0)                                           -> x2
+    v34  Imm(0)                                           -> x2
+    v35  Imm(0)                                           -> x2
+    v36  Binop { op=add, lhs=v16, rhs=v21 }               -> x2
+    v37  Imm(0)                                           -> x9
+    v38  BinopI { op=or, lhs=v26, rhs_imm=1 }             -> x9
     v39  Binop { op=div, lhs=v36, rhs=v38 }               -> x3
-    v40  Imm(0)                                           -> x8
-    v41  Binop { op=mul, lhs=v16, rhs=v21 }               -> x8
+    v40  Imm(0)                                           -> x2
+    v41  Binop { op=mul, lhs=v16, rhs=v21 }               -> x2
     v42  Binop { op=div, lhs=v41, rhs=v38 }               -> x13
     v43  Binop { op=mul, lhs=v42, rhs=v38 }               -> x13
-    v44  Binop { op=mod, lhs=v41, rhs=v38 }               -> x7
+    v44  Binop { op=mod, lhs=v41, rhs=v38 }               -> x9
     v45  Imm(0)                                           -> x13
-    v46  BinopI { op=mul, lhs=v41, rhs_imm=977 }          -> x8
+    v46  BinopI { op=mul, lhs=v41, rhs_imm=977 }          -> x2
     v47  Imm(0)                                           -> x13
     v48  BinopI { op=or, lhs=v30, rhs_imm=1 }             -> x13
-    v49  Binop { op=divu, lhs=v46, rhs=v48 }              -> x8
+    v49  Binop { op=divu, lhs=v46, rhs=v48 }              -> x2
     v50  Imm(0)                                           -> x13
     v51  Imm(0)                                           -> x13
     v52  Imm(0)                                           -> x13
-    v53  Binop { op=add, lhs=v39, rhs=v44 }               -> x7
+    v53  Binop { op=add, lhs=v39, rhs=v44 }               -> x9
     v54  Imm(0)                                           -> x3
-    v55  Binop { op=add, lhs=v53, rhs=v49 }               -> x7
+    v55  Binop { op=add, lhs=v53, rhs=v49 }               -> x2
     v56  Binop { op=add, lhs=v55, rhs=v16 }               -> x0
     v57  Binop { op=add, lhs=v56, rhs=v21 }               -> x0
     v58  Binop { op=add, lhs=v57, rhs=v26 }               -> x0

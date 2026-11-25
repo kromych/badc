@@ -48,9 +48,9 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movq	0x8(%rsp), %rcx
                	imulq	$0x7, %rcx, %rcx
-               	addq	%rcx, %rax
-               	cvttsd2si	%xmm0, %rcx
-               	shlq	$0x3, %rcx
+               	addq	%rax, %rcx
+               	cvttsd2si	%xmm0, %rax
+               	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	leaq	(%r9,%r9,8), %rcx
                	addq	%rcx, %rax
@@ -81,9 +81,9 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movq	(%rsp), %rcx
                	imulq	$0x7, %rcx, %rcx
-               	addq	%rcx, %rax
-               	movq	0x8(%rsp), %rcx
-               	shlq	$0x3, %rcx
+               	addq	%rax, %rcx
+               	movq	0x8(%rsp), %rax
+               	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	addq	$0x18, %rsp
                	retq
@@ -162,12 +162,11 @@ Disassembly of section .text:
                	popq	%r13
                	addq	$0x70, %rsp
                	retq
-               	movq	0x98(%rsp), %rdi
+               	movq	0x98(%rsp), %r8
                	movq	0x98(%rsp), %rax
-               	leaq	0x1(%rax), %r8
+               	leaq	0x1(%rax), %rbx
                	movq	0x98(%rsp), %rdx
-               	movq	%rdx, %rbx
-               	shlq	%rbx
+               	shlq	%rdx
                	movl	$0x4, %r12d
                	movl	$0x5, %r13d
                	movq	0x98(%rsp), %rax
@@ -176,17 +175,17 @@ Disassembly of section .text:
                	movq	0x98(%rsp), %rax
                	movq	0x98(%rsp), %r9
                	movl	$0xb, %ecx
-               	movl	$0x5, %edx
-               	movl	$0x6, %esi
-               	movq	%rdx, (%rsp)
-               	movq	%rsi, 0x8(%rsp)
+               	movl	$0x5, %esi
+               	movl	$0x6, %edi
+               	movq	%rsi, (%rsp)
+               	movq	%rdi, 0x8(%rsp)
                	movq	%r9, 0x10(%rsp)
                	movq	%rcx, 0x18(%rsp)
-               	movq	%r8, %rsi
+               	movq	%r8, %rdi
                	movq	%rax, %r9
                	movq	%r13, %r8
                	movq	%r12, %rcx
-               	movq	%rbx, %rdx
+               	movq	%rbx, %rsi
                	callq	<addr>
                	cmpq	$0x158, %rax            # imm = 0x158
                	je	<addr>

@@ -353,11 +353,11 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x60, %rsp
                	retq
-               	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
+               	movl	<rip>, %eax # <addr>
                	movl	<rip>, %edx # <addr>
-               	orq	%rdx, %rcx
-               	cmpl	%ecx, %eax
+               	orq	%rdx, %rax
+               	cmpl	%eax, %ecx
                	je	<addr>
                	movl	$0x92, %eax
                	popq	%rbx

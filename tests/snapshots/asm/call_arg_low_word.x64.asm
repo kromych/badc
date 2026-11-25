@@ -60,8 +60,8 @@ Disassembly of section .text:
                	retq
 
 <half>:
+               	andq	$0xffff, %rdi           # imm = 0xFFFF
                	movq	%rdi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	retq
 
 <via_scale>:

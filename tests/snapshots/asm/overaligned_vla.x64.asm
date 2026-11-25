@@ -128,25 +128,23 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	movq	%r15, %rdx
-               	orq	%rax, %rdx
+               	orq	%r15, %rax
                	testb	$0x1f, %cl
-               	movl	$0x1, %eax
+               	movl	$0x1, %edx
                	jne	<addr>
-               	leaq	0x3(%rbx), %rax
-               	shlq	$0x6, %rax
-               	movq	%rax, %r10
-               	movq	-0x18(%rbp), %rax
-               	cmpl	%r10d, %eax
-               	setne	%al
-               	movzbq	%al, %rax
+               	leaq	0x3(%rbx), %rcx
+               	shlq	$0x6, %rcx
+               	movq	-0x18(%rbp), %rdx
+               	cmpl	%ecx, %edx
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	orq	%rax, %rdx
                	leaq	0x3(%rbx), %rax
                	decq	%rax
                	shlq	$0x6, %rax
                	addq	%r14, %rax
                	movsbq	0x3f(%rax), %rax
-               	nopl	(%rax)
+               	nopw	%cs:(%rax,%rax)
                	cmpl	%ebx, %eax
                	movl	$0x1, %r15d
                	jne	<addr>

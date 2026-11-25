@@ -167,20 +167,20 @@ Disassembly of section .text:
                	leaq	0x40(%rbx), %rax
                	andq	$0x3f, %rax
                	testl	%eax, %eax
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	leaq	(%rbx), %rax
+               	andq	$0x7f, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	leaq	(%rbx), %rcx
-               	andq	$0x7f, %rcx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	shlq	%rcx
-               	orq	%rcx, %rax
-               	movq	0x40(%rbx), %rcx
-               	cmpq	$0x4d, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	shlq	$0x2, %rcx
+               	shlq	%rax
+               	orq	%rax, %rcx
+               	movq	0x40(%rbx), %rax
+               	cmpq	$0x4d, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	shlq	$0x2, %rax
                	orq	%rax, %rcx
                	movq	0x10(%rbx), %rax
                	cmpq	$0x4d, %rax

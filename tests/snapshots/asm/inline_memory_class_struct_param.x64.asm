@@ -43,18 +43,18 @@ Disassembly of section .text:
                	retq
 
 <use_sum>:
-               	movq	(%rdi), %rax
-               	movq	0x8(%rdi), %rcx
-               	shlq	%rcx
-               	addq	%rcx, %rax
-               	movq	0x10(%rdi), %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
-               	movq	0x18(%rdi), %rcx
-               	shlq	$0x3, %rcx
-               	addq	%rcx, %rax
-               	movq	0x20(%rdi), %rcx
-               	shlq	$0x4, %rcx
+               	movq	(%rdi), %rcx
+               	movq	0x8(%rdi), %rax
+               	shlq	%rax
+               	addq	%rax, %rcx
+               	movq	0x10(%rdi), %rax
+               	shlq	$0x2, %rax
+               	addq	%rax, %rcx
+               	movq	0x18(%rdi), %rax
+               	shlq	$0x3, %rax
+               	addq	%rax, %rcx
+               	movq	0x20(%rdi), %rax
+               	shlq	$0x4, %rax
                	addq	%rcx, %rax
                	retq
 

@@ -27,10 +27,10 @@ Disassembly of section .text:
 
 <fill>:
                	xorl	%eax, %eax
-               	imulq	$0x1f, %rsi, %rcx
-               	leaq	(%rcx,%rax), %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rdi,%rax)
+               	imulq	$0x1f, %rsi, %rdx
+               	leaq	(%rdx,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rdi,%rax)
                	incq	%rax
                	nopw	(%rax,%rax)
                	cmpl	$0x200, %eax            # imm = 0x200
@@ -45,12 +45,12 @@ Disassembly of section .text:
 
 <intact>:
                	xorl	%eax, %eax
-               	imulq	$0x1f, %rsi, %rcx
-               	movzbq	(%rdi,%rax), %rdx
-               	leaq	(%rcx,%rax), %r8
-               	andq	$0xff, %r8
+               	imulq	$0x1f, %rsi, %rdx
+               	movzbq	(%rdi,%rax), %r8
+               	leaq	(%rdx,%rax), %rcx
+               	andq	$0xff, %rcx
                	nopl	(%rax)
-               	cmpl	%r8d, %edx
+               	cmpl	%ecx, %r8d
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200

@@ -26,14 +26,14 @@ Disassembly of section .text:
                	int3
 
 <rsub>:
-               	leaq	(%rdi,%rdi,2), %rcx
+               	leaq	(%rdi,%rdi,2), %rax
+               	subq	%rax, %rsi
                	movq	%rsi, %rax
-               	subq	%rcx, %rax
                	retq
 
 <twice>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <rsub_call>:

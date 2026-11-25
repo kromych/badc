@@ -132,7 +132,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v86  Imm(0)                                           -> x0
     v87  Extend { value=v82, kind=I32 }                   -> x0
     v88  Extend { value=v82, kind=I32 }                   -> x0
-    v89  Imm(0)                                           -> x0
+    v89  Imm(0)                                           -> x1
     terminator Jmp(b9)   (exit_acc=v89)
   block 8  start_pc=0
     v179 Extend { value=v175, kind=I32 }                  -> x2
@@ -141,19 +141,19 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v182 BinopI { op=mul, lhs=v176, rhs_imm=429496730 }   -> x2
     v183 BinopI { op=shru, lhs=v182, rhs_imm=32 }         -> x2
     v184 BinopI { op=mul, lhs=v183, rhs_imm=10 }          -> x8
-    v185 Binop { op=sub, lhs=v176, rhs=v184 }             -> x1
+    v185 Binop { op=sub, lhs=v176, rhs=v184 }             -> x0
     v186 Extend { value=v185, kind=I32, nsw }             -> x8
     v187 BinopI { op=shl, lhs=v185, rhs_imm=2 }           -> x8
     v188 Binop { op=add, lhs=v180, rhs=v187 }             -> x8
-    v189 LoadIndexed { base=v180, index=v185, scale=4, kind=I32 } -> x1
-    v190 Binop { op=add, lhs=v175, rhs=v189 }             -> x0
-    v191 Extend { value=v190, kind=I32, nsw }             -> x1
-    v192 Imm(0)                                           -> x1
-    v193 Extend { value=v183, kind=I32, nsw }             -> x1
+    v189 LoadIndexed { base=v180, index=v185, scale=4, kind=I32 } -> x0
+    v190 Binop { op=add, lhs=v175, rhs=v189 }             -> x1
+    v191 Extend { value=v190, kind=I32, nsw }             -> x0
+    v192 Imm(0)                                           -> x0
+    v193 Extend { value=v183, kind=I32, nsw }             -> x0
     terminator Jmp(b9)   (exit_acc=v183)
   block 9  start_pc=0
-    v175 Phi { incoming=[b7:v89, b8:v190], kind=I64 }     -> x0
-    v176 Phi { incoming=[b7:v82, b8:v183], kind=I64 }     -> x1
+    v175 Phi { incoming=[b7:v89, b8:v190], kind=I64 }     -> x1
+    v176 Phi { incoming=[b7:v82, b8:v183], kind=I64 }     -> x0
     v177 Extend { value=v176, kind=I32 }                  -> x2
     v178 BinopI { op=gt, lhs=v176, rhs_imm=0 }            -> x2
     terminator Bz { cond=v178, target=b10, fall=b8 }   (exit_acc=v178)

@@ -3149,15 +3149,18 @@ fn data_import_lowers_as_iat_load_not_thunk_on_windows_x64() {
 
     // Scan .text for every RIP-relative instruction whose computed
     // target equals the IAT slot RVA. `lea`/`mov reg, [rip+disp32]`
-    // share the 7-byte REX.W + modrm 0x05 + disp32 layout, differing
-    // only in the opcode (0x8D vs 0x8B); the `jmp [rip+disp32]` thunk
+    // share the 7-byte REX.W(+R) + modrm 00 reg 101 + disp32 layout,
+    // differing only in the opcode (0x8D vs 0x8B); the `jmp [rip+disp32]` thunk
     // is `FF 25` + disp32 over 6 bytes.
     let mut lea_to_slot = 0usize; // 48 8D 05 (address-of -- the bug)
     let mut mov_to_slot = 0usize; // 48 8B 05 (IAT-slot load -- the fix)
     let mut thunk_to_slot = 0usize; // FF 25     (call trampoline standing in for data)
     let mut i = 0usize;
     while i + 7 <= text.len() {
-        if text[i] == 0x48 && text[i + 2] == 0x05 && (text[i + 1] == 0x8D || text[i + 1] == 0x8B) {
+        if text[i] & 0xFB == 0x48
+            && text[i + 2] & 0xC7 == 0x05
+            && (text[i + 1] == 0x8D || text[i + 1] == 0x8B)
+        {
             let disp = i32::from_le_bytes(text[i + 3..i + 7].try_into().unwrap());
             let instr_rva = text_rva + i as u32;
             let target = (instr_rva as i64 + 7 + disp as i64) as u32;

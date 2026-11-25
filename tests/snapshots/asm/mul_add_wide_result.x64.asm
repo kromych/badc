@@ -34,9 +34,9 @@ Disassembly of section .text:
 
 <macc_sub>:
                	movslq	%edi, %rdi
-               	imulq	%rdi, %rsi
+               	imulq	%rsi, %rdi
+               	subq	%rdi, %rdx
                	movq	%rdx, %rax
-               	subq	%rsi, %rax
                	retq
 
 <main>:

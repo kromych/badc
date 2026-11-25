@@ -59,11 +59,11 @@ Disassembly of section .text:
                	retq
 
 <low_words>:
-               	movq	%rdi, %rax
-               	shrq	$0x1f, %rax
+               	shrq	$0x1f, %rdi
                	andq	$0x7, %rsi
                	movabsq	$0x100000000, %rcx      # imm = 0x100000000
                	addq	%rsi, %rcx
+               	movl	%edi, %eax
                	xorl	%edx, %edx
                	divl	%ecx
                	movl	$0xaaaaaaab, %ecx       # imm = 0xAAAAAAAB
@@ -81,10 +81,9 @@ Disassembly of section .text:
                	shrq	$0x3d, %rax
                	addq	%rdi, %rax
                	sarq	$0x3, %rax
-               	movq	%rax, %rcx
-               	shlq	$0x3, %rcx
+               	shlq	$0x3, %rax
+               	subq	%rax, %rdi
                	movq	%rdi, %rax
-               	subq	%rcx, %rax
                	retq
 
 <urem_bounded>:
@@ -116,14 +115,14 @@ Disassembly of section .text:
                	movabsq	$-0x5555555555555555, %rsi # imm = 0xAAAAAAAAAAAAAAAB
                	movq	%rcx, %rax
                	mulq	%rsi
-               	movq	%rdx, %rax
-               	shrq	%rax
-               	movl	%ecx, %ecx
+               	shrq	%rdx
+               	movl	%ecx, %eax
                	movl	$0xaaaaaaab, %r11d      # imm = 0xAAAAAAAB
-               	imulq	%r11, %rcx
-               	shrq	$0x21, %rcx
-               	shlq	%rcx
-               	xorq	%rcx, %rax
+               	imulq	%r11, %rax
+               	shrq	$0x21, %rax
+               	shlq	%rax
+               	xorq	%rax, %rdx
+               	movq	%rdx, %rax
                	retq
 
 <main>:

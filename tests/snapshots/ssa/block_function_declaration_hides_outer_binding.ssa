@@ -244,9 +244,9 @@ fn ent_pc=19 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(2)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x0
-    v6   Extend { value=v5, kind=I32, nsw }               -> x1
-    v7   Extend { value=v5, kind=I32 }                    -> x1
+    v5   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x7
+    v6   Extend { value=v5, kind=I32, nsw }               -> x0
+    v7   Extend { value=v5, kind=I32 }                    -> x0
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=20 ---
 ; name=later

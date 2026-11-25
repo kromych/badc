@@ -209,8 +209,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v214 LoadIndexed { base=v175, index=v192, scale=4, kind=I32 } -> x8
     v215 Binop { op=add, lhs=v176, rhs=v212 }             -> x9
     v216 Extend { value=v199, kind=I32 }                  -> x7
-    v217 Binop { op=mul, lhs=v214, rhs=v216 }             -> x7
-    v218 Extend { value=v217, kind=I32, nsw }             -> x8
+    v217 Binop { op=mul, lhs=v214, rhs=v216 }             -> x8
+    v218 Extend { value=v217, kind=I32, nsw }             -> x7
     v219 Binop { op=add, lhs=v191, rhs=v217 }             -> x1
     v220 Extend { value=v219, kind=I32, nsw }             -> x7
     v221 Extend { value=v192, kind=I32 }                  -> x7

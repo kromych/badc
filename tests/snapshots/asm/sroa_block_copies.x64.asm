@@ -97,8 +97,8 @@ Disassembly of section .text:
                	retq
 
 <self_assign>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
                	retq
 
 <member_copy>:
@@ -752,13 +752,13 @@ Disassembly of section .text:
                	popq	%rbx
                	addq	$0x2a0, %rsp            # imm = 0x2A0
                	retq
-               	movq	%rbx, %rax
-               	andq	$0xff, %rax
-               	leaq	0x1(%rbx), %rcx
-               	shlq	$0x8, %rcx
-               	andq	$0xff00, %rcx           # imm = 0xFF00
-               	orq	%rcx, %rax
-               	movq	%rax, %r10
+               	movq	%rbx, %rcx
+               	andq	$0xff, %rcx
+               	leaq	0x1(%rbx), %rax
+               	shlq	$0x8, %rax
+               	andq	$0xff00, %rax           # imm = 0xFF00
+               	orq	%rax, %rcx
+               	movq	%rcx, %r10
                	orq	$0x10000, %r10          # imm = 0x10000
                	movq	%r10, 0x18(%rsp)
                	movq	%rbx, %rdi

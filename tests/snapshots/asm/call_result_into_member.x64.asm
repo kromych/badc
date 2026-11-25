@@ -30,26 +30,26 @@ Disassembly of section .text:
                	retq
 
 <mk_U1>:
+               	andq	$0xff, %rdi
                	movq	%rdi, %rax
-               	andq	$0xff, %rax
                	retq
 
 <mk_U2>:
+               	andq	$0xffff, %rdi           # imm = 0xFFFF
                	movq	%rdi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	retq
 
 <mk_U3>:
                	andq	$0xff, %rdi
+               	orq	$0x200, %rdi            # imm = 0x200
+               	orq	$0x30000, %rdi          # imm = 0x30000
                	movq	%rdi, %rax
-               	orq	$0x200, %rax            # imm = 0x200
-               	orq	$0x30000, %rax          # imm = 0x30000
                	retq
 
 <mk_B4>:
+               	andq	$0xfffff, %rdi          # imm = 0xFFFFF
+               	orq	$0x3ff00000, %rdi       # imm = 0x3FF00000
                	movq	%rdi, %rax
-               	andq	$0xfffff, %rax          # imm = 0xFFFFF
-               	orq	$0x3ff00000, %rax       # imm = 0x3FF00000
                	retq
 
 <mk_U5>:
@@ -129,8 +129,7 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0x1(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x1(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -225,8 +224,7 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0x2(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x2(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -322,8 +320,7 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0x3(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x3(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -418,8 +415,7 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0x4(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x4(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -516,8 +512,7 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0x5(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x5(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -614,8 +609,7 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0x6(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x6(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -715,8 +709,7 @@ Disassembly of section .text:
                	leaq	0x18(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0x7(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x7(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -815,8 +808,7 @@ Disassembly of section .text:
                	leaq	0x10(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0xc(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0xc(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -918,8 +910,7 @@ Disassembly of section .text:
                	leaq	0x10(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0xc(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0xc(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -1003,8 +994,7 @@ Disassembly of section .text:
                	movq	%r11, 0x30(%rsp)
                	movq	%rbx, %rsi
                	callq	<addr>
-               	movzbq	0x94(%rsp), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x94(%rsp), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -1036,8 +1026,7 @@ Disassembly of section .text:
                	leaq	0x10(%rsp), %rdi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
-               	movzbq	0xc(%rax), %rax
-               	movq	%rax, %rcx
+               	movzbq	0xc(%rax), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -1120,8 +1109,7 @@ Disassembly of section .text:
                	movq	%r11, 0x30(%rsp)
                	movq	%rbx, %rsi
                	callq	<addr>
-               	movzbq	0x94(%rsp), %rax
-               	movq	%rax, %rcx
+               	movzbq	0x94(%rsp), %rcx
                	xorq	$0x55, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx

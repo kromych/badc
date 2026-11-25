@@ -241,21 +241,21 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	popq	%r11
                	retq
-               	movl	$0x1, %edi
+               	movl	$0x1, %r8d
                	movl	$0x2, %ecx
                	movl	$0x3, %edx
                	xorl	%eax, %eax
-               	movq	%rdi, %rsi
+               	movq	%r8, %rsi
                	jmp	<addr>
                	incq	%rax
-               	nopw	(%rax,%rax)
+               	nopl	(%rax,%rax)
                	cmpl	$0x7, %eax
                	jge	<addr>
-               	imulq	$0x55555556, %rax, %r8  # imm = 0x55555556
-               	shrq	$0x20, %r8
-               	leaq	(%r8,%r8,2), %r8
+               	imulq	$0x55555556, %rax, %rdi # imm = 0x55555556
+               	shrq	$0x20, %rdi
+               	leaq	(%rdi,%rdi,2), %rdi
                	movq	%rax, %r9
-               	subq	%r8, %r9
+               	subq	%rdi, %r9
                	nopw	(%rax,%rax)
                	testl	%r9d, %r9d
                	jne	<addr>
@@ -276,7 +276,7 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
                	movq	%r11, %xmm1
-               	movq	%rdi, %rax
+               	movq	%r8, %rax
                	cmpl	$0x1, %eax
                	jl	<addr>
                	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
@@ -376,13 +376,13 @@ Disassembly of section .text:
                	movl	$0x24, %eax
                	popq	%r11
                	retq
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	movzbq	(%rdx,%rax), %rsi
-               	andq	$0x1, %rsi
+               	movzbq	(%rsi,%rax), %rdx
+               	andq	$0x1, %rdx
                	leaq	0x1(%rcx), %rdi
-               	testl	%esi, %esi
+               	testl	%edx, %edx
                	cmovneq	%rdi, %rcx
                	incq	%rax
                	nopl	(%rax)

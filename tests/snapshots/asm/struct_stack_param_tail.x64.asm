@@ -134,9 +134,9 @@ Disassembly of section .text:
                	movb	%dl, 0x60(%rsp,%rax)
                	cmpl	$0x11, %eax
                	jge	<addr>
-               	movl	$0x28, %edx
-               	subq	%rax, %rdx
-               	movb	%dl, 0x78(%rsp,%rax)
+               	movl	$0x28, %ecx
+               	subq	%rax, %rcx
+               	movb	%cl, 0x78(%rsp,%rax)
                	nop
                	jmp	<addr>
                	leaq	0x30(%rsp), %r9

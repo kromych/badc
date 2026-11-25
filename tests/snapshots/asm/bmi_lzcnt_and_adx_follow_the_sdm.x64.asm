@@ -27,22 +27,20 @@ Disassembly of section .text:
 
 <_subborrow_u64>:
                	cmpq	$0x1, %rsi
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	leaq	-0x1(%rsi), %rax
-               	movq	%rdx, %rsi
-               	negq	%rsi
+               	setb	%al
+               	movzbq	%al, %rax
+               	leaq	-0x1(%rsi), %rdx
+               	negq	%rax
                	andq	$0xff, %rdi
                	testl	%edi, %edi
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	%rdx, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
+               	cmpq	%rsi, %rdx
                	setb	%dil
                	movzbq	%dil, %rdi
-               	subq	%rdx, %rax
-               	subq	%rdi, %rsi
-               	movq	%rax, (%rcx)
-               	movq	%rsi, %rax
+               	subq	%rsi, %rdx
+               	subq	%rdi, %rax
+               	movq	%rdx, (%rcx)
                	shrq	$0x3f, %rax
                	retq
 

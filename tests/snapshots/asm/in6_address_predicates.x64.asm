@@ -26,19 +26,18 @@ Disassembly of section .text:
                	int3
 
 <in6>:
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
+               	andq	$0xff, %rdi
                	andq	$0xff, %rsi
                	shlq	$0x8, %rsi
-               	orq	%rsi, %rax
+               	orq	%rsi, %rdi
                	andq	$0xff, %rdx
                	shlq	$0x10, %rdx
                	andq	$0xff, %rcx
                	shlq	$0x18, %rcx
-               	orq	%rdx, %rcx
-               	movq	%r8, %rdx
-               	shlq	$0x38, %rdx
                	orq	%rcx, %rdx
+               	shlq	$0x38, %r8
+               	orq	%r8, %rdx
+               	movq	%rdi, %rax
                	retq
 
 <main>:

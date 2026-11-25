@@ -58,9 +58,9 @@ Disassembly of section .text:
                	retq
 
 <or_then_wider_mask>:
+               	orq	$0xf0, %rdi
+               	andq	$0x1f0, %rdi            # imm = 0x1F0
                	movq	%rdi, %rax
-               	orq	$0xf0, %rax
-               	andq	$0x1f0, %rax            # imm = 0x1F0
                	retq
 
 <main>:

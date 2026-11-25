@@ -386,8 +386,8 @@ fn ent_pc=11 n_params=10 variadic=false locals=0
     v33  Binop { op=sub, lhs=v32, rhs=v31 }               -> x1
     v34  LoadLocal { off=9, kind=I64 }                    -> x0
     v35  Binop { op=add, lhs=v33, rhs=v34 }               -> x1
-    v36  Binop { op=sub, lhs=v35, rhs=v34 }               -> x2
-    v37  LoadLocal { off=10, kind=I64 }                   -> x1
+    v36  Binop { op=sub, lhs=v35, rhs=v34 }               -> x1
+    v37  LoadLocal { off=10, kind=I64 }                   -> x2
     v38  Binop { op=add, lhs=v36, rhs=v37 }               -> x0
     v39  Binop { op=sub, lhs=v38, rhs=v37 }               -> x0
     terminator Return(v39)   (exit_acc=v39)

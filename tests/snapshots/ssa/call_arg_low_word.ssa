@@ -94,7 +94,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x0
+    v3   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x7
     terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=via_scale

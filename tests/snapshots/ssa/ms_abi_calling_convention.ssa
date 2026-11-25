@@ -143,8 +143,8 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v65  Fma { a=v62, b=v63, c=v61, neg_product=false, neg_addend=false } -> d1
     v66  Imm(4616189618054758400)                         -> d2
     v67  Undef                                            -> x0
-    v68  Fma { a=v57, b=v66, c=v65, neg_product=false, neg_addend=false } -> d0
-    v69  Imm(4629137466983448576)                         -> d1
+    v68  Fma { a=v57, b=v66, c=v65, neg_product=false, neg_addend=false } -> d1
+    v69  Imm(4629137466983448576)                         -> d0
     v70  Binop { op=fne, lhs=v68, rhs=v69 }               -> x0
     terminator Bz { cond=v70, target=b6, fall=b5 }   (exit_acc=v70)
   block 5  start_pc=0

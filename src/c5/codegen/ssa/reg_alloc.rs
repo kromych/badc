@@ -1820,11 +1820,46 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // the class roots this produces.
     let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
     let value_interference = liveness.interference(func, &value_of);
-    let mut classes = super::phi_class::PhiClasses::build(func, &value_interference);
+    // x86-64: a two-address result joins the class of an operand dying at
+    // it, the one the lowering writes the result over, when no member of
+    // one class interferes with the other: the chain shares one register
+    // and the copy ahead of each step goes.
+    let joined: Vec<(ValueId, ValueId)> = if target.is_x86_64() {
+        let dies = |o: ValueId, v: usize| {
+            last_use.get(o as usize) == Some(&(v as u32)) && use_counts[o as usize] > 0
+        };
+        // A fused multiply-add writes whichever operand its form names, so
+        // it joins only an accumulation: an addend that a fused
+        // multiply-add produced.
+        (func.insts.iter().enumerate())
+            .filter_map(|(v, inst)| {
+                let o = match *inst {
+                    Inst::Binop { .. } | Inst::BinopI { .. } => x86_two_address(inst)
+                        .into_iter()
+                        .flatten()
+                        .find(|&o| dies(o, v))?,
+                    Inst::Fma { c, .. }
+                        if dies(c, v) && matches!(func.insts[c as usize], Inst::Fma { .. }) =>
+                    {
+                        c
+                    }
+                    _ => return None,
+                };
+                Some((v as ValueId, o))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let mut calls_after_def =
         super::emit_common::time_pass("ssa::liveness::values_live_across_calls", || {
             compute_calls_after_def(func, &liveness, target)
         });
+    let mut classes = super::phi_class::PhiClasses::build_with(
+        func,
+        &value_interference,
+        (&joined, &calls_after_def),
+    );
     // Promote per-value `calls_after_def` to the class: members share
     // one register, so a member whose own range does not cross a call
     // still needs a callee-saved home when another member's does.

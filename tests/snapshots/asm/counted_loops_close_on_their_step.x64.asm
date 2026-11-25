@@ -126,37 +126,37 @@ Disassembly of section .text:
 
 <negatives>:
                	cmpq	$-0x7, %rdi
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$-0xfff, %rdi           # imm = 0xF001
+               	setne	%al
+               	movzbq	%al, %rax
+               	shlq	%rax
+               	addq	%rax, %rcx
+               	cmpq	$-0x1000, %rdi          # imm = 0xF000
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$-0xfff, %rdi           # imm = 0xF001
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	shlq	%rcx
-               	addq	%rcx, %rax
-               	cmpq	$-0x1000, %rdi          # imm = 0xF000
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
+               	shlq	$0x2, %rax
+               	addq	%rax, %rcx
                	cmpl	$-0x1, %esi
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	shlq	$0x3, %rcx
-               	addq	%rcx, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	shlq	$0x3, %rax
+               	addq	%rax, %rcx
                	cmpq	$-0x64, %rdi
-               	setl	%cl
-               	movzbq	%cl, %rcx
-               	shlq	$0x4, %rcx
+               	setl	%al
+               	movzbq	%al, %rax
+               	shlq	$0x4, %rax
                	addq	%rcx, %rax
                	retq
 
 <main>:
                	subq	$0xe8, %rsp
                	xorl	%eax, %eax
-               	imulq	$0x1d, %rax, %rdx
-               	addq	$0x3, %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, 0x18(%rsp,%rax)
+               	imulq	$0x1d, %rax, %rcx
+               	addq	$0x3, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, 0x18(%rsp,%rax)
                	incq	%rax
                	cmpl	$0xc8, %eax
                	jl	<addr>

@@ -36,54 +36,56 @@ Disassembly of section .text:
                	shrxq	%r8, %rsi, %r8
                	andq	$0xff, %r8
                	xorq	%rdi, %r8
-               	movl	%r8d, %edi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
-               	negq	%rdi
-               	andq	%rax, %rdi
+               	movl	%r8d, %r8d
+               	movq	%r8, %rdi
+               	shrq	%rdi
+               	andq	$0x1, %r8
+               	negq	%r8
+               	andq	%rax, %r8
                	xorq	%r8, %rdi
                	movq	%rdi, %r8
                	shrq	%r8
                	andq	$0x1, %rdi
                	negq	%rdi
                	andq	%rax, %rdi
+               	xorq	%rdi, %r8
+               	movq	%r8, %rdi
+               	shrq	%rdi
+               	andq	$0x1, %r8
+               	negq	%r8
+               	andq	%rax, %r8
                	xorq	%r8, %rdi
                	movq	%rdi, %r8
                	shrq	%r8
                	andq	$0x1, %rdi
                	negq	%rdi
                	andq	%rax, %rdi
+               	xorq	%rdi, %r8
+               	movq	%r8, %rdi
+               	shrq	%rdi
+               	andq	$0x1, %r8
+               	negq	%r8
+               	andq	%rax, %r8
                	xorq	%r8, %rdi
                	movq	%rdi, %r8
                	shrq	%r8
                	andq	$0x1, %rdi
                	negq	%rdi
                	andq	%rax, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
+               	xorq	%rdi, %r8
+               	movq	%r8, %r9
+               	shrq	%r9
+               	andq	$0x1, %r8
+               	movq	%r8, %rdi
                	negq	%rdi
                	andq	%rax, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
-               	negq	%rdi
-               	andq	%rax, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
-               	negq	%rdi
-               	andq	%rax, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
-               	negq	%rdi
-               	andq	%rax, %rdi
+               	xorq	%rdi, %r9
+               	movq	%r9, %rdi
+               	shrq	%rdi
+               	andq	$0x1, %r9
+               	movq	%r9, %r8
+               	negq	%r8
+               	andq	%rax, %r8
                	xorq	%r8, %rdi
                	incq	%rcx
                	cmpl	%edx, %ecx
@@ -152,27 +154,26 @@ Disassembly of section .text:
                	movl	-0x4(%rbp), %edx
                	movl	%edi, %edi
                	crc32l	%edx, %edi
+               	movq	%rax, %rdx
                	movabsq	$0x3837363534333231, %r10 # imm = 0x3837363534333231
-               	crc32q	%r10, %rax
-               	movl	%esi, %edx
-               	movq	%rdx, %rsi
+               	crc32q	%r10, %rdx
+               	movl	%esi, %eax
+               	movl	$0x39, %r10d
+               	crc32b	%r10b, %eax
+               	movl	%edi, %esi
                	movl	$0x39, %r10d
                	crc32b	%r10b, %esi
-               	movl	%edi, %edx
+               	movl	%edx, %edx
                	movl	$0x39, %r10d
                	crc32b	%r10b, %edx
-               	movl	%eax, %eax
-               	movq	%rax, %rdi
-               	movl	$0x39, %r10d
-               	crc32b	%r10b, %edi
                	xorq	$-0x1, %rcx
                	cmpl	$0xe3069283, %ecx       # imm = 0xE3069283
                	jne	<addr>
+               	xorq	$-0x1, %rax
+               	cmpl	$0xe3069283, %eax       # imm = 0xE3069283
+               	jne	<addr>
                	xorq	$-0x1, %rsi
                	cmpl	$0xe3069283, %esi       # imm = 0xE3069283
-               	jne	<addr>
-               	xorq	$-0x1, %rdx
-               	cmpl	$0xe3069283, %edx       # imm = 0xE3069283
                	je	<addr>
                	movl	$0x2f, %eax
                	popq	%rbx
@@ -181,7 +182,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	movq	%rdi, %rax
+               	movq	%rdx, %rax
                	xorq	$-0x1, %rax
                	cmpl	$0xe3069283, %eax       # imm = 0xE3069283
                	je	<addr>
@@ -225,6 +226,7 @@ Disassembly of section .text:
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
                	callq	<addr>
+               	nopl	(%rax)
                	cmpl	%eax, %r14d
                	jne	<addr>
                	movq	%rbx, %rax

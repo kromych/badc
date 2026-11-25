@@ -420,7 +420,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	stmxcsr	(%rax)
-               	movl	-0x8(%rbp), %ecx
+               	movl	-0x8(%rbp), %edx
                	leaq	-0x8(%rbp), %rax
                	stmxcsr	(%rax)
                	movl	-0x8(%rbp), %eax
@@ -432,19 +432,18 @@ Disassembly of section .text:
                	ldmxcsr	(%rax)
                	leaq	-0x8(%rbp), %rax
                	stmxcsr	(%rax)
-               	movl	-0x8(%rbp), %eax
-               	andq	$0x40, %rax
-               	movq	%rax, %rdx
-               	xorq	$0x40, %rdx
-               	movl	%ecx, -0x8(%rbp)
+               	movl	-0x8(%rbp), %ecx
+               	andq	$0x40, %rcx
+               	xorq	$0x40, %rcx
+               	movl	%edx, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	ldmxcsr	(%rax)
-               	testl	%edx, %edx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	-0x8(%rbp), %rax
                	stmxcsr	(%rax)
                	movl	-0x8(%rbp), %eax
-               	cmpl	%ecx, %eax
+               	cmpl	%edx, %eax
                	je	<addr>
                	movl	$0x1d, %eax
                	leave

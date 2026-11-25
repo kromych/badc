@@ -37,16 +37,16 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	divl	%esi
                	movq	%rdx, %rbx
-               	leaq	<rip>, %rax # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x4, %rcx
-               	andq	%rbx, %rcx
-               	movl	(%rax,%rcx,4), %ecx
-               	movl	%ecx, <rip> # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x4, %rcx
-               	andq	%rbx, %rcx
-               	movl	(%rax,%rcx,4), %eax
+               	leaq	<rip>, %rcx # <addr>
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x4, %rax
+               	andq	%rbx, %rax
+               	movl	(%rcx,%rax,4), %eax
+               	movl	%eax, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x4, %rax
+               	andq	%rbx, %rax
+               	movl	(%rcx,%rax,4), %eax
                	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rax # <addr>
                	movl	<rip>, %ecx # <addr>
@@ -64,22 +64,22 @@ Disassembly of section .text:
                	andq	%rbx, %rcx
                	movl	(%rax,%rcx,4), %eax
                	movl	%eax, <rip> # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x4, %rcx
-               	andq	%rbx, %rcx
-               	movl	(%rax,%rcx,4), %ecx
-               	movl	%ecx, <rip> # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x4, %rcx
-               	andq	%rbx, %rcx
-               	movl	(%rax,%rcx,4), %eax
+               	leaq	<rip>, %rcx # <addr>
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x4, %rax
+               	andq	%rbx, %rax
+               	movl	(%rcx,%rax,4), %eax
                	movl	%eax, <rip> # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x4, %rcx
-               	andq	%rbx, %rcx
-               	movl	(%rax,%rcx,4), %eax
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x4, %rax
+               	andq	%rbx, %rax
+               	movl	(%rcx,%rax,4), %eax
+               	movl	%eax, <rip> # <addr>
+               	leaq	<rip>, %rcx # <addr>
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x4, %rax
+               	andq	%rbx, %rax
+               	movl	(%rcx,%rax,4), %eax
                	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rdi
                	movq	%rbx, %rsi

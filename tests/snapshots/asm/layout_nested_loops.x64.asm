@@ -26,22 +26,22 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorl	%edx, %edx
-               	movq	%rdx, %rax
+               	xorl	%edi, %edi
+               	movq	%rdi, %rax
                	xorl	%ecx, %ecx
                	jmp	<addr>
                	incq	%rcx
-               	cmpl	%edx, %ecx
+               	cmpl	%edi, %ecx
                	jge	<addr>
-               	leaq	(%rdx,%rcx), %rsi
-               	movslq	%esi, %rsi
-               	imulq	$0x55555556, %rsi, %rdi # imm = 0x55555556
-               	sarq	$0x20, %rdi
-               	movq	%rdi, %r8
+               	leaq	(%rdi,%rcx), %rdx
+               	movslq	%edx, %rsi
+               	imulq	$0x55555556, %rsi, %rdx # imm = 0x55555556
+               	sarq	$0x20, %rdx
+               	movq	%rdx, %r8
                	shrq	$0x3f, %r8
-               	addq	%r8, %rdi
-               	leaq	(%rdi,%rdi,2), %rdi
-               	subq	%rdi, %rsi
+               	addq	%r8, %rdx
+               	leaq	(%rdx,%rdx,2), %rdx
+               	subq	%rdx, %rsi
                	testl	%esi, %esi
                	je	<addr>
                	nopw	(%rax,%rax)
@@ -49,8 +49,8 @@ Disassembly of section .text:
                	je	<addr>
                	addq	%rcx, %rax
                	jmp	<addr>
-               	addq	%rdx, %rax
-               	incq	%rdx
-               	cmpl	$0x6, %edx
+               	addq	%rdi, %rax
+               	incq	%rdi
+               	cmpl	$0x6, %edi
                	jl	<addr>
                	retq

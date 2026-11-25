@@ -196,11 +196,11 @@ Disassembly of section .text:
                	addq	$0x58, %rsp
                	retq
                	xorl	%eax, %eax
-               	imulq	$0xd, %rax, %rdx
+               	imulq	$0xd, %rax, %rcx
                	movl	0x48(%rsp), %esi
-               	addq	%rsi, %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, 0x28(%rsp,%rax)
+               	addq	%rsi, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, 0x28(%rsp,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>

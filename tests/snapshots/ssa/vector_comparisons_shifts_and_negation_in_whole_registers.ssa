@@ -3378,12 +3378,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v3574 LocalAddr(-398)                                  -> x1
     v3575 Extend { value=v3537, kind=I32 }                 -> x1
     v3576 Binop { op=add, lhs=v3301, rhs=v3537 }           -> x1
-    v3577 LoadIndexed { base=v3301, index=v3537, scale=1, kind=U8 } -> x1
-    v3578 LocalAddr(-361)                                  -> x8
+    v3577 LoadIndexed { base=v3301, index=v3537, scale=1, kind=U8 } -> x8
+    v3578 LocalAddr(-361)                                  -> x1
     v3579 Extend { value=v3537, kind=I32 }                 -> x9
     v3580 Binop { op=add, lhs=v3578, rhs=v3537 }           -> x9
-    v3581 LoadIndexed { base=v3578, index=v3537, scale=1, kind=U8 } -> x8
-    v3582 BinopI { op=shru, lhs=v3581, rhs_imm=3 }         -> x8
+    v3581 LoadIndexed { base=v3578, index=v3537, scale=1, kind=U8 } -> x1
+    v3582 BinopI { op=shru, lhs=v3581, rhs_imm=3 }         -> x1
     v3583 Binop { op=ne, lhs=v3577, rhs=v3582 }            -> x1
     v3584 BinopI { op=and, lhs=v3583, rhs_imm=4294967295 } -> x8
     v3585 Binop { op=ne, lhs=v3577, rhs=v3582 }            -> x8

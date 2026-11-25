@@ -54,22 +54,22 @@ Disassembly of section .text:
                	addq	$0x3, %rcx
                	addq	%rcx, %rax
                	shlq	%rax
-               	addq	%rdx, %rax
+               	leaq	(%rdx,%rax), %rcx
                	movswq	%si, %r8
-               	leaq	0x1(%rsi), %rcx
-               	movswq	%cx, %rcx
+               	leaq	0x1(%rsi), %rax
+               	movswq	%ax, %rax
                	movq	%rsi, %rdx
                	shlq	%rdx
                	movswq	%dx, %rdx
                	leaq	-0x3(%rsi), %r9
                	movswq	%r9w, %r9
-               	shlq	%rcx
-               	addq	%r8, %rcx
+               	shlq	%rax
+               	addq	%r8, %rax
                	leaq	(%rdx,%rdx,2), %rdx
-               	addq	%rdx, %rcx
-               	addq	%r9, %rcx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	leaq	(%rax,%rcx), %r10
+               	addq	%rdx, %rax
+               	addq	%r9, %rax
+               	leaq	(%rax,%rax,2), %rax
+               	leaq	(%rcx,%rax), %r10
                	movq	%r10, 0x8(%rsp)
                	xorl	%edx, %edx
                	movl	$0x1, %ecx

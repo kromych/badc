@@ -100,19 +100,19 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	movb	%al, 0x2d(%rsp)
                	movzbq	0xe(%rsp), %rax
-               	movzbq	0x1e(%rsp), %rsi
-               	xorq	%rsi, %rax
+               	movzbq	0x1e(%rsp), %rcx
+               	xorq	%rcx, %rax
                	movb	%al, 0x2e(%rsp)
                	movzbq	0xf(%rsp), %rax
-               	movzbq	0x1f(%rsp), %rdi
-               	xorq	%rdi, %rax
+               	movzbq	0x1f(%rsp), %rcx
+               	xorq	%rcx, %rax
                	movb	%al, 0x2f(%rsp)
                	xorl	%eax, %eax
-               	movzbq	0x20(%rsp,%rax), %rdi
-               	movzbq	(%rsp,%rax), %r8
+               	movzbq	0x20(%rsp,%rax), %r8
+               	movzbq	(%rsp,%rax), %rcx
                	movzbq	0x10(%rsp,%rax), %r9
-               	xorq	%r9, %r8
-               	cmpl	%r8d, %edi
+               	xorq	%r9, %rcx
+               	cmpl	%ecx, %r8d
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax

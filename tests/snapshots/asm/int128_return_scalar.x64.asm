@@ -32,8 +32,8 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	xorq	$-0x3, %rdx
                	xorq	$-0x1, %rcx
-               	orq	%rdx, %rcx
-               	testq	%rcx, %rcx
+               	orq	%rcx, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -59,8 +59,8 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	xorq	$-0x3, %rdx
                	xorq	$-0x1, %rcx
-               	orq	%rdx, %rcx
-               	testq	%rcx, %rcx
+               	orq	%rcx, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x6, %eax
                	retq

@@ -154,14 +154,14 @@ Disassembly of section .text:
                	sarq	$0xa, %rax
                	cmpq	$-0x4b5, %rax           # imm = 0xFB4B
                	jne	<addr>
-               	movq	0x10(%rsp), %rax
-               	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x36, %rcx
-               	addq	%rcx, %rax
-               	andq	$0x3ff, %rax            # imm = 0x3FF
-               	subq	%rcx, %rax
-               	cmpl	$0xfffffd79, %eax       # imm = 0xFFFFFD79
+               	movq	0x10(%rsp), %rcx
+               	movq	%rcx, %rax
+               	sarq	$0x3f, %rax
+               	shrq	$0x36, %rax
+               	addq	%rax, %rcx
+               	andq	$0x3ff, %rcx            # imm = 0x3FF
+               	subq	%rax, %rcx
+               	cmpl	$0xfffffd79, %ecx       # imm = 0xFFFFFD79
                	je	<addr>
                	movl	$0x8, %eax
                	addq	$0x28, %rsp

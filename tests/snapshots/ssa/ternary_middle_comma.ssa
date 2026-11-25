@@ -180,17 +180,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v199 Imm(0)                                           -> x1
     v200 Imm(0)                                           -> x1
     v201 Imm(0)                                           -> x1
-    v202 BinopI { op=and, lhs=v176, rhs_imm=255 }         -> x2
-    v203 Imm(0)                                           -> x0
-    v204 Imm(1)                                           -> x0
-    v205 Imm(0)                                           -> x0
-    v206 Imm(0)                                           -> x0
-    v207 Imm(0)                                           -> x0
+    v202 BinopI { op=and, lhs=v176, rhs_imm=255 }         -> x0
+    v203 Imm(0)                                           -> x1
+    v204 Imm(1)                                           -> x1
+    v205 Imm(0)                                           -> x1
+    v206 Imm(0)                                           -> x1
+    v207 Imm(0)                                           -> x1
     v208 ImmData(64)                                      -> x7
     v209 Imm(1)                                           -> x6
-    v210 Imm(0)                                           -> x0
-    v211 Imm(0)                                           -> x0
-    v212 BinopI { op=and, lhs=v202, rhs_imm=255 }         -> x0
+    v210 Imm(0)                                           -> x1
+    v211 Imm(0)                                           -> x1
+    v212 BinopI { op=and, lhs=v202, rhs_imm=255 }         -> x1
     v213 CallExt { binding_idx=25, args=[v208, v209, v202], fp_arg_mask=0x0 } -> x0
     v214 Imm(5)                                           -> x0
     v215 LifetimeEnd(0)                                   -> -

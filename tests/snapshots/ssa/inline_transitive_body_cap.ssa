@@ -20,8 +20,8 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v14  BinopI { op=shru, lhs=v13, rhs_imm=11 }          -> x1
     v15  Binop { op=xor, lhs=v13, rhs=v14 }               -> x0
     v16  BinopI { op=shl, lhs=v15, rhs_imm=13 }           -> x1
-    v17  Binop { op=add, lhs=v15, rhs=v16 }               -> x0
-    v18  BinopI { op=shru, lhs=v17, rhs_imm=17 }          -> x1
+    v17  Binop { op=add, lhs=v15, rhs=v16 }               -> x1
+    v18  BinopI { op=shru, lhs=v17, rhs_imm=17 }          -> x0
     v19  Binop { op=xor, lhs=v17, rhs=v18 }               -> x1
     v20  Imm(0)                                           -> x0
     v21  BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0

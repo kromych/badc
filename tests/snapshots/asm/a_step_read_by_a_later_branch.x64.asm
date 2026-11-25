@@ -69,29 +69,28 @@ Disassembly of section .text:
                	movq	%r8, %rax
                	mulq	%r9
                	shrq	%rdx
-               	leaq	(%rdx,%rdx,2), %rdx
-               	movq	%r8, %rax
-               	subq	%rdx, %rax
+               	leaq	(%rdx,%rdx,2), %rax
+               	subq	%rax, %r8
                	subq	$0x1, %rcx
                	jb	<addr>
                	incq	%rsi
                	incq	%rdi
-               	movsbq	-0x1(%rdi), %rdx
-               	movb	%dl, -0x1(%rsi)
-               	leaq	-0x1(%rax), %rdx
-               	nop
-               	testq	%rax, %rax
+               	movsbq	-0x1(%rdi), %rax
+               	movb	%al, -0x1(%rsi)
+               	leaq	-0x1(%r8), %rax
+               	nopl	(%rax)
+               	testq	%r8, %r8
                	jne	<addr>
                	testq	%rcx, %rcx
                	je	<addr>
                	incq	%rsi
                	movb	$0x2c, -0x1(%rsi)
-               	movl	$0x2, %eax
+               	movl	$0x2, %r8d
                	jmp	<addr>
-               	movq	%rdx, %rax
-               	nopl	(%rax,%rax)
+               	movq	%rax, %r8
+               	nopl	(%rax)
                	jmp	<addr>
-               	movq	%rdx, %rax
+               	movq	%rax, %r8
                	subq	$0x1, %rcx
                	jae	<addr>
                	incq	%rsi

@@ -8,16 +8,16 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   ImmData(80)                                      -> x0
-    v5   ImmData(16)                                      -> x0
-    v6   Imm(2)                                           -> x1
-    v7   Imm(2)                                           -> x1
-    v8   Load { addr=v4, disp=0, kind=I64 pc_rel }        -> x1
+    v5   ImmData(16)                                      -> x1
+    v6   Imm(2)                                           -> x0
+    v7   Imm(2)                                           -> x0
+    v8   Load { addr=v4, disp=0, kind=I64 pc_rel }        -> x0
     v9   Imm(64)                                          -> x2
     v10  Imm(2)                                           -> x2
     v11  Imm(62)                                          -> x2
     v12  Imm(62)                                          -> x2
-    v13  BinopI { op=shru, lhs=v8, rhs_imm=62 }           -> x1
-    v14  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x1
+    v13  BinopI { op=shru, lhs=v8, rhs_imm=62 }           -> x0
+    v14  BinopI { op=shl, lhs=v13, rhs_imm=2 }            -> x0
     v15  Binop { op=add, lhs=v5, rhs=v14 }                -> x0
     v16  Mcpy { dst=v1, src=v15, size=2, align=1 }        -> -
     v17  BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x1

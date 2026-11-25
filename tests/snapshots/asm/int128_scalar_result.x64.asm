@@ -202,17 +202,16 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %edi
                	cmpq	%r12, %rbx
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%sil
+               	movzbq	%sil, %rsi
                	cmpq	%r12, %rbx
-               	sete	%cl
-               	movzbq	%cl, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
                	cmpq	%r14, %r13
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	andq	%rdx, %rcx
-               	orq	%rcx, %rax
-               	movq	%rax, %rsi
+               	setb	%cl
+               	movzbq	%cl, %rcx
+               	andq	%rcx, %rax
+               	orq	%rax, %rsi
                	xorq	$0x1, %rsi
                	movl	$0x4d, %edx
                	movb	$0x0, %al
@@ -230,17 +229,17 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	cmpq	%rbx, %r12
-               	setb	%al
-               	movzbq	%al, %rax
-               	cmpq	%rbx, %r12
-               	sete	%cl
+               	setb	%cl
                	movzbq	%cl, %rcx
+               	cmpq	%rbx, %r12
+               	sete	%al
+               	movzbq	%al, %rax
                	cmpq	%r13, %r14
                	setb	%dl
                	movzbq	%dl, %rdx
-               	andq	%rdx, %rcx
-               	movq	%rax, %rdx
-               	orq	%rcx, %rdx
+               	andq	%rdx, %rax
+               	movq	%rcx, %rdx
+               	orq	%rax, %rdx
                	leaq	(%rdx,%rdx,2), %rdx
                	cmpl	$0x3, %edx
                	jne	<addr>
@@ -266,8 +265,8 @@ Disassembly of section .text:
                	orq	%rbx, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
-               	orq	%rcx, %rax
-               	testq	%rax, %rax
+               	orq	%rax, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	leaq	0x20(%rsp), %rax
                	leaq	<rip>, %rcx
@@ -325,17 +324,17 @@ Disassembly of section .text:
                	addq	$0x18, %rsp
                	retq
                	cmpq	%r12, %rbx
-               	setb	%al
-               	movzbq	%al, %rax
-               	cmpq	%r12, %rbx
-               	sete	%cl
+               	setb	%cl
                	movzbq	%cl, %rcx
+               	cmpq	%r12, %rbx
+               	sete	%al
+               	movzbq	%al, %rax
                	cmpq	%r14, %r13
                	setb	%dl
                	movzbq	%dl, %rdx
-               	andq	%rdx, %rcx
-               	orq	%rcx, %rax
-               	testl	%eax, %eax
+               	andq	%rdx, %rax
+               	orq	%rax, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx

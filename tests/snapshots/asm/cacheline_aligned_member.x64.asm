@@ -97,14 +97,14 @@ Disassembly of section .text:
                	jne	<addr>
                	testl	%ecx, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x80(%rax), %rcx
-               	andq	$0x3f, %rcx
-               	testl	%ecx, %ecx
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x80(%rcx), %rax
+               	andq	$0x3f, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	testl	%ecx, %ecx
+               	testl	%eax, %eax
                	jne	<addr>
-               	addq	$0xc0, %rax
+               	leaq	0xc0(%rcx), %rax
                	andq	$0x3f, %rax
                	testl	%eax, %eax
                	jne	<addr>

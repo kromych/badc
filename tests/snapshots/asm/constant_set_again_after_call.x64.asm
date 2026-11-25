@@ -68,9 +68,9 @@ Disassembly of section .text:
                	movq	%rax, %r12
                	movl	$0x5, %edi
                	callq	<addr>
-               	addq	%r12, %rax
-               	movl	$0x5, %ecx
-               	imulq	%rbx, %rcx
+               	leaq	(%rax,%r12), %rcx
+               	movl	$0x5, %eax
+               	imulq	%rbx, %rax
                	addq	%rcx, %rax
                	popq	%rbx
                	popq	%r12

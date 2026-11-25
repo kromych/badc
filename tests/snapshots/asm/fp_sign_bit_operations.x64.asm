@@ -104,12 +104,12 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rax, %xmm0
                	callq	<addr>
-               	movq	%xmm0, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx,%rbx,8), %rcx
-               	orq	%r12, %rcx
+               	movq	%xmm0, %rcx
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax,%rbx,8), %rax
+               	orq	%r12, %rax
                	nopw	(%rax,%rax)
-               	cmpq	%rcx, %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
                	incq	%rbx
                	cmpl	$0xa, %ebx

@@ -300,9 +300,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=23
     v204 Imm(1)                                           -> x7
     v205 LocalAddr(-20)                                   -> x6
     v206 CallExt { binding_idx=66, args=[v204, v205], fp_arg_mask=0x0 } -> x0
-    v207 LocalAddr(-20)                                   -> x6
+    v207 LocalAddr(-20)                                   -> x7
     v208 LoadLocal { off=-20, kind=I64 }                  -> x0
-    v209 BinopI { op=mul, lhs=v208, rhs_imm=1000 }        -> x7
+    v209 BinopI { op=mul, lhs=v208, rhs_imm=1000 }        -> x6
     v210 BinopI { op=add, lhs=v207, rhs_imm=8 }           -> x0
     v211 LoadLocal { off=-20, disp=8, kind=I64 }          -> x0
     v212 Imm(4835703278458516699)                         -> x1
@@ -310,7 +310,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=23
     v214 BinopI { op=shr, lhs=v213, rhs_imm=18 }          -> x2
     v215 BinopI { op=shru, lhs=v214, rhs_imm=63 }         -> x0
     v216 Binop { op=add, lhs=v214, rhs=v215 }             -> x0
-    v217 Binop { op=add, lhs=v209, rhs=v216 }             -> x7
+    v217 Binop { op=add, lhs=v209, rhs=v216 }             -> x6
     v218 LocalAddr(-22)                                   -> x8
     v219 LoadLocal { off=-22, kind=I64 }                  -> x0
     v220 BinopI { op=mul, lhs=v219, rhs_imm=1000 }        -> x9
@@ -321,7 +321,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=23
     v225 BinopI { op=shru, lhs=v224, rhs_imm=63 }         -> x0
     v226 Binop { op=add, lhs=v224, rhs=v225 }             -> x0
     v227 Binop { op=add, lhs=v220, rhs=v226 }             -> x0
-    v228 Binop { op=sub, lhs=v217, rhs=v227 }             -> x7
+    v228 Binop { op=sub, lhs=v217, rhs=v227 }             -> x6
     v229 BinopI { op=lt, lhs=v228, rhs_imm=20 }           -> x0
     terminator Bz { cond=v229, target=b31, fall=b30 }   (exit_acc=v229)
   block 30  start_pc=0

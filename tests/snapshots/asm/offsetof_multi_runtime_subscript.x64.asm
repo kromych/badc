@@ -125,12 +125,12 @@ Disassembly of section .text:
                	cmpl	%edi, %esi
                	jne	<addr>
                	addq	$0x4, %rcx
+               	leaq	0x50(%rcx), %rsi
+               	leaq	0x1(%rdx), %rcx
+               	shlq	$0x2, %rcx
                	addq	$0x50, %rcx
-               	incq	%rdx
-               	shlq	$0x2, %rdx
-               	addq	$0x50, %rdx
-               	nopl	(%rax,%rax)
-               	cmpl	%edx, %ecx
+               	nopl	(%rax)
+               	cmpl	%ecx, %esi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax

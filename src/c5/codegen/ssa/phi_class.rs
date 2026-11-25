@@ -42,6 +42,20 @@ impl PhiClasses {
     /// that every class is internally interference-free, so the allocator
     /// may assign one location per class.
     pub(crate) fn build(func: &FunctionSsa, ig: &Interference) -> Self {
+        Self::build_with(func, ig, (&[], &[]))
+    }
+
+    /// [`Self::build`], then each pair of `joined` -- a result and an
+    /// operand dying at it that the lowering writes the result over --
+    /// merged the same way, so the two share a register and the copy
+    /// between them goes; unless one class holds a value `crosses` marks,
+    /// live across a call, and the other none, which the merge would send
+    /// to a saved register or a slot as well.
+    pub(crate) fn build_with(
+        func: &FunctionSsa,
+        ig: &Interference,
+        (joined, crosses): (&[(ValueId, ValueId)], &[bool]),
+    ) -> Self {
         let n = func.insts.len();
         let mut classes = Self {
             parent: (0..n as ValueId).collect(),
@@ -51,51 +65,66 @@ impl PhiClasses {
         // on merge.
         let mut members: Vec<Vec<ValueId>> = (0..n as ValueId).map(|v| alloc::vec![v]).collect();
 
-        for idx in 0..n {
-            let Inst::Phi { incoming, .. } = &func.insts[idx] else {
-                continue;
-            };
-            // Collect operands first so the borrow of `func.insts` ends
-            // before the merge loop mutates nothing in `func` but keeps
-            // the borrow checker satisfied.
-            let operands: Vec<ValueId> = incoming
+        let phis = (0..n).filter_map(|idx| match &func.insts[idx] {
+            Inst::Phi { incoming, .. } => Some((idx as ValueId, incoming)),
+            _ => None,
+        });
+        let mut pairs: Vec<(ValueId, ValueId)> = Vec::new();
+        for (idx, incoming) in phis {
+            pairs.extend(
+                incoming
+                    .iter()
+                    .map(|(_, s)| (idx, *s))
+                    .filter(|(_, s)| *s != NO_VALUE && (*s as usize) < n),
+            );
+        }
+        let phi_pairs = pairs.len();
+        pairs.extend(
+            joined
                 .iter()
-                .map(|(_, s)| *s)
-                .filter(|s| *s != NO_VALUE && (*s as usize) < n)
-                .collect();
-            for src in operands {
-                let rr = classes.find(idx as ValueId);
-                let rs = classes.find(src);
-                if rr == rs {
-                    continue;
-                }
-                // Never coalesce two values whose register class differs:
-                // the allocator places every class member in one physical
-                // location, and an FP value and an integer value cannot
-                // share a register or a slot's classification. An FP phi's
-                // operands are FP, so this normally never fires, but it
-                // guards against an FP-classed operand merging with an
-                // integer-classed one (a class-crossing location share).
-                if super::reg_alloc::produces_fp_result(&func.insts[idx])
-                    != super::reg_alloc::produces_fp_result(&func.insts[src as usize])
-                {
-                    continue;
-                }
-                // Attach the smaller member list to the larger to keep
-                // the union-find shallow. The retained root owns the
-                // combined member list.
-                let (keep, drop) = if members[rr as usize].len() >= members[rs as usize].len() {
-                    (rr, rs)
-                } else {
-                    (rs, rr)
-                };
-                if classes_interfere(ig, &mut classes, &members[drop as usize], keep) {
-                    continue;
-                }
-                let moved = core::mem::take(&mut members[drop as usize]);
-                members[keep as usize].extend(moved);
-                classes.parent[drop as usize] = keep;
+                .filter(|(a, b)| (*a as usize) < n && (*b as usize) < n),
+        );
+        for (k, (idx, src)) in pairs.into_iter().enumerate() {
+            let idx = idx as usize;
+            let rr = classes.find(idx as ValueId);
+            let rs = classes.find(src);
+            if rr == rs {
+                continue;
             }
+            // Never coalesce two values whose register class differs:
+            // the allocator places every class member in one physical
+            // location, and an FP value and an integer value cannot
+            // share a register or a slot's classification. An FP phi's
+            // operands are FP, so this normally never fires, but it
+            // guards against an FP-classed operand merging with an
+            // integer-classed one (a class-crossing location share).
+            if super::reg_alloc::produces_fp_result(&func.insts[idx])
+                != super::reg_alloc::produces_fp_result(&func.insts[src as usize])
+            {
+                continue;
+            }
+            // Attach the smaller member list to the larger to keep
+            // the union-find shallow. The retained root owns the
+            // combined member list.
+            let (keep, drop) = if members[rr as usize].len() >= members[rs as usize].len() {
+                (rr, rs)
+            } else {
+                (rs, rr)
+            };
+            let crossing = |root: ValueId| {
+                members[root as usize]
+                    .iter()
+                    .any(|&m| crosses.get(m as usize) == Some(&true))
+            };
+            if k >= phi_pairs && crossing(keep) != crossing(drop) {
+                continue;
+            }
+            if classes_interfere(ig, &mut classes, &members[drop as usize], keep) {
+                continue;
+            }
+            let moved = core::mem::take(&mut members[drop as usize]);
+            members[keep as usize].extend(moved);
+            classes.parent[drop as usize] = keep;
         }
         classes
     }

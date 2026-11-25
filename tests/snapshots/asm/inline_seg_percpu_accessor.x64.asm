@@ -135,9 +135,9 @@ Disassembly of section .text:
                	movabsq	$0xf1e2d3c4b5a6978, %rcx # imm = 0xF1E2D3C4B5A6978
                	addq	$0x20, %rax
                	movq	%rcx, %gs:(%rax)
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	shlq	%rcx
+               	movq	<rip>, %rax # <addr>
+               	shlq	%rax
                	movabsq	$-0x112053135014111, %rdx # imm = 0xFEEDFACECAFEBEEF
                	addq	%rcx, %rax
                	movq	%rdx, %gs:(%rax)

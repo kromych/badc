@@ -12,11 +12,11 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   Binop { op=and, lhs=v1, rhs=v3 }                 -> x0
+    v9   Binop { op=and, lhs=v1, rhs=v3 }                 -> x6
     v10  BinopI { op=xor, lhs=v1, rhs_imm=-1 }            -> x7
-    v11  Imm(0)                                           -> x1
-    v12  Binop { op=and, lhs=v10, rhs=v5 }                -> x2
-    v13  Binop { op=xor, lhs=v9, rhs=v12 }                -> x0
+    v11  Imm(0)                                           -> x0
+    v12  Binop { op=and, lhs=v10, rhs=v5 }                -> x7
+    v13  Binop { op=xor, lhs=v9, rhs=v12 }                -> x6
     terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=bs1

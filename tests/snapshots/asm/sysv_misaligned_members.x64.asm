@@ -382,19 +382,18 @@ Disassembly of section .text:
                	retq
                	movl	$0x8, %edi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	shrq	$0x8, %rcx
                	movq	%rax, %rdx
-               	shrq	$0x10, %rdx
+               	shrq	$0x8, %rdx
                	movq	%rax, %rsi
-               	shrq	$0x18, %rsi
+               	shrq	$0x10, %rsi
+               	movq	%rax, %rcx
+               	shrq	$0x18, %rcx
                	andq	$0xff, %rax
                	movb	%al, 0x20(%rsp)
-               	andq	$0xff, %rcx
-               	movb	%cl, 0x21(%rsp)
                	andq	$0xff, %rdx
-               	movb	%dl, 0x22(%rsp)
-               	movq	%rsi, %rcx
+               	movb	%dl, 0x21(%rsp)
+               	andq	$0xff, %rsi
+               	movb	%sil, 0x22(%rsp)
                	andq	$0xff, %rcx
                	movb	%cl, 0x23(%rsp)
                	movsbq	%al, %rax

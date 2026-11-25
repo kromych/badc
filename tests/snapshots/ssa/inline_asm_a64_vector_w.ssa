@@ -635,35 +635,35 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v629 LocalAddr(-2)                                    -> x0
     v630 Imm(14)                                          -> x0
     v631 BinopI { op=add, lhs=v591, rhs_imm=14 }          -> x0
-    v632 LocalAddr(-6)                                    -> x1
+    v632 LocalAddr(-6)                                    -> x2
     v633 Imm(14)                                          -> x0
     v634 BinopI { op=add, lhs=v632, rhs_imm=14 }          -> x0
     v635 LoadLocal { off=-6, disp=14, kind=U8 }           -> x0
-    v636 LocalAddr(-4)                                    -> x2
-    v637 Imm(14)                                          -> x6
-    v638 BinopI { op=add, lhs=v636, rhs_imm=14 }          -> x6
-    v639 LoadLocal { off=-4, disp=14, kind=U8 }           -> x6
+    v636 LocalAddr(-4)                                    -> x6
+    v637 Imm(14)                                          -> x1
+    v638 BinopI { op=add, lhs=v636, rhs_imm=14 }          -> x1
+    v639 LoadLocal { off=-4, disp=14, kind=U8 }           -> x1
     v640 Binop { op=xor, lhs=v635, rhs=v639 }             -> x0
-    v641 BinopI { op=and, lhs=v640, rhs_imm=255 }         -> x6
+    v641 BinopI { op=and, lhs=v640, rhs_imm=255 }         -> x1
     v642 StoreLocal { off=-2, disp=14, value=v640, kind=I8 } -> -
     v643 Imm(14)                                          -> x0
     v644 Imm(15)                                          -> x0
     v645 Imm(15)                                          -> x0
     v646 Imm(15)                                          -> x0
     v647 Imm(1)                                           -> x0
-    v648 LocalAddr(-2)                                    -> x6
+    v648 LocalAddr(-2)                                    -> x7
     v649 Imm(15)                                          -> x0
     v650 BinopI { op=add, lhs=v648, rhs_imm=15 }          -> x0
     v651 LocalAddr(-6)                                    -> x0
     v652 Imm(15)                                          -> x0
     v653 BinopI { op=add, lhs=v632, rhs_imm=15 }          -> x0
     v654 LoadLocal { off=-6, disp=15, kind=U8 }           -> x0
-    v655 LocalAddr(-4)                                    -> x7
-    v656 Imm(15)                                          -> x7
-    v657 BinopI { op=add, lhs=v636, rhs_imm=15 }          -> x7
-    v658 LoadLocal { off=-4, disp=15, kind=U8 }           -> x7
+    v655 LocalAddr(-4)                                    -> x1
+    v656 Imm(15)                                          -> x1
+    v657 BinopI { op=add, lhs=v636, rhs_imm=15 }          -> x1
+    v658 LoadLocal { off=-4, disp=15, kind=U8 }           -> x1
     v659 Binop { op=xor, lhs=v654, rhs=v658 }             -> x0
-    v660 BinopI { op=and, lhs=v659, rhs_imm=255 }         -> x7
+    v660 BinopI { op=and, lhs=v659, rhs_imm=255 }         -> x1
     v661 StoreLocal { off=-2, disp=15, value=v659, kind=I8 } -> -
     v662 Imm(15)                                          -> x0
     v663 Imm(16)                                          -> x0
@@ -671,34 +671,34 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v665 Imm(16)                                          -> x0
     v666 Imm(0)                                           -> x0
     v667 Imm(0)                                           -> x0
-    v668 Imm(0)                                           -> x7
+    v668 Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v667)
   block 1  start_pc=0
-    v675 LocalAddr(-2)                                    -> x7
-    v676 Extend { value=v669, kind=I32 }                  -> x7
-    v677 Binop { op=add, lhs=v648, rhs=v669 }             -> x7
-    v678 LoadIndexed { base=v648, index=v669, scale=1, kind=U8 } -> x7
-    v679 LocalAddr(-6)                                    -> x8
-    v680 Extend { value=v669, kind=I32 }                  -> x8
-    v681 Binop { op=add, lhs=v632, rhs=v669 }             -> x8
-    v682 LoadIndexed { base=v632, index=v669, scale=1, kind=U8 } -> x8
+    v675 LocalAddr(-2)                                    -> x1
+    v676 Extend { value=v669, kind=I32 }                  -> x1
+    v677 Binop { op=add, lhs=v648, rhs=v669 }             -> x1
+    v678 LoadIndexed { base=v648, index=v669, scale=1, kind=U8 } -> x8
+    v679 LocalAddr(-6)                                    -> x1
+    v680 Extend { value=v669, kind=I32 }                  -> x1
+    v681 Binop { op=add, lhs=v632, rhs=v669 }             -> x1
+    v682 LoadIndexed { base=v632, index=v669, scale=1, kind=U8 } -> x1
     v683 LocalAddr(-4)                                    -> x9
     v684 Extend { value=v669, kind=I32 }                  -> x9
     v685 Binop { op=add, lhs=v636, rhs=v669 }             -> x9
     v686 LoadIndexed { base=v636, index=v669, scale=1, kind=U8 } -> x9
-    v687 Binop { op=xor, lhs=v682, rhs=v686 }             -> x8
+    v687 Binop { op=xor, lhs=v682, rhs=v686 }             -> x1
     v688 BinopI { op=and, lhs=v687, rhs_imm=255 }         -> x9
-    v689 Binop { op=ne, lhs=v678, rhs=v687 }              -> x7
+    v689 Binop { op=ne, lhs=v678, rhs=v687 }              -> x1
     terminator Bz { cond=v689, target=b2, fall=b5 }   (exit_acc=v689)
   block 2  start_pc=0
-    v672 Extend { value=v669, kind=I32 }                  -> x7
+    v672 Extend { value=v669, kind=I32 }                  -> x1
     v673 BinopI { op=add, lhs=v669, rhs_imm=1 }           -> x0
-    v674 Extend { value=v673, kind=I32, nsw }             -> x7
+    v674 Extend { value=v673, kind=I32, nsw }             -> x1
     terminator Jmp(b3)   (exit_acc=v673)
   block 3  start_pc=0
     v669 Phi { incoming=[b0:v667, b2:v673], kind=I64 }    -> x0
-    v670 Extend { value=v669, kind=I32 }                  -> x7
-    v671 BinopI { op=lt, lhs=v669, rhs_imm=16 }           -> x7
+    v670 Extend { value=v669, kind=I32 }                  -> x1
+    v671 BinopI { op=lt, lhs=v669, rhs_imm=16 }           -> x1
     terminator Bz { cond=v671, target=b4, fall=b1 }   (exit_acc=v671)
   block 4  start_pc=0
     v690 Imm(42)                                          -> x0

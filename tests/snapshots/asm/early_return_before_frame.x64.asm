@@ -164,17 +164,17 @@ Disassembly of section .text:
                	retq
 
 <ucount>:
-               	xorl	%eax, %eax
+               	xorl	%ecx, %ecx
                	cmpl	%esi, %edi
                	jb	<addr>
                	subq	%rsi, %rdi
-               	xorq	$0x1, %rax
+               	xorq	$0x1, %rcx
                	cmpl	%esi, %edi
                	jae	<addr>
-               	movq	%rdi, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rsi, %rcx
-               	movl	%ecx, %ecx
+               	movq	%rdi, %rax
+               	shlq	$0x2, %rax
+               	addq	%rsi, %rax
+               	movl	%eax, %eax
                	xorq	%rcx, %rax
                	retq
 

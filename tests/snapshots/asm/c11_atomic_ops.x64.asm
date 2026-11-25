@@ -187,12 +187,12 @@ Disassembly of section .text:
                	addq	$0x28, %rsp
                	retq
                	movb	$-0x38, 0x8(%rsp)
-               	leaq	0x8(%rsp), %rax
-               	movl	$0x64, %ecx
+               	leaq	0x8(%rsp), %rcx
+               	movl	$0x64, %eax
                	lock
-               	xaddb	%cl, (%rax)
-               	andq	$0xff, %rcx
-               	cmpl	$0xc8, %ecx
+               	xaddb	%al, (%rcx)
+               	andq	$0xff, %rax
+               	cmpl	$0xc8, %eax
                	je	<addr>
                	movl	$0x14, %eax
                	addq	$0x28, %rsp
@@ -204,12 +204,12 @@ Disassembly of section .text:
                	addq	$0x28, %rsp
                	retq
                	movw	$0x9c40, 0x10(%rsp)     # imm = 0x9C40
-               	leaq	0x10(%rsp), %rax
-               	movl	$0x7530, %ecx           # imm = 0x7530
+               	leaq	0x10(%rsp), %rcx
+               	movl	$0x7530, %eax           # imm = 0x7530
                	lock
-               	xaddw	%cx, (%rax)
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	cmpl	$0x9c40, %ecx           # imm = 0x9C40
+               	xaddw	%ax, (%rcx)
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	cmpl	$0x9c40, %eax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x16, %eax
                	addq	$0x28, %rsp

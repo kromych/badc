@@ -93,13 +93,13 @@ Disassembly of section .text:
                	movl	(%rcx), %eax
                	shlq	%rax
                	movl	%eax, (%rcx)
-               	movslq	0x8(%rsp), %rax
-               	movabsq	$0x1122334455667788, %rdx # imm = 0x1122334455667788
-               	movq	%rdx, 0x8(%rsp)
+               	movslq	0x8(%rsp), %rdx
+               	movabsq	$0x1122334455667788, %rax # imm = 0x1122334455667788
+               	movq	%rax, 0x8(%rsp)
                	movq	%rcx, <rip> # <addr>
                	xorq	$0x1, (%rcx)
-               	movq	<rip>, %rdx # <addr>
-               	movq	(%rdx), %rdx
+               	movq	<rip>, %rax # <addr>
+               	movq	(%rax), %rax
                	addq	%rax, %rdx
                	movl	$0x9, 0x8(%rsp)
                	movq	%rcx, <rip> # <addr>

@@ -44,9 +44,9 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	xgetbv
                	shlq	$0x20, %rdx
-               	orq	%rdx, %rax
-               	andq	$0x3, %rax
-               	cmpl	$0x3, %eax
+               	orq	%rax, %rdx
+               	andq	$0x3, %rdx
+               	cmpl	$0x3, %edx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -71,9 +71,9 @@ Disassembly of section .text:
                	movl	$0xdeadbeef, -0x8(%rbp) # imm = 0xDEADBEEF
                	rdtscp
                	movl	%ecx, -0x8(%rbp)
-               	movl	%eax, %eax
-               	shlq	$0x20, %rdx
                	movq	%rdx, %rsi
+               	movl	%eax, %eax
+               	shlq	$0x20, %rsi
                	orq	%rax, %rsi
                	rdtscp
                	movl	%eax, %eax
@@ -117,8 +117,8 @@ Disassembly of section .text:
                	je	<addr>
                	pushfq
                	popq	%rcx
-               	xorq	%rcx, %rax
-               	testl	$0x200000, %eax         # imm = 0x200000
+               	xorq	%rax, %rcx
+               	testl	$0x200000, %ecx         # imm = 0x200000
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx

@@ -282,15 +282,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v272 LifetimeEnd(0)                                   -> -
     terminator Return(v265)   (exit_acc=v265)
   block 3  start_pc=0
-    v273 LocalAddr(-6)                                    -> x0
-    v274 Imm(16)                                          -> x1
-    v275 BinopI { op=add, lhs=v273, rhs_imm=16 }          -> x1
+    v273 LocalAddr(-6)                                    -> x1
+    v274 Imm(16)                                          -> x0
+    v275 BinopI { op=add, lhs=v273, rhs_imm=16 }          -> x0
     v276 Imm(0)                                           -> x2
     v277 LocalAddr(-6)                                    -> x2
-    v278 Binop { op=sub, lhs=v275, rhs=v273 }             -> x1
-    v279 Imm(4)                                           -> x0
-    v280 BinopI { op=shr, lhs=v278, rhs_imm=63 }          -> x0
-    v281 BinopI { op=shru, lhs=v280, rhs_imm=62 }         -> x0
+    v278 Binop { op=sub, lhs=v275, rhs=v273 }             -> x0
+    v279 Imm(4)                                           -> x1
+    v280 BinopI { op=shr, lhs=v278, rhs_imm=63 }          -> x1
+    v281 BinopI { op=shru, lhs=v280, rhs_imm=62 }         -> x1
     v282 Binop { op=add, lhs=v278, rhs=v281 }             -> x0
     v283 BinopI { op=shr, lhs=v282, rhs_imm=2 }           -> x0
     v284 BinopI { op=ne, lhs=v283, rhs_imm=4 }            -> x0

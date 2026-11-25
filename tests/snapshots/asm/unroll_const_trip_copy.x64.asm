@@ -44,15 +44,15 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rcx)
                	movups	0x30(%rax), %xmm14
                	movups	%xmm14, 0x30(%rcx)
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	shlq	%rcx
+               	movq	<rip>, %rax # <addr>
+               	shlq	%rax
                	addq	%rcx, %rax
                	movq	<rip>, %rcx # <addr>
                	leaq	(%rcx,%rcx,2), %rcx
-               	addq	%rcx, %rax
-               	movq	<rip>, %rcx # <addr>
-               	shlq	$0x2, %rcx
+               	addq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	shlq	$0x2, %rax
                	addq	%rcx, %rax
                	movq	<rip>, %rcx # <addr>
                	leaq	(%rcx,%rcx,4), %rcx
@@ -62,9 +62,9 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movq	<rip>, %rcx # <addr>
                	imulq	$0x7, %rcx, %rcx
-               	addq	%rcx, %rax
-               	movq	<rip>, %rcx # <addr>
-               	shlq	$0x3, %rcx
+               	addq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	cmpq	$0x1c8, %rax            # imm = 0x1C8
                	je	<addr>

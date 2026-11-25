@@ -35,22 +35,22 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rax)
                	movups	0x20(%rcx), %xmm14
                	movups	%xmm14, 0x20(%rax)
-               	leaq	0x20(%rax), %rdx
-               	movq	%rdx, %rcx
-               	subq	%rax, %rcx
-               	movq	%rcx, %rsi
+               	leaq	0x20(%rax), %rdi
+               	movq	%rdi, %rdx
+               	subq	%rax, %rdx
+               	movq	%rdx, %rsi
                	sarq	$0x3f, %rsi
                	shrq	$0x3c, %rsi
-               	leaq	(%rcx,%rsi), %rdi
-               	sarq	$0x4, %rdi
-               	shlq	$0x4, %rdi
-               	addq	%rax, %rdi
-               	cmpq	%rdx, %rdi
+               	leaq	(%rdx,%rsi), %rcx
+               	sarq	$0x4, %rcx
+               	shlq	$0x4, %rcx
+               	addq	%rax, %rcx
+               	cmpq	%rdi, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x38, %rsp
                	retq
-               	addq	%rsi, %rcx
+               	leaq	(%rdx,%rsi), %rcx
                	sarq	$0x4, %rcx
                	shlq	$0x4, %rcx
                	leaq	0x10(%rax), %rdx

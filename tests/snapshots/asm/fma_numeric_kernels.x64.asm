@@ -174,12 +174,12 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm0
                	movsd	0x10(%rsp), %xmm1
                	movq	%rax, %xmm15
-               	vfmadd213sd	%xmm15, %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) + xmm15
+               	vfmadd213sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm15
                	movsd	0x20(%rsp), %xmm2
-               	movsd	0x28(%rsp), %xmm0
-               	vfmadd231sd	%xmm0, %xmm2, %xmm1 # xmm1 = (xmm2 * xmm0) + xmm1
+               	movsd	0x28(%rsp), %xmm1
+               	vfmadd231sd	%xmm1, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm1) + xmm0
                	movsd	0x40(%rsp), %xmm2
-               	vfmadd213sd	%xmm1, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm0) + xmm1
+               	vfmadd231sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm2) + xmm0
                	vsubsd	<rip>, %xmm0, %xmm0
                	movq	%rax, %xmm14
                	comisd	%xmm0, %xmm14

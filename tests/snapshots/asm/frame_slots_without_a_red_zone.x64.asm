@@ -37,49 +37,45 @@ Disassembly of section .text:
                	addq	%rbx, %rcx
                	imulq	$0x7, %r8, %r12
                	addq	%r9, %r12
-               	xorq	%rdi, %rdx
+               	xorq	%rdx, %rdi
                	xorq	%rbx, %rsi
-               	xorq	%r8, %r9
-               	leaq	(%rax,%rcx), %r8
-               	movq	%r12, %rdi
-               	orq	$0x1, %rdi
+               	xorq	%r9, %r8
+               	leaq	(%rax,%rcx), %rdx
+               	movq	%r12, %r9
+               	orq	$0x1, %r9
                	movq	%rax, 0x20(%rsp)
-               	movq	%rdx, 0x28(%rsp)
-               	movq	%r8, %rax
+               	movq	%rdx, %rax
                	cqto
-               	idivq	%rdi
+               	idivq	%r9
                	movq	%rax, %rbx
-               	movq	0x28(%rsp), %rdx
                	movq	0x20(%rsp), %rax
-               	movq	%rax, %r8
-               	imulq	%rcx, %r8
+               	movq	%rax, %rdx
+               	imulq	%rcx, %rdx
                	movq	%rax, 0x20(%rsp)
                	movq	%rdx, 0x28(%rsp)
-               	movq	%r8, %rax
+               	movq	%rdx, %rax
                	cqto
-               	idivq	%rdi
-               	movq	%rdx, %rdi
+               	idivq	%r9
+               	movq	%rdx, %r9
                	movq	0x28(%rsp), %rdx
                	movq	0x20(%rsp), %rax
-               	imulq	$0x3d1, %r8, %r8        # imm = 0x3D1
+               	imulq	$0x3d1, %rdx, %rdx      # imm = 0x3D1
                	movq	%rsi, %r13
                	orq	$0x1, %r13
                	movq	%rax, 0x20(%rsp)
-               	movq	%rdx, 0x28(%rsp)
-               	movq	%r8, %rax
+               	movq	%rdx, %rax
                	xorl	%edx, %edx
                	divq	%r13
-               	movq	%rax, %r8
-               	movq	0x28(%rsp), %rdx
+               	movq	%rax, %rdx
                	movq	0x20(%rsp), %rax
-               	addq	%rbx, %rdi
-               	addq	%r8, %rdi
-               	addq	%rdi, %rax
+               	addq	%rbx, %r9
+               	addq	%r9, %rdx
+               	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	%r12, %rax
-               	addq	%rdx, %rax
+               	addq	%rdi, %rax
                	addq	%rsi, %rax
-               	addq	%r9, %rax
+               	addq	%r8, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

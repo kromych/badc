@@ -123,8 +123,8 @@ Disassembly of section .text:
                	retq
 
 <low>:
-               	imulq	%rdi, %rsi
-               	leaq	0x1(%rsi), %rax
+               	imulq	%rsi, %rdi
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <main>:

@@ -6,14 +6,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(16)                                      -> x0
-    v4   Imm(16)                                          -> x1
-    v5   BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x1
+    v3   ImmData(16)                                      -> x1
+    v4   Imm(16)                                          -> x0
+    v5   BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x0
     v6   Imm(0)                                           -> x2
-    v7   Binop { op=sub, lhs=v5, rhs=v3 }                 -> x1
-    v8   Imm(4)                                           -> x0
-    v9   BinopI { op=shr, lhs=v7, rhs_imm=63 }            -> x0
-    v10  BinopI { op=shru, lhs=v9, rhs_imm=62 }           -> x0
+    v7   Binop { op=sub, lhs=v5, rhs=v3 }                 -> x0
+    v8   Imm(4)                                           -> x1
+    v9   BinopI { op=shr, lhs=v7, rhs_imm=63 }            -> x1
+    v10  BinopI { op=shru, lhs=v9, rhs_imm=62 }           -> x1
     v11  Binop { op=add, lhs=v7, rhs=v10 }                -> x0
     v12  BinopI { op=shr, lhs=v11, rhs_imm=2 }            -> x0
     v13  BinopI { op=ne, lhs=v12, rhs_imm=4 }             -> x0
@@ -58,13 +58,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v50  Imm(16)                                          -> x0
     v51  Imm(0)                                           -> x0
     v52  Imm(0)                                           -> x0
-    v53  ImmData(2)                                       -> x0
-    v54  Imm(6)                                           -> x1
-    v55  BinopI { op=add, lhs=v53, rhs_imm=6 }            -> x1
+    v53  ImmData(2)                                       -> x1
+    v54  Imm(6)                                           -> x0
+    v55  BinopI { op=add, lhs=v53, rhs_imm=6 }            -> x0
     v56  Imm(0)                                           -> x2
-    v57  Binop { op=sub, lhs=v55, rhs=v53 }               -> x1
-    v58  Imm(2)                                           -> x0
-    v59  BinopI { op=shru, lhs=v57, rhs_imm=63 }          -> x0
+    v57  Binop { op=sub, lhs=v55, rhs=v53 }               -> x0
+    v58  Imm(2)                                           -> x1
+    v59  BinopI { op=shru, lhs=v57, rhs_imm=63 }          -> x1
     v60  Binop { op=add, lhs=v57, rhs=v59 }               -> x0
     v61  BinopI { op=shr, lhs=v60, rhs_imm=1 }            -> x0
     v62  BinopI { op=ne, lhs=v61, rhs_imm=3 }             -> x0

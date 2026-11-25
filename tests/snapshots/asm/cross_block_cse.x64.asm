@@ -37,40 +37,40 @@ Disassembly of section .text:
                	movq	%rax, 0x20(%rsp)
                	movabsq	$0x5100000040, %rax     # imm = 0x5100000040
                	movq	%rax, 0x28(%rsp)
-               	movl	$0x99, %ecx
-               	xorl	%eax, %eax
-               	imulq	$0x1999999a, %rcx, %rdx # imm = 0x1999999A
+               	movl	$0x99, %eax
+               	xorl	%ecx, %ecx
+               	imulq	$0x1999999a, %rax, %rdx # imm = 0x1999999A
                	shrq	$0x20, %rdx
                	imulq	$0xa, %rdx, %rdi
-               	subq	%rdi, %rcx
-               	movl	0x8(%rsp,%rcx,4), %ecx
-               	addq	%rcx, %rax
-               	cmpl	$0xc8, %eax
+               	subq	%rdi, %rax
+               	movl	0x8(%rsp,%rax,4), %eax
+               	addq	%rax, %rcx
+               	cmpl	$0xc8, %ecx
                	jg	<addr>
-               	movq	%rdx, %rcx
+               	movq	%rdx, %rax
                	nopl	(%rax)
-               	testl	%ecx, %ecx
+               	testl	%eax, %eax
                	jg	<addr>
-               	cmpl	$0x23, %eax
+               	cmpl	$0x23, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x38, %rsp
                	retq
-               	movl	$0xf423f, %ecx          # imm = 0xF423F
-               	xorl	%eax, %eax
-               	imulq	$0x1999999a, %rcx, %rdx # imm = 0x1999999A
+               	movl	$0xf423f, %eax          # imm = 0xF423F
+               	xorl	%ecx, %ecx
+               	imulq	$0x1999999a, %rax, %rdx # imm = 0x1999999A
                	shrq	$0x20, %rdx
                	imulq	$0xa, %rdx, %rdi
-               	subq	%rdi, %rcx
-               	movl	0x8(%rsp,%rcx,4), %ecx
-               	addq	%rcx, %rax
+               	subq	%rdi, %rax
+               	movl	0x8(%rsp,%rax,4), %eax
+               	addq	%rax, %rcx
                	nopw	%cs:(%rax,%rax)
-               	cmpl	$0xc8, %eax
+               	cmpl	$0xc8, %ecx
                	jg	<addr>
-               	movq	%rdx, %rcx
-               	testl	%ecx, %ecx
+               	movq	%rdx, %rax
+               	testl	%eax, %eax
                	jg	<addr>
-               	cmpl	$-0x1, %eax
+               	cmpl	$-0x1, %ecx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x38, %rsp

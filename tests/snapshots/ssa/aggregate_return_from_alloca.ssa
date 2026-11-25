@@ -806,22 +806,22 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v5   ImmData(16)                                      -> x0
     v6   Imm(0)                                           -> x0
     v7   Load { addr=v5, disp=0, kind=I64, volatile pc_rel } -> x0
-    v8   Binop { op=mul, lhs=v2, rhs=v7 }                 -> [spill 0]
+    v8   Binop { op=mul, lhs=v2, rhs=v7 }                 -> [spill 4]
     v9   Imm(0)                                           -> x0
     v10  Imm(8)                                           -> x0
     v11  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x0
     v12  Load { addr=v5, disp=8, kind=I64, volatile pc_rel } -> x0
-    v13  Binop { op=mul, lhs=v2, rhs=v12 }                -> [spill 1]
+    v13  Binop { op=mul, lhs=v2, rhs=v12 }                -> [spill 5]
     v14  Imm(0)                                           -> x0
     v15  Imm(16)                                          -> x0
     v16  BinopI { op=add, lhs=v5, rhs_imm=16 }            -> x0
     v17  Load { addr=v5, disp=16, kind=I64, volatile pc_rel } -> x0
-    v18  Binop { op=mul, lhs=v2, rhs=v17 }                -> [spill 2]
+    v18  Binop { op=mul, lhs=v2, rhs=v17 }                -> [spill 6]
     v19  Imm(0)                                           -> x0
     v20  Imm(24)                                          -> x0
     v21  BinopI { op=add, lhs=v5, rhs_imm=24 }            -> x0
     v22  Load { addr=v5, disp=24, kind=I64, volatile pc_rel } -> x0
-    v23  Binop { op=mul, lhs=v2, rhs=v22 }                -> [spill 3]
+    v23  Binop { op=mul, lhs=v2, rhs=v22 }                -> [spill 7]
     v24  Imm(0)                                           -> x0
     v25  Imm(7)                                           -> x0
     v26  BinopI { op=mul, lhs=v2, rhs_imm=7 }             -> x12
@@ -1002,17 +1002,17 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v175 BinopI { op=shru, lhs=v165, rhs_imm=32 }         -> x8
     v176 Imm(0)                                           -> x9
     v177 BinopI { op=shru, lhs=v165, rhs_imm=40 }         -> x9
-    v178 Imm(0)                                           -> [spill 4]
-    v179 BinopI { op=shru, lhs=v165, rhs_imm=48 }         -> [spill 4]
-    v180 Imm(0)                                           -> [spill 5]
-    v181 BinopI { op=shru, lhs=v165, rhs_imm=56 }         -> [spill 5]
-    v182 Imm(0)                                           -> [spill 6]
-    v183 Imm(0)                                           -> [spill 6]
-    v184 BinopI { op=shru, lhs=v166, rhs_imm=8 }          -> [spill 6]
-    v185 Imm(0)                                           -> [spill 7]
-    v186 BinopI { op=shru, lhs=v166, rhs_imm=16 }         -> [spill 7]
-    v187 Imm(0)                                           -> [spill 8]
-    v188 BinopI { op=shru, lhs=v166, rhs_imm=24 }         -> [spill 8]
+    v178 Imm(0)                                           -> [spill 0]
+    v179 BinopI { op=shru, lhs=v165, rhs_imm=48 }         -> [spill 0]
+    v180 Imm(0)                                           -> [spill 1]
+    v181 BinopI { op=shru, lhs=v165, rhs_imm=56 }         -> [spill 8]
+    v182 Imm(0)                                           -> [spill 1]
+    v183 Imm(0)                                           -> [spill 1]
+    v184 BinopI { op=shru, lhs=v166, rhs_imm=8 }          -> [spill 1]
+    v185 Imm(0)                                           -> [spill 2]
+    v186 BinopI { op=shru, lhs=v166, rhs_imm=16 }         -> [spill 2]
+    v187 Imm(0)                                           -> [spill 3]
+    v188 BinopI { op=shru, lhs=v166, rhs_imm=24 }         -> [spill 3]
     v189 Imm(0)                                           -> [spill 9]
     v190 Imm(0)                                           -> [spill 9]
     v191 Imm(0)                                           -> [spill 9]
@@ -1028,17 +1028,17 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v201 Imm(0)                                           -> [spill 9]
     v202 BinopI { op=and, lhs=v177, rhs_imm=255 }         -> x9
     v203 Imm(0)                                           -> [spill 9]
-    v204 BinopI { op=and, lhs=v179, rhs_imm=255 }         -> [spill 4]
+    v204 BinopI { op=and, lhs=v179, rhs_imm=255 }         -> [spill 0]
     v205 Imm(0)                                           -> [spill 9]
     v206 BinopI { op=and, lhs=v181, rhs_imm=255 }         -> [spill 9]
     v207 Imm(0)                                           -> [spill 9]
     v208 BinopI { op=and, lhs=v166, rhs_imm=255 }         -> x2
     v209 Imm(0)                                           -> [spill 9]
-    v210 BinopI { op=and, lhs=v184, rhs_imm=255 }         -> [spill 6]
+    v210 BinopI { op=and, lhs=v184, rhs_imm=255 }         -> [spill 1]
     v211 Imm(0)                                           -> [spill 9]
-    v212 BinopI { op=and, lhs=v186, rhs_imm=255 }         -> [spill 7]
+    v212 BinopI { op=and, lhs=v186, rhs_imm=255 }         -> [spill 2]
     v213 Imm(0)                                           -> [spill 9]
-    v214 BinopI { op=and, lhs=v188, rhs_imm=255 }         -> [spill 8]
+    v214 BinopI { op=and, lhs=v188, rhs_imm=255 }         -> [spill 3]
     v215 Imm(0)                                           -> [spill 9]
     v216 LifetimeEnd(0)                                   -> -
     v217 Imm(0)                                           -> [spill 9]

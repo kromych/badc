@@ -589,14 +589,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v568 Imm(3)                                           -> x0
     terminator Return(v568)   (exit_acc=v568)
   block 9  start_pc=0
-    v569 ImmData(112)                                     -> x0
-    v570 Imm(16)                                          -> x1
-    v571 BinopI { op=add, lhs=v569, rhs_imm=16 }          -> x1
+    v569 ImmData(112)                                     -> x1
+    v570 Imm(16)                                          -> x0
+    v571 BinopI { op=add, lhs=v569, rhs_imm=16 }          -> x0
     v572 Imm(0)                                           -> x2
-    v573 Binop { op=sub, lhs=v571, rhs=v569 }             -> x1
-    v574 Imm(4)                                           -> x0
-    v575 BinopI { op=shr, lhs=v573, rhs_imm=63 }          -> x0
-    v576 BinopI { op=shru, lhs=v575, rhs_imm=62 }         -> x0
+    v573 Binop { op=sub, lhs=v571, rhs=v569 }             -> x0
+    v574 Imm(4)                                           -> x1
+    v575 BinopI { op=shr, lhs=v573, rhs_imm=63 }          -> x1
+    v576 BinopI { op=shru, lhs=v575, rhs_imm=62 }         -> x1
     v577 Binop { op=add, lhs=v573, rhs=v576 }             -> x0
     v578 BinopI { op=shr, lhs=v577, rhs_imm=2 }           -> x0
     v579 BinopI { op=ne, lhs=v578, rhs_imm=4 }            -> x0

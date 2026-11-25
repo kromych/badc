@@ -65,8 +65,8 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	andq	$0x7, %rax
                	shlxq	%rax, %rdi, %rax
-               	orq	%rsi, %rax
-               	movb	%al, 0xb0(%rsp,%rdx)
+               	orq	%rax, %rsi
+               	movb	%sil, 0xb0(%rsp,%rdx)
                	xorl	%edx, %edx
                	movl	0x8(%rsp), %eax
                	leaq	0x1(%rax), %rdi
@@ -78,16 +78,16 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	jne	<addr>
                	movslq	0x8(%rsp), %rax
-               	movq	%rax, %rdx
-               	shrq	$0x3d, %rdx
-               	addq	%rax, %rdx
-               	sarq	$0x3, %rdx
-               	movzbq	0xb0(%rsp,%rdx), %rcx
+               	movq	%rax, %rcx
+               	shrq	$0x3d, %rcx
+               	addq	%rax, %rcx
+               	sarq	$0x3, %rcx
+               	movzbq	0xb0(%rsp,%rcx), %rcx
                	movl	$0x1, %edx
                	andq	$0x7, %rax
                	shlxq	%rax, %rdx, %rax
-               	andq	%rcx, %rax
-               	testl	%eax, %eax
+               	andq	%rax, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x2, %eax
                	addq	$0x1c8, %rsp            # imm = 0x1C8
@@ -113,8 +113,8 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	andq	$0x7, %rax
                	shlxq	%rax, %rdi, %rax
-               	orq	%rsi, %rax
-               	movb	%al, 0xb0(%rsp,%rdx)
+               	orq	%rax, %rsi
+               	movb	%sil, 0xb0(%rsp,%rdx)
                	xorl	%edx, %edx
                	movl	0x8(%rsp), %eax
                	leaq	0x1(%rax), %rdi
@@ -127,16 +127,16 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	jne	<addr>
                	movslq	0x8(%rsp), %rax
-               	movq	%rax, %rdx
-               	shrq	$0x3d, %rdx
-               	addq	%rax, %rdx
-               	sarq	$0x3, %rdx
-               	movzbq	0xb0(%rsp,%rdx), %rcx
+               	movq	%rax, %rcx
+               	shrq	$0x3d, %rcx
+               	addq	%rax, %rcx
+               	sarq	$0x3, %rcx
+               	movzbq	0xb0(%rsp,%rcx), %rcx
                	movl	$0x1, %edx
                	andq	$0x7, %rax
                	shlxq	%rax, %rdx, %rax
-               	andq	%rcx, %rax
-               	testl	%eax, %eax
+               	andq	%rax, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x3, %eax
                	addq	$0x1c8, %rsp            # imm = 0x1C8

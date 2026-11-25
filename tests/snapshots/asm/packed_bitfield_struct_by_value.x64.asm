@@ -68,27 +68,27 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	addq	$0x28, %rsp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$-0x100000, %rcx        # imm = 0xFFF00000
-               	orq	$0xfffff, %rcx          # imm = 0xFFFFF
-               	movl	%ecx, <rip> # <addr>
-               	movq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rcx # <addr>
+               	movl	<rip>, %eax # <addr>
+               	andq	$-0x100000, %rax        # imm = 0xFFF00000
+               	orq	$0xfffff, %rax          # imm = 0xFFFFF
+               	movl	%eax, <rip> # <addr>
+               	movq	<rip>, %rax # <addr>
                	movabsq	$-0xfffffffffff1, %r11  # imm = 0xFFFF00000000000F
-               	andq	%r11, %rcx
+               	andq	%r11, %rax
                	movabsq	$0x7ffffffffff0, %r11   # imm = 0x7FFFFFFFFFF0
-               	orq	%r11, %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$-0x100000, %rcx        # imm = 0xFFF00000
-               	orq	$0xabcde, %rcx          # imm = 0xABCDE
-               	movl	%ecx, <rip> # <addr>
+               	orq	%r11, %rax
+               	movq	%rax, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
+               	andq	$-0x100000, %rax        # imm = 0xFFF00000
+               	orq	$0xabcde, %rax          # imm = 0xABCDE
+               	movl	%eax, <rip> # <addr>
                	movb	$0x9, <rip> # <addr>
-               	leaq	0x10(%rsp), %rcx
-               	movq	(%rax), %r10
-               	movq	%r10, (%rcx)
-               	movl	0x8(%rax), %r10d
-               	movl	%r10d, 0x8(%rcx)
+               	leaq	0x10(%rsp), %rax
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
+               	movl	0x8(%rcx), %r10d
+               	movl	%r10d, 0x8(%rax)
                	movzbq	<rip>, %rax # <addr>
                	incq	%rax
                	movb	%al, 0x1b(%rsp)

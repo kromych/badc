@@ -80,17 +80,17 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%r11
                	retq
-               	movzbq	<rip>, %rcx # <addr>
                	movzbq	<rip>, %rax # <addr>
-               	subq	%rax, %rcx
-               	cmpl	$0xc, %ecx
+               	movzbq	<rip>, %rcx # <addr>
+               	subq	%rcx, %rax
+               	cmpl	$0xc, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%r11
                	retq
-               	movzbq	<rip>, %rcx # <addr>
-               	subq	%rax, %rcx
-               	cmpl	$0x4, %ecx
+               	movzbq	<rip>, %rax # <addr>
+               	subq	%rcx, %rax
+               	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%r11

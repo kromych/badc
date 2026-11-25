@@ -26,8 +26,8 @@ Disassembly of section .text:
                	int3
 
 <doer>:
+               	imulq	%rsi, %rdi
                	movq	%rdi, %rax
-               	imulq	%rsi, %rax
                	retq
 
 <main>:

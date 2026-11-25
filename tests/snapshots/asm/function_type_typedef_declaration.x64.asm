@@ -26,8 +26,8 @@ Disassembly of section .text:
                	int3
 
 <sub>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
                	retq
 
 <main>:

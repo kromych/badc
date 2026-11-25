@@ -93,34 +93,34 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	negq	%rsi
                	negq	%rdx
-               	movq	%rdx, %rdi
-               	sarq	$0x4, %rdi
+               	movq	%rdx, %r8
+               	sarq	$0x4, %r8
                	movq	%rsi, %rax
                	shrq	$0x4, %rax
-               	movq	%rdx, %r8
-               	shlq	$0x3c, %r8
-               	orq	%rax, %r8
-               	movq	$-0x1, %rax
-               	cmpq	%rax, %r8
+               	movq	%rdx, %rdi
+               	shlq	$0x3c, %rdi
+               	orq	%rdi, %rax
+               	movq	$-0x1, %rdi
+               	cmpq	%rdi, %rax
                	jne	<addr>
-               	cmpl	%eax, %edi
+               	cmpl	%edi, %r8d
                	je	<addr>
                	movl	$0x9, %eax
                	testq	%rax, %rax
                	je	<addr>
                	retq
                	cmpq	%rdx, %rcx
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%dil
+               	movzbq	%dil, %rdi
                	cmpq	%rdx, %rcx
-               	sete	%cl
-               	movzbq	%cl, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
                	testq	%rsi, %rsi
-               	seta	%dl
-               	movzbq	%dl, %rdx
-               	andq	%rdx, %rcx
-               	orq	%rcx, %rax
-               	testl	%eax, %eax
+               	seta	%cl
+               	movzbq	%cl, %rcx
+               	andq	%rcx, %rax
+               	orq	%rax, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	movl	$0xa, %eax
                	retq

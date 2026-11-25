@@ -30,7 +30,8 @@ Disassembly of section .text:
                	movl	$0x9abc, %edx           # imm = 0x9ABC
                	shlq	$0x20, %rdx
                	movl	%eax, %eax
-               	orq	%rdx, %rax
+               	orq	%rax, %rdx
+               	movq	%rdx, %rax
                	retq
 
 <four>:

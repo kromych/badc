@@ -90,12 +90,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x10(%rax), %rcx
-               	subq	%rax, %rcx
-               	movq	%rcx, %rax
-               	sarq	$0x3f, %rax
-               	shrq	$0x3e, %rax
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x10(%rcx), %rax
+               	subq	%rcx, %rax
+               	movq	%rax, %rcx
+               	sarq	$0x3f, %rcx
+               	shrq	$0x3e, %rcx
                	addq	%rcx, %rax
                	sarq	$0x2, %rax
                	cmpq	$0x4, %rax

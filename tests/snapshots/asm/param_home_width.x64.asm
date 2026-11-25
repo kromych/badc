@@ -37,8 +37,8 @@ Disassembly of section .text:
                	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
+               	andq	$0xff, %rdi
                	movq	%rdi, %rax
-               	andq	$0xff, %rax
                	retq
 
 <step_u16>:
@@ -53,8 +53,8 @@ Disassembly of section .text:
                	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
+               	andq	$0xffff, %rdi           # imm = 0xFFFF
                	movq	%rdi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
                	retq
 
 <step_u32>:
@@ -130,8 +130,8 @@ Disassembly of section .text:
                	nopl	(%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
+               	andq	$0xff, %rdi
                	movq	%rdi, %rax
-               	andq	$0xff, %rax
                	retq
 
 <toggle>:

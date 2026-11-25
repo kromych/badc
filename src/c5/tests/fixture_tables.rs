@@ -85,6 +85,7 @@
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("frame_without_pointer_borrows.c", 0),
+    ("frame_slots_without_a_red_zone.c", 0),
     ("hfa_argument_ahead_of_narrow_stack_arguments.c", 0),
     ("byte_reversal_by_shifts.c", 0),
     ("fp_sign_bit_operations.c", 0),
@@ -1669,6 +1670,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("c99_comparison_macros_raise_no_invalid.c", 0),
     ("cpuid_h_reads_the_processor.c", 0),
     ("frame_without_pointer_borrows.c", 0),
+    ("frame_slots_without_a_red_zone.c", 0),
     ("hfa_argument_ahead_of_narrow_stack_arguments.c", 0),
     ("byte_reversal_by_shifts.c", 0),
     ("fp_sign_bit_operations.c", 0),
@@ -2942,6 +2944,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("frame_without_pointer_borrows.c", 0),
+    ("frame_slots_without_a_red_zone.c", 0),
     ("hfa_argument_ahead_of_narrow_stack_arguments.c", 0),
     ("byte_reversal_by_shifts.c", 0),
     ("fp_sign_bit_operations.c", 0),
@@ -4158,6 +4161,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("crt_initializer_tables_run.c", 0),
     ("frame_without_pointer_borrows.c", 0),
+    ("frame_slots_without_a_red_zone.c", 0),
     ("hfa_argument_ahead_of_narrow_stack_arguments.c", 0),
     ("byte_reversal_by_shifts.c", 0),
     ("fp_sign_bit_operations.c", 0),
@@ -5139,6 +5143,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("crt_initializer_tables_run.c", 0),
     ("frame_without_pointer_borrows.c", 0),
+    ("frame_slots_without_a_red_zone.c", 0),
     ("hfa_argument_ahead_of_narrow_stack_arguments.c", 0),
     ("byte_reversal_by_shifts.c", 0),
     ("fp_sign_bit_operations.c", 0),
@@ -6082,6 +6087,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("frame_without_pointer_borrows.c", 0),
+    ("frame_slots_without_a_red_zone.c", 0),
     ("hfa_argument_ahead_of_narrow_stack_arguments.c", 0),
     ("byte_reversal_by_shifts.c", 0),
     ("fp_sign_bit_operations.c", 0),

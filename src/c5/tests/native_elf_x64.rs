@@ -712,6 +712,41 @@ fn fixture_parity_native_optimized() {
     );
 }
 
+/// Under -mno-red-zone, a frame with no pointer keeps the registers its
+/// lowerings borrow in slots of its own: the fixtures whose -O code keeps
+/// one in the red zone, which their committed snapshot shows as an access
+/// below rsp, and the one written for the option run at -O with it.
+#[test]
+fn fixtures_that_borrow_below_rsp_run_without_a_red_zone() {
+    let snapshots = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/asm");
+    let borrows = |name: &&(&str, i32)| {
+        let asm = snapshots.join(format!("{}.x64.asm", name.0.trim_end_matches(".c")));
+        let below = |t: &str| t.starts_with("-0x") && t.ends_with("(%rsp)");
+        std::fs::read_to_string(asm).is_ok_and(|a| a.split([' ', '\t', ',']).any(below))
+    };
+    let picked: Vec<(&str, i32)> = NATIVE_ELF_X64_FIXTURES
+        .iter()
+        .filter(|f| borrows(f) || f.0 == "frame_slots_without_a_red_zone.c")
+        .copied()
+        .collect();
+    assert!(
+        picked.len() >= 20,
+        "{} fixtures borrow below rsp",
+        picked.len()
+    );
+    let opts = NativeOptions {
+        red_zone: false,
+        ..NativeOptions::new().with_optimize()
+    };
+    let failures = super::parity_failures(&picked, |name, expected| {
+        let outcome = build_and_run_fixture_with_options(name, opts.clone(), "-O-no-red-zone");
+        (!outcome.matches(*expected)).then(|| {
+            format!("{name} (-O -mno-red-zone): expected exit {expected}, got {outcome:?}")
+        })
+    });
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
 /// [`BADC_FIXTURES`], at -O0 and -O.
 #[test]
 fn badc_fixtures() {

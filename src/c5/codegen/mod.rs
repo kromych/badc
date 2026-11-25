@@ -4848,7 +4848,8 @@ pub struct NativeOptions {
     /// `-mno-red-zone` (false): x86-64 code stores nothing below rsp, as
     /// code that runs where an interrupt or exception pushes onto the
     /// current stack must (System V AMD64 3.2.2 grants the 128 bytes below
-    /// rsp to the function). Every System V frame then keeps its pointer.
+    /// rsp to the function). A frame with no pointer then keeps what its
+    /// lowerings borrow in slots of its own.
     pub red_zone: bool,
     /// `-fno-plt`: a call to a function the link resolves loads the
     /// callee's address from its GOT entry and calls through it, with no

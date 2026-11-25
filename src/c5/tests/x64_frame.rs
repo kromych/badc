@@ -501,49 +501,47 @@ fn win64_keeps_borrowed_registers_inside_the_frame() {
     );
 }
 
-/// `-mno-red-zone` keeps every frame's pointer, a frame with none keeping
-/// borrowed registers below rsp, and nothing is stored below rsp: the x87
-/// conversion reserves its eight bytes with `lea`, inside a frame whose
-/// call-frame rule does not follow rsp.
+/// `-mno-red-zone` stores nothing below rsp. A frame with no pointer keeps
+/// a register its lowering borrows, and the x87 conversion its eight bytes,
+/// in a keep slot inside the frame, as with the red zone the functions keep
+/// no frame pointer; a framed one reserves the conversion's bytes with
+/// `lea`, inside a frame whose call-frame rule does not follow rsp.
 #[test]
-fn no_red_zone_keeps_the_frame_pointer_and_stores_nothing_below_rsp() {
+fn no_red_zone_keeps_borrowed_registers_inside_the_frame() {
     const SRC: &str = "long h(long);\n\
         long one(long a, long b) { long t = h(a); return t / b + t % (a | 1) + (a << (b & 7)); }\n\
         double ld(long double *p) { return (double)*p; }\n\
         void st(long double *p, double d) { *p = d; }\n";
     let target = Target::LinuxX64;
-    let opts = NativeOptions {
+    let below = |i: &X64Insn| i.mem_base() == Some(4) && i.disp < 0;
+    let moves_rsp = |i: &X64Insn| i.op == 0x8D && i.regs().0 == 4;
+    let opts = |form| NativeOptions {
         red_zone: false,
-        ..NativeOptions::new()
+        ..with_form(form)
     };
-    let obj = object(SRC, target, true, FULL, opts);
+    let obj = object(SRC, target, true, FULL, opts(None));
     for name in ["one", "ld", "st"] {
         let insns = insns_of(&obj, name);
         let frame = frame_of(&insns, target).expect("a frame");
-        assert!(!frame.pointerless, "{name}: {insns:x?}");
-        let below = |i: &X64Insn| i.mem_base() == Some(4) && i.disp < 0 && i.op != 0x8D;
-        assert!(!insns.iter().any(below), "{name}: {insns:x?}");
+        assert!(frame.pointerless, "{name}: {insns:x?}");
+        let off = |i: &X64Insn| below(i) || moves_rsp(i);
+        assert!(!insns.iter().any(off), "{name}: {insns:x?}");
     }
+    let obj = object(SRC, target, true, FULL, opts(Some(false)));
     for name in ["ld", "st"] {
         let insns = insns_of(&obj, name);
+        assert!(
+            !insns.iter().any(|i| below(i) && i.op != 0x8D),
+            "{name}: {insns:x?}"
+        );
         // `lea rsp, [rsp - 8]` ... `lea rsp, [rsp + 8]`.
-        let lea = |d: i64| {
-            move |i: &X64Insn| {
-                i.op == 0x8D && i.regs().0 == 4 && i.mem_base() == Some(4) && i.disp == d
-            }
-        };
+        let lea =
+            |d: i64| move |i: &X64Insn| moves_rsp(i) && i.mem_base() == Some(4) && i.disp == d;
         assert!(
             insns.iter().any(lea(-8)) && insns.iter().any(lea(8)),
             "{name}: {insns:x?}"
         );
     }
-    // With the red zone, the same functions keep none.
-    let obj = object(SRC, target, true, FULL, NativeOptions::new());
-    let insns = insns_of(&obj, "one");
-    assert!(
-        frame_of(&insns, target).is_some_and(|f| f.pointerless),
-        "{insns:x?}"
-    );
 }
 
 /// A call that passes arguments in memory -- past the six integer

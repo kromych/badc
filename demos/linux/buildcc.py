@@ -201,8 +201,8 @@ FORWARD_EXACT = {
     "-Wno-frame-larger-than",
     # The frame pointer, and code that runs where an interrupt or exception
     # pushes onto the current stack: under -mno-red-zone badc stores nothing
-    # below rsp and keeps the frame pointer, which a frame with none needs
-    # the red zone without.
+    # below rsp, and a frame with no pointer keeps what its lowerings borrow
+    # in slots of its own.
     "-fomit-frame-pointer", "-fno-omit-frame-pointer", "-mno-red-zone", "-mred-zone",
 }
 

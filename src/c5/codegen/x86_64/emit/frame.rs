@@ -106,7 +106,7 @@ pub(crate) struct Frame {
     pub out: u32,
     /// The keep slots ([`super::keep`]) a frame with no pointer and no red
     /// zone reserves, slot `k` at bit `k`: the ones its lowerings take,
-    /// packed in slot order directly above the outgoing area.
+    /// packed in slot order above the outgoing area and the System V saves.
     pub keep: u32,
     /// The callee-saved pushes come first and one allocation below them,
     /// then the xmm saves into it, so that each exit is `add rsp`, the pops
@@ -165,8 +165,12 @@ impl Frame {
 
     /// rsp displacement of keep slot `k` in the keep area.
     pub(crate) fn keep_disp(&self, k: i32) -> i32 {
+        let saves = match self.saves_first {
+            true => 0,
+            false => self.parts.saved_regs,
+        };
         let below = self.keep & ((1u32 << k) - 1);
-        (self.out + 8 * below.count_ones()) as i32
+        (self.out + saves + 8 * below.count_ones()) as i32
     }
 }
 
@@ -176,9 +180,9 @@ impl Frame {
 /// rsp where its prologue left it, so every frame region is addressed from
 /// rsp and the call-frame information and the unwind codes follow rsp
 /// through the prologue and the epilogues alone; a lowering keeps what it
-/// borrows in keep slots ([`super::keep`]), in the red zone on System V,
-/// which `-mno-red-zone` withdraws, and a call places its stack arguments
-/// in the frame's outgoing area ([`Frame::out`]). Left with one: an rsp the
+/// borrows in keep slots ([`super::keep`]), in the red zone where there is
+/// one and else in the frame, and a call places its stack arguments in the
+/// frame's outgoing area ([`Frame::out`]). Left with one: an rsp the
 /// body moves (`alloca`, a realigned region, the `va_arg` and `va_copy`
 /// lowerings), a frame read as such (the frame-address intrinsics, a
 /// variadic callee's save areas, `-pg`), any asm statement, which may name
@@ -196,8 +200,7 @@ pub(crate) fn frame_pointer_free(
         a.mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
         a
     };
-    let keeps_in_red_zone = target == Target::LinuxX64 && native.red_zone;
-    if !(keeps_in_red_zone || target == Target::WindowsX64)
+    if !matches!(target, Target::LinuxX64 | Target::WindowsX64)
         || !native.omits_frame_pointer()
         || target.abi_row(func.conv) != target
         || abi.mcount_frame
@@ -1164,8 +1167,9 @@ pub(super) fn is_full_leaf(
     if !alloc.fp_used.is_empty() {
         return false;
     }
-    // With no red zone an x87 conversion moves rsp, which only a frame
-    // pointer's call-frame rule survives.
+    // With no red zone an x87 conversion takes a slot in the frame
+    // ([`super::keep`]), or moves rsp, which only a frame pointer's
+    // call-frame rule survives.
     if !abi.red_zone && converts_through_x87(func) {
         return false;
     }

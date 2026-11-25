@@ -1851,6 +1851,17 @@ def self_test() -> int:
         if got != want:
             failures.append(f"{name}: got {got!r}, want {want!r}")
 
+    with tempfile.TemporaryDirectory() as scratch:
+        report = Path(scratch) / "runs" / "today" / "report.json"
+        check("an output directory is made", output_problem([str(report), None]), None)
+        check("before the run", report.parent.is_dir(), True)
+        blocker = Path(scratch) / "file"
+        blocker.write_text("", encoding="utf-8")
+        check(
+            "an output under a file is refused",
+            output_problem([str(blocker / "report.json")]) is not None,
+            True,
+        )
     check(
         "weekly title mid-week",
         weekly_title(dt.date(2026, 9, 17)),
@@ -2424,6 +2435,18 @@ def generator_lacks(csmith: Csmith, flags: tuple[str, ...]) -> list[str]:
     return [f for f in flags if f not in text]
 
 
+def output_problem(paths: list[str | None]) -> str | None:
+    """Create the directories of the files a run writes when it ends, so
+    that a run cannot spend its budget and then fail to record it; why one
+    cannot be created, or None."""
+    for path in filter(None, paths):
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            return f"cannot create the directory of {path}: {error}"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     global LEG, KEEP
     args = parse_args(argv)
@@ -2431,6 +2454,10 @@ def main(argv: list[str] | None = None) -> int:
         return self_test()
     LEG = LEGS[args.leg]
     KEEP = args.keep
+    problem = output_problem([args.report, args.summary])
+    if problem:
+        print(f"error: {problem}", file=sys.stderr)
+        return 2
 
     csmith = find_csmith(args.csmith, args.csmith_include)
     if csmith is None:

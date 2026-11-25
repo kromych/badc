@@ -96,6 +96,7 @@ pub(super) fn emit_inst(
             };
             load_imm64(code, rd, *value as u64);
             store_spilled_int(code, frame, dst, rd);
+            super::mem::store_spilled_int_rest(code, frame, alloc.width(v), dst, rd);
             Ok(())
         }
         // The language handler leaves the code in x0.

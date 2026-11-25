@@ -1093,6 +1093,25 @@ pub(super) fn store_spilled_int(code: &mut CodeBuf, frame: Frame, dst: Place, sr
     }
 }
 
+/// The cells past the first of the spill slot of an integer value as wide
+/// as `w`, written from `src`: a zero read as a vector keeps all of them
+/// (`reg_alloc::widen_vector_zeros`). Nothing for a scalar or a register.
+pub(super) fn store_spilled_int_rest(
+    code: &mut CodeBuf,
+    frame: Frame,
+    w: super::ssa::reg_alloc::VecWidth,
+    dst: Place,
+    src: Reg,
+) {
+    if let Place::Spill(slot) = dst {
+        for k in 1..w.units() {
+            let (start, off) = (code.len(), spill_off(frame, slot + k));
+            emit_spill_str_x_auto(code, frame, src, off);
+            note_spill_store(code, start, frame, off, src.0, SpillWidth::Int);
+        }
+    }
+}
+
 /// Record the spill store the bytes from `start` hold. A word of the
 /// branch, exception and system class (bits 28:26 = 101) earlier in the
 /// instruction may be a branch landing after it.

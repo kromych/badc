@@ -1883,9 +1883,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let crossings = call_crossings(func, &liveness, target);
     let ret_part_forbid = ret_part_crossing_forbid(func, target, &crossings, &node_of);
     let mut wide = wide_values(func);
-    if target.is_x86_64() {
-        widen_vector_zeros(func, &mut wide);
-    }
+    widen_vector_zeros(func, &mut wide);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) || produces_pred_result(inst) {
@@ -4705,12 +4703,11 @@ impl VecWidth {
 }
 
 /// `Inst::Imm(0)` stands for the zero of every width, a vector's included.
-/// On x86-64 a zero read as a vector operand -- a SIMD row's, a vector
-/// operation's, a vector store's or phi's -- takes the widest such width,
-/// so a spill keeps the whole vector: its slot is that wide, and the
-/// lowering zeroes every cell of it. Readers of the scalar find zero in the
-/// slot's first cell as before; in a register the vector forms extend it
-/// with `vmovq`.
+/// A zero read as a vector operand -- a SIMD row's, a vector operation's, a
+/// vector store's or phi's -- takes the widest such width, so a spill keeps
+/// the whole vector: its slot is that wide, and the lowering zeroes every
+/// cell of it. Readers of the scalar find zero in the slot's first cell as
+/// before; in a register the vector forms extend it (`vmovq`, `fmov`).
 fn widen_vector_zeros(func: &FunctionSsa, wide: &mut [VecWidth]) {
     let zero = |v: ValueId| matches!(func.insts.get(v as usize), Some(Inst::Imm(0)));
     let demand = |v: ValueId, w: VecWidth, wide: &mut [VecWidth]| {

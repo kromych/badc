@@ -80,6 +80,7 @@ pub(super) fn emit_copy(
         }
         (Place::IntReg(r), Place::Spill(_)) if !is_fp => {
             store_spilled_int(code, frame, dst, Reg(r));
+            super::mem::store_spilled_int_rest(code, frame, alloc.width(value), dst, Reg(r));
             return Ok(());
         }
         _ => {}
@@ -134,6 +135,7 @@ pub(super) fn emit_copy(
         emit(code, super::encode::enc_mov_reg(rd, rn));
     }
     store_spilled_int(code, frame, dst, rd);
+    super::mem::store_spilled_int_rest(code, frame, alloc.width(value), dst, rd);
     Ok(())
 }
 

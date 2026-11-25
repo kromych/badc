@@ -2918,3 +2918,52 @@ fn an_overloaded_sve_intrinsic_names_each_operand_once() {
         "{err}"
     );
 }
+
+/// `Imm(0)` stands for a zero vector too. One read as a 128-bit NEON
+/// operand, spilled when the banks are cut to one register each, keeps its
+/// whole width in its slot: interleaving bytes with it by `zip1` / `zip2`
+/// sums the bytes natively at -O as at the full register file.
+#[cfg(all(
+    target_arch = "aarch64",
+    any(target_os = "linux", target_os = "macos", target_os = "windows")
+))]
+#[test]
+fn a_spilled_zero_vector_keeps_its_width() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target, jit_run_with_options};
+    let src = "#include <arm_neon.h>\n\
+        static unsigned char buf[640];\n\
+        static unsigned long sum(const unsigned char *p, const unsigned char *q, int n, int step, int a, int b) {\n\
+            uint8x16_t zero = {0};\n\
+            uint64x2_t acc = {0}, acc2 = {0};\n\
+            for (int i = 0, j = 0, k = n; i < n; i += step, j += a, k -= b) {\n\
+                uint8x16_t x = vld1q_u8(p + i), y = vld1q_u8(q + (k & 0x1f0));\n\
+                acc = vpadalq_u32(acc, vpaddlq_u16(vpaddlq_u8(vzip1q_u8(x, zero))));\n\
+                acc2 = vaddq_u64(acc2, vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(vzip2q_u8(y, zero)))));\n\
+                acc2 = vaddq_u64(acc2, vdupq_n_u64((unsigned long)j));\n\
+            }\n\
+            return vgetq_lane_u64(acc, 0) + vgetq_lane_u64(acc, 1) + (vgetq_lane_u64(acc2, 0) > 0 ? 0 : 1);\n\
+        }\n\
+        int main(void) {\n\
+            for (int i = 0; i < 640; i++) buf[i] = (unsigned char)(i * 131 + (i >> 3));\n\
+            unsigned long want = 0;\n\
+            for (int i = 0; i < 640; i += 16) for (int t = 0; t < 8; t++) want += buf[i + t];\n\
+            return sum(buf, buf + 128, 640, 16, 3, 5) == want ? 0 : 1;\n\
+        }\n";
+    let host = if cfg!(target_os = "macos") {
+        Target::MacOSAarch64
+    } else if cfg!(windows) {
+        Target::WindowsAarch64
+    } else {
+        Target::LinuxAarch64
+    };
+    for (gpr, fpr) in [(1, 1), (1, 2), (usize::MAX, usize::MAX)] {
+        let code = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(gpr, fpr, || {
+            let program = Compiler::with_options(src.into(), host, CompileOptions::default())
+                .compile()
+                .expect("compile");
+            let opts = NativeOptions::new().with_optimize();
+            jit_run_with_options(&program, &[String::from("p")], opts, &mut |_| {}).expect("run")
+        });
+        assert_eq!(code, 0, "registers per bank: {gpr} general, {fpr} vector");
+    }
+}

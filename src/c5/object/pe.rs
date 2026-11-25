@@ -13,6 +13,7 @@ use super::aarch64;
 use super::elf_reloc_types::AbsCheck;
 use super::x86_64;
 use super::{AddrPart, Build, DataRegion, Machine, data_region_addr, image, nt_crt};
+use crate::c5::codegen::{GuardSlot, GuardTableSymbol};
 use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
@@ -55,6 +56,11 @@ const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY: u16 = 0x0080;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
 const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
+const IMAGE_DLLCHARACTERISTICS_GUARD_CF: u16 = 0x4000;
+/// `GuardFlags`: the image's indirect calls are checked, and it lists its
+/// valid call targets.
+const IMAGE_GUARD_CF_INSTRUMENTED: u64 = 0x100;
+const IMAGE_GUARD_CF_FUNCTION_TABLE_PRESENT: u64 = 0x400;
 
 const IMAGE_SYM_CLASS_EXTERNAL: u8 = 2;
 const IMAGE_SYM_TYPE_FUNCTION: u16 = 0x20;
@@ -251,6 +257,9 @@ struct PeLayout<'a> {
     /// the build names a PDB; filled once the PDB is written.
     debug_dir: Vec<u8>,
     debug_dir_base_in_rdata: u32,
+    /// Control Flow Guard's function table, sorted RVAs, under `--guard-cf`.
+    guard_table: Vec<u8>,
+    guard_base_in_rdata: u32,
     rdata_size: u32,
     rdata_present: bool,
     data_present: bool,
@@ -541,6 +550,69 @@ impl<'a> PeWriter<'a> {
     }
 
     /// RVA of the code body, past the entry stub.
+    /// Control Flow Guard's function table (PE/COFF specification 6.11):
+    /// the sorted RVAs of every function an indirect call may enter -- what
+    /// the link collected, the entry point, the exported functions, and the
+    /// stubs of the imports whose address the image takes.
+    fn guard_table(&self) -> Result<Vec<u8>, C5Error> {
+        let build = self.build;
+        let Some(link) = &build.guard_cf else {
+            return Err(C5Error::hard(
+                Code::UNSUPPORTED,
+                "`--guard-cf` takes the call targets a link collects: compile with -c and \
+                 link the objects",
+            ));
+        };
+        for symbol in [
+            GuardTableSymbol::FidsTable,
+            GuardTableSymbol::FidsCount,
+            GuardTableSymbol::Flags,
+        ] {
+            if self.guard_slots(symbol).next().is_none() {
+                let name = match symbol {
+                    GuardTableSymbol::FidsTable => "__guard_fids_table",
+                    GuardTableSymbol::FidsCount => "__guard_fids_count",
+                    GuardTableSymbol::Flags => "__guard_flags",
+                };
+                return Err(C5Error::hard(
+                    Code::LINK,
+                    format!(
+                        "`--guard-cf`: no load-config directory of the image names `{name}`, \
+                         so the loader would not find the guard table"
+                    ),
+                ));
+            }
+        }
+        let body = self.layout.text_rva + self.text_prologue_len;
+        let mut rvas: alloc::collections::BTreeSet<u32> =
+            link.targets.iter().map(|&off| body + off as u32).collect();
+        rvas.insert(self.entry_rva()?);
+        let exported = (build.exports.iter())
+            .filter_map(|e| build.pc_to_native.get(e.ent_pc).copied())
+            .filter(|&off| off != usize::MAX);
+        rvas.extend(exported.map(|off| body + off as u32));
+        let dynamic = (build.dynamic_exports.iter())
+            .filter(|d| d.section == super::DynamicExportSection::Text);
+        rvas.extend(dynamic.map(|d| body + d.offset as u32));
+        let stubs = (build.imports.imports.iter()).zip(&build.plt_trampoline_offsets);
+        for (import, stub) in stubs {
+            if let Some(stub) = stub
+                && link.imports.contains(&import.local_name)
+            {
+                rvas.insert(body + *stub as u32);
+            }
+        }
+        Ok(rvas.into_iter().flat_map(u32::to_le_bytes).collect())
+    }
+
+    /// The data slots naming `symbol` under `--guard-cf`.
+    fn guard_slots(&self, symbol: GuardTableSymbol) -> impl Iterator<Item = &GuardSlot> {
+        (self.build.guard_cf.iter())
+            .filter(|_| self.build.pe.guard_cf)
+            .flat_map(|g| &g.slots)
+            .filter(move |s| s.symbol == symbol)
+    }
+
     fn text_body_rva(&self) -> u32 {
         self.layout.text_rva + self.text_prologue_len
     }
@@ -749,6 +821,14 @@ impl<'a> PeWriter<'a> {
                 vec![0; IMAGE_DEBUG_DIRECTORY_SIZE + CV_RSDS_HEADER_SIZE + path.len() + 1];
             l.rdata_size = l.debug_dir_base_in_rdata + l.debug_dir.len() as u32;
         }
+        if build.pe.guard_cf {
+            let table = self.guard_table()?;
+            let l = &mut self.layout;
+            l.guard_base_in_rdata = round_up(l.rdata_size, 4);
+            l.rdata_size = l.guard_base_in_rdata + table.len() as u32;
+            l.guard_table = table;
+        }
+        let l = &mut self.layout;
         l.rdata_present = l.rdata_size > 0;
         l.data_present = data_head_len + data_tail.len + bss_head + bss_tail.len > 0
             || tls_directory_present(build);
@@ -757,7 +837,8 @@ impl<'a> PeWriter<'a> {
             || !build.code_relocs.is_empty()
             || !build.label_relocs.is_empty()
             || !build.text_abs_relocs.is_empty()
-            || !build.image_base_slots.is_empty();
+            || !build.image_base_slots.is_empty()
+            || build.pe.guard_cf;
         l.edata_present = !build.exports.is_empty()
             || !build.dynamic_exports.is_empty()
             || !build.forwarded_exports.is_empty();
@@ -1029,6 +1110,14 @@ impl<'a> PeWriter<'a> {
         } else {
             (0, 0)
         };
+        let image_addr_slots: Vec<_> = (build.image_base_slots.iter().copied())
+            .chain(self.guard_slots(GuardTableSymbol::FidsTable).map(|s| {
+                crate::c5::codegen::ImageBaseSlot {
+                    data_offset: s.data_offset,
+                    addend: s.addend,
+                }
+            }))
+            .collect();
         let reloc_bytes: Vec<u8> = if reloc_present {
             build_reloc_section(
                 l.data_rva,
@@ -1039,7 +1128,7 @@ impl<'a> PeWriter<'a> {
                 &build.data_relocs,
                 &build.code_relocs,
                 &build.label_relocs,
-                &build.image_base_slots,
+                &image_addr_slots,
                 &text_abs_fields,
                 &tls_sites,
             )
@@ -1685,6 +1774,7 @@ impl<'a> PeWriter<'a> {
                 resource_table_size: l.rsrc_bytes.len() as u32,
                 stack: build.pe.stack.unwrap_or(DEFAULT_STACK),
                 force_integrity: build.pe.force_integrity,
+                guard_cf: build.pe.guard_cf,
                 debug_rva: debug_dir.0,
                 debug_size: debug_dir.1,
                 subsystem: self.subsystem,
@@ -1877,6 +1967,25 @@ impl<'a> PeWriter<'a> {
             data[at..at + IMAGE_TLS_DIRECTORY64_SIZE as usize]
                 .copy_from_slice(&self.tls_directory());
         }
+        for s in (build.guard_cf.iter()).flat_map(|g| &g.slots) {
+            let value = match s.symbol {
+                GuardTableSymbol::FidsTable => {
+                    IMAGE_BASE + (l.rdata_rva + l.guard_base_in_rdata) as u64
+                }
+                GuardTableSymbol::FidsCount => l.guard_table.len() as u64 / 4,
+                GuardTableSymbol::Flags => {
+                    IMAGE_GUARD_CF_INSTRUMENTED | IMAGE_GUARD_CF_FUNCTION_TABLE_PRESENT
+                }
+            };
+            let at = (s.data_offset as usize).checked_sub(ro_len as usize);
+            let Some(field) = at.and_then(|at| data.get_mut(at..at + 8)) else {
+                return Err(Self::internal(format!(
+                    "PE: guard slot at data offset {:#x} is outside the relocated data",
+                    s.data_offset
+                )));
+            };
+            field.copy_from_slice(&value.wrapping_add(s.addend as u64).to_le_bytes());
+        }
         let mut out = core::mem::take(&mut self.out);
         pad_to(&mut out, l.text_file_off as usize)?;
         out.extend_from_slice(&self.text_bytes);
@@ -1928,6 +2037,11 @@ impl<'a> PeWriter<'a> {
                 let at = l.rdata_file_off + l.debug_dir_base_in_rdata;
                 pad_to(&mut out, at as usize)?;
                 out.extend_from_slice(&l.debug_dir);
+            }
+            if !l.guard_table.is_empty() {
+                let at = l.rdata_file_off + l.guard_base_in_rdata;
+                pad_to(&mut out, at as usize)?;
+                out.extend_from_slice(&l.guard_table);
             }
             pad_to(&mut out, (l.rdata_file_off + l.rdata_raw_size) as usize)?;
         }
@@ -2502,6 +2616,7 @@ struct OptionalHeaderInputs {
     /// `SizeOfStackReserve` and `SizeOfStackCommit`.
     stack: (u64, u64),
     force_integrity: bool,
+    guard_cf: bool,
     debug_rva: u32,
     debug_size: u32,
     subsystem: u16,
@@ -2517,11 +2632,17 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     } else {
         0
     };
+    let guard = if inp.guard_cf {
+        IMAGE_DLLCHARACTERISTICS_GUARD_CF
+    } else {
+        0
+    };
     let dll_chars = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
         | IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA
         | IMAGE_DLLCHARACTERISTICS_NX_COMPAT
         | IMAGE_DLLCHARACTERISTICS_NO_SEH
-        | integrity;
+        | integrity
+        | guard;
 
     let mut data_directory = [DataDirectoryEntry { rva: 0, size: 0 }; NUM_DATA_DIRS as usize];
     data_directory[DATA_DIRECTORY_IMPORT] = DataDirectoryEntry {

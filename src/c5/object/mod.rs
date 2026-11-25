@@ -998,6 +998,7 @@ pub(crate) mod test_support {
             tls_index_slot: None,
             delay_import_table: None,
             pe_unwind: Vec::new(),
+            guard_cf: None,
             tls_got: Vec::new(),
             tls_got_fields: Vec::new(),
             static_tls: false,

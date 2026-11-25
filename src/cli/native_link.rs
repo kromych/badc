@@ -1182,8 +1182,10 @@ fn select_archive_members(
         sel.pull(&mut slots, &span);
         pull_default_libraries(embedded.cli, &mut sel, &mut slots, shared_libs);
     }
-    // An image no library gives one goes without it.
-    if sel.undefined.get(LOAD_CONFIG) == Some(&image_root) {
+    // An image no library gives one goes without it, unless it claims
+    // Control Flow Guard: the loader reads the guard table through it, and
+    // the runtime's is offered with the on-demand sources.
+    if sel.undefined.get(LOAD_CONFIG) == Some(&image_root) && !embedded.cli.link.pe.guard_cf {
         sel.undefined.remove(LOAD_CONFIG);
     }
     // The inputs stalled; offer the on-demand sources once, as the last
@@ -1555,6 +1557,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         export_data: cli.link.export_data || cli.exports_definitions(),
         format: cli.target.binary_format(),
         delay_load: cli.link.delay_load.clone(),
+        guard_cf: cli.link.pe.guard_cf,
     };
     let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,

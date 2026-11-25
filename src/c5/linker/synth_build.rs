@@ -396,6 +396,7 @@ fn synth_program_and_build(
         fn_unwind,
         a64_unwind,
         pe_unwind: merged.pe_unwind.clone(),
+        guard_cf: merged.guard_cf.clone(),
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
         user_extern_data_refs: Vec::new(),
@@ -2057,6 +2058,7 @@ mod tests {
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
             pe_unwind: Vec::new(),
+            guard_cf: None,
         }
     }
 

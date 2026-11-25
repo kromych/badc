@@ -582,6 +582,7 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         compact_unwind,
         eh_frame,
         pe_unwind: Vec::new(),
+        guard_fids: None,
     })
 }
 

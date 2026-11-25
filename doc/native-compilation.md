@@ -169,6 +169,18 @@ link.exe's `/STACK` (default 8 MiB reserved, one page committed), and sets
 `IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY` under `--force-integrity`,
 link.exe's `/INTEGRITYCHECK`, which a driver registering process, thread or
 object callbacks needs.
+Under `--guard-cf` (link.exe's `/guard:cf`, also `-mguard=cf-nochecks`), a PE
+image claims Control Flow Guard (`IMAGE_DLLCHARACTERISTICS_GUARD_CF`) and lists
+the functions an indirect call may enter: each one a reference other than a
+call names, or, from an object compiled with `/guard:cf`, its `.gfids$y` list;
+the constructor-table, TLS-callback and `__try` handler entries; the exported
+functions; the entry point; and the call stub of an import whose address the
+image takes. The loader reads the table through the load-config directory's
+guard fields, which `__guard_fids_table`, `__guard_fids_count` and
+`__guard_flags` fill; an image no library gives a directory takes the
+runtime's. Such an image loads in a process that requires the guard, as one
+created under strict Control Flow Guard does, and the system's checks of calls
+into it hold. Its own indirect calls are not checked.
 A PE DLL link writes the DLL's import library under `--out-implib=<file>`,
 as link.exe writes one beside a DLL: an archive of short import members, a
 data export's naming only its `__imp_` slot.

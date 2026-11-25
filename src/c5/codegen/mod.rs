@@ -2688,6 +2688,8 @@ pub(crate) struct Build {
     pub a64_unwind: Vec<A64Unwind>,
     /// Functions the inputs' own unwind tables describe.
     pub pe_unwind: Vec<PeUnwindRange>,
+    /// What a `--guard-cf` link collected for the image's guard table.
+    pub guard_cf: Option<GuardCfLink>,
     /// Inline-asm main-stream references to labels defined in the template's
     /// pushed sections. The relocatable ELF writer emits one PC-relative
     /// reloc per entry against the target section's symbol.
@@ -5283,6 +5285,53 @@ pub struct ElfImageOptions {
 pub struct PeImageOptions {
     pub stack: Option<(u64, u64)>,
     pub force_integrity: bool,
+    /// `--guard-cf`, link.exe's `/guard:cf`: the image lists its valid
+    /// indirect-call targets and claims `IMAGE_DLLCHARACTERISTICS_GUARD_CF`,
+    /// so a process that requires Control Flow Guard loads it.
+    pub guard_cf: bool,
+}
+
+/// Control Flow Guard's inputs from a PE link (`--guard-cf`): the merged
+/// text offsets of the functions an indirect call may enter, the imports
+/// whose address a reference other than a call takes, and the data slots
+/// naming the symbols through which the load-config directory reads the
+/// table. The image writer adds the entry point and fills the slots.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GuardCfLink {
+    pub targets: Vec<u64>,
+    pub imports: Vec<String>,
+    pub slots: Vec<GuardSlot>,
+}
+
+/// An 8-byte data slot holding `symbol + addend`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuardSlot {
+    pub data_offset: u64,
+    pub symbol: GuardTableSymbol,
+    pub addend: i64,
+}
+
+/// The names link.exe defines for a `/guard:cf` image's load-config
+/// directory (PE/COFF specification 6.11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardTableSymbol {
+    /// `__guard_fids_table`: the address of the sorted RVA table.
+    FidsTable,
+    /// `__guard_fids_count`: its entry count.
+    FidsCount,
+    /// `__guard_flags`: the `IMAGE_GUARD_*` flags.
+    Flags,
+}
+
+impl GuardTableSymbol {
+    pub fn named(name: &str) -> Option<GuardTableSymbol> {
+        match name {
+            "__guard_fids_table" => Some(GuardTableSymbol::FidsTable),
+            "__guard_fids_count" => Some(GuardTableSymbol::FidsCount),
+            "__guard_flags" => Some(GuardTableSymbol::Flags),
+            _ => None,
+        }
+    }
 }
 
 /// The image forms ld64 selects with `-bundle`, a Mach-O image that only

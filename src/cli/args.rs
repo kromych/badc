@@ -2466,6 +2466,14 @@ impl Parser {
             }
             // GNU ld's PE `--force-integrity`, link.exe's `/INTEGRITYCHECK`.
             "--force-integrity" => link.pe.force_integrity = true,
+            // lld's MinGW `--guard-cf`, link.exe's `/guard:cf`: the image lists
+            // its valid indirect-call targets for Control Flow Guard.
+            "--guard-cf" => link.pe.guard_cf = true,
+            "--no-guard-cf" => link.pe.guard_cf = false,
+            // clang's MinGW `-mguard=`: `cf-nochecks` writes the tables without
+            // checking the image's own indirect calls.
+            "-mguard=cf-nochecks" => link.pe.guard_cf = true,
+            "-mguard=none" => link.pe.guard_cf = false,
             // lld's MinGW `--delayload`, link.exe's `/DELAYLOAD`.
             "--delayload" | "-delayload" => link.delay_load.push(operand(
                 iter,

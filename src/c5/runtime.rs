@@ -58,6 +58,10 @@ pub(super) static EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[
         "interlocked.c",
         include_str!("../../libc/lib/interlocked.c"),
     ),
+    (
+        "load_config.c",
+        include_str!("../../libc/lib/load_config.c"),
+    ),
 ];
 
 /// C-library sources joined to the link the same way, for entry points a

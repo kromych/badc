@@ -1288,6 +1288,11 @@ pub struct NativeObject {
     pub eh_frame: Option<EhFrameInput>,
     /// A COFF object's `.pdata` entries, which replace the writer's.
     pub pe_unwind: Vec<PeUnwindEntry>,
+    /// A COFF object compiled for Control Flow Guard (`@feat.00` bit 11):
+    /// the symbols its `.gfids$y` sections list as the functions whose
+    /// address it takes, by index into [`Self::symbols`]. `None` for any
+    /// other object, whose references are read from its relocations.
+    pub guard_fids: Option<Vec<usize>>,
 }
 
 impl NativeObject {
@@ -1354,6 +1359,7 @@ impl NativeObject {
             compact_unwind: Vec::new(),
             eh_frame: None,
             pe_unwind: Vec::new(),
+            guard_fids: None,
         }
     }
 }
@@ -1622,6 +1628,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         compact_unwind: Vec::new(),
         eh_frame: None,
         pe_unwind: Vec::new(),
+        guard_fids: None,
     })
 }
 

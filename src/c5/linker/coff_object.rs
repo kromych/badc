@@ -560,6 +560,43 @@ fn read_resources(
     Ok(out)
 }
 
+/// `@feat.00` bit 11: the object was compiled for Control Flow Guard.
+const FEAT_GUARD_CF: u32 = 0x800;
+
+/// The sections in which a Control Flow Guard object lists its
+/// address-taken functions, address-taken imports, `longjmp` targets and
+/// exception continuations, for the linker's tables; none is image content.
+fn is_guard_metadata(name: &str) -> bool {
+    matches!(name, ".gfids$y" | ".giats$y" | ".gljmp$y" | ".gehcont$y")
+}
+
+/// The functions a Control Flow Guard object takes the address of: each
+/// `.gfids$y` entry is a symbol-table index. `None` for an object compiled
+/// without it, whose relocations say instead.
+fn read_guard_fids(
+    bytes: &[u8],
+    sects: &[Sect],
+    raw: &[Option<RawSym>],
+) -> Result<Option<Vec<usize>>, C5Error> {
+    let feat = (raw.iter().flatten())
+        .find(|r| r.name == "@feat.00" && r.section == IMAGE_SYM_ABSOLUTE)
+        .map_or(0, |r| r.value);
+    if feat & FEAT_GUARD_CF == 0 {
+        return Ok(None);
+    }
+    let mut out = Vec::new();
+    for s in sects.iter().filter(|s| s.name == ".gfids$y") {
+        for entry in s.content(bytes)?.as_chunks::<4>().0 {
+            let k = u32::from_le_bytes(*entry) as usize;
+            if raw.get(k).is_none_or(Option::is_none) {
+                return Err(bad(&format!("`.gfids$y` entry {k} names no symbol")));
+            }
+            out.push(k + 1);
+        }
+    }
+    Ok(Some(out))
+}
+
 fn is_tls(name: &str) -> bool {
     name == ".tls" || name.starts_with(".tls$")
 }
@@ -571,11 +608,13 @@ fn is_tls(name: &str) -> bool {
 /// any other initialized data, which its `MEM_*` flags place.
 fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
     let f = s.flags;
-    // `.pdata` is read by `read_unwind`, `.rsrc$*` by `read_resources`. GNU
-    // as gives `.drectve` data flags, not LNK_INFO.
+    // `.pdata` is read by `read_unwind`, `.gfids$y` by `read_guard_fids`,
+    // `.rsrc$*` by `read_resources`. GNU as gives `.drectve` data flags, not
+    // LNK_INFO.
     if f & (IMAGE_SCN_LNK_REMOVE | IMAGE_SCN_LNK_INFO | IMAGE_SCN_MEM_DISCARDABLE) != 0
         || s.name == ".drectve"
         || s.name.starts_with(".debug")
+        || is_guard_metadata(&s.name)
         || is_pdata(&s.name)
         || is_rsrc(&s.name)
     {
@@ -2033,6 +2072,7 @@ pub fn parse_native_coff(
     )?;
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
     let pe_unwind = read_unwind(bytes, h.machine, &sects, &raw)?;
+    let guard_fids = read_guard_fids(bytes, &sects, &raw)?;
     let resources = read_resources(bytes, h.machine, &sects, &raw)?;
     // A forced reference archive selection resolves, as `ld -u` does.
     symbols.extend(directives.include_symbols());
@@ -2102,6 +2142,7 @@ pub fn parse_native_coff(
         compact_unwind: Vec::new(),
         eh_frame: None,
         pe_unwind,
+        guard_fids,
     })
 }
 
@@ -3058,5 +3099,31 @@ mod tests {
             (o.symbols[1].name.as_str(), o.symbols[1].kind),
             ("f", STT_FUNC)
         );
+    }
+
+    /// A Control Flow Guard object (`@feat.00` bit 11) lists the functions
+    /// it takes the address of in `.gfids$y`, by symbol-table index, and no
+    /// guard section joins the image. Without the bit the object has no
+    /// list: its relocations say instead.
+    #[test]
+    fn a_guard_object_lists_its_address_taken_functions() {
+        let gfids = sec(".gfids$y", RDATA, &2u32.to_le_bytes());
+        let secs = [
+            sec(".text", TEXT, &[0xC3; 2]),
+            gfids,
+            sec(".gljmp$y", RDATA, &[]),
+        ];
+        for (feat, want) in [(FEAT_GUARD_CF, Some(alloc::vec![3])), (0, None)] {
+            let syms = [
+                sym("@feat.00", feat, -1, IMAGE_SYM_CLASS_STATIC),
+                sym("a", 0, 1, IMAGE_SYM_CLASS_EXTERNAL),
+                sym("b", 1, 1, IMAGE_SYM_CLASS_EXTERNAL),
+            ];
+            let o = parse(&secs, &syms).unwrap();
+            assert_eq!(o.guard_fids, want, "feat {feat:#x}");
+            assert_eq!(o.symbols[3].name, "b");
+            let dropped: Vec<_> = o.discarded.iter().map(|d| d.0.as_str()).collect();
+            assert_eq!(dropped, [".gfids$y", ".gljmp$y"]);
+        }
     }
 }

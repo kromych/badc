@@ -68,6 +68,10 @@ VS_DEFAULT_LIBS = ["kernel32", "user32", "gdi32", "winspool", "comdlg32", "advap
                    "shell32", "ole32", "oleaut32", "uuid", "odbc32", "odbccp32"]
 # The static VC runtime with the UCRT DLL, which a `/MT` build's cl objects name.
 VC_RUNTIME = ["libvcruntime", "libcmt", "ucrt"]
+# SI's release images link with `/GUARD:CF` (cmake/toolchain/msvc.cmake), so
+# the program loads where a process requires Control Flow Guard, as it does
+# once it restarts itself under strict CFG with its driver loaded.
+GUARD_LINK = ["--guard-cf"]
 # SI's functions with nothing to build here: the plugin SDK's headers
 # (`si_sdkbuild`) and the driver signing (`si_kphsign`).
 IGNORED_CALLS = {"si_sdkbuild", "si_kphsign"}
@@ -860,7 +864,7 @@ class Build:
                 o = self.obj(name, src, ".obj")
                 # SI's MSVC release flags, but /WX and /W3: a newer cl warns
                 # about more, and the warnings are SI's to settle.
-                cmd = [tools.cl, "/nologo", "/c", "/O2", "/MT", "/EHsc", "/std:c++latest",
+                cmd = [tools.cl, "/nologo", "/c", "/O2", "/MT", "/guard:cf", "/EHsc", "/std:c++latest",
                        "/permissive-", "/utf-8", "/Zc:wchar_t", "/Zc:inline", "/GF", "/Gy",
                        "/W0"] + [f"/D{x}" for x in defines] + \
                     [f"/I{x}" for x in includes] + [str(src), f"/Fo{o}"]
@@ -930,7 +934,7 @@ class Build:
         cmd += [str(o) for o in objs] + [str(r) for r in resources] + [str(d) for d in defs]
         cmd += ["--start-group"] + [str(lib) for lib in libs] + ["--end-group"]
         cmd += [f"-l{n}" for n in names] + [f"-l{n}" for n in VC_RUNTIME]
-        cmd += [f"--delayload={d}" for d in delay] + ["-o", str(exe)]
+        cmd += [f"--delayload={d}" for d in delay] + GUARD_LINK + ["-o", str(exe)]
         rc, text = run(cmd, self.tools.env, cwd=self.out)
         # The command as JSON, to run again; then what the link printed.
         log = json.dumps([str(c) for c in cmd]) + "\n\n" + text

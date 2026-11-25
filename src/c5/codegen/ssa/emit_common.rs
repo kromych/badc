@@ -4013,6 +4013,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         tls_index_slot: None,
         delay_import_table: None,
         pe_unwind: alloc::vec::Vec::new(),
+        guard_cf: None,
         tls_got: alloc::vec::Vec::new(),
         tls_got_fields: alloc::vec::Vec::new(),
         static_tls: false,

@@ -7645,6 +7645,7 @@ fn minimal_native_object(
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
         pe_unwind: alloc::vec::Vec::new(),
+        guard_fids: None,
     }
 }
 
@@ -8003,6 +8004,7 @@ fn aarch64_data_ref_object_ex(
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
         pe_unwind: alloc::vec::Vec::new(),
+        guard_fids: None,
     }
 }
 
@@ -8262,6 +8264,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
         pe_unwind: alloc::vec::Vec::new(),
+        guard_fids: None,
     }
 }
 

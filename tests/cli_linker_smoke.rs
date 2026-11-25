@@ -12872,6 +12872,214 @@ fn a_librarys_load_config_structure_joins_the_image_unnamed() {
     }
 }
 
+/// `--guard-cf` (link.exe's `/guard:cf`): a PE image claims Control Flow
+/// Guard and lists, sorted, the functions an indirect call may enter -- each
+/// one a reference other than a call names, and the entry point -- and not
+/// one that is only called. With no library's load-config directory, the
+/// runtime supplies one, whose guard fields hold the table's rebased address,
+/// its count and the flags.
+#[test]
+fn a_guard_cf_image_lists_the_functions_an_indirect_call_may_enter() {
+    let dir = tempdir("a_guard_cf_image_lists_the_functions_an_indirect_call_may_enter");
+    write_source(
+        &dir,
+        "g.c",
+        "int taken_in_data(int x) { return x * x; }\n\
+         int taken_in_code(int x) { return -x; }\n\
+         int only_called(int x) { return x + 1; }\n\
+         int (*table[])(int) = { taken_in_data };\n\
+         int (*pick(void))(int) { return taken_in_code; }\n\
+         int main(int argc, char **argv) {\n\
+             (void)argv;\n\
+             return table[0](argc) + pick()(argc) + only_called(argc);\n\
+         }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let t = format!("--target={target}");
+        let args = [&t, "-Wl,--guard-cf", "-Wl,-Map=g.map", "g.c", "-o", "g.exe"];
+        run(Command::new(badc()).args(args).current_dir(&dir), "link");
+        let image = std::fs::read(dir.join("g.exe")).expect("read image");
+        let map = std::fs::read_to_string(dir.join("g.map")).expect("read map");
+        let addr = |name: &str| {
+            let line = map
+                .lines()
+                .find(|l| l.split_whitespace().nth(1) == Some(name));
+            let word = line.and_then(|l| l.split_whitespace().next()).expect(name);
+            u64::from_str_radix(word.trim_start_matches("0x"), 16).expect(name)
+        };
+        let u16le = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap());
+        let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+        let u64le = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+        let opt = u32le(0x3c) as usize + 24;
+        assert_ne!(u16le(opt + 70) & 0x4000, 0, "{target}: GUARD_CF");
+        let (base, _, dir64) = pe_layout(&image);
+        let rva = u32le(opt + 192);
+        let at = pe_rva_offset(&image, rva).expect("the directory in a section");
+        assert_eq!(u32le(at), 0x140, "{target}: the directory's size");
+        let (table, count, flags) = (u64le(at + 0x80), u64le(at + 0x88), u64le(at + 0x90));
+        assert!(
+            dir64.contains(&(rva + 0x80)),
+            "{target}: table address rebased"
+        );
+        assert_eq!(flags, 0x500, "{target}: instrumented, table present");
+        let start = pe_rva_offset(&image, (table - base) as u32).expect("the table");
+        let entries: Vec<u64> = (0..count as usize)
+            .map(|k| base + u64::from(u32le(start + 4 * k)))
+            .collect();
+        assert!(entries.windows(2).all(|w| w[0] < w[1]), "{target}: sorted");
+        let entry = base + u64::from(u32le(opt + 16));
+        for (name, want) in [
+            ("taken_in_data", true),
+            ("taken_in_code", true),
+            ("only_called", false),
+            ("pick", false),
+        ] {
+            assert_eq!(entries.contains(&addr(name)), want, "{target}: {name}");
+        }
+        assert!(entries.contains(&entry), "{target}: the entry point");
+    }
+}
+
+/// `--guard-cf` lists the call targets of a PE image only, and the loader
+/// reads them through the load-config directory, so a link whose directory
+/// does not name the guard table is refused.
+#[test]
+fn guard_cf_needs_a_pe_image_whose_load_config_names_the_table() {
+    let dir = tempdir("guard_cf_needs_a_pe_image_whose_load_config_names_the_table");
+    write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    write_source(
+        &dir,
+        "lc.c",
+        "struct load_config { unsigned size, stamp; void *pad[14]; };\n\
+         const struct load_config _load_config_used = {sizeof(struct load_config)};\n\
+         int main(void) { return 0; }\n",
+    );
+    for (target, src, want) in [
+        ("linux-x64", "main.c", "PE image only"),
+        ("windows-x64", "lc.c", "names `__guard_fids_table`"),
+    ] {
+        let t = format!("--target={target}");
+        let out = Command::new(badc())
+            .args([&t, "-Wl,--guard-cf", src, "-o", "a.out"])
+            .current_dir(&dir)
+            .output()
+            .expect("badc");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && stderr.contains(want),
+            "{target}: {stderr}"
+        );
+    }
+}
+
+/// A `--guard-cf` image loads in a process created under strict Control
+/// Flow Guard, and the system's checks of calls into it hold for the
+/// functions it hands out: a sort comparator, an imported function as one,
+/// a thread's start, a `__try` filter and an exit handler. A comparator one
+/// byte into a function stops the process with a fast fail; an image
+/// linked without the option is refused.
+#[cfg(windows)]
+#[test]
+fn a_guard_cf_image_runs_under_strict_control_flow_guard() {
+    let dir = tempdir("a_guard_cf_image_runs_under_strict_control_flow_guard");
+    write_source(
+        &dir,
+        "launch.c",
+        "#include <windows.h>\n\
+         #include <stdio.h>\n\
+         int main(int argc, char **argv) {\n\
+             DWORD64 policy[2] = {PROCESS_CREATION_MITIGATION_POLICY_CONTROL_FLOW_GUARD_ALWAYS_ON,\n\
+                 PROCESS_CREATION_MITIGATION_POLICY2_STRICT_CONTROL_FLOW_GUARD_ALWAYS_ON};\n\
+             SIZE_T size = 0;\n\
+             InitializeProcThreadAttributeList(NULL, 1, 0, &size);\n\
+             LPPROC_THREAD_ATTRIBUTE_LIST list = HeapAlloc(GetProcessHeap(), 0, size);\n\
+             InitializeProcThreadAttributeList(list, 1, 0, &size);\n\
+             UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY,\n\
+                 policy, sizeof policy, NULL, NULL);\n\
+             STARTUPINFOEXA si = {0};\n\
+             si.StartupInfo.cb = sizeof si;\n\
+             si.lpAttributeList = list;\n\
+             PROCESS_INFORMATION pi;\n\
+             char cmd[1024];\n\
+             snprintf(cmd, sizeof cmd, \"%s %s\", argv[1], argc > 2 ? argv[2] : \"\");\n\
+             if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT,\n\
+                     NULL, NULL, &si.StartupInfo, &pi)) {\n\
+                 printf(\"refused %lu\", GetLastError());\n\
+                 return 0;\n\
+             }\n\
+             WaitForSingleObject(pi.hProcess, INFINITE);\n\
+             DWORD code = 0;\n\
+             GetExitCodeProcess(pi.hProcess, &code);\n\
+             printf(\"exit %#lx\", code);\n\
+             return 0;\n\
+         }\n",
+    );
+    write_source(
+        &dir,
+        "guarded.c",
+        "#include <windows.h>\n\
+         #include <stdlib.h>\n\
+         #include <string.h>\n\
+         typedef int (*cmp_fn)(const void *, const void *);\n\
+         static int ok;\n\
+         static int by_value(const void *a, const void *b) {\n\
+             return *(const int *)a - *(const int *)b;\n\
+         }\n\
+         static DWORD WINAPI worker(LPVOID p) { *(int *)p = 7; return 0; }\n\
+         static void at_exit(void) { _exit(ok ? 42 : 1); }\n\
+         static int filter(unsigned long code) {\n\
+             return code == EXCEPTION_ACCESS_VIOLATION;\n\
+         }\n\
+         int main(int argc, char **argv) {\n\
+             (void)argv;\n\
+             int v[] = {3, 1, 2};\n\
+             cmp_fn cmp = argc > 1 ? (cmp_fn)((char *)by_value + 1) : by_value;\n\
+             qsort(v, 3, sizeof *v, cmp);\n\
+             char words[3][8] = {\"pear\", \"fig\", \"apple\"};\n\
+             qsort(words, 3, sizeof words[0], (cmp_fn)strcmp);\n\
+             int seen = 0, caught = 0;\n\
+             HANDLE t = CreateThread(NULL, 0, worker, &seen, 0, NULL);\n\
+             WaitForSingleObject(t, INFINITE);\n\
+             __try { *(volatile int *)0 = 1; }\n\
+             __except (filter(GetExceptionCode())) { caught = 1; }\n\
+             ok = v[0] == 1 && v[2] == 3 && !strcmp(words[0], \"apple\") && seen == 7 && caught;\n\
+             atexit(at_exit);\n\
+             return 0;\n\
+         }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["launch.c", "-o", "launch.exe"])
+            .current_dir(&dir),
+        "launcher",
+    );
+    for (exe, flags) in [("guarded.exe", &["-Wl,--guard-cf"][..]), ("plain.exe", &[])] {
+        run(
+            Command::new(badc())
+                .args(flags)
+                .args(["guarded.c", "-o", exe])
+                .current_dir(&dir),
+            exe,
+        );
+    }
+    for (exe, arg, want) in [
+        ("guarded.exe", "", "exit 0x2a"),
+        ("guarded.exe", "x", "exit 0xc0000409"),
+        ("plain.exe", "", "refused 1657"),
+    ] {
+        let launcher = Command::new(dir.join("launch.exe"))
+            .args([dir.join(exe).to_str().unwrap(), arg])
+            .current_dir(&dir)
+            .output()
+            .expect("launch");
+        assert_eq!(
+            String::from_utf8_lossy(&launcher.stdout),
+            want,
+            "{exe} {arg}"
+        );
+    }
+}
+
 /// A PE image's preferred base, its sections as `(rva, file offset, raw
 /// size)`, and the RVAs its `IMAGE_REL_BASED_DIR64` entries cover.
 fn pe_layout(image: &[u8]) -> (u64, Vec<(u32, usize, usize)>, Vec<u32>) {

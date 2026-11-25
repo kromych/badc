@@ -13,7 +13,9 @@ with another decimal separator the first of them fails whatever compiler
 built it, and the smoke then requires exactly that failure, which the string
 and tree checks before it have passed. SystemInformer.exe (without its
 settings file, driver or plugins) and peview.exe (on a system DLL) must each
-still run after 10 s, when the smoke stops them. The driver loads only under
+still run after 10 s, when the smoke stops them; so must SystemInformer.exe
+created under the mitigation policies it restarts itself under once its
+driver is loaded, strict Control Flow Guard among them. The driver loads only under
 test signing, so its images are checked as the loader reads them: the
 target's machine, the native subsystem, an entry, the kernel modules it
 imports from, a load-config directory, the integrity-check flag the kernel
@@ -154,6 +156,61 @@ def stays_up(exe: Path, args: list[str], seconds: int = 10) -> str | None:
         return None
 
 
+# The mitigation policies PhRestartSelf (SystemInformer/ksisup.c) restarts
+# the program under once its driver is loaded: heap terminate, bottom-up and
+# high-entropy ASLR, extension point disable, Control Flow Guard and prefer
+# System32; loader integrity continuity, strict Control Flow Guard and module
+# tampering protection. Strict CFG loads only images that claim the guard.
+RESTART_MITIGATIONS = ((1 << 12) | (1 << 16) | (1 << 20) | (1 << 32) | (1 << 40) | (1 << 60),
+                       (1 << 4) | (1 << 8) | (1 << 12))
+
+
+def stays_up_mitigated(exe: Path, args: list[str], seconds: int = 10) -> str | None:
+    """stays_up, with the process created under RESTART_MITIGATIONS."""
+    import ctypes
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+    class StartupInfoEx(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("reserved", ctypes.c_void_p * 3),
+                    ("pos_size", wintypes.DWORD * 7), ("flags", wintypes.DWORD),
+                    ("show", wintypes.WORD), ("reserved2", wintypes.WORD),
+                    ("reserved3", ctypes.c_void_p), ("std", wintypes.HANDLE * 3),
+                    ("attributes", ctypes.c_void_p)]
+
+    class ProcessInformation(ctypes.Structure):
+        _fields_ = [("process", wintypes.HANDLE), ("thread", wintypes.HANDLE),
+                    ("pid", wintypes.DWORD), ("tid", wintypes.DWORD)]
+
+    size = ctypes.c_size_t()
+    k32.InitializeProcThreadAttributeList(None, 1, 0, ctypes.byref(size))
+    attributes = ctypes.create_string_buffer(size.value)
+    policy = (ctypes.c_uint64 * 2)(*RESTART_MITIGATIONS)
+    if not (k32.InitializeProcThreadAttributeList(attributes, 1, 0, ctypes.byref(size))
+            and k32.UpdateProcThreadAttribute(attributes, 0, 0x20007, ctypes.byref(policy),
+                                              ctypes.c_size_t(ctypes.sizeof(policy)), None, None)):
+        return f"the attribute list: error {ctypes.get_last_error()}"
+    si, pi = StartupInfoEx(), ProcessInformation()
+    si.cb, si.attributes = ctypes.sizeof(si), ctypes.cast(attributes, ctypes.c_void_p)
+    line = ctypes.create_unicode_buffer(subprocess.list2cmdline([str(exe), *args]))
+    # EXTENDED_STARTUPINFO_PRESENT
+    if not k32.CreateProcessW(None, line, None, None, False, 0x80000, None, str(exe.parent),
+                              ctypes.byref(si), ctypes.byref(pi)):
+        return f"refused: error {ctypes.get_last_error()}"
+    try:
+        if k32.WaitForSingleObject(pi.process, seconds * 1000) != 0x102:  # WAIT_TIMEOUT
+            code = wintypes.DWORD()
+            k32.GetExitCodeProcess(pi.process, ctypes.byref(code))
+            return f"exited {code.value:#x} within {seconds} s"
+        k32.TerminateProcess(pi.process, 1)
+        k32.WaitForSingleObject(pi.process, 0xFFFFFFFF)
+        return None
+    finally:
+        k32.CloseHandle(pi.thread)
+        k32.CloseHandle(pi.process)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -186,6 +243,9 @@ def main(argv: list[str] | None = None) -> int:
             ("phlib-test", phlib_test(bin_dir / "phlib-test.exe")),
             ("SystemInformer", stays_up(bin_dir / "SystemInformer.exe",
                                         ["-nosettings", "-nokph", "-noplugins", "-newinstance"])),
+            ("SystemInformer under its restart mitigations",
+             stays_up_mitigated(bin_dir / "SystemInformer.exe",
+                                ["-nosettings", "-nokph", "-noplugins", "-newinstance"])),
             ("peview", stays_up(bin_dir / "peview.exe",
                                 [str(Path(os.environ.get("SystemRoot", r"C:\Windows"))
                                      / "System32" / "kernel32.dll")])),

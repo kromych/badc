@@ -34,8 +34,10 @@ use super::object::{
 use super::section_groups::SectionGroups;
 use crate::c5::codegen::{
     BinaryFormat, CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget,
-    PointerSlot,
+    GuardTableSymbol, PointerSlot,
 };
+
+mod guard_cf;
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
 // a 26-bit PC-relative branch immediate -- so `R_AARCH64_JUMP26` shares
@@ -428,6 +430,8 @@ pub struct MergedNative {
     pub eh_frame: Vec<EhFrameBlock>,
     /// The COFF inputs' `.pdata` entries, placed in the merged streams.
     pub(crate) pe_unwind: Vec<crate::c5::codegen::PeUnwindRange>,
+    /// Control Flow Guard's targets and slots, under `--guard-cf`.
+    pub guard_cf: Option<crate::c5::codegen::GuardCfLink>,
     /// C-identifier-named sections grouped across units, in the order
     /// their bytes sit in the merged streams. A writer able to carry a
     /// variable section list gives each its own output section; the
@@ -1204,6 +1208,8 @@ pub struct LinkOptions {
     pub format: BinaryFormat,
     /// The DLLs a PE image loads on the first call of an import from them.
     pub delay_load: Vec<String>,
+    /// `--guard-cf`: collect a PE image's valid indirect-call targets.
+    pub guard_cf: bool,
 }
 
 /// [`link_native_objects_with_shared_libs`] under `opts`.
@@ -1266,6 +1272,9 @@ pub fn link_native_objects_with<'a>(
     link.allocate_got_slots();
     link.place_unwind_tables()?;
     link.place_pe_unwind()?;
+    if link.guard_cf.is_some() {
+        link.collect_guard_targets()?;
+    }
     let resolved = (link.resolve_text_relocs())
         .and_then(|()| link.resolve_tls_fixups())
         .and_then(|()| link.resolve_data_relocs());
@@ -1538,6 +1547,7 @@ struct Link<'a> {
     compact_unwind: Vec<CompactUnwind>,
     eh_frame: Vec<EhFrameBlock>,
     pe_unwind: Vec<crate::c5::codegen::PeUnwindRange>,
+    guard_cf: Option<crate::c5::codegen::GuardCfLink>,
     /// Import indices the note channel names as data references, and
     /// those some site branches to; a branch makes the import code.
     object_imports: BTreeSet<usize>,
@@ -1669,6 +1679,7 @@ impl<'a> Link<'a> {
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
             pe_unwind: Vec::new(),
+            guard_cf: opts.guard_cf.then(Default::default),
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             tls_imports: BTreeSet::new(),
@@ -4128,6 +4139,9 @@ impl<'a> Link<'a> {
             return self.place_target(patch_offset, reloc, (def.section, def.value as i64), site);
         }
         if let Some(&value) = self.absolute_defined.get(sym.name.as_str()) {
+            if self.guard_cf.is_some() && GuardTableSymbol::named(&sym.name).is_some() {
+                return Err(site.unsupported());
+            }
             return apply_absolute_reloc(&mut self.text, patch_offset, value + reloc.addend, site);
         }
         if sym.name.is_empty() {
@@ -4576,6 +4590,9 @@ impl<'a> Link<'a> {
             _ => None,
         };
         if let Some(value) = abs_value {
+            if let Some(guard) = self.guard_slot(sym, slot_offset, reloc.addend, in_tls)? {
+                self.guard_cf.as_mut().unwrap().slots.push(guard);
+            }
             return self.write_data_slot(slot_offset, in_tls, value + reloc.addend, "absolute");
         }
         if !in_tls && sym.binding != 0 && self.preemptible.contains(sym.name.as_str()) {
@@ -5736,6 +5753,7 @@ impl<'a> Link<'a> {
             compact_unwind: self.compact_unwind,
             eh_frame: self.eh_frame,
             pe_unwind: self.pe_unwind,
+            guard_cf: self.guard_cf,
         })
     }
 }
@@ -8424,6 +8442,7 @@ mod tests {
                 compact_unwind: alloc::vec::Vec::new(),
                 eh_frame: None,
                 pe_unwind: alloc::vec::Vec::new(),
+                guard_fids: None,
             }
         };
         // Weak definition of `weak_target` in `.text`.

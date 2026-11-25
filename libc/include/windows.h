@@ -1560,6 +1560,11 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 // (processthreadsapi.h). Encoded as ProcThreadAttributeHandleList(2) with
 // the THREAD(0x10000) and INPUT(0x20000) flag bits set.
 #define PROC_THREAD_ATTRIBUTE_HANDLE_LIST 0x00020002
+// The mitigation policies a new process starts under: two 64-bit words
+// (winbase.h), each policy a 4-bit field whose value 1 is ALWAYS_ON.
+#define PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY 0x00020007
+#define PROCESS_CREATION_MITIGATION_POLICY_CONTROL_FLOW_GUARD_ALWAYS_ON (0x00000001ULL << 40)
+#define PROCESS_CREATION_MITIGATION_POLICY2_STRICT_CONTROL_FLOW_GUARD_ALWAYS_ON (0x00000001ULL << 8)
 
 // CopyFile2 dwCopyFlags (winbase.h).
 #define COPY_FILE_FAIL_IF_EXISTS              0x00000001

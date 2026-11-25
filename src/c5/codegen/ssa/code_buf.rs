@@ -91,13 +91,15 @@ pub(crate) struct CodeBuf {
     listing: Option<alloc::boxed::Box<super::super::listing::Listing>>,
 }
 
-/// x86-64 `-mbranches-within-32B-boundaries`, and under `-O` in the blocks
-/// that run repeatedly: a branch group -- a jump, a call, a return, or the
-/// flag-setting instruction a conditional jump fuses with through the jump
-/// -- padded so that it neither crosses nor ends on a 32-byte boundary, which
-/// a core with the update for Intel erratum SKX102 otherwise decodes on every
-/// pass through. Function entries are 32-byte aligned, so the offset in the
-/// buffer places the boundaries.
+/// x86-64 branch groups padded so that none crosses or ends on a 32-byte
+/// boundary, which a core with the update for Intel erratum SKX102 decodes
+/// on every pass through: a jump, or the flag-setting instruction a
+/// conditional jump fuses with through the jump, everywhere under
+/// `-mbranches-within-32B-boundaries` and under `-O` in the blocks that run
+/// repeatedly; a call or a return in those blocks under either. The cost
+/// falls where a transfer repeats, and most calls and returns elsewhere run
+/// once. Function entries are 32-byte aligned, so the offset in the buffer
+/// places the boundaries.
 #[derive(Default)]
 pub(crate) struct BranchWindows {
     pub(crate) on: bool,
@@ -122,10 +124,25 @@ pub(crate) struct BranchWindows {
     /// counted it.
     pub(crate) closed_prev: Vec<bool>,
     pub(crate) closed_now: Vec<bool>,
-    /// Per block, whether its groups are padded; empty pads every block.
+    /// Per block, whether its jumps are padded, and whether its calls and
+    /// returns are; empty pads every block.
     pub(crate) pad: Vec<bool>,
-    /// Whether the code being emitted pads.
+    pub(crate) pad_calls: Vec<bool>,
+    /// Whether the code being emitted pads its jumps, and its calls and
+    /// returns.
     pub(crate) here: bool,
+    pub(crate) here_calls: bool,
+    /// An epilogue is being emitted, which takes no padding.
+    pub(crate) quiet: bool,
+}
+
+impl BranchWindows {
+    /// Block `b` begins: no group is open, and its own flags decide.
+    pub(crate) fn enter_block(&mut self, b: usize) {
+        self.open = None;
+        self.here = self.pad.get(b).copied().unwrap_or(true);
+        self.here_calls = self.pad_calls.get(b).copied().unwrap_or(true);
+    }
 }
 
 impl CodeBuf {

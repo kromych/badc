@@ -431,13 +431,20 @@ pub(crate) fn emit_function(
         };
         let entry_mark = out.mark();
         let steps = flag_steps(func, alloc);
-        out.cx.code.windows = BranchWindows {
-            on: padding != super::super::BranchPadding::Off,
-            pad: match padding {
-                super::super::BranchPadding::Loops => repeated_blocks(func),
-                _ => Vec::new(),
-            },
-            ..BranchWindows::default()
+        out.cx.code.windows = match padding {
+            super::super::BranchPadding::Off => BranchWindows::default(),
+            all_jumps => {
+                let repeated = repeated_blocks(func);
+                BranchWindows {
+                    on: true,
+                    pad: match all_jumps {
+                        super::super::BranchPadding::All => Vec::new(),
+                        _ => repeated.clone(),
+                    },
+                    pad_calls: repeated,
+                    ..BranchWindows::default()
+                }
+            }
         };
         let mut fe = FnEmit {
             start: entry_mark.code,
@@ -746,11 +753,10 @@ impl FnEmit<'_, '_> {
             );
             // The test and the early return run on every call: they pad
             // where the blocks they stand for do.
-            let w = &mut code.windows;
-            w.here = w.pad.get(exit.test_block as usize).copied().unwrap_or(true);
+            code.windows.enter_block(exit.test_block as usize);
             let mut probe = CodeBuf::default();
             emit_early_test(&mut probe, exit, self.fcx.frame.fixed_regs);
-            pad_group(code, 0, probe.len());
+            pad_group(code, 0, probe.len(), Ends::Jump);
             let site = emit_early_test(code, exit, self.fcx.frame.fixed_regs);
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
             let site = site.unwrap_or(0);
@@ -773,7 +779,7 @@ impl FnEmit<'_, '_> {
                 patch_early_branch(code, site, frame_at);
             }
             self.early_site = (site, code.len());
-            code.windows.here = false;
+            (code.windows.here, code.windows.here_calls) = (false, false);
         }
         emit_prologue(
             code,
@@ -809,8 +815,7 @@ impl FnEmit<'_, '_> {
             exit_at,
             self.out.cx.ssa_line_rows,
         );
-        let w = &mut code.windows;
-        w.here = w.pad.get(exit.exit_block as usize).copied().unwrap_or(true);
+        code.windows.enter_block(exit.exit_block as usize);
         let emitted = emit_early_return(
             code,
             exit,
@@ -1024,9 +1029,7 @@ impl FnEmit<'_, '_> {
         self.block_offsets[block_idx] = self.out.cx.code.len();
         self.out.cx.code.begin_block();
         self.out.cx.code.label_block(block_idx as u32);
-        let w = &mut self.out.cx.code.windows;
-        w.open = None;
-        w.here = w.pad.get(block_idx).copied().unwrap_or(true);
+        self.out.cx.code.windows.enter_block(block_idx);
         // A `__try` handler is entered with rsp where the exception left it:
         // the prologue's rsp, realigned as the prologue realigns it.
         if func.is_seh_target(block_idx as super::super::ir::BlockId) {
@@ -1400,7 +1403,7 @@ impl FnEmit<'_, '_> {
                 let Some(import_index) = imports.index_of_binding(binding_idx) else {
                     return fail("TailExt: no import slot for binding");
                 };
-                pad_group(self.out.cx.code, 0, 5);
+                pad_group(self.out.cx.code, 0, 5, Ends::Jump);
                 self.out.cx.plt_call_fixups.push(PltCallFixup {
                     instr_offset: self.out.cx.code.len(),
                     import_index,
@@ -2647,10 +2650,10 @@ fn emit_epilogue_ret(
     ex: &mut Vec<(usize, super::X64ExitStep)>,
 ) {
     clear_upper(code, frame, wide_result(func, abi));
-    let here = pad_epilogue(code, (func, frame, alloc, abi), ret_len(abi));
+    pad_epilogue(code, (func, frame, alloc, abi), ret_len(abi), Ends::Call);
     emit_frame_teardown(code, func, frame, alloc, abi, ex);
     emit_hardened_ret(code, abi, extern_sites);
-    code.windows.here = here;
+    code.windows.quiet = false;
 }
 
 /// Drop the frame and restore rbp, after [`restore_callee_saved`]: `leave`,
@@ -2831,18 +2834,36 @@ pub(super) fn emit_canary_check(
     emit_rm(code, Mnem::Cmp, 8, CANARY_SCRATCH, base, disp);
     super::encode::emit_jcc_rel8(code, Cc::E, 0);
     let rel8_at = code.len() - 1;
-    emit_extern_branch(code, extern_sites, super::STACK_CHK_FAIL_SYMBOL, true);
+    emit_extern_branch(
+        code,
+        extern_sites,
+        super::STACK_CHK_FAIL_SYMBOL,
+        (true, Ends::Call),
+    );
     code[rel8_at] = (code.len() - rel8_at - 1) as u8;
     super::encode::emit_zero_r(code, CANARY_SCRATCH);
 }
 
-/// Pad ahead of a group of `len` bytes -- a call, a return, a jump out of
-/// the function or the entry's test -- that follows `lead` bytes emitted
-/// next, where the code pads ([`BranchWindows`]). Its length is known, so
-/// the layout decides it.
-pub(super) fn pad_group(code: &mut CodeBuf, lead: usize, len: usize) {
+/// What a group of fixed length ends in, which decides where it pads
+/// ([`BranchWindows`]).
+#[derive(Clone, Copy)]
+pub(super) enum Ends {
+    /// A jump out of the function, an indirect jump, or the entry's test.
+    Jump,
+    /// A call or a return.
+    Call,
+}
+
+/// Pad ahead of a group of `len` bytes that follows `lead` bytes emitted
+/// next, where the code pads groups ending as it does. Its length is known,
+/// so the layout decides it.
+pub(super) fn pad_group(code: &mut CodeBuf, lead: usize, len: usize, ends: Ends) {
     let w = &code.windows;
-    if !w.on || !w.here || lead + len >= 32 {
+    let here = match ends {
+        Ends::Jump => w.here,
+        Ends::Call => w.here_calls,
+    };
+    if !w.on || w.quiet || !here || lead + len >= 32 {
         return;
     }
     let at = (code.len() + lead) % 32;
@@ -2856,16 +2877,17 @@ pub(super) fn pad_group(code: &mut CodeBuf, lead: usize, len: usize) {
 }
 
 /// Pad ahead of an epilogue whose teardown precedes a transfer of `len`
-/// bytes, and pad nothing inside it until the caller restores the returned
-/// state: the Win64 unwinder recognizes an epilogue only as `add rsp`, the
-/// pops and the transfer.
+/// bytes, and pad nothing inside it until the caller clears `quiet`: the
+/// Win64 unwinder recognizes an epilogue only as `add rsp`, the pops and the
+/// transfer.
 pub(super) fn pad_epilogue(
     code: &mut CodeBuf,
     (func, frame, alloc, abi): (&FunctionSsa, Frame, &Allocation, super::Abi),
     len: usize,
-) -> bool {
-    pad_group(code, teardown_len(func, frame, alloc, abi), len);
-    core::mem::replace(&mut code.windows.here, false)
+    ends: Ends,
+) {
+    pad_group(code, teardown_len(func, frame, alloc, abi), len, ends);
+    code.windows.quiet = true;
 }
 
 /// The bytes of `emit_frame_teardown`, which precede an epilogue's transfer.
@@ -2886,14 +2908,14 @@ fn ret_len(abi: super::Abi) -> usize {
 
 /// A branch to a symbol this unit does not define: `E8` / `E9 rel32` with
 /// a zero displacement and a by-name call site for the writer's
-/// relocation. Returns where the instruction starts.
+/// relocation, padded as `ends`. Returns where the instruction starts.
 fn emit_extern_branch(
     code: &mut CodeBuf,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     symbol: &str,
-    is_call: bool,
+    (is_call, ends): (bool, Ends),
 ) -> usize {
-    pad_group(code, 0, 5);
+    pad_group(code, 0, 5, ends);
     let at = code.len();
     extern_sites.push(super::UserExternCallSite {
         instr_offset: at,
@@ -2922,7 +2944,7 @@ fn emit_profile_call(
         mcount_sites.push(code.len());
         super::encode::emit_long_nop(code, 5);
     } else {
-        let at = emit_extern_branch(code, extern_sites, call.symbol(), true);
+        let at = emit_extern_branch(code, extern_sites, call.symbol(), (true, Ends::Call));
         mcount_sites.push(at);
     }
 }
@@ -2940,11 +2962,11 @@ pub(super) fn emit_hardened_ret(
             code,
             extern_sites,
             super::encode::RETURN_THUNK_SYMBOL,
-            false,
+            (false, Ends::Call),
         );
         return;
     }
-    pad_group(code, 0, 1);
+    pad_group(code, 0, 1, Ends::Call);
     emit_ret(code);
     if abi.hardening.sls_return {
         super::encode::emit_int3(code);
@@ -2996,7 +3018,7 @@ pub(super) fn emit_hardened_call_r(
     match abi.hardening.indirect_branch {
         IndirectBranch::ThunkExtern => {
             let symbol = super::encode::indirect_thunk_symbol(target);
-            emit_extern_branch(code, extern_sites, symbol, true);
+            emit_extern_branch(code, extern_sites, symbol, (true, Ends::Call));
         }
         IndirectBranch::ThunkInline => {
             // Over the thunk body, then the call of the capture.
@@ -3008,7 +3030,7 @@ pub(super) fn emit_hardened_call_r(
             super::encode::emit_call_rel32(code, -0x16);
         }
         IndirectBranch::Keep => {
-            pad_group(code, 0, 2 + usize::from(target.high()));
+            pad_group(code, 0, 2 + usize::from(target.high()), Ends::Call);
             super::encode::emit_call_r(code, target);
         }
     }
@@ -3035,7 +3057,7 @@ pub(super) fn emit_indirect_call(
     }
     // `rex.w call [rip + disp32]`: the REX byte keeps the displacement at
     // `instr_offset + 3`, where a direct reference's field lies.
-    pad_group(code, 0, 7);
+    pad_group(code, 0, 7, Ends::Call);
     extern_data_refs.push(super::UserExternDataRef {
         instr_offset: code.len(),
         symbol_name: GUARD_DISPATCH.into(),
@@ -3060,7 +3082,7 @@ fn emit_hardened_jmp_r(
     match abi.hardening.indirect_branch {
         IndirectBranch::ThunkExtern => {
             let symbol = super::encode::indirect_thunk_symbol(target);
-            emit_extern_branch(code, extern_sites, symbol, false);
+            emit_extern_branch(code, extern_sites, symbol, (false, Ends::Jump));
         }
         IndirectBranch::ThunkInline => {
             // The call of the capture.
@@ -3068,7 +3090,7 @@ fn emit_hardened_jmp_r(
             emit_retpoline_capture(code, target);
         }
         IndirectBranch::Keep => {
-            pad_group(code, 0, 2 + usize::from(target.high()));
+            pad_group(code, 0, 2 + usize::from(target.high()), Ends::Jump);
             super::encode::emit_jmp_r(code, target);
         }
     }

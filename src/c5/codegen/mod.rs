@@ -1345,10 +1345,10 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
     ReturnExt::None
 }
 
-/// Which x86-64 branch groups keep off 32-byte boundaries, which a core with
+/// Which x86-64 jump groups keep off 32-byte boundaries, which a core with
 /// the update for Intel erratum SKX102 otherwise decodes on every pass
 /// through: none, those of blocks inside a loop or of a function that calls
-/// itself, or all.
+/// itself, or all. Calls and returns pad in those blocks unless it is none.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BranchPadding {
     Off,
@@ -4939,9 +4939,9 @@ pub struct NativeOptions {
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
     /// x86-64 `-m[no-]branches-within-32B-boundaries`: function entries on
-    /// 32 bytes, and no local jump or fused compare-and-jump crossing or
-    /// ending on a 32-byte boundary, everywhere or nowhere; unset, the groups
-    /// inside loops under `-O` ([`Self::branch_padding`]).
+    /// 32 bytes, and no jump or fused compare-and-jump crossing or ending on
+    /// a 32-byte boundary, everywhere or nowhere; unset, those of the blocks
+    /// that run repeatedly under `-O` ([`Self::branch_padding`]).
     pub branches_within_32b: Option<bool>,
     /// Leave the program, the lowering and dead bodies unfreed to the process exit.
     pub freed_by_exit: bool,

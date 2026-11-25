@@ -8563,8 +8563,9 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
 
 /// Under `-O` a call inside a loop, and every call, return and jump of a
 /// function that calls itself, its entry's test included, keeps off 32-byte
-/// boundaries as a loop's jumps do, at every entry shift; under
-/// `-mno-branches-within-32B-boundaries` some call crosses or ends on one.
+/// boundaries as a loop's jumps do, at every entry shift, and so they do
+/// under `-mbranches-within-32B-boundaries`, which leaves a call that runs
+/// once where it falls; under `-mno-` some call crosses or ends on one.
 #[test]
 fn x64_calls_and_returns_that_repeat_stay_within_32_byte_windows() {
     use crate::{
@@ -8580,6 +8581,9 @@ int sum(const int *a, int n) {\n\
 int walk(int n, int k) {\n\
     if (n < 2) return n + k;\n\
     return walk(n - 1, k ^ n) + walk(n - 2, k + 3) * 3;\n\
+}\n\
+int once(int x) {\n\
+    return leaf(x) + leaf(x + 1) * leaf(x + 2) - leaf(x ^ 5);\n\
 }\n";
     let program = Compiler::with_options(
         SRC.to_string(),
@@ -8592,7 +8596,7 @@ int walk(int n, int k) {\n\
     .expect("compile");
     // Per option, entry shift and function: the calls, returns and jumps
     // that cross or end on a boundary, a conditional jump with the
-    // flag-setting instruction ahead of it; in `sum` only the calls.
+    // flag-setting instruction ahead of it; elsewhere only the calls.
     let crossing = |on: Option<bool>, shift: u32, name: &str| {
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
@@ -8616,7 +8620,7 @@ int walk(int n, int k) {\n\
         };
         let transfer = |i: &X64Insn| call(i) || i.op == 0xC3 || i.is_jmp() || i.is_jcc();
         (insns.iter().enumerate())
-            .filter(|(_, i)| if name == "sum" { call(i) } else { transfer(i) })
+            .filter(|(_, i)| if name == "walk" { transfer(i) } else { call(i) })
             .filter(|&(k, i)| {
                 let from = match k.checked_sub(1).map(|p| &insns[p]) {
                     Some(p) if i.is_jcc() && matches!(p.op, 0x38..=0x3D | 0x83 | 0x84 | 0x85) => {
@@ -8633,9 +8637,19 @@ int walk(int n, int k) {\n\
         (0..32).any(|shift| crossing(Some(false), shift, "sum") > 0),
         "no call crosses a boundary without padding"
     );
+    assert!(
+        (0..32).any(|shift| crossing(Some(true), shift, "once") > 0),
+        "the option pads a call that runs once"
+    );
     for shift in 0..32 {
-        assert_eq!(crossing(None, shift, "sum"), 0, "sum, shift {shift}");
-        assert_eq!(crossing(None, shift, "walk"), 0, "walk, shift {shift}");
+        for on in [None, Some(true)] {
+            assert_eq!(crossing(on, shift, "sum"), 0, "sum, {on:?}, shift {shift}");
+            assert_eq!(
+                crossing(on, shift, "walk"),
+                0,
+                "walk, {on:?}, shift {shift}"
+            );
+        }
     }
 }
 

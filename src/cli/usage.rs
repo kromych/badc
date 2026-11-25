@@ -592,7 +592,9 @@ Compile knobs:
                            on a 32-byte boundary, which cores with the
                            update for Intel erratum SKX102 decode
                            without the uop cache; or pad nothing. Under
-                           -O, unless given, the jumps inside loops.
+                           -O, unless given, the jumps inside loops and
+                           in functions that call themselves. Their calls
+                           and returns pad either way.
   -mindirect-branch=keep|thunk-extern|thunk-inline
                            x86-64: route each indirect call and jump
                            through __x86_indirect_thunk_<reg>, or

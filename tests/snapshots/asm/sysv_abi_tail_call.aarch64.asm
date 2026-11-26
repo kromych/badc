@@ -133,10 +133,9 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	mov	x1, #0x14               // =20
                	bl	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0xe77
-               	csel	x20, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	fmov	d0, #0.50000000
                	fmov	d1, #0.25000000
                	bl	<addr>

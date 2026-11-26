@@ -58,9 +58,9 @@ Disassembly of section .text:
                	sub	x1, x1, x2
                	cmp	x1, #0x10
                	cset	x1, eq
-               	mov	x2, #0x1                // =1
                	cmp	x1, #0x0
-               	csel	x0, x2, x0, ne
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, x0, ne
                	cmp	w0, #0x0
                	cset	x0, eq
                	ret

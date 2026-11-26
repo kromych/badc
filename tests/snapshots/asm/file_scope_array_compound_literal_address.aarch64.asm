@@ -139,9 +139,8 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	ret
                	adrp	x0, <page>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x8                // =8
                	ldrsw	x0, [x0, #0x140]
                	cmp	w0, #0x4
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x8               // =8
+               	csel	x0, xzr, x17, eq
                	ret

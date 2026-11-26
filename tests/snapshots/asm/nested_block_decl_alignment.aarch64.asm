@@ -19,39 +19,38 @@ Disassembly of section .text:
                	sub	sp, sp, #0x40
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffc0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
-               	mov	x2, #0x3                // =3
-               	str	w2, [x1]
-               	tst	x1, #0x3f
-               	mov	x2, #0x1                // =1
-               	csel	x2, x0, x2, ne
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x3, #0x5                // =5
-               	strb	w3, [x1]
-               	tst	x1, #0x7f
-               	mov	x3, #0x1                // =1
-               	csel	x1, x0, x3, ne
-               	add	x1, x2, x1
-               	mov	x2, sp
-               	mov	x3, #0x7                // =7
-               	strb	w3, [sp]
-               	tst	x2, #0x3f
-               	mov	x3, #0x1                // =1
-               	csel	x2, x0, x3, ne
-               	add	x1, x1, x2
-               	mov	x2, sp
-               	mov	x3, #0x9                // =9
-               	str	w3, [sp]
-               	tst	x2, #0x3f
-               	mov	x3, #0x1                // =1
-               	csel	x0, x0, x3, ne
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x3                // =3
+               	str	w1, [x0]
+               	tst	x0, #0x3f
+               	mov	x17, #0x1               // =1
+               	csel	x1, xzr, x17, ne
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x2, #0x5                // =5
+               	strb	w2, [x0]
+               	tst	x0, #0x7f
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, ne
                	add	x0, x1, x0
-               	mov	x1, #0x2a               // =42
+               	mov	x1, sp
+               	mov	x2, #0x7                // =7
+               	strb	w2, [sp]
+               	tst	x1, #0x3f
+               	mov	x17, #0x1               // =1
+               	csel	x1, xzr, x17, ne
+               	add	x0, x0, x1
+               	mov	x1, sp
+               	mov	x2, #0x9                // =9
+               	str	w2, [sp]
+               	tst	x1, #0x3f
+               	mov	x17, #0x1               // =1
+               	csel	x1, xzr, x17, ne
+               	add	x0, x0, x1
                	cmp	w0, #0x4
-               	csel	x0, x1, x0, eq
+               	mov	x16, #0x2a              // =42
+               	csel	x0, x16, x0, eq
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

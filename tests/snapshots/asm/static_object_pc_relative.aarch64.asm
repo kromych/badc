@@ -107,12 +107,11 @@ Disassembly of section .text:
                	ret
 
 <zero_tests>:
-               	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	ldrsb	x1, [x1, #0x3e]
-               	mov	x2, #0x1                // =1
-               	cmp	x1, #0x0
-               	csel	x0, x2, x0, ne
+               	adrp	x0, <page>
+               	ldrsb	x0, [x0, #0x3e]
+               	cmp	x0, #0x0
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, xzr, ne
                	adrp	x1, <page>
                	ldrsh	x1, [x1, #0x3c]
                	orr	x2, x0, #0x2

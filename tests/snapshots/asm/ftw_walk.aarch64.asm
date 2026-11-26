@@ -58,10 +58,9 @@ Disassembly of section .text:
                	ret
 
 <stop_at_file>:
-               	mov	x0, #0x2a               // =42
-               	mov	x1, #0x0                // =0
                	cmp	w2, #0x0
-               	csel	x0, x1, x0, ne
+               	mov	x17, #0x2a              // =42
+               	csel	x0, xzr, x17, ne
                	ret
 
 <main>:

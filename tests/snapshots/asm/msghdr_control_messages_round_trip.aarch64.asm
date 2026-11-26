@@ -32,11 +32,10 @@ Disassembly of section .text:
                	cmp	w20, #0x0
                	b.ge	<addr>
                	bl	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x14               // =20
                	ldrsw	x0, [x0]
                	cmp	w0, #0x61
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x14              // =20
+               	csel	x0, xzr, x17, eq
                	ldr	x20, [sp]
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
@@ -56,11 +55,10 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	bl	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x15               // =21
                	ldrsw	x0, [x0]
                	cmp	w0, #0x63
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x15              // =21
+               	csel	x0, xzr, x17, eq
                	ldr	x20, [sp]
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
@@ -210,10 +208,9 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	ldr	x1, [sp, #0x18]
-               	mov	x0, #0x0                // =0
-               	mov	x2, #0x1b               // =27
                	cmp	x1, #0x0
-               	csel	x0, x0, x2, ne
+               	mov	x17, #0x1b              // =27
+               	csel	x0, xzr, x17, ne
                	ldr	x20, [sp]
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
@@ -633,10 +630,9 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, x21
                	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x13               // =19
                	cmp	x20, #0x0
-               	csel	x0, x0, x1, ne
+               	mov	x17, #0x13              // =19
+               	csel	x0, xzr, x17, ne
                	b	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>

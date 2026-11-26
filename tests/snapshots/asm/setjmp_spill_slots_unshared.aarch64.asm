@@ -58,14 +58,13 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	mov	x1, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x2, [x0]
-               	add	x2, x2, x2, lsl #1
-               	mov	x3, #0x1                // =1
-               	cmp	w20, w2
-               	csel	x1, x3, x1, ne
+               	ldrsw	x1, [x0]
+               	add	x1, x1, x1, lsl #1
+               	cmp	w20, w1
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, ne
                	ldrsw	x2, [x0, #0x4]
                	add	x2, x2, x2, lsl #1
                	add	x2, x2, #0x1

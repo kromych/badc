@@ -338,12 +338,11 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	mov	w1, v0.s[3]
                	add	x0, x0, x1
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	mov	x17, #0xf746            // =63302
                	movk	x17, #0xcd89, lsl #16
                	cmp	w0, w17
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ldp	x29, x30, [sp, #0xb0]
                	ldr	x28, [sp, #0x40]
                	ldp	x26, x27, [sp, #0x30]

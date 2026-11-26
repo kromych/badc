@@ -32,10 +32,9 @@ Disassembly of section .text:
 
 <guarded>:
                	sxtw	x0, w0
-               	mov	x1, #0x0                // =0
-               	add	x2, x0, #0x1
+               	add	x1, x0, #0x1
                	cmp	w0, #0x64
-               	csel	x0, x2, x1, lt
+               	csel	x0, x1, xzr, lt
                	ret
 
 <uwrap>:
@@ -132,10 +131,10 @@ Disassembly of section .text:
 
 <diff_zero>:
                	sub	x0, x0, x1
-               	mov	x1, #0x7                // =7
-               	mov	x2, #0x9                // =9
                	cmp	w0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x16, #0x9               // =9
+               	mov	x17, #0x7               // =7
+               	csel	x0, x16, x17, ne
                	ret
 
 <main>:

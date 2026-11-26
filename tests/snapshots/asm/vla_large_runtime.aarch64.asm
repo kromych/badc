@@ -49,10 +49,10 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	x0, x1
                	b.lt	<addr>
-               	mov	x0, #0x2a               // =42
-               	mov	x3, #0x1                // =1
                	cmp	x2, x1
-               	csel	x0, x0, x3, eq
+               	mov	x16, #0x2a              // =42
+               	mov	x17, #0x1               // =1
+               	csel	x0, x16, x17, eq
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

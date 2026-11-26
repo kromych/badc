@@ -30,10 +30,10 @@ Disassembly of section .text:
                	ret
 
 <keeps_values>:
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
                	cmp	w0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x16, #0x2               // =2
+               	mov	x17, #0x1               // =1
+               	csel	x0, x16, x17, ne
                	ret
 
 <keeps_store>:

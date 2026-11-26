@@ -127,10 +127,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x7                // =7
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x7               // =7
+               	csel	x0, x16, xzr, ne
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -277,9 +277,9 @@ Disassembly of section .text:
                	strb	wzr, [x3, x6]
                	mov	sp, x8
                	b	<addr>
-               	mov	x9, #0x1                // =1
                	cmp	x6, x5
-               	csel	x4, x9, x4, ne
+               	mov	x16, #0x1               // =1
+               	csel	x4, x16, x4, ne
                	b	<addr>
                	mov	x0, x4
                	mov	sp, x29

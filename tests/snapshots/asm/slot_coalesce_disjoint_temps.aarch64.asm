@@ -63,8 +63,7 @@ Disassembly of section .text:
                	b	<addr>
                	add	x1, x2, #0x1
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x1                // =1
                	cmp	w4, w3
-               	csel	x0, x0, x1, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ret

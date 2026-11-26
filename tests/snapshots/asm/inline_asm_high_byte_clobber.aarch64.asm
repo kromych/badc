@@ -190,9 +190,9 @@ Disassembly of section .text:
                	cmp	x0, #0x127
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	mov	x1, #0x2a               // =42
                	cmp	x0, #0x0
-               	csel	x0, x0, x1, ne
+               	mov	x17, #0x2a              // =42
+               	csel	x0, x0, x17, ne
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

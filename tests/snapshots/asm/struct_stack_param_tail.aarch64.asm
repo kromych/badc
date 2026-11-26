@@ -92,10 +92,9 @@ Disassembly of section .text:
                	str	w16, [x0, #0x10]
                	bl	<addr>
                	fmov	s1, #15.00000000
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
                	fcmp	s0, s1
-               	csel	x20, x0, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	sub	x1, x29, #0xa8
                	sub	x0, x29, #0x48
                	ldp	x16, x17, [x1]

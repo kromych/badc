@@ -34,9 +34,9 @@ Disassembly of section .text:
                	movk	x0, #0xa1b2, lsl #16
                	movk	x0, #0x2, lsl #32
                	stur	x0, [x29, #-0x18]
-               	mov	x0, #0x100              // =256
                	cmp	w20, #0x100
-               	csel	x0, x20, x0, gt
+               	mov	x17, #0x100             // =256
+               	csel	x0, x20, x17, gt
                	add	x0, x0, #0x30
                	stur	w0, [x29, #-0x10]
                	sub	x0, x29, #0x18
@@ -127,9 +127,9 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	b	<addr>
                	ldr	w0, [x0, #0x8]
-               	mov	x1, #0x100              // =256
                	cmp	w20, #0x100
-               	csel	x1, x20, x1, gt
+               	mov	x17, #0x100             // =256
+               	csel	x1, x20, x17, gt
                	add	x1, x1, #0x30
                	cmp	w0, w1
                	b.eq	<addr>

@@ -4855,7 +4855,7 @@ int flag(long x) { int ok = 1; if (f(x)) ok = 0; return ok; }\n";
     m.expect(matches!((call, fmov), (Some(c), Some(k)) if k > c), || {
         format!("aarch64 fm: the constant is not set after the call: {ws:08x?}")
     });
-    for (name, len) in [("ret", 6), ("flag", 9)] {
+    for (name, len) in [("ret", 6), ("flag", 8)] {
         let ws = a64(SRC, name);
         m.expect(ws.len() == len, || {
             format!(
@@ -6220,6 +6220,24 @@ fn address_arguments_the_call_sets_take_no_slot() {
         !before.iter().any(|&w| ldr_x(w)),
         "aarch64: an argument register loaded ahead of the call: {before:08x?}"
     );
+}
+
+/// AArch64: a select's zero arm is `xzr`: no register holds the constant
+/// and no instruction sets it, so each function is the compare, the
+/// `csel` reading `xzr`, and the return, with the subtraction ahead.
+#[test]
+fn a_zero_select_arm_reads_the_zero_register() {
+    const SRC: &str = "long clamp(long a, long b) { return a > b ? 0 : a - b; }\n\
+        long pick(long a, long b, long c) { return a < b ? 0 : c; }\n";
+    let obj = object_at(SRC, Target::LinuxAarch64, true);
+    for (name, len) in [("clamp", 4), ("pick", 3)] {
+        let words = function_words(&obj, name);
+        let csel = |w: &u32| w & 0xFFE0_0C00 == 0x9A80_0000 && (w >> 5) & 31 == 31;
+        assert!(
+            words.len() == len && words.iter().any(csel),
+            "{name}: {words:08x?}"
+        );
+    }
 }
 
 /// AArch64: a data address evaluated ahead of a conditional argument and

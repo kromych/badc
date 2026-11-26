@@ -97,10 +97,9 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	fmov	d1, #3.75000000
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x1                // =1
                	fcmp	d0, d1
-               	csel	x0, x0, x1, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

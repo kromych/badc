@@ -21,10 +21,10 @@ Disassembly of section .text:
                	add	x3, x3, x0
                	str	x3, [x2, #0x20]
                	add	x1, x1, #0x1
-               	mov	x3, #0x1                // =1
-               	mov	x4, #0x2                // =2
                	cmp	w0, #0x1
-               	csel	x0, x3, x4, lo
+               	mov	x16, #0x1               // =1
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, lo
                	cmp	w0, #0x2
                	b.ne	<addr>
                	cmp	x1, #0x2

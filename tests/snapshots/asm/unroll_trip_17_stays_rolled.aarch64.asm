@@ -30,11 +30,10 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x11
                	b.lt	<addr>
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x11
                	cset	x0, eq
                	cmp	x1, #0x88
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	cmp	w0, #0x0
                	cset	x0, eq
                	ret

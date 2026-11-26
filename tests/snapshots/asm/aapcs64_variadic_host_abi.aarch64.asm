@@ -487,10 +487,9 @@ Disassembly of section .text:
                	mov	x4, #0x4                // =4
                	mov	x5, #0x5                // =5
                	bl	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0xf
-               	csel	x20, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	mov	x16, #0x8               // =8
                	str	x16, [sp]
                	mov	x16, #0x9               // =9

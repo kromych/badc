@@ -14,17 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <pick_pair>:
-               	mov	x0, #0x4                // =4
-               	mov	x2, #0x5                // =5
-               	mov	x3, #-0x4               // =-4
-               	mov	x4, #-0x5               // =-5
                	cmp	w1, #0x0
-               	csel	x2, x2, x4, ne
+               	mov	x16, #0x5               // =5
+               	mov	x17, #-0x5              // =-5
+               	csel	x0, x16, x17, ne
                	cmp	w1, #0x0
-               	csel	x0, x0, x3, ne
+               	mov	x16, #0x4               // =4
+               	mov	x17, #-0x4              // =-4
+               	csel	x1, x16, x17, ne
                	mov	x17, #0x64              // =100
-               	mul	x0, x0, x17
-               	add	x0, x0, x2
+               	mul	x1, x1, x17
+               	add	x0, x1, x0
                	ret
 
 <pick_triple>:
@@ -50,11 +50,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x24]
                	adrp	x2, <page>
-               	mov	x3, #0x5                // =5
-               	mov	x4, #0x0                // =0
-               	ldrsw	x5, [x2, #0x20]
-               	cmp	w5, #0x0
-               	csel	x3, x3, x4, ge
+               	ldrsw	x3, [x2, #0x20]
+               	cmp	w3, #0x0
+               	mov	x16, #0x5               // =5
+               	csel	x3, x16, xzr, ge
                	eor	x1, x1, x3
                	str	w1, [x0, #0x24]
                	cmp	w1, #0x5

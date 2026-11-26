@@ -547,12 +547,11 @@ Disassembly of section .text:
                	mov	x4, #0xd                // =13
                	mov	x2, #0x11               // =17
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x1                // =1
                	mov	x17, #0x2760            // =10080
                	movk	x17, #0x4634, lsl #16
                	movk	x17, #0xf948, lsl #32
                	movk	x17, #0xd14a, lsl #48
                	cmp	x4, x17
-               	csel	x0, x0, x1, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ret

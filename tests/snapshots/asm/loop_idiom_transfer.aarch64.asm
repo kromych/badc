@@ -135,9 +135,9 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x0, x2
                	ldrsw	x3, [x1, x0, lsl #2]
-               	mov	x4, #-0x1               // =-1
                	cmp	w0, #0xa
-               	csel	x4, x2, x4, lt
+               	mov	x17, #-0x1              // =-1
+               	csel	x4, x2, x17, lt
                	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1

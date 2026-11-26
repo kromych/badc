@@ -25,10 +25,10 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x1, #0x1                // =1
-               	mov	x2, #-0x1               // =-1
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, gt
+               	mov	x16, #0x1               // =1
+               	mov	x17, #-0x1              // =-1
+               	csel	x0, x16, x17, gt
                	ret
 
 <main>:

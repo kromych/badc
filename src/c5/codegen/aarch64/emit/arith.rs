@@ -221,6 +221,16 @@ pub(super) fn emit_select(
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
+    // A constant the select sets (`Allocation::select_set`): zero is
+    // `xzr`, another takes the scratch a spilled arm loads into.
+    let arm = |code: &mut CodeBuf, x: u32, into: Reg| match func.insts[x as usize] {
+        Inst::Imm(0) if alloc.select_set.contains(&x) => Some(Reg(31)),
+        Inst::Imm(k) if alloc.select_set.contains(&x) => {
+            load_imm64(code, into, k as u64);
+            Some(into)
+        }
+        _ => materialize_int(code, place_of(alloc, x), into, frame),
+    };
     if alloc.select_inc.get(v as usize).copied().unwrap_or(false) {
         use super::encode::enc_csinc;
         // `cinc`: the arm that is not the increment, plus one when the
@@ -228,7 +238,7 @@ pub(super) fn emit_select(
         let inc_is_a = matches!(func.insts[a as usize],
             Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: 1 } if lhs == b);
         let (x, keep) = if inc_is_a { (b, cc.flip()) } else { (a, cc) };
-        let Some(rx) = materialize_int(code, place_of(alloc, x), scratch.primary, frame) else {
+        let Some(rx) = arm(code, x, scratch.primary) else {
             return fail("Select: arm not int reg / spill");
         };
         let Some(rd) = int_or_spill_scratch(dst, scratch) else {
@@ -238,10 +248,10 @@ pub(super) fn emit_select(
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
-    let Some(ra) = materialize_int(code, place_of(alloc, a), scratch.primary, frame) else {
+    let Some(ra) = arm(code, a, scratch.primary) else {
         return fail("Select: arm not int reg / spill");
     };
-    let Some(rb) = materialize_int(code, place_of(alloc, b), scratch.secondary, frame) else {
+    let Some(rb) = arm(code, b, scratch.secondary) else {
         return fail("Select: arm not int reg / spill");
     };
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {

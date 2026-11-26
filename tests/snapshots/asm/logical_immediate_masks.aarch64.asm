@@ -179,10 +179,9 @@ Disassembly of section .text:
                	ret
 
 <classify>:
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	tst	x0, #0x40
-               	csel	x1, x2, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, ne
                	and	x2, x0, #0xf0
                	orr	x3, x1, #0x2
                	cmp	w2, #0x30
@@ -391,12 +390,11 @@ Disassembly of section .text:
                	mov	x1, #0xf0f              // =3855
                	movk	x1, #0xf0f, lsl #16
                	stur	w1, [x29, #-0x8]
-               	mov	x1, #0x0                // =0
-               	ldur	x2, [x29, #-0x20]
-               	and	x2, x20, x2
-               	mov	x3, #0x1                // =1
-               	cmp	x2, #0x0
-               	csel	x1, x3, x1, ne
+               	ldur	x1, [x29, #-0x20]
+               	and	x1, x20, x1
+               	cmp	x1, #0x0
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, ne
                	ldur	x2, [x29, #-0x18]
                	and	x2, x20, x2
                	orr	x3, x1, #0x2

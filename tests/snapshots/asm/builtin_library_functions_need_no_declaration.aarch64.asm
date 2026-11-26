@@ -273,11 +273,10 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x50]
                	mov	x0, x1
                	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0xc                // =12
                	ldr	x16, [sp, #0x58]
                	cmp	x16, #0x0
-               	csel	x0, x1, x0, ne
+               	mov	x16, #0xc               // =12
+               	csel	x0, x16, xzr, ne
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret

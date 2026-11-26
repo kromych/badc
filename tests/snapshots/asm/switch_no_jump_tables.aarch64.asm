@@ -115,9 +115,9 @@ Disassembly of section .text:
                	b	<addr>
                	add	x1, x1, #0x4
                	b	<addr>
-               	mov	x2, #0x1                // =1
                	cmp	w0, #0x1
-               	csel	x0, x2, x1, lt
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, x1, lt
                	add	x1, x0, #0x2
                	b	<addr>
 

@@ -17,9 +17,8 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	lsl	x0, x0, #1
                	mrs	x1, CNTVCT_EL0
-               	mov	x2, #0x0                // =0
                	cmp	x1, #0x0
-               	csel	x0, x0, x2, ne
+               	csel	x0, x0, xzr, ne
                	ret
 
 <main>:
@@ -28,7 +27,6 @@ Disassembly of section .text:
                	add	x0, x16, x17
                	lsl	x0, x0, #1
                	mrs	x1, CNTVCT_EL0
-               	mov	x2, #0x0                // =0
                	cmp	x1, #0x0
-               	csel	x0, x0, x2, ne
+               	csel	x0, x0, xzr, ne
                	ret

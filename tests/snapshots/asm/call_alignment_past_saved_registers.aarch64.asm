@@ -24,11 +24,10 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x1, x29, #0x20
                	and	x1, x1, #0xf
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x5
                	cset	x0, eq
                	cmp	w1, #0x0
-               	csel	x0, x2, x0, ne
+               	csel	x0, xzr, x0, ne
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -27,10 +27,10 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x40
                	ret
                	ldur	x0, [x29, #-0x10]
-               	mov	x1, #0x7fffffffffffffff // =9223372036854775807
-               	lsr	x2, x0, #9
+               	lsr	x1, x0, #9
                	cmn	x0, #0x1
-               	csel	x20, x1, x2, eq
+               	mov	x16, #0x7fffffffffffffff // =9223372036854775807
+               	csel	x20, x16, x1, eq
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	mov	x1, x0

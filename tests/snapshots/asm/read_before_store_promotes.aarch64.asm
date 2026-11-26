@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <maybe>:
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, ne
                	ret
 
 <self_init>:
@@ -45,17 +45,17 @@ Disassembly of section .text:
                	ret
 
 <narrow_maybe>:
-               	mov	x1, #-0x3               // =-3
-               	mov	x2, #0x7                // =7
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #-0x3              // =-3
+               	mov	x17, #0x7               // =7
+               	csel	x0, x16, x17, ne
                	ret
 
 <u8_maybe>:
-               	mov	x1, #0xc8               // =200
-               	mov	x2, #0x9                // =9
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0xc8              // =200
+               	mov	x17, #0x9               // =9
+               	csel	x0, x16, x17, ne
                	ret
 
 <loop_first>:
@@ -103,10 +103,10 @@ Disassembly of section .text:
                	ret
 
 <inlined>:
-               	mov	x1, #0x1e               // =30
-               	mov	x2, #-0x1               // =-1
                	cmp	w0, #0x2
-               	csel	x1, x1, x2, gt
+               	mov	x16, #0x1e              // =30
+               	mov	x17, #-0x1              // =-1
+               	csel	x1, x16, x17, gt
                	add	x0, x0, #0x3
                	mov	x17, #0xa               // =10
                	mul	x0, x0, x17

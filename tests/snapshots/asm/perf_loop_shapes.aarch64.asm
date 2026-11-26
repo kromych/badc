@@ -250,9 +250,8 @@ Disassembly of section .text:
 
 <guarded_negate>:
                	neg	x1, x1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, gt
+               	csel	x0, x1, xzr, gt
                	ret
 
 <main>:

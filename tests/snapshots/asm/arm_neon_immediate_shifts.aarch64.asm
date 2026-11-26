@@ -59,7 +59,6 @@ Disassembly of section .text:
                	ldrsb	x2, [x3, x0]
                	lsl	x4, x2, #3
                	mov	x2, #-0x80              // =-128
-               	mov	x14, #0x7f              // =127
                	cmp	w4, w2
                	b.ge	<addr>
                	cmp	w10, w2
@@ -68,9 +67,9 @@ Disassembly of section .text:
                	ldrb	w4, [x8, x0]
                	ldrb	w1, [x6, x0]
                	lsl	x1, x1, #2
-               	mov	x10, #0xff              // =255
                	cmp	w1, #0xff
-               	csel	x1, x10, x1, gt
+               	mov	x16, #0xff              // =255
+               	csel	x1, x16, x1, gt
                	cmp	w4, w1
                	cset	x1, ne
                	orr	x1, x2, x1, lsl #1
@@ -92,7 +91,8 @@ Disassembly of section .text:
                	orr	x1, x1, x2, lsl #3
                	b	<addr>
                	cmp	w4, #0x7f
-               	csel	x2, x14, x4, gt
+               	mov	x16, #0x7f              // =127
+               	csel	x2, x16, x4, gt
                	b	<addr>
                	shrn	v1.8b, v0.8h, #0x3
                	rshrn	v2.4h, v0.4s, #0x10
@@ -166,10 +166,10 @@ Disassembly of section .text:
                	b.le	<addr>
                	mov	x2, #0x7fffffffffffffff // =9223372036854775807
                	b	<addr>
-               	mov	x7, #-0x8000000000000000 // =-9223372036854775808
-               	lsl	x9, x2, #1
+               	lsl	x7, x2, #1
                	cmp	x2, x8
-               	csel	x2, x7, x9, lt
+               	mov	x16, #-0x8000000000000000 // =-9223372036854775808
+               	csel	x2, x16, x7, lt
                	b	<addr>
                	mov	x0, #0xc0               // =192
                	mov	x2, #0x0                // =0
@@ -278,10 +278,9 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, v5.d[0]
                	mov	x2, v2.d[0]
-               	mov	x3, #-0x1               // =-1
-               	mov	x6, #0x0                // =0
                	cmp	x2, #0x0
-               	csel	x2, x3, x6, lt
+               	mov	x16, #-0x1              // =-1
+               	csel	x2, x16, xzr, lt
                	mov	x17, #0x7f80            // =32640
                	movk	x17, #0x1ff, lsl #16
                	movk	x17, #0x5500, lsl #32

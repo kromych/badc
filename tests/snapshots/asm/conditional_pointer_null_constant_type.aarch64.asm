@@ -23,9 +23,8 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x10]
                	mov	x1, #0x2a               // =42
                	stur	w1, [x29, #-0x8]
-               	mov	x1, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x1, x0, x1, ne
+               	csel	x1, x0, xzr, ne
                	ldrsw	x1, [x1, #0x10]
                	cmp	w1, #0x2a
                	b.eq	<addr>

@@ -22,27 +22,27 @@ Disassembly of section .text:
                	ubfx	x0, x2, #52, #11
                	and	x2, x2, #0xfffffffffffff
                	cbnz	w0, <addr>
-               	mov	x3, #0x2                // =2
-               	mov	x4, #0x3                // =3
                	cmp	x2, #0x0
-               	csel	x3, x4, x3, ne
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x2               // =2
+               	csel	x3, x16, x17, ne
                	cbz	w3, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	cbnz	w0, <addr>
-               	mov	x1, #0x2                // =2
-               	mov	x3, #0x3                // =3
                	cmp	x2, #0x0
-               	csel	x1, x3, x1, ne
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x2               // =2
+               	csel	x1, x16, x17, ne
                	cmp	w1, #0x1
                	b.ne	<addr>
                	mov	x0, #0x7                // =7
                	ret
                	cbnz	w0, <addr>
-               	mov	x0, #0x2                // =2
-               	mov	x1, #0x3                // =3
                	cmp	x2, #0x0
-               	csel	x0, x1, x0, ne
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, ne
                	cbz	w0, <addr>
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -52,10 +52,10 @@ Disassembly of section .text:
                	ubfx	x1, x0, #52, #11
                	and	x0, x0, #0xfffffffffffff
                	cbnz	w1, <addr>
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
                	cmp	x0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, ne
                	cbz	w0, <addr>
                	mov	x0, #0xc                // =12
                	ret
@@ -63,29 +63,27 @@ Disassembly of section .text:
                	ret
                	cmp	w1, #0x7ff
                	b.ne	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, ne
                	b	<addr>
                	cmp	w0, #0x7ff
                	b.ne	<addr>
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
                	cmp	x2, #0x0
-               	csel	x0, x1, x0, ne
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, ne
                	b	<addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
                	cmp	w0, #0x7ff
                	b.ne	<addr>
-               	mov	x3, #0x1                // =1
                	cmp	x2, #0x0
-               	csel	x1, x1, x3, ne
+               	mov	x17, #0x1               // =1
+               	csel	x1, x1, x17, ne
                	b	<addr>
                	cmp	w0, #0x7ff
                	b.ne	<addr>
-               	mov	x3, #0x1                // =1
                	cmp	x2, #0x0
-               	csel	x3, x1, x3, ne
+               	mov	x17, #0x1               // =1
+               	csel	x3, x1, x17, ne
                	b	<addr>

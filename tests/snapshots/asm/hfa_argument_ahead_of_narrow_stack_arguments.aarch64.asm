@@ -54,10 +54,9 @@ Disassembly of section .text:
                	add	x0, x0, x5
                	add	x0, x0, x6
                	add	x0, x0, x7
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x3                // =3
                	cmp	x0, #0x42
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x3               // =3
+               	csel	x0, xzr, x17, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
 

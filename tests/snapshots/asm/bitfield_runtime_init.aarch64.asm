@@ -30,9 +30,9 @@ Disassembly of section .text:
                	sbfx	x1, x1, #8, #5
                	cmp	w1, w2
                	cset	x1, eq
-               	mov	x2, #0x1                // =1
                	cmp	x1, #0x0
-               	csel	x0, x2, x0, ne
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, x0, ne
                	ret
                	mov	x1, x0
                	b	<addr>
@@ -56,12 +56,12 @@ Disassembly of section .text:
                	eor	x1, x4, x1, asr #19
                	cmp	w1, #0x0
                	cset	x1, eq
-               	mov	x2, #0x1                // =1
                	cmp	x1, #0x0
-               	csel	x1, x2, x0, ne
-               	mov	x2, #0x1                // =1
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, x0, ne
                	cmp	x1, #0x0
-               	csel	x0, x2, x0, ne
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, x0, ne
                	ret
                	mov	x1, x0
                	b	<addr>

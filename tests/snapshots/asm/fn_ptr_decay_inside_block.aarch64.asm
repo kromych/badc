@@ -24,9 +24,8 @@ Disassembly of section .text:
                	bl	<addr>
                	add	x0, x0, #0xcb
                	add	x0, x0, #0x68
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x2                // =2
                	cmp	w0, #0x19a
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x2               // =2
+               	csel	x0, xzr, x17, eq
                	ldp	x29, x30, [sp], #0x10
                	ret

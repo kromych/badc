@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <pick>:
-               	mov	x0, #0x8                // =8
-               	mov	x2, #0x9                // =9
                	cmp	w1, #0x0
-               	csel	x0, x2, x0, ne
+               	mov	x16, #0x9               // =9
+               	mov	x17, #0x8               // =8
+               	csel	x0, x16, x17, ne
                	ret
 
 <sum>:

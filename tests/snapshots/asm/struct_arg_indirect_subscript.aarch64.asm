@@ -52,9 +52,8 @@ Disassembly of section .text:
                	mul	x6, x6, x17
                	add	x5, x5, x6
                	add	x5, x5, #0x3
-               	mov	x6, #0x0                // =0
                	cmp	x4, #0x0
-               	csel	x1, x1, x6, ne
+               	csel	x1, x1, xzr, ne
                	add	x1, x5, x1
                	cmp	x1, #0xfc2
                	b.eq	<addr>

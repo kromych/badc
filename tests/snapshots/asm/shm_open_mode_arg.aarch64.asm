@@ -52,8 +52,7 @@ Disassembly of section .text:
                	ret
                	ldur	w0, [x29, #-0x70]
                	and	x0, x0, #0x1ff
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x180
-               	csel	x21, x1, x2, ne
+               	mov	x16, #0x3               // =3
+               	csel	x21, x16, xzr, ne
                	b	<addr>

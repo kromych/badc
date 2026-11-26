@@ -110,10 +110,9 @@ Disassembly of section .text:
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x20, x0, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
@@ -191,10 +190,9 @@ Disassembly of section .text:
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
-               	mov	x0, #0x8                // =8
-               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x20, x0, x1, ne
+               	mov	x16, #0x8               // =8
+               	csel	x20, x16, xzr, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x8]
@@ -225,10 +223,9 @@ Disassembly of section .text:
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
-               	mov	x0, #0x80               // =128
-               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x20, x0, x1, ne
+               	mov	x16, #0x80              // =128
+               	csel	x20, x16, xzr, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sub	x0, x0, #0x1
@@ -257,10 +254,9 @@ Disassembly of section .text:
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x20, x0, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
                	fmov	d1, #6.00000000

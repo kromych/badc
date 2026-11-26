@@ -19,8 +19,7 @@ Disassembly of section .text:
                	aesmc	v0.16b, v0.16b
                	aesimc	v0.16b, v0.16b
                	mov	w0, v0.s[0]
-               	mov	x1, #0x2a               // =42
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x2a
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x2a              // =42
+               	csel	x0, x16, xzr, eq
                	ret

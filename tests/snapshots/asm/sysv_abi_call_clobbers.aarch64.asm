@@ -191,10 +191,9 @@ Disassembly of section .text:
                	ldr	d1, [x0, #0x8]
                	bl	<addr>
                	fmov	d1, #11.00000000
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x20, x0, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x0, [x3]

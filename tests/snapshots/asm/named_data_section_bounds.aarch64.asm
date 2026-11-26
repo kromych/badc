@@ -25,10 +25,10 @@ Disassembly of section .text:
                	b.hs	<addr>
                	ldrsw	x5, [x0, #0x8]
                	ldr	x6, [x0]
-               	mov	x7, #0x3e8              // =1000
                	ldrb	w6, [x6, #0x1]
                	cmp	w6, #0x0
-               	csel	x6, x7, x1, ne
+               	mov	x16, #0x3e8             // =1000
+               	csel	x6, x16, x1, ne
                	add	x5, x5, x6
                	add	x3, x3, x5
                	add	x0, x0, #0x10
@@ -80,8 +80,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x40]
                	add	x0, x0, x1
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x4                // =4
                	cmp	w0, #0x3
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x4               // =4
+               	csel	x0, xzr, x17, eq
                	ret

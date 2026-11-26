@@ -209,33 +209,33 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	ldrb	w2, [x8, x0]
-               	mov	x3, #0x1d               // =29
                	tst	x2, #0x80
-               	csel	x3, x3, x1, ne
+               	mov	x16, #0x1d              // =29
+               	csel	x3, x16, x1, ne
                	eor	x3, x3, x2, lsl #1
                	and	x4, x3, #0xff
                	ldrb	w3, [x9, x0]
                	eor	x4, x4, x3
                	eor	x12, x2, x3
-               	mov	x2, #0x1d               // =29
                	tst	x4, #0x80
-               	csel	x2, x2, x1, ne
+               	mov	x16, #0x1d              // =29
+               	csel	x2, x16, x1, ne
                	eor	x2, x2, x4, lsl #1
                	and	x3, x2, #0xff
                	ldrb	w2, [x10, x0]
                	eor	x3, x3, x2
                	eor	x4, x12, x2
-               	mov	x2, #0x1d               // =29
                	tst	x3, #0x80
-               	csel	x2, x2, x1, ne
+               	mov	x16, #0x1d              // =29
+               	csel	x2, x16, x1, ne
                	eor	x2, x2, x3, lsl #1
                	and	x3, x2, #0xff
                	ldrb	w2, [x11, x0]
                	eor	x3, x3, x2
                	eor	x4, x4, x2
-               	mov	x2, #0x1d               // =29
                	tst	x3, #0x80
-               	csel	x2, x2, x1, ne
+               	mov	x16, #0x1d              // =29
+               	csel	x2, x16, x1, ne
                	eor	x2, x2, x3, lsl #1
                	and	x3, x2, #0xff
                	ldrb	w2, [x5, x0]
@@ -372,10 +372,9 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x90
                	ret
-               	mov	x0, #0x7                // =7
-               	mov	x1, #0x0                // =0
                	cmp	x20, #0x0
-               	csel	x0, x1, x0, ne
+               	mov	x17, #0x7               // =7
+               	csel	x0, xzr, x17, ne
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x90

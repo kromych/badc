@@ -74,9 +74,9 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	mov	x0, x1
                	add	x0, x0, #0x1
-               	mov	x4, #0x1                // =1
                	cmp	w0, w2
-               	csel	x4, x1, x4, lt
+               	mov	x17, #0x1               // =1
+               	csel	x4, x1, x17, lt
                	ldr	x4, [x3, x4, lsl #3]
                	br	x4
                	b	<addr>

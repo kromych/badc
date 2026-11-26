@@ -43,10 +43,10 @@ Disassembly of section .text:
                	strb	w0, [x2, x1]
                	mov	x0, #0xa                // =10
                	ret
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x14               // =20
                	cmp	w0, #0x1
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x14              // =20
+               	csel	x0, x16, x17, eq
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x1, <page>
@@ -92,10 +92,10 @@ Disassembly of section .text:
                	str	w4, [x1, #0x60]
                	mov	x4, #0x63               // =99
                	strb	w4, [x2, x3]
-               	mov	x3, #0x1e               // =30
-               	mov	x4, #0x28               // =40
                	cmp	w0, #0x2
-               	csel	x0, x3, x4, eq
+               	mov	x16, #0x1e              // =30
+               	mov	x17, #0x28              // =40
+               	csel	x0, x16, x17, eq
                	ldrsw	x3, [x1, #0x60]
                	add	x4, x3, #0x1
                	str	w4, [x1, #0x60]

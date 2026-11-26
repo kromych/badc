@@ -2271,15 +2271,14 @@ Disassembly of section .text:
                	cmp	w20, #0x1f4
                	b.lt	<addr>
                	adrp	x0, <page>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	ldr	x0, [x0, #0x18]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0xdf7             // =3575
                	movk	x17, #0x5164, lsl #16
                	movk	x17, #0xcaee, lsl #32
                	movk	x17, #0xba11, lsl #48
                	cmp	x0, x17
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ldp	x20, x21, [sp, #0x10]
                	ldp	d8, d9, [sp]
                	add	sp, sp, #0x470

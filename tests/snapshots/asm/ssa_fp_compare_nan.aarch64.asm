@@ -20,10 +20,10 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x0
                	fdiv	d0, d16, d17
-               	mov	x1, #0x1                // =1
                	fmov	d17, x0
                	fcmpe	d0, d17
-               	csel	x1, x1, x0, mi
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, x0, mi
                	orr	x2, x1, #0x2
                	fmov	d17, x0
                	fcmpe	d0, d17

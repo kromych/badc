@@ -29,8 +29,7 @@ Disassembly of section .text:
                	add	x1, x1, #0xa
                	str	w1, [x0, #0x20]
                	mov	x0, x1
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	w0, #0xa
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ret

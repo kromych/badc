@@ -24,10 +24,9 @@ Disassembly of section .text:
                	st1	{ v0.s }[2], [x17]
                	ld1	{ v1.s }[0], [x17]
                	mov	w0, v1.s[0]
-               	mov	x1, #0x2a               // =42
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x2a
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x2a              // =42
+               	csel	x0, x16, xzr, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

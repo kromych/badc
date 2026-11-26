@@ -37,9 +37,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x1                // =1
                	cmp	x0, #0x0
-               	csel	x20, x20, x1, ne
+               	mov	x17, #0x1               // =1
+               	csel	x20, x20, x17, ne
                	mov	x0, x22
                	bl	<addr>
                	cbnz	x0, <addr>

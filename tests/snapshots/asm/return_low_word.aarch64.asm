@@ -69,10 +69,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x5                // =5
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x5               // =5
+               	csel	x0, x16, x17, ne
                	ldp	x29, x30, [sp], #0x10
                	ret
 

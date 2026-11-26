@@ -124,13 +124,12 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	adrp	x16, <page>
                	ldr	d0, [x16]
-               	mov	x2, #0x1                // =1
-               	mov	x3, #0x0                // =0
                	add	x16, x1, #0x20
                	bl	<addr>
                	fmov	d1, x16
                	fcmpe	d1, d0
-               	csel	x1, x2, x3, gt
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, gt
                	add	x0, x0, x1
                	ldp	x20, x21, [sp, #0x50]
                	ldr	d8, [sp, #0x40]

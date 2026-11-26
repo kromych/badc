@@ -70,10 +70,9 @@ Disassembly of section .text:
                	stp	x16, x17, [x0, #0x10]
                	sub	x1, x29, #0x38
                	bl	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	x0, #0x384
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

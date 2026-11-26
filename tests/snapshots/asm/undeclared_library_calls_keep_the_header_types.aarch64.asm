@@ -27,14 +27,12 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	fmov	d0, #1.50000000
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	fcmp	d8, d0
-               	csel	x1, x1, x2, eq
-               	mov	x2, #0x0                // =0
-               	mov	x3, #0x2                // =2
+               	mov	x17, #0x1               // =1
+               	csel	x1, xzr, x17, eq
                	cmp	w0, #0x5
-               	csel	x0, x2, x3, eq
+               	mov	x17, #0x2               // =2
+               	csel	x0, xzr, x17, eq
                	orr	x0, x1, x0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	d8, [sp], #0x20

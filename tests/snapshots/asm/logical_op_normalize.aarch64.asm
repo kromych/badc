@@ -14,10 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <or_ll>:
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, xzr, ne
                	ret
 
 <or_rr>:

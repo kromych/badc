@@ -53,15 +53,15 @@ Disassembly of section .text:
 
 <pick>:
                	cbz	w0, <addr>
-               	mov	x0, #0x1                // =1
-               	mov	x2, #0x2                // =2
                	cmp	w1, #0x0
-               	csel	x0, x0, x2, ne
+               	mov	x16, #0x1               // =1
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, ne
                	ret
-               	mov	x0, #0x3                // =3
-               	mov	x1, #0x4                // =4
                	cmp	w2, #0x0
-               	csel	x0, x0, x1, ne
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x4               // =4
+               	csel	x0, x16, x17, ne
                	b	<addr>
 
 <carry>:

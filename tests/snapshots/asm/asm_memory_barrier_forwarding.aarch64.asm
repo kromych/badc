@@ -20,9 +20,8 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0xc]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0xc]
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x8
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ret

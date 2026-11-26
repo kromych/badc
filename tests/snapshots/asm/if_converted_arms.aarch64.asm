@@ -26,16 +26,15 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x0, #0x7                // =7
                	bl	<addr>
-               	lsr	x2, x0, #32
-               	mov	x1, #0x0                // =0
+               	lsr	x1, x0, #32
                	cmp	w0, #0x7
                	cset	x0, eq
                	cmp	x20, #0x12
-               	csel	x0, x0, x1, eq
-               	cmn	w2, #0x7
-               	cset	x2, eq
+               	csel	x0, x0, xzr, eq
+               	cmn	w1, #0x7
+               	cset	x1, eq
                	cmp	x0, #0x0
-               	csel	x0, x2, x1, ne
+               	csel	x0, x1, xzr, ne
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
@@ -480,10 +479,10 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	mov	x2, #0x7                // =7
                	bl	<addr>
-               	mov	x1, #0x5                // =5
-               	mov	x2, #0x7                // =7
                	cmp	x20, #0x0
-               	csel	x1, x1, x2, ne
+               	mov	x16, #0x5               // =5
+               	mov	x17, #0x7               // =7
+               	csel	x1, x16, x17, ne
                	cmp	x0, x1
                	b.ne	<addr>
                	sub	x0, x29, #0x48
@@ -491,10 +490,10 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	mov	x2, #0x7                // =7
                	bl	<addr>
-               	mov	x1, #0x7                // =7
-               	mov	x2, #0x5                // =5
                	cmp	x20, #0x0
-               	csel	x1, x1, x2, ne
+               	mov	x16, #0x7               // =7
+               	mov	x17, #0x5               // =5
+               	csel	x1, x16, x17, ne
                	cmp	x0, x1
                	b.ne	<addr>
                	sub	x0, x29, #0x38
@@ -502,20 +501,20 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	mov	x2, #0x7                // =7
                	bl	<addr>
-               	mov	x1, #0x7                // =7
-               	mov	x2, #0x5                // =5
                	cmp	x20, #0x0
-               	csel	x1, x1, x2, ne
+               	mov	x16, #0x7               // =7
+               	mov	x17, #0x5               // =5
+               	csel	x1, x16, x17, ne
                	cmp	x0, x1
                	b.ne	<addr>
                	mov	x0, x20
                	mov	x1, #0x5                // =5
                	mov	x2, #0x7                // =7
                	bl	<addr>
-               	mov	x1, #0x7                // =7
-               	mov	x2, #0x5                // =5
                	cmp	x20, #0x0
-               	csel	x1, x1, x2, ne
+               	mov	x16, #0x7               // =7
+               	mov	x17, #0x5               // =5
+               	csel	x1, x16, x17, ne
                	cmp	x0, x1
                	b.ne	<addr>
                	add	x20, x20, #0x1

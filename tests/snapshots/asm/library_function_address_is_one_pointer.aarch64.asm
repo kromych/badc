@@ -50,10 +50,9 @@ Disassembly of section .text:
                	blr	x1
                	ldr	x16, [sp, #0x8]
                	add	x0, x16, x0
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x2                // =2
                	cmp	x0, #0x6
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x2               // =2
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

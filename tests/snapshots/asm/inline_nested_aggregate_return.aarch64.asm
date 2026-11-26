@@ -81,10 +81,9 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	add	x0, x0, x4
                	add	x0, x0, x5
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x38
-               	csel	x20, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	mov	x21, x0

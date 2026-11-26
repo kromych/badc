@@ -2015,13 +2015,12 @@ Disassembly of section .text:
                	orr	x0, x1, x0
                	cbnz	x0, <addr>
                	cbz	x20, <addr>
-               	mov	x2, #0x0                // =0
                	cmn	x20, #0x1
                	cset	x0, hs
-               	add	x3, x20, x0
+               	add	x2, x20, x0
                	cmn	x20, #0x1
-               	csel	x4, x3, x20, hs
-               	csel	x8, x0, x2, hs
+               	csel	x4, x2, x20, hs
+               	csel	x8, x0, xzr, hs
                	mov	x3, #0xffffffff         // =4294967295
                	lsr	x2, x21, #32
                	mov	w5, w21
@@ -2210,11 +2209,10 @@ Disassembly of section .text:
                	orr	x0, x0, x1
                	and	x1, x4, x3
                	orr	x2, x0, x1
-               	mov	x3, #0x1                // =1
-               	mov	x4, #0x0                // =0
                	cmp	x2, #0x0
-               	csel	x20, x3, x0, eq
-               	csel	x21, x4, x1, eq
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, x0, eq
+               	csel	x21, xzr, x1, eq
                	mov	x0, x23
                	mov	x3, x21
                	mov	x2, x20

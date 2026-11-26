@@ -145,9 +145,8 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	mov	x2, #0x14               // =20
                	bl	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	x0, #0x160
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ldp	x29, x30, [sp], #0x10
                	ret

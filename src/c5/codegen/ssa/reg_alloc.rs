@@ -174,6 +174,9 @@ pub(crate) struct Allocation {
     /// marshaling sets it from its encoding, so it holds no register ahead
     /// of the call.
     pub call_set: alloc::collections::BTreeMap<ValueId, ArgSet>,
+    /// AArch64: the constants the integer selects reading them set as an
+    /// arm ([`select_set_arms`]), taking no place as `call_set` does.
+    pub select_set: alloc::collections::BTreeSet<ValueId>,
     /// The frame loads ([`stack_arg_loads`]) the call's marshaling performs
     /// itself, as `(slot, disp, kind)`, taking no place as `call_set` does.
     pub stack_load: alloc::collections::BTreeMap<ValueId, (i64, i32, LoadKind)>,
@@ -2014,7 +2017,11 @@ fn allocate_keeping(
     } else {
         alloc::collections::BTreeSet::new()
     };
-    for &v in call_set.keys().chain(stack_load.keys()).chain(&fp_literals) {
+    let select_set = select_set_arms(func, target, &use_counts);
+    for &v in (call_set.keys().chain(stack_load.keys()))
+        .chain(&fp_literals)
+        .chain(&select_set)
+    {
         use_counts[v as usize] = 0;
     }
     // A store whose own value is unread can take a constant from its
@@ -2081,6 +2088,7 @@ fn allocate_keeping(
             imm_held: Vec::new(),
             imm_store: Vec::new(),
             call_set: alloc::collections::BTreeMap::new(),
+            select_set: alloc::collections::BTreeSet::new(),
             stack_load: alloc::collections::BTreeMap::new(),
             fp_mem_operand: alloc::collections::BTreeSet::new(),
             fp_const,
@@ -2405,7 +2413,7 @@ fn allocate_keeping(
         coloring = color(&node_cons);
     }
     places = coloring.places;
-    for &v in call_set.keys().chain(stack_load.keys()) {
+    for &v in call_set.keys().chain(stack_load.keys()).chain(&select_set) {
         places[v as usize] = Place::None;
     }
     let mut spill_count = coloring.spill_count;
@@ -3094,6 +3102,7 @@ fn allocate_keeping(
         imm_held,
         imm_store,
         call_set,
+        select_set,
         stack_load,
         fp_mem_operand,
         fp_const,
@@ -5525,6 +5534,62 @@ fn call_set_arguments(
             Inst::ImmCode(pc) => Some((v, ArgSet::Code(pc))),
             _ => None,
         })
+        .collect()
+}
+
+/// AArch64: the constants every reader of which is an integer select's
+/// arm, which the select sets ([`Allocation::select_set`]): zero, which it
+/// reads as `xzr`, and a constant one instruction sets that one select
+/// reads in a block of no deeper loop, set there instead of at its
+/// definition.
+fn select_set_arms(
+    func: &FunctionSsa,
+    target: Target,
+    use_counts: &[u32],
+) -> alloc::collections::BTreeSet<ValueId> {
+    let mut readers: alloc::collections::BTreeMap<ValueId, (u32, usize)> =
+        alloc::collections::BTreeMap::new();
+    if !target.is_aarch64() {
+        return alloc::collections::BTreeSet::new();
+    }
+    for (b, blk) in func.blocks.iter().enumerate() {
+        for pc in blk.inst_range.clone() {
+            let Inst::Select {
+                a, b: other, kind, ..
+            } = func.insts[pc as usize]
+            else {
+                continue;
+            };
+            if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                continue;
+            }
+            for arm in [a, other] {
+                if matches!(func.insts.get(arm as usize), Some(Inst::Imm(_))) {
+                    let r = readers.entry(arm).or_insert((0, b));
+                    *r = (r.0 + 1, b);
+                }
+            }
+        }
+    }
+    let mut depths = None;
+    let mut as_often = |v: ValueId, reader: usize| {
+        let depths =
+            depths.get_or_insert_with(|| crate::c5::codegen::passes::layout::loop_depths(func));
+        let def = (func.blocks.iter()).position(|blk| blk.inst_range.contains(&v));
+        def.is_some_and(|d| depths[reader] <= depths[d])
+    };
+    (readers.into_iter())
+        .filter(|&(v, (n, b))| {
+            let Inst::Imm(k) = func.insts[v as usize] else {
+                return false;
+            };
+            use_counts.get(v as usize) == Some(&n)
+                && (k == 0
+                    || crate::c5::codegen::aarch64::encode::imm64_insts(k as u64) == 1
+                        && n == 1
+                        && as_often(v, b))
+        })
+        .map(|(v, _)| v)
         .collect()
 }
 

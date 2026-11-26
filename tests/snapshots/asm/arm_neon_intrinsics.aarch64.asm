@@ -94,9 +94,9 @@ Disassembly of section .text:
                	mov	x0, x2
                	ldrb	w5, [x4, x0]
                	ldrb	w3, [x1, x0]
-               	mov	x6, #0x1d               // =29
                	tst	x3, #0x80
-               	csel	x6, x6, x2, ne
+               	mov	x16, #0x1d              // =29
+               	csel	x6, x16, x2, ne
                	eor	x3, x6, x3, lsl #1
                	and	x3, x3, #0xff
                	sub	x6, x29, #0x40

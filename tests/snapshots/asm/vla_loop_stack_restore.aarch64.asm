@@ -58,11 +58,11 @@ Disassembly of section .text:
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2a               // =42
-               	mov	x1, #0x2                // =2
                	mov	x17, #0x1000            // =4096
                	cmp	x4, x17
-               	csel	x0, x0, x1, eq
+               	mov	x16, #0x2a              // =42
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, eq
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -68,10 +68,9 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	x0, #0x0
-               	csel	x1, x2, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x17, #0x30              // =48

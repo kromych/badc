@@ -34,10 +34,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
-               	mov	x2, #0x0                // =0
-               	mov	x3, #0x3                // =3
                	ldr	x0, [x0, #0x10]
                	cmp	x0, x1
-               	csel	x0, x2, x3, eq
+               	mov	x17, #0x3               // =3
+               	csel	x0, xzr, x17, eq
                	ldp	x29, x30, [sp], #0x10
                	ret

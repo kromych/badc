@@ -724,15 +724,14 @@ Disassembly of section .text:
                	cmp	w20, #0x7d0
                	b.lt	<addr>
                	adrp	x0, <page>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	ldr	x0, [x0, #0x18]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0x414c            // =16716
                	movk	x17, #0xd123, lsl #16
                	movk	x17, #0x18ff, lsl #32
                	movk	x17, #0x6ebc, lsl #48
                	cmp	x0, x17
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ldp	x29, x30, [sp, #0x1b0]
                	ldr	x20, [sp, #0x20]
                	ldr	d10, [sp, #0x10]

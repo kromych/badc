@@ -21,10 +21,10 @@ Disassembly of section .text:
                	add	x4, x4, #0x1
                	str	w4, [x2, #0x20]
                	adrp	x2, <page>
-               	mov	x4, #-0x1               // =-1
                	ldrsw	x1, [x1]
                	cmp	w1, w0
-               	csel	x0, x0, x4, eq
+               	mov	x17, #-0x1              // =-1
+               	csel	x0, x0, x17, eq
                	str	w0, [x2, #0x24]
                	adrp	x0, <page>
                	adrp	x1, <page>
@@ -135,10 +135,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x28]
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x6                // =6
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x17, #0x6               // =6
+               	csel	x0, xzr, x17, ne
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -429,16 +429,15 @@ Disassembly of section .text:
                	ldur	d8, [x29, #-0x8]
                	ldrsw	x2, [x1, #0x8]
                	ldrsw	x0, [x1, #0xc]
-               	ldrsw	x3, [x1, #0x10]
-               	mov	x1, #0x0                // =0
+               	ldrsw	x1, [x1, #0x10]
                	cmp	w0, #0x0
-               	cset	x4, eq
-               	cmp	w2, #0x0
-               	csel	x4, x1, x4, ne
-               	cmp	w3, #0x0
                	cset	x3, eq
-               	cmp	x4, #0x0
-               	csel	x1, x3, x1, ne
+               	cmp	w2, #0x0
+               	csel	x3, xzr, x3, ne
+               	cmp	w1, #0x0
+               	cset	x1, eq
+               	cmp	x3, #0x0
+               	csel	x1, x1, xzr, ne
                	mov	x3, #0x1                // =1
                	cmp	w0, #0x0
                	cset	x4, ne
@@ -519,9 +518,9 @@ Disassembly of section .text:
                	fmov	d0, d8
                	bl	<addr>
                	orr	x0, x24, x0, lsl #9
-               	mov	x1, #-0x1               // =-1
                	cmp	w22, w0
-               	csel	x0, x22, x1, eq
+               	mov	x17, #-0x1              // =-1
+               	csel	x0, x22, x17, eq
                	cmp	w0, w23
                	b.ne	<addr>
                	sub	x0, x29, #0xf8
@@ -592,9 +591,9 @@ Disassembly of section .text:
                	fmov	d0, d8
                	bl	<addr>
                	orr	x0, x22, x0, lsl #9
-               	mov	x1, #-0x1               // =-1
                	cmp	w21, w0
-               	csel	x0, x21, x1, eq
+               	mov	x17, #-0x1              // =-1
+               	csel	x0, x21, x17, eq
                	cmp	w0, w23
                	b.eq	<addr>
                	b	<addr>

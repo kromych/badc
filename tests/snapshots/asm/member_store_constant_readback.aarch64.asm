@@ -14,15 +14,13 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x2, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x3, #0x20               // =32
                	mov	x1, #0x8080             // =32896
                	movk	x1, #0x8000, lsl #16
-               	mov	x4, #0x8000             // =32768
+               	mov	x2, #0x8000             // =32768
                	str	w1, [x0]
-               	strh	w4, [x0, #0x4]
+               	strh	w2, [x0, #0x4]
                	mov	x1, #-0x7fffffff80000000 // =-9223372034707292160
                	str	x1, [x0, #0x8]
                	mov	x1, #-0x1               // =-1
@@ -31,18 +29,19 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	str	x0, [x1, #0x40]
-               	mov	x4, #0x905              // =2309
-               	strh	w4, [x0]
+               	mov	x2, #0x905              // =2309
+               	strh	w2, [x0]
                	ldr	x1, [x1, #0x40]
-               	mov	x4, #0x7                // =7
-               	strb	w4, [x1]
+               	mov	x2, #0x7                // =7
+               	strb	w2, [x1]
                	adrp	x1, <page>
-               	ldrsw	x4, [x1, #0x48]
-               	add	x4, x4, #0x1
-               	str	w4, [x1, #0x48]
+               	ldrsw	x2, [x1, #0x48]
+               	add	x2, x2, #0x1
+               	str	w2, [x1, #0x48]
                	ldrb	w0, [x0]
                	cmp	w0, #0x7
-               	csel	x0, x3, x2, ne
+               	mov	x16, #0x20              // =32
+               	csel	x0, x16, xzr, ne
                	adrp	x1, <page>
                	mov	x2, #0x6                // =6
                	strb	w2, [x1, #0x3a]

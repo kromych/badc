@@ -151,11 +151,11 @@ Disassembly of section .text:
 
 <round_to_double>:
                	sxtw	x3, w3
-               	mov	x4, #0xb                // =11
-               	mov	x5, #0xc                // =12
-               	sub	x5, x5, x3
+               	mov	x4, #0xc                // =12
+               	sub	x4, x4, x3
                	cmp	w3, #0x1
-               	csel	x5, x4, x5, ge
+               	mov	x16, #0xb               // =11
+               	csel	x5, x16, x4, ge
                	cmp	w3, #0x7ff
                	b.lt	<addr>
                	orr	x0, x0, #0x7ff0000000000000
@@ -163,11 +163,10 @@ Disassembly of section .text:
                	cmp	w5, #0x40
                	b.le	<addr>
                	ret
-               	mov	x4, #0x0                // =0
-               	sxtw	x6, w5
-               	lsr	x6, x1, x6
+               	sxtw	x4, w5
+               	lsr	x4, x1, x4
                	cmp	w5, #0x40
-               	csel	x4, x4, x6, eq
+               	csel	x4, xzr, x4, eq
                	sub	x5, x5, #0x1
                	sxtw	x6, w5
                	lsr	x5, x1, x6
@@ -217,17 +216,15 @@ Disassembly of section .text:
                	b.ne	<addr>
                	orr	x0, x3, #0x7fff000000000000
                	orr	x0, x0, x1, lsr #4
-               	mov	x2, #0x800000000000     // =140737488355328
-               	mov	x3, #0x0                // =0
                	cmp	x1, #0x0
-               	csel	x1, x2, x3, ne
+               	mov	x16, #0x800000000000    // =140737488355328
+               	csel	x1, x16, xzr, ne
                	orr	x3, x0, x1
                	lsl	x0, x20, #60
-               	mov	x1, #0x0                // =0
                	cmp	x5, x3
-               	cset	x2, eq
+               	cset	x1, eq
                	cmp	x4, x0
-               	csel	x0, x2, x1, eq
+               	csel	x0, x1, xzr, eq
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
@@ -264,10 +261,9 @@ Disassembly of section .text:
                	lsl	x24, x26, #63
                	cmp	w20, #0x8
                	b.ge	<addr>
-               	mov	x0, #0xffffffffffff     // =281474976710655
-               	mov	x1, #0x0                // =0
                	tst	x20, #0x1
-               	csel	x0, x0, x1, ne
+               	mov	x16, #0xffffffffffff    // =281474976710655
+               	csel	x0, x16, xzr, ne
                	cmp	w20, #0x8
                	b.ge	<addr>
                	adrp	x1, <addr>

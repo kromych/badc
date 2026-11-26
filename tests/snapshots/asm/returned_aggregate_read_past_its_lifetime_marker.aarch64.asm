@@ -30,8 +30,8 @@ Disassembly of section .text:
                	strb	w0, [x3, #0x48]
                	str	x1, [x2]
                	adrp	x1, <page>
-               	mov	x2, #0x1                // =1
-               	ldr	x1, [x1, #0x30]
+               	ldr	x1, [x1, <lo12>]
                	cmp	x1, #0x3
-               	csel	x0, x0, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, x0, x17, eq
                	ret

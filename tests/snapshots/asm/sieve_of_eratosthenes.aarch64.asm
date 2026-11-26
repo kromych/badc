@@ -46,9 +46,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w2
                	b.lt	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	mov	x17, #0x2578            // =9592
                	cmp	w1, w17
-               	csel	x0, x0, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ret

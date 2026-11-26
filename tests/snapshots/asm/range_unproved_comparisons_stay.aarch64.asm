@@ -28,9 +28,9 @@ Disassembly of section .text:
                	ldr	x1, [x1, #0x20]
                	and	x5, x1, #0xff
                	cbnz	w5, <addr>
-               	mov	x5, #0x1                // =1
                	cmp	x1, #0x0
-               	csel	x1, x0, x5, ne
+               	mov	x17, #0x1               // =1
+               	csel	x1, x0, x17, ne
                	cbz	x1, <addr>
                	mov	x0, x1
                	add	sp, sp, #0x10

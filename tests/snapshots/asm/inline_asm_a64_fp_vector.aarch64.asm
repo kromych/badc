@@ -24,11 +24,10 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	mov	x16, #0x42280000        // =1109917696
                	fmov	s0, w16
-               	mov	x0, #0x2a               // =42
-               	mov	x1, #0x0                // =0
                	ldur	s1, [x29, #-0x8]
                	fcmp	s1, s0
-               	csel	x0, x0, x1, eq
+               	mov	x16, #0x2a              // =42
+               	csel	x0, x16, xzr, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

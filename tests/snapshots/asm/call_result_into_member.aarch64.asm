@@ -160,11 +160,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurb	w0, [x29, #-0x60]
                	ldurb	w1, [x29, #-0x5f]
-               	mov	x2, #0x0                // =0
                	cmp	w0, w20
                	cset	x0, eq
                	cmp	w1, #0x55
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
@@ -235,11 +234,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurh	w0, [x29, #-0x60]
                	ldurb	w1, [x29, #-0x5e]
-               	mov	x2, #0x0                // =0
                	cmp	w0, w20
                	cset	x0, eq
                	cmp	w1, #0x55
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
@@ -312,11 +310,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurb	w0, [x29, #-0x60]
                	ldurb	w1, [x29, #-0x5d]
-               	mov	x2, #0x0                // =0
                	cmp	w0, w20
                	cset	x0, eq
                	cmp	w1, #0x55
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
@@ -386,12 +383,11 @@ Disassembly of section .text:
                	bl	<addr>
                	ldur	w0, [x29, #-0x60]
                	ldurb	w1, [x29, #-0x5c]
-               	mov	x2, #0x0                // =0
                	and	x0, x0, #0xfffff
                	cmp	w0, w20
                	cset	x0, eq
                	cmp	w1, #0x55
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
@@ -464,11 +460,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurb	w0, [x29, #-0x60]
                	ldurb	w1, [x29, #-0x5b]
-               	mov	x2, #0x0                // =0
                	cmp	w0, w20
                	cset	x0, eq
                	cmp	w1, #0x55
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
@@ -541,11 +536,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurh	w0, [x29, #-0x60]
                	ldurb	w1, [x29, #-0x5a]
-               	mov	x2, #0x0                // =0
                	cmp	w0, w20
                	cset	x0, eq
                	cmp	w1, #0x55
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
@@ -622,11 +616,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurb	w0, [x29, #-0x60]
                	ldurb	w1, [x29, #-0x59]
-               	mov	x2, #0x0                // =0
                	cmp	w0, w20
                	cset	x0, eq
                	cmp	w1, #0x55
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
@@ -700,11 +693,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldur	w0, [x29, #-0x70]
                	ldurb	w1, [x29, #-0x64]
-               	mov	x2, #0x0                // =0
                	cmp	w0, w20
                	cset	x0, eq
                	cmp	w1, #0x55
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x20, [sp], #0x90
                	ret

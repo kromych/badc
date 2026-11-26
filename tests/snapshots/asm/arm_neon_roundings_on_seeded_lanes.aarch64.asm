@@ -978,10 +978,10 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.ne	<addr>
                	and	x0, x20, #0x7
-               	mov	x1, #0x400000           // =4194304
-               	mov	x2, #0xc00000           // =12582912
                	cmp	w0, #0x2
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x400000          // =4194304
+               	mov	x17, #0xc00000          // =12582912
+               	csel	x0, x16, x17, eq
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
                	bl	<addr>
@@ -1311,15 +1311,14 @@ Disassembly of section .text:
                	lsr	x1, x1, #16
                	b	<addr>
                	adrp	x0, <page>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	ldr	x0, [x0, #0x18]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0x8f04            // =36612
                	movk	x17, #0x8a03, lsl #16
                	movk	x17, #0xa214, lsl #32
                	movk	x17, #0x110c, lsl #48
                	cmp	x0, x17
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ldr	x22, [sp, #0x20]
                	ldp	x20, x21, [sp, #0x10]
                	ldp	d8, d9, [sp]

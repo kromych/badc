@@ -184,11 +184,10 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, #0x17               // =23
-               	mov	x2, #0x0                // =0
                	ldrsw	x0, [x0, #0x5c]
                	cmp	w0, #0x2a
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x17              // =23
+               	csel	x0, x16, xzr, ne
                	cbz	x0, <addr>
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

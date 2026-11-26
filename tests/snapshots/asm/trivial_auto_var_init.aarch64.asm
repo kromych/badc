@@ -326,9 +326,9 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	add	x0, x20, x0
-               	mov	x1, #0x64               // =100
                	cmp	w0, #0x64
-               	csel	x0, x1, x0, gt
+               	mov	x16, #0x64              // =100
+               	csel	x0, x16, x0, gt
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

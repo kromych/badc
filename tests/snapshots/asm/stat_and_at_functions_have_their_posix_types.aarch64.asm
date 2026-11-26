@@ -287,10 +287,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0xb8
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0xb                // =11
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0xb               // =11
+               	csel	x0, x16, xzr, ne
                	ldr	x20, [sp]
                	add	sp, sp, #0xf0
                	ldp	x29, x30, [sp], #0x10

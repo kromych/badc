@@ -621,6 +621,67 @@ fn link_units_and_run(dir: &Path, opt: &str, sources: &[&Path]) -> Option<i32> {
     Command::new(&exe).output().expect("run prog").status.code()
 }
 
+/// A unit whose thread-local's initializer sets only its first byte.
+const PARTIAL_TLS_PAD: &str = "_Thread_local char pad[5000] = {1};\n\
+     char *pa(void) { return pad; }\n";
+
+/// Another unit's thread-local, which the link places after `pad`.
+const PARTIAL_TLS_T: &str = "_Thread_local int t = 7;\nint *pt(void) { return &t; }\n";
+
+/// Exits 0 when `t` lies past the end of `pad` and both keep their values.
+const PARTIAL_TLS_MAIN: &str = "char *pa(void);\nint *pt(void);\n\
+     extern _Thread_local int t;\n\
+     int main(void) {\n\
+         int f = 0;\n\
+         if ((char *)pt() - pa() < 5000) f |= 1;\n\
+         if (pa()[0] != 1 || pa()[4999] != 0 || *pt() != 7) f |= 2;\n\
+         if (&t != pt()) f |= 4;\n\
+         t = 9;\n\
+         if (*pt() != 9 || pa()[8] != 0) f |= 8;\n\
+         return f;\n\
+     }\n";
+
+/// A thread-local whose initializer sets only its first byte stays whole
+/// in its object, so another unit's thread-local lands past its end, both
+/// in badc's link and, on Linux, in the system compiler's.
+#[test]
+fn a_partly_initialized_thread_local_keeps_other_units_past_its_end() {
+    let dir = tempdir("tls-partial");
+    let main = write_source(&dir, "main.c", PARTIAL_TLS_MAIN);
+    let pad = write_source(&dir, "pad.c", PARTIAL_TLS_PAD);
+    let t = write_source(&dir, "t.c", PARTIAL_TLS_T);
+    for opt in ["-O0", "-O"] {
+        let code = link_units_and_run(&dir, opt, &[&main, &pad, &t]);
+        assert_eq!(code, Some(0), "{opt}: failure bitmask {code:?}");
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(cc) = host_cc() {
+        for src in [&main, &t] {
+            let obj = src.with_extension("cc.o");
+            run(
+                Command::new(&cc).arg("-c").arg(src).arg("-o").arg(&obj),
+                "cc -c",
+            );
+        }
+        let exe = dir.join("mixed");
+        run(
+            Command::new(&cc)
+                .arg(dir.join("main.cc.o"))
+                .arg(dir.join("pad.o"))
+                .arg(dir.join("t.cc.o"))
+                .arg("-o")
+                .arg(&exe),
+            "cc link",
+        );
+        let code = Command::new(&exe)
+            .output()
+            .expect("run mixed")
+            .status
+            .code();
+        assert_eq!(code, Some(0), "badc's pad.o in the system link: {code:?}");
+    }
+}
+
 /// Inline asm naming the C library's `optind`: `T` 1 takes its address, 2
 /// loads it in place, 3 stores 7 to it in place. Exits 0 when each access
 /// reaches the library's object.

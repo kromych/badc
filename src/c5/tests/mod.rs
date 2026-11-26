@@ -1429,6 +1429,14 @@ pub fn zero_filled_storage_source() -> &'static str {
      }\n"
 }
 
+/// A unit whose thread-local's initializer sets only its first byte.
+pub const PARTIAL_TLS_PAD: &str = "_Thread_local char pad[5000] = {1};\n\
+     char *pa(void) { return pad; }\n";
+
+/// A unit with a thread-local of its own, which the link places after
+/// [`PARTIAL_TLS_PAD`]'s.
+pub const PARTIAL_TLS_T: &str = "_Thread_local int t = 7;\nint *pt(void) { return &t; }\n";
+
 /// [`zero_filled_storage_source`] with thread storage duration: a large
 /// thread-local array, a tentative one, an initialized one between them and
 /// a block-scope one.

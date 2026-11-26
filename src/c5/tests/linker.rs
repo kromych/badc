@@ -4800,6 +4800,54 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
     }
 }
 
+/// A thread-local whose initializer sets only its first byte is
+/// initialized data as a whole: the object's `.tdata` (`__thread_data`)
+/// holds all of it, so the link, which places every unit's `.tdata` ahead
+/// of every `.tbss`, keeps it in one piece and the next unit's block past
+/// its end, on every target.
+#[test]
+fn a_partly_initialized_thread_local_is_initialized_data_whole() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let unit = |src: &str| {
+            let prog = Compiler::with_options(
+                alloc::format!("{TEST_PRELUDE}{src}"),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&prog, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse")
+        };
+        let pad = unit(super::PARTIAL_TLS_PAD);
+        assert!(
+            pad.tls_data.len() >= 5000 && pad.tls_bss_size == 0,
+            "{target:?}: `pad` is split, {} initialized bytes and {} zero-fill",
+            pad.tls_data.len(),
+            pad.tls_bss_size
+        );
+        let merged = link_native_objects(&[pad, unit(super::PARTIAL_TLS_T)]).expect("link");
+        let t_base = (merged.section_map.tls.iter())
+            .find(|c| c.input == Some(1) && c.name == ".tdata")
+            .map(|c| c.offset)
+            .expect("the second unit's .tdata is in the TLS map");
+        assert!(t_base >= 5000, "{target:?}: `t` at {t_base}, inside `pad`");
+    }
+}
+
 /// Two units with over-aligned thread-locals whose images are not
 /// multiples of their alignment: the second unit's block starts on its
 /// own alignment in the merged image, the image takes the widest

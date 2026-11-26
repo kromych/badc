@@ -560,6 +560,71 @@ int main(void) {\n\
     }
 }
 
+/// The `main` over [`super::PARTIAL_TLS_PAD`] and [`super::PARTIAL_TLS_T`]:
+/// exits 0 when `t` lies past the end of `pad`, both keep their values and
+/// the access by name reaches the one by address.
+const PARTIAL_TLS_MAIN: &str = "char *pa(void);\nint *pt(void);\n\
+     extern _Thread_local int t;\n\
+     int main(void) {\n\
+         int f = 0;\n\
+         if ((char *)pt() - pa() < 5000) f |= 1;\n\
+         if (pa()[0] != 1 || pa()[4999] != 0 || *pt() != 7) f |= 2;\n\
+         if (&t != pt()) f |= 4;\n\
+         t = 9;\n\
+         if (*pt() != 9 || pa()[8] != 0) f |= 8;\n\
+         return f;\n\
+     }\n";
+
+/// A thread-local past 4 KB in the merged block, behind another unit's
+/// partly initialized one: its accesses' `add` pairs take both
+/// immediates, and the object ahead of it stays whole.
+#[test]
+fn a_thread_local_past_4_kb_takes_both_add_immediates() {
+    let copts = crate::CompileOptions::default().with_no_entry_point(true);
+    let compile = |src: &str| -> crate::Program {
+        Compiler::with_options(
+            super::with_prelude(src),
+            Target::WindowsAarch64,
+            copts.clone(),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let bytes = super::link_executable_with_runtime_multi(
+        &[
+            &compile(PARTIAL_TLS_MAIN),
+            &compile(super::PARTIAL_TLS_PAD),
+            &compile(super::PARTIAL_TLS_T),
+        ],
+        Target::WindowsAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link: {e}"));
+    let offsets = teb_offsets(pe_text_section(&bytes));
+    assert!(
+        offsets.iter().any(|&o| o >> 12 != 0 && o & 0xFFF != 0),
+        "no TEB-indexed `add` pair past 4 KB with both immediates: {offsets:x?}"
+    );
+    let path = super::unique_temp_path("badc-pe-arm64-test", "tls_past_4k", ".exe");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    let outcome = run_pe(&path, &[]);
+    let _ = std::fs::remove_file(&path);
+    match outcome {
+        Some(Ok(o)) => assert_eq!(
+            o.status.code(),
+            Some(0),
+            "thread-locals overlap (failure bitmask in exit code); stderr: {}",
+            String::from_utf8_lossy(&o.stderr)
+        ),
+        Some(Err(e)) => panic!("could not exec PE binary: {e}"),
+        None => eprintln!("skip tls_past_4k: no PE runner on this host"),
+    }
+}
+
 /// A `_Thread_local` defined in a TU that is not first in TLS layout must
 /// have its LOCAL accesses (writes and reads within the defining TU)
 /// resolve to the same merged offset as EXTERN accesses from other TUs. A

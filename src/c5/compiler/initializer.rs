@@ -579,10 +579,12 @@ impl Compiler {
     /// relocations initialize them first, as `.tdata`, then the all-zero
     /// ones, which join the `.tbss` zero fill whatever their declaration
     /// order or initializer. An object's extent runs to the next object's
-    /// start and moves to the placement alignment it was reserved on;
-    /// `.tdata` ends on the block alignment, where the relocatable writer
-    /// and the reader both start `.tbss`. A template with a byte or
-    /// relocation ahead of its first object keeps its layout.
+    /// start and moves to the placement alignment it was reserved on.
+    /// `.tdata` holds the whole extent of each initialized object, as the
+    /// link places every unit's `.tdata` ahead of every `.tbss`, and ends
+    /// on the block alignment, where the relocatable writer and the reader
+    /// both start `.tbss`. Every template byte is reserved for an object,
+    /// the first at 0, so none precedes the first object.
     pub(super) fn lay_out_thread_locals(&mut self) {
         let len = self.tls_data.len();
         // Each object's start and the alignment it was reserved on.
@@ -599,6 +601,10 @@ impl Compiler {
         objects.retain(|&v, _| v <= len);
         let starts: Vec<(usize, usize)> = objects.into_iter().collect();
         let Some(&(first, _)) = starts.first() else {
+            debug_assert_eq!(
+                self.tls_init_size, 0,
+                "initialized thread-local bytes, no object"
+            );
             return;
         };
         let mut patched = alloc::vec![false; len];
@@ -612,9 +618,10 @@ impl Compiler {
         }
         let data = &self.tls_data;
         let significant = |i: usize| data[i] != 0 || patched[i];
-        if (0..first).any(significant) {
-            return;
-        }
+        debug_assert!(
+            !(0..first).any(significant),
+            "an initialized thread-local byte ahead of the first object"
+        );
         let align = crate::c5::layout::tls_image_align(self.tls_align);
         // (old start, old end, new start), initialized objects first.
         let mut moves: Vec<(usize, usize, usize)> = Vec::with_capacity(starts.len());
@@ -634,8 +641,8 @@ impl Compiler {
                 let new = image.len().next_multiple_of(object_align.max(1));
                 image.resize(new, 0);
                 image.extend_from_slice(&data[old..end]);
-                if let Some(last) = last {
-                    init_end = new + last - old + 1;
+                if initialized {
+                    init_end = new + end - old;
                 }
                 moves.push((old, end, new));
             }

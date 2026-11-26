@@ -7,7 +7,9 @@
 //! read outside the head is renamed to the definition that reaches it,
 //! with a phi where two meet: the on-demand construction with trivial-phi
 //! removal of Braun et al., "Simple and Efficient Construction of Static
-//! Single Assignment Form" (CC 2013), explored with a worklist.
+//! Single Assignment Form" (CC 2013), explored with a worklist. The phis a
+//! pass's repairs place wait past the tape's end ([`Pending`]) and reach
+//! their blocks in one rewrite ([`settle`]), so a repair renumbers no value.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -51,6 +53,38 @@ impl Readers {
 
     pub(crate) fn of(&self, v: ValueId) -> &[Reader] {
         self.0.get(v as usize).map_or(&[], Vec::as_slice)
+    }
+
+    fn grow(&mut self, n: usize) {
+        self.0.resize(n.max(self.0.len()), Vec::new());
+    }
+}
+
+/// The phis repairs placed, held past the tape's end until [`settle`]
+/// moves them to the starts of their blocks in one rewrite: per block, in
+/// the order they will stand there.
+pub(crate) struct Pending {
+    /// The tape's length before the first was placed.
+    start: usize,
+    at: BTreeMap<BlockId, Vec<ValueId>>,
+}
+
+impl Pending {
+    pub(crate) fn new(func: &FunctionSsa) -> Self {
+        Pending {
+            start: func.insts.len(),
+            at: BTreeMap::new(),
+        }
+    }
+
+    /// `b`'s values: the phis placed at its start, then its instructions.
+    pub(crate) fn values<'a>(
+        &'a self,
+        func: &FunctionSsa,
+        b: BlockId,
+    ) -> impl Iterator<Item = ValueId> + 'a {
+        let range = func.blocks[b as usize].inst_range.clone();
+        (self.at.get(&b).into_iter().flatten().copied()).chain(range)
     }
 }
 
@@ -255,69 +289,70 @@ fn resolve(same: &BTreeMap<BlockId, Src>, mut s: Src) -> Src {
     s
 }
 
-/// Insert the phis of `plans` and rename the reads, in the CFG the plans
-/// were made over.
+/// Place the phis of `plans` past the tape's end, their blocks recorded in
+/// `pending`, and rename the reads, in the CFG the plans were made over.
+/// Returns each placed phi's block, in value order.
 pub(crate) fn apply(
     func: &mut FunctionSsa,
     items: &[Redefined],
     plans: &[Plan],
     readers: &mut Readers,
-) {
-    let mut placed: Vec<(usize, BlockId, Insertion)> = Vec::new();
+    pending: &mut Pending,
+) -> Vec<BlockId> {
+    let mut placed: BTreeMap<(usize, BlockId), ValueId> = BTreeMap::new();
+    let mut homes: Vec<BlockId> = Vec::new();
+    let mut at: BTreeMap<BlockId, Vec<ValueId>> = BTreeMap::new();
     for (k, (r, p)) in items.iter().zip(plans).enumerate() {
+        let is_f32 = func
+            .f32_values
+            .get(r.value as usize)
+            .copied()
+            .unwrap_or(false);
         for &b in p.phis.keys() {
-            let range = &func.blocks[b as usize].inst_range;
-            let at = if range.is_empty() {
-                At::Empty(b)
-            } else {
-                At::Before(range.start)
-            };
-            let inst = Inst::Phi {
+            let n = func.insts.len();
+            for (table, value) in [
+                (&mut func.f32_values, is_f32),
+                (&mut func.cmp32, false),
+                (&mut func.div32, false),
+            ] {
+                if table.len() == n {
+                    table.push(value);
+                }
+            }
+            if func.inst_src.len() == n {
+                func.inst_src.push(crate::c5::ir::InstSrc::default());
+            }
+            func.insts.push(Inst::Phi {
                 incoming: Vec::new(),
                 kind: r.kind,
-            };
-            let is_f32 = func
-                .f32_values
-                .get(r.value as usize)
-                .copied()
-                .unwrap_or(false);
-            placed.push((
-                k,
-                b,
-                Insertion {
-                    at,
-                    inst,
-                    is_f32,
-                    copy_of: None,
-                },
-            ));
+            });
+            placed.insert((k, b), n as ValueId);
+            homes.push(b);
+            at.entry(b).or_default().push(n as ValueId);
         }
     }
-    placed.sort_by_key(|(_, _, i)| i.at.order(&func.blocks));
-    let slot: BTreeMap<(usize, BlockId), usize> = placed
-        .iter()
-        .enumerate()
-        .map(|(j, &(k, b, _))| ((k, b), j))
-        .collect();
-    let insertions: Vec<Insertion> = placed.into_iter().map(|(_, _, i)| i).collect();
-    // A repair that only renames leaves every value where it is.
-    let rw = (!insertions.is_empty()).then(|| tape::insert(func, &insertions));
-    let remap = |v: ValueId| rw.as_ref().map_or(v, |rw| rw.remap[v as usize]);
-    let placed_id =
-        |k: usize, b: BlockId| rw.as_ref().expect("a phi was placed").ids[slot[&(k, b)]];
+    readers.grow(func.insts.len());
+    // A repair's phis stand ahead of an earlier one's at a block's start.
+    for (b, ids) in at {
+        pending.at.entry(b).or_default().splice(0..0, ids);
+    }
     let id_of = |k: usize, s: Src| match s {
-        Src::Val(v) => remap(v),
-        Src::Entry(b) => placed_id(k, b),
+        Src::Val(v) => v,
+        Src::Entry(b) => placed[&(k, b)],
     };
     for (k, (r, p)) in items.iter().zip(plans).enumerate() {
         for (&b, incoming) in &p.phis {
+            let phi = placed[&(k, b)];
             let merged: Vec<(BlockId, ValueId)> =
                 incoming.iter().map(|&(q, s)| (q, id_of(k, s))).collect();
-            if let Inst::Phi { incoming, .. } = &mut func.insts[placed_id(k, b) as usize] {
+            for &(_, v) in &merged {
+                readers.add(v, Reader::Inst(phi));
+            }
+            if let Inst::Phi { incoming, .. } = &mut func.insts[phi as usize] {
                 *incoming = merged;
             }
         }
-        let old = remap(r.value);
+        let old = r.value;
         let rename = |v: &mut ValueId, new: ValueId| {
             if *v == old {
                 *v = new;
@@ -327,19 +362,19 @@ pub(crate) fn apply(
             match *read {
                 Read::Operand(i, s) => {
                     let new = id_of(k, s);
-                    func.insts[remap(i) as usize].for_each_operand_mut(|v| rename(v, new));
-                    readers.add(new, Reader::Inst(remap(i)));
+                    func.insts[i as usize].for_each_operand_mut(|v| rename(v, new));
+                    readers.add(new, Reader::Inst(i));
                 }
                 Read::Incoming(i, q, s) => {
                     let new = id_of(k, s);
-                    if let Inst::Phi { incoming, .. } = &mut func.insts[remap(i) as usize] {
+                    if let Inst::Phi { incoming, .. } = &mut func.insts[i as usize] {
                         for (pred, v) in incoming.iter_mut() {
                             if *pred == q {
                                 rename(v, new);
                             }
                         }
                     }
-                    readers.add(new, Reader::Inst(remap(i)));
+                    readers.add(new, Reader::Inst(i));
                 }
                 Read::End(b, s) => {
                     let new = id_of(k, s);
@@ -351,8 +386,75 @@ pub(crate) fn apply(
             }
         }
     }
-    // Placed phis moved every value.
-    if rw.is_some() {
-        *readers = Readers::of_function(func);
+    homes
+}
+
+/// Move the phis `pending` holds past the tape's end to the starts of their
+/// blocks, in one rewrite of the tape.
+pub(crate) fn settle(func: &mut FunctionSsa, pending: Pending) {
+    let (start, end) = (pending.start, func.insts.len());
+    if end == start {
+        return;
     }
+    let mut order: Vec<(ValueId, At)> = Vec::with_capacity(end - start);
+    for (&b, ids) in &pending.at {
+        let range = &func.blocks[b as usize].inst_range;
+        let at = if range.is_empty() {
+            At::Empty(b)
+        } else {
+            At::Before(range.start)
+        };
+        order.extend(ids.iter().map(|&v| (v, at)));
+    }
+    order.sort_by_key(|&(_, at)| at.order(&func.blocks));
+    // An operand naming a placed phi names its insertion, which the tape
+    // numbers past its old end.
+    let mut slot = alloc::vec![0usize; end - start];
+    for (j, &(v, _)) in order.iter().enumerate() {
+        slot[v as usize - start] = j;
+    }
+    let insertions: Vec<Insertion> = order
+        .iter()
+        .map(|&(v, at)| {
+            let mut inst = func.insts[v as usize].clone();
+            inst.for_each_operand_mut(|o| {
+                if (*o as usize) >= start && (*o as usize) < end {
+                    *o = (end + slot[*o as usize - start]) as ValueId;
+                }
+            });
+            Insertion {
+                at,
+                inst,
+                is_f32: func.f32_values.get(v as usize).copied().unwrap_or(false),
+                copy_of: None,
+            }
+        })
+        .collect();
+    let rw = tape::insert(func, &insertions);
+    // The held copies, renumbered past every block, read as their placed
+    // twins and go.
+    let n = func.insts.len();
+    let mut to: Vec<ValueId> = (0..n as ValueId).collect();
+    for v in start..end {
+        to[rw.remap[v] as usize] = rw.ids[slot[v - start]];
+    }
+    let kept = n - (end - start);
+    debug_assert!((start..end).all(|v| rw.remap[v] as usize >= kept));
+    let map = |v: &mut ValueId| {
+        if let Some(&w) = to.get(*v as usize) {
+            *v = w;
+        }
+    };
+    func.insts.truncate(kept);
+    for inst in func.insts.iter_mut() {
+        inst.for_each_operand_mut(map);
+    }
+    for block in func.blocks.iter_mut() {
+        map(&mut block.exit_acc);
+        block.terminator.for_each_operand_mut(map);
+    }
+    for table in [&mut func.f32_values, &mut func.cmp32, &mut func.div32] {
+        table.truncate(kept);
+    }
+    func.inst_src.truncate(kept);
 }

@@ -5471,12 +5471,26 @@ fn call_set_arguments(
         .chain(&func.extern_imm_code_refs)
         .map(|&(v, _)| v)
         .collect();
+    // An AArch64 local's address is one `sub` from fp when its distance
+    // fits 12 bits whatever saves (every callee-saved register and the
+    // x19 pair) and canary the frame puts between them; an over-aligned
+    // object lies in a region placed after the coloring.
+    let banks = RegBanks::for_target(target);
+    let slots16 = |n: usize| u64::from(super::emit_common::slots16(n as u32));
+    let a64_saves = slots16(banks.callee_gprs.len())
+        + slots16(banks.callee_fprs.len())
+        + 16
+        + u64::from(crate::c5::codegen::CANARY_REGION_BYTES);
     let one = |v: ValueId, inst: &Inst| match *inst {
         Inst::Imm(k) => {
             target.is_x86_64() || crate::c5::codegen::aarch64::encode::imm64_insts(k as u64) == 1
         }
-        // An AArch64 frame address spans as many instructions as the frame
-        // needs, a data or code address two.
+        Inst::LocalAddr(off) if target.is_aarch64() => {
+            off < 0
+                && off.unsigned_abs() * 8 + a64_saves < 1 << 12
+                && !func.over_aligned.iter().any(|m| m.slot == off)
+        }
+        // An AArch64 data or code address is two instructions.
         _ => target.is_x86_64() && !bound.contains(&v),
     };
     // Per value: the reading calls' arguments, whether each is set at no

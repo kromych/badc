@@ -6222,6 +6222,39 @@ fn address_arguments_the_call_sets_take_no_slot() {
     );
 }
 
+/// AArch64: a local's address one `sub` from fp reaches, read by a call
+/// ahead of a loop and by one inside it, is set by each call; no
+/// callee-saved register holds it across the loop.
+#[test]
+fn a_near_local_address_is_set_by_each_call() {
+    const SRC: &str = "void use(char *p, int i);\nvoid init(char *p);\n\
+        void f(int n) { char buf[32]; init(buf); for (int i = 0; i < n; i++) use(buf, i); }\n";
+    let words = function_words(&object_at(SRC, Target::LinuxAarch64, true), "f");
+    // `sub xd, x29, #imm12`.
+    let from_fp = |w: u32| w & 0xFFC0_03E0 == 0xD100_03A0;
+    let calls: Vec<usize> = (words.iter().enumerate())
+        .filter(|&(_, &w)| w & 0xFC00_0000 == 0x9400_0000)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(calls.len(), 2, "{words:08x?}");
+    for &c in &calls {
+        assert!(
+            words[..c]
+                .iter()
+                .rev()
+                .take(2)
+                .any(|&w| from_fp(w) && w & 31 == 0),
+            "the address is not set ahead of the call at {c}: {words:08x?}"
+        );
+    }
+    assert!(
+        !words
+            .iter()
+            .any(|&w| from_fp(w) && (19..=28).contains(&(w & 31))),
+        "a callee-saved register holds the address: {words:08x?}"
+    );
+}
+
 /// AArch64: a select's zero arm is `xzr`: no register holds the constant
 /// and no instruction sets it, so each function is the compare, the
 /// `csel` reading `xzr`, and the return, with the subtraction ahead.

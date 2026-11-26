@@ -381,6 +381,17 @@ fn shift_addend(sym: &str, by: i128) -> String {
     }
 }
 
+/// `text` without the `@` operators that follow a symbol.
+fn without_operators(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find('@') {
+        out.push_str(&rest[..at]);
+        rest = rest[at + 1..].trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    }
+    out + rest
+}
+
 /// The spellings a listing may name relocation symbol `sym` by: itself, or
 /// for a section's symbol plus an addend, an object or function the section
 /// holds there.
@@ -493,9 +504,12 @@ fn compare(listing: &str, objdump: &str, a64: bool) -> Vec<String> {
                 true => shift_addend(sym, (end - field) as i128),
                 false => sym.clone(),
             };
+            // An x86-64 operator such as `@tpoff` follows the symbol, ahead
+            // of an addend.
+            let text = without_operators(&row.text);
             if !reloc_names(&sym, &syms)
                 .iter()
-                .any(|n| row.text.contains(n.as_str()))
+                .any(|n| text.contains(n.as_str()))
             {
                 issues.push(format!("{at}: `{}` does not name `{sym}`", row.text));
             }
@@ -1051,6 +1065,30 @@ fn a64_address_references_name_their_objects() {
         ", :secrel_hi12:e, lsl #12\n",
         ", :secrel_lo12:e\n",
     ] {
+        assert!(l.contains(text), "{text}\n{l}");
+    }
+}
+
+/// An x86-64 thread-local's offset names its variable: the local-exec
+/// immediate a relocation fills (`@tpoff`), and the Windows block offset
+/// badc records in a note of its own (`@secrel32`), of an internal-linkage
+/// variable too, which the Windows object writes no symbol for. An
+/// inline-asm RIP-relative operand outside the encoder's catalog names its
+/// object.
+#[test]
+fn x86_thread_local_offsets_and_asm_rip_operands_name_their_symbols() {
+    let dir = TempDir::new("badc-listing-x86-tls");
+    let src = "_Thread_local int t;\nstatic _Thread_local long s[4];\n\
+        int h(void) { return t; }\nlong g(int i) { return s[i & 3]; }\n\
+        typedef int v4 __attribute__((vector_size(16)));\n\
+        static const v4 k = {1, 2, 3, 4};\n\
+        v4 f(v4 a) { __asm__(\"paddd %1, %0\" : \"+x\"(a) : \"m\"(k)); return a; }\n";
+    let l = listing(&dir, "tls", src, &[]);
+    for text in ["\t$t@tpoff, %r", "\t$s@tpoff, %r", "\tk(%rip), %xmm"] {
+        assert!(l.contains(text), "{text}\n{l}");
+    }
+    let l = listing_for("windows-x64", &dir, "tls", src, &[]);
+    for text in ["\tt@secrel32(%r", "\ts@secrel32(%r", "\tk(%rip), %xmm"] {
         assert!(l.contains(text), "{text}\n{l}");
     }
 }

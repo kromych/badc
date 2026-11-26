@@ -59,6 +59,8 @@ pub(crate) struct Reloc {
     pub(crate) pcrel: bool,
     /// The operator ahead of the symbol, as `:lo12:`.
     pub(crate) spec: &'static str,
+    /// The operator after the symbol, as `@tpoff`.
+    pub(crate) suffix: &'static str,
 }
 
 /// An instruction's text; its operand, when it has one, is inserted at byte
@@ -287,10 +289,11 @@ mod rows {
         /// The object and function symbols of each section, by section
         /// name: value, size, name.
         objects: &'a BTreeMap<String, Vec<(u64, u64, String)>>,
-        /// The A64 fields the object records in a note of badc's own
-        /// rather than a relocation, by instruction offset: what a
-        /// Windows TLS access reads, the `_tls_index` slot and the
-        /// variable's offset in the `.tls` section.
+        /// The fields the object records in a note of badc's own rather
+        /// than a relocation, by the offset of the A64 instruction or of
+        /// the x86-64 field: what a Windows TLS access reads, the
+        /// `_tls_index` slot and the variable's offset in the `.tls`
+        /// section.
         noted: BTreeMap<usize, String>,
         build: &'a Build,
     }
@@ -299,6 +302,11 @@ mod rows {
         /// Relocation symbol `symbol` plus `addend`: a section's own symbol
         /// reads as the object or function the object holds there.
         fn reloc(&self, symbol: &str, addend: i64) -> String {
+            self.reloc_with(symbol, addend, "")
+        }
+
+        /// [`Self::reloc`] with the operator `suffix` after the symbol.
+        fn reloc_with(&self, symbol: &str, addend: i64, suffix: &str) -> String {
             let symbol = plain(symbol);
             let covers = |&&(value, size, _): &&(u64, u64, String)| {
                 (value as i64..value as i64 + size.max(1) as i64).contains(&addend)
@@ -308,35 +316,42 @@ mod rows {
                 .get(symbol)
                 .and_then(|v| v.iter().rev().find(covers))
             {
-                Some((value, _, name)) => with_addend(plain(name), addend - *value as i64),
-                None => with_addend(symbol, addend),
+                Some((value, _, name)) => {
+                    with_addend(&format!("{}{suffix}", plain(name)), addend - *value as i64)
+                }
+                None => with_addend(&format!("{symbol}{suffix}"), addend),
             }
         }
 
         /// The operands of [`Names::noted`]. A Windows TLS access records a
-        /// `_tls_index` fixup and, for its `add` pair, the variable.
-        fn noted_fields(&self) -> BTreeMap<usize, String> {
+        /// `_tls_index` fixup and, for the field of its offset, the variable:
+        /// an A64 `add` pair, an x86-64 `lea` displacement.
+        fn noted_fields(&self, words: bool) -> BTreeMap<usize, String> {
             let build = self.build;
             let mut noted = BTreeMap::new();
             if build.tls_index_fixups.is_empty() {
                 return noted;
             }
-            for f in &build.tls_index_fixups {
+            for f in build.tls_index_fixups.iter().filter(|_| words) {
                 noted.insert(f.instr_offset, String::from("_tls_index"));
                 noted.insert(f.instr_offset + 4, String::from(":lo12:_tls_index"));
             }
             let init = build.tls_init_size.min(build.tls_data.len()) as u64;
             for f in &build.elf_tpoff_fixups {
-                let name = match &f.target {
-                    ElfTpoffTarget::Local(off) if *off >= init => {
-                        self.reloc(".tbss", (off - init) as i64)
-                    }
-                    ElfTpoffTarget::Local(off) => self.reloc(".tdata", *off as i64),
-                    ElfTpoffTarget::Extern(name) => name.clone(),
+                let (symbol, addend) = match &f.target {
+                    ElfTpoffTarget::Local(off) if *off >= init => (".tbss", (off - init) as i64),
+                    ElfTpoffTarget::Local(off) => (".tdata", *off as i64),
+                    ElfTpoffTarget::Extern(name) => (name.as_str(), 0),
                     _ => continue,
                 };
-                noted.insert(f.imm_offset, format!(":secrel_hi12:{name}"));
-                noted.insert(f.imm_offset + 4, format!(":secrel_lo12:{name}"));
+                if words {
+                    let name = self.reloc(symbol, addend);
+                    noted.insert(f.imm_offset, format!(":secrel_hi12:{name}"));
+                    noted.insert(f.imm_offset + 4, format!(":secrel_lo12:{name}"));
+                } else {
+                    let name = self.reloc_with(symbol, addend, "@secrel32");
+                    noted.insert(f.imm_offset, name);
+                }
             }
             noted
         }
@@ -393,7 +408,10 @@ mod rows {
                     } else {
                         r.addend
                     };
-                    return self.reloc(&r.symbol, a);
+                    return self.reloc_with(&r.symbol, a, r.suffix);
+                }
+                if let Some(text) = self.noted.get(&at) {
+                    return text.clone();
                 }
             }
             match o {
@@ -587,9 +605,7 @@ mod rows {
             noted: BTreeMap::new(),
             build,
         };
-        if listing.words {
-            names.noted = names.noted_fields();
-        }
+        names.noted = names.noted_fields(listing.words);
         // A pc-relative target no block names takes a label of its own.
         let mut tmp = 0;
         for row in &listing.rows {

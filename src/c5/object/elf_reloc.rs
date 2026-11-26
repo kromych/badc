@@ -4583,6 +4583,18 @@ impl<'a> RelocWriter<'a> {
     fn list_text(&mut self, text: &[u8], got_sites: &[usize], abs_sites: &[usize]) {
         use crate::c5::codegen::aarch64::Reg;
         use crate::c5::codegen::x86_64::text::gpr;
+        // An internal-linkage thread-local the object writes no symbol for
+        // (a Windows target's) still reads by its name.
+        let tls_locals: Vec<(u16, (u64, u64, String))> = (self.names.defined_tls_locals.iter())
+            .filter(|_| !self.elf_tls_interop)
+            .map(|&(name, off, size)| {
+                let (shndx, value) = self.tls_home(off);
+                (
+                    self.out.shndx.map(shndx),
+                    (value as u64, size, String::from(name)),
+                )
+            })
+            .collect();
         let Some(listing) = self.listing.as_deref_mut() else {
             return;
         };
@@ -4670,6 +4682,7 @@ impl<'a> RelocWriter<'a> {
             addend,
             pcrel: pcrel(rtype),
             spec: if a64 { a64_reloc_spec(rtype) } else { "" },
+            suffix: if a64 { "" } else { x86_reloc_suffix(rtype) },
         };
         let mut relocs = Vec::new();
         for rec in self.relocs.text.as_chunks::<ELF64_RELA_SIZE>().0 {
@@ -4706,6 +4719,11 @@ impl<'a> RelocWriter<'a> {
             }
             if let Some(section) = section_of(s.st_shndx) {
                 let entry = (s.st_value, s.st_size, c_str(strtab, s.st_name as usize));
+                objects.entry(section).or_default().push(entry);
+            }
+        }
+        for (shndx, entry) in tls_locals {
+            if let Some(section) = section_of(shndx) {
                 objects.entry(section).or_default().push(entry);
             }
         }
@@ -5873,6 +5891,23 @@ fn emit_abs32_ref_reloc(out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64, adde
 /// becomes `mov` (opcode 0x8d -> 0x8b, same REX/modrm/disp32).
 /// The operator GNU as spells an AArch64 relocation of an instruction field
 /// with, ahead of the symbol.
+#[cfg(feature = "listing")]
+/// The operator GNU as spells after the symbol of x86-64 relocation `rtype`,
+/// as `@tpoff`; none for an address or a call.
+fn x86_reloc_suffix(rtype: u32) -> &'static str {
+    match rtype {
+        R_X86_64_TPOFF32 => "@tpoff",
+        R_X86_64_DTPOFF32 => "@dtpoff",
+        R_X86_64_GOTTPOFF => "@gottpoff",
+        R_X86_64_TLSGD => "@tlsgd",
+        R_X86_64_TLSLD => "@tlsld",
+        R_X86_64_GOTPC32_TLSDESC => "@tlsdesc",
+        R_X86_64_TLSDESC_CALL => "@tlscall",
+        R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | R_X86_64_REX_GOTPCRELX => "@GOTPCREL",
+        _ => "",
+    }
+}
+
 #[cfg(feature = "listing")]
 fn a64_reloc_spec(rtype: u32) -> &'static str {
     match rtype {

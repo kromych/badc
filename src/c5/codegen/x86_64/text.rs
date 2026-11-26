@@ -504,9 +504,28 @@ pub(crate) fn asm_text(
 ) -> Text {
     let catalog_form = super::asm::to_table(m, suffix, ops)
         .and_then(|(name, w, ops)| Some((Mnem::from_name(name)?, w, ops)));
-    match catalog_form {
-        Some((mnem, w, ops)) => catalog(mnem, w, &ops, field),
-        None => Text::from(att(name, ops)),
+    let rip = ops
+        .iter()
+        .find(|o| matches!(o, super::asm::Concrete::RipRel { .. }));
+    match (catalog_form, rip.zip(field)) {
+        (Some((mnem, w, ops)), _) => catalog(mnem, w, &ops, field),
+        // The RIP-relative displacement reads as the field the relocation
+        // or the layout fills.
+        (None, Some((&rip, field))) => {
+            let mut text = att(name, ops);
+            let disp = concrete(rip);
+            match text.find(&disp) {
+                Some(at) => {
+                    text.replace_range(at..at + disp.len(), "(%rip)");
+                    Text {
+                        text,
+                        operand: Some((at, Operand::PcRel { field, width: 4 })),
+                    }
+                }
+                None => Text::from(text),
+            }
+        }
+        (None, None) => Text::from(att(name, ops)),
     }
 }
 

@@ -140,9 +140,9 @@ pub(super) fn emit_tls_addr(
             code.push(0xC0 | (rd.0 & 7));
             let imm_offset = code.len();
             code.extend_from_slice(&(tpoff as i32).to_le_bytes());
-            code.describe(at, || match by_name {
-                Some(r) => alloc::format!("addq ${}@tpoff, {}", r.name, t::gpr(rd.0, 8)),
-                None => alloc::format!("addq {}, {}", t::imm(tpoff), t::gpr(rd.0, 8)),
+            code.describe(at, || {
+                let field = t::Operand::Field { field: 3, width: 4 };
+                t::Text::with("addq $", field, &alloc::format!(", {}", t::gpr(rd.0, 8)))
             });
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset,
@@ -224,15 +224,11 @@ pub(super) fn emit_tls_addr(
             }
             let imm_offset = code.len();
             code.extend_from_slice(&(disp as i32).to_le_bytes());
+            let field = (imm_offset - at) as u8;
             code.describe(at, || {
-                let t_reg = t.0;
                 let (rd, t) = (super::text::gpr(rd.0, 8), super::text::gpr(t.0, 8));
-                match &extern_sym {
-                    Some(name) => alloc::format!("leaq {name}@secrel32({t}), {rd}"),
-                    None => {
-                        alloc::format!("leaq {}, {rd}", super::text::mem_at(t_reg, disp as i32))
-                    }
-                }
+                let field = super::text::Operand::Field { field, width: 4 };
+                super::text::Text::with("leaq ", field, &alloc::format!("({t}), {rd}"))
             });
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset,

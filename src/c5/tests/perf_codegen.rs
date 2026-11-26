@@ -8717,6 +8717,54 @@ long s = 0; for (long i = 0; i < n; i++) s += a[i] * (x * y + 3); return s; }\n"
     );
 }
 
+/// Rows of a 56-byte struct indexed by two counters: row `i`'s position is
+/// read once before the inner loop, whose stores reach only the velocity
+/// fields of rows `i` and `j`, and so is its mass on AArch64; an x86-64
+/// multiply takes the mass as its memory operand, which costs the loop
+/// nothing. Row `j`'s position stays one load per field in the loop.
+#[test]
+fn fields_a_strided_loop_does_not_store_are_read_before_it() {
+    const SRC: &str = "struct body { double x, y, z, vx, vy, vz, mass; };\n\
+struct body rows[5];\n\
+void pull(void) {\n\
+    for (int i = 0; i < 5; i++) {\n\
+        struct body *bi = &rows[i];\n\
+        for (int j = i + 1; j < 5; j++) {\n\
+            struct body *bj = &rows[j];\n\
+            double dx = bi->x - bj->x, dy = bi->y - bj->y, dz = bi->z - bj->z;\n\
+            bi->vx -= dx * bj->mass;\n\
+            bi->vy -= dy * bj->mass;\n\
+            bi->vz -= dz * bj->mass;\n\
+            bj->vx += dx * bi->mass;\n\
+            bj->vy += dy * bi->mass;\n\
+            bj->vz += dz * bi->mass;\n\
+        }\n\
+    }\n\
+}\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        // The full register files, which the plan's measure is taken with.
+        let dump = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || ssa_dump_for(SRC, "pull", target, true),
+        );
+        // The live loads of the block that stores, by displacement.
+        let block = (dump.split("  block "))
+            .find(|b| b.contains("Store {"))
+            .expect("the inner loop");
+        let live = |disp: &str| {
+            (block.lines())
+                .filter(|l| l.contains("Load {") && l.contains(disp) && !l.ends_with("-> -"))
+                .count()
+        };
+        for disp in ["disp=0,", "disp=8,", "disp=16,"] {
+            assert_eq!(live(disp), 1, "{target:?} {disp}\n{dump}");
+        }
+        let mass = if target == Target::LinuxAarch64 { 3 } else { 6 };
+        assert_eq!(live("disp=48,"), mass, "{target:?}\n{dump}");
+    }
+}
+
 /// On AArch64 a frame object's address and a floating constant a loop
 /// reads are set once before it: the `sub xN, x29, #imm` of each local
 /// array and the `fmov dN, #4.0` the compare takes, which the loop would

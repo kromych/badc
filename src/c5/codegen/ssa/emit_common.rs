@@ -3532,6 +3532,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // with the spilled values' call-free reuse runs split out; a retry
     // is kept only when it lowers the function's loop-weighted cost.
     let data_len = program.data.len() + program.zero_fill_len;
+    let objects = super::alias::data_objects(program);
     let ssa_allocs: alloc::vec::Vec<super::reg_alloc::Allocation> =
         pipeline.run("ssa::reg_alloc::allocate", &mut ssa_funcs, |funcs| {
             funcs
@@ -3547,7 +3548,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                         let capacity = super::reg_alloc::bank_capacity(target, native.fixed_regs);
                         super::pressure_order::lower_peaks(f, capacity);
                         super::remat::split_across_calls(f, target);
-                        super::licm::allocate_hoisted(f, target, native.fixed_regs, data_len)
+                        super::licm::allocate_hoisted(
+                            f,
+                            target,
+                            native.fixed_regs,
+                            data_len,
+                            &objects,
+                        )
                     } else {
                         super::reg_alloc::allocate(f, target, native.fixed_regs)
                     }

@@ -2,6 +2,7 @@
 //! the shared emit substrate. The per-target instruction selection lives in
 //! the sibling x86_64/ and aarch64/ modules.
 
+pub(crate) mod alias;
 pub(crate) mod asm_outputs;
 pub(crate) mod ast_reach;
 pub(crate) mod block_plan;

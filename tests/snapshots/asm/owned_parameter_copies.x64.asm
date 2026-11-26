@@ -105,17 +105,16 @@ Disassembly of section .text:
                	movq	0x40(%rsp), %r10
                	movq	%r10, 0x18(%rsp)
                	xorl	%eax, %eax
-               	movq	0x8(%rsp), %rcx
-               	movq	0x10(%rsp), %rdx
-               	cmpq	%rdx, %rcx
-               	jge	<addr>
                	movq	0x18(%rsp), %rdx
+               	movq	0x10(%rsp), %rsi
+               	movq	0x8(%rsp), %rcx
+               	cmpq	%rsi, %rcx
+               	jge	<addr>
                	addq	%rdx, %rax
                	incq	%rcx
                	movq	%rcx, 0x8(%rsp)
                	movq	0x8(%rsp), %rcx
-               	movq	0x10(%rsp), %rdx
-               	cmpq	%rdx, %rcx
+               	cmpq	%rsi, %rcx
                	jl	<addr>
                	addq	$0x28, %rsp
                	retq

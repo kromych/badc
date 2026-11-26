@@ -114,15 +114,13 @@ struct Memory {
     /// return. Each frame's locals + params occupy
     /// `(locals + n_params) * 8` bytes starting at this offset.
     stack_top: usize,
-    /// First byte of the heap region (`data_end + STACK_BYTES`).
+    /// First byte of the heap region, `data_end + STACK_BYTES` rounded up
+    /// to [`Memory::MAX_ALIGN`].
     /// Fixed at construction; `malloc` allocations start here
     /// and grow upward. Retained so a future `free`/`realloc`
     /// can resolve a pointer back to its allocator origin.
     heap_base: usize,
-    /// Next free byte in the heap. C99 7.20.3.3 leaves `malloc`'s
-    /// alignment unspecified except that it must suffice for any
-    /// object; we round each allocation up to 16 bytes to match
-    /// what host malloc implementations typically guarantee.
+    /// Next free byte in the heap, a multiple of [`Memory::MAX_ALIGN`].
     heap_top: usize,
     /// First byte of the stack region (= `data_end`). Stack
     /// addresses are exempt from the allocations check since
@@ -199,11 +197,11 @@ impl Memory {
         const STACK_BYTES: usize = 256 * 1024;
         const HEAP_BYTES: usize = 256 * 1024;
         let data_end = data.len();
-        let total = data_end + STACK_BYTES + HEAP_BYTES;
+        let heap_base = (data_end + STACK_BYTES).next_multiple_of(Self::MAX_ALIGN);
+        let total = heap_base + HEAP_BYTES;
         let mut bytes = Vec::with_capacity(total);
         bytes.extend_from_slice(data);
         bytes.resize(total, 0);
-        let heap_base = data_end + STACK_BYTES;
         let mut mem = Self {
             bytes,
             sve_vl_bytes: SVE_DEFAULT_VL_BYTES,
@@ -350,14 +348,20 @@ impl Memory {
     /// the allocation functions return a null pointer (C99 7.20.3).
     const LIMIT: u64 = 4 << 30;
 
+    /// The greatest fundamental alignment of the targets, `max_align_t`'s
+    /// (C17 7.19p2), which every allocation's address is a multiple of
+    /// (C17 7.22.3p1).
+    const MAX_ALIGN: usize = 16;
+
     /// Bump-pointer `malloc`: the base of `n` fresh bytes, or 0 when the
-    /// memory cannot grow to hold them. A zero-size request takes 16
-    /// bytes, so each pointer returned is distinct (C99 7.20.3p1).
+    /// memory cannot grow to hold them. A zero-size request takes
+    /// [`Self::MAX_ALIGN`] bytes, so each pointer returned is distinct
+    /// (C99 7.20.3p1).
     fn heap_alloc(&mut self, n: u64) -> usize {
         let base = self.heap_top;
         let next = n
             .max(1)
-            .checked_next_multiple_of(16)
+            .checked_next_multiple_of(Self::MAX_ALIGN as u64)
             .and_then(|size| (base as u64).checked_add(size))
             .filter(|&end| end <= Self::LIMIT)
             .and_then(|end| usize::try_from(end).ok());

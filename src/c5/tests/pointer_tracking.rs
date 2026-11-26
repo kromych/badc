@@ -246,6 +246,27 @@ fn an_allocation_the_interpreter_cannot_hold_is_a_null_pointer() {
     assert_eq!(run_str(src), 0);
 }
 
+/// C17 7.22.3p1: an allocation's address suits any object of fundamental
+/// alignment, whatever the length of the argument strings stored ahead of
+/// the heap; a pointer's low bit is then free to carry a tag.
+#[test]
+fn every_allocation_is_aligned_for_any_fundamental_type() {
+    let src = "#include <stddef.h>\n#include <stdint.h>\n#include <stdlib.h>\n\
+        static int misaligned(void *p) { return (uintptr_t)p % _Alignof(max_align_t) != 0; }\n\
+        int main(void) {\n\
+            if (misaligned(malloc(1)) || misaligned(malloc(24))) return 1;\n\
+            if (misaligned(calloc(3, 5)) || misaligned(realloc(0, 9))) return 2;\n\
+            long *p = malloc(sizeof *p);\n\
+            *(long *)(((uintptr_t)p | 1) & ~(uintptr_t)1) = 42;\n\
+            return *p != 42;\n\
+        }\n";
+    for len in 1..=16 {
+        let vm = Vm::new(compile_str(src)).with_pointer_tracking();
+        let exit = vm.with_args(["a".repeat(len)]).run().expect("run");
+        assert_eq!(exit, 0, "an argument of {len} bytes");
+    }
+}
+
 #[test]
 fn a_fill_or_resize_past_the_interpreters_memory_is_a_runtime_error() {
     // The size is checked against the memory before anything is built for

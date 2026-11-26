@@ -46,10 +46,10 @@ Disassembly of section .text:
                	shlq	$0x2, %rdx
                	addq	%rdx, %rax
                	leaq	(%r8,%r8,4), %rcx
-               	movq	0x10(%rsp), %r10
                	addq	%rcx, %rax
                	imulq	$0x6, %r9, %rcx
                	addq	%rcx, %rax
+               	movq	0x10(%rsp), %r10
                	imulq	$0x7, %r10, %rcx
                	addq	%rcx, %rax
                	shlq	$0x3, %rsi

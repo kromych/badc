@@ -1389,9 +1389,9 @@ Disassembly of section .text:
                	movw	%di, 0x106(%rsp)
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	movw	%r8w, 0x108(%rsp)
-               	movq	0x130(%rsp), %r10
                	andq	$0xffff, %r9            # imm = 0xFFFF
                	movw	%r9w, 0x10a(%rsp)
+               	movq	0x130(%rsp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movw	%r10w, 0x10c(%rsp)
                	andq	$0xffff, %r11           # imm = 0xFFFF
@@ -1477,9 +1477,9 @@ Disassembly of section .text:
                	movw	%di, 0x106(%rsp)
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	movw	%r8w, 0x108(%rsp)
-               	movq	0x130(%rsp), %r10
                	andq	$0xffff, %r9            # imm = 0xFFFF
                	movw	%r9w, 0x10a(%rsp)
+               	movq	0x130(%rsp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movw	%r10w, 0x10c(%rsp)
                	andq	$0xffff, %r11           # imm = 0xFFFF
@@ -1565,9 +1565,9 @@ Disassembly of section .text:
                	movw	%di, 0x106(%rsp)
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	movw	%r8w, 0x108(%rsp)
-               	movq	0x130(%rsp), %r10
                	andq	$0xffff, %r9            # imm = 0xFFFF
                	movw	%r9w, 0x10a(%rsp)
+               	movq	0x130(%rsp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movw	%r10w, 0x10c(%rsp)
                	andq	$0xffff, %r11           # imm = 0xFFFF
@@ -1653,9 +1653,9 @@ Disassembly of section .text:
                	movw	%di, 0x106(%rsp)
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	movw	%r8w, 0x108(%rsp)
-               	movq	0x130(%rsp), %r10
                	andq	$0xffff, %r9            # imm = 0xFFFF
                	movw	%r9w, 0x10a(%rsp)
+               	movq	0x130(%rsp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movw	%r10w, 0x10c(%rsp)
                	andq	$0xffff, %r11           # imm = 0xFFFF
@@ -2069,9 +2069,9 @@ Disassembly of section .text:
                	movb	%dil, 0x15b(%rsp)
                	andq	$0xff, %r8
                	movb	%r8b, 0x15c(%rsp)
-               	movq	0x130(%rsp), %r10
                	andq	$0xff, %r9
                	movb	%r9b, 0x15d(%rsp)
+               	movq	0x130(%rsp), %r10
                	andq	$0xff, %r10
                	movb	%r10b, 0x15e(%rsp)
                	andq	$0xff, %r11

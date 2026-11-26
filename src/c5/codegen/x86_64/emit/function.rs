@@ -1109,10 +1109,18 @@ impl FnEmit<'_, '_> {
         let tls = super::ssa::reg_alloc::tls_addr_is_call(target, func);
         let call = super::ssa::reg_alloc::is_call_site(&func.insts[v as usize], tls);
         let plan = plan_inst(alloc, frame, v, call, pending_regs(self.out.cx.code));
-        begin_site(self.out.cx.code, plan);
+        let inst = &func.insts[v as usize];
+        if call || matches!(inst, super::super::ir::Inst::InlineAsm { .. }) {
+            begin_site(self.out.cx.code, plan);
+            let lowered = self.lower_block_inst(block, v, tail_call);
+            return lowered.and(end_scratch(self.out.cx.code));
+        }
+        let bit = |u: u32| int_reg(place_of(alloc, u)).map_or(0u16, |r| 1 << r.0);
+        let mut reads = 0u16;
+        inst.for_each_operand(|u| reads |= bit(u));
+        begin_inst_site(self.out.cx.code, plan, reads, bit(v));
         let lowered = self.lower_block_inst(block, v, tail_call);
-        let ended = end_scratch(self.out.cx.code);
-        lowered.and(ended)
+        lowered.and(end_inst_site(self.out.cx.code))
     }
 
     fn lower_block_inst(

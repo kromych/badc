@@ -192,8 +192,8 @@ Disassembly of section .text:
                	xorq	%rcx, %r8
                	leaq	(%r9,%r8), %r10
                	movq	%r10, 0x58(%rsp)
-               	movq	0x38(%rsp), %r10
                	xorq	%rcx, %r9
+               	movq	0x38(%rsp), %r10
                	leaq	(%r10,%r9), %r8
                	movq	%r8, 0x50(%rsp)
                	xorq	%rcx, %r10

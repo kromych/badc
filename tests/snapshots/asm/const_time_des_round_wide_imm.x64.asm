@@ -59,7 +59,6 @@ Disassembly of section .text:
                	xorq	%r10, %rdi
                	andq	%rdx, %rdi
                	xorq	%rdi, %rcx
-               	movq	0x10(%rsp), %r10
                	movq	%r8, %r9
                	shrq	%r9
                	andq	$0x11111111, %r9        # imm = 0x11111111
@@ -87,6 +86,7 @@ Disassembly of section .text:
                	xorq	%r8, %r9
                	movq	%rax, %r8
                	andq	$0x252cf820, %r8        # imm = 0x252CF820
+               	movq	0x10(%rsp), %r10
                	movq	%r11, 0x10(%rsp)
                	movl	$0xc9c755bb, %r11d      # imm = 0xC9C755BB
                	xorq	%r11, %r8
@@ -110,11 +110,9 @@ Disassembly of section .text:
                	andq	%r9, %r8
                	xorq	%r8, %rcx
                	movl	0x10(%rsi), %r8d
-               	movq	0x10(%rsp), %r11
                	xorq	%r8, %r10
                	movq	%rax, %r8
                	andq	$0x794f104a, %r8        # imm = 0x794F104A
-               	movq	%r11, 0x10(%rsp)
                	movl	$0xd6b6ac77, %r11d      # imm = 0xD6B6AC77
                	xorq	%r11, %r8
                	movq	%rax, %rbx
@@ -149,9 +147,9 @@ Disassembly of section .text:
                	xorq	%r12, %rbx
                	andq	%r9, %rbx
                	xorq	%rbx, %r8
-               	movq	0x10(%rsp), %r11
                	andq	%r10, %r8
                	xorq	%r8, %rcx
+               	movq	0x10(%rsp), %r11
                	rorl	$0x4, %r11d
                	movl	0x14(%rsi), %esi
                	xorq	%rsi, %r11
@@ -160,9 +158,9 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rsp)
                	movl	$0xaf7d655a, %r10d      # imm = 0xAF7D655A
                	xorq	%r10, %rsi
-               	movq	0x10(%rsp), %r10
                	movq	%rax, %r8
                	andq	$0x3b0fe8ae, %r8        # imm = 0x3B0FE8AE
+               	movq	0x10(%rsp), %r10
                	movq	%r11, 0x10(%rsp)
                	movl	$0xf0168aa3, %r11d      # imm = 0xF0168AA3
                	xorq	%r11, %r8
@@ -240,8 +238,8 @@ Disassembly of section .text:
                	andq	%rbx, %r9
                	xorq	%r9, %r8
                	andq	%r8, %r10
-               	movq	0x10(%rsp), %r11
                	xorq	%r10, %rsi
+               	movq	0x10(%rsp), %r11
                	andq	%rsi, %r11
                	xorq	%r11, %rcx
                	movq	%rcx, %rax

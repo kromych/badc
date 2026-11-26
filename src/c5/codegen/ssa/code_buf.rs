@@ -356,6 +356,23 @@ impl CodeBuf {
         self.pending
     }
 
+    /// The slot of the pending borrow of register `reg`, which it no
+    /// longer is.
+    pub(crate) fn take_pending_reg(&mut self, reg: u8) -> Option<(u8, i32)> {
+        let p = self
+            .pending
+            .iter_mut()
+            .find(|p| p.is_some_and(|(r, _)| r == reg))?;
+        p.take().map(|(_, slot)| slot)
+    }
+
+    /// The register of the pending borrow keeping its value in `slot`,
+    /// which it no longer is.
+    pub(crate) fn take_pending_slot(&mut self, slot: (u8, i32)) -> Option<u8> {
+        let p = (self.pending.iter_mut()).find(|p| p.is_some_and(|(_, s)| s == slot))?;
+        p.take().map(|(r, _)| r)
+    }
+
     pub(crate) fn set_pending(&mut self, pending: [Option<Borrowed>; 2]) {
         self.pending = pending;
     }

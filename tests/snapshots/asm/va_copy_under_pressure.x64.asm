@@ -131,10 +131,10 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	addq	%rdi, %rcx
                	addq	%r8, %rcx
-               	movq	0xf0(%rsp), %r10
                	addq	%r9, %rcx
-               	movq	0xe8(%rsp), %r11
+               	movq	0xf0(%rsp), %r10
                	addq	%r10, %rcx
+               	movq	0xe8(%rsp), %r11
                	addq	%r11, %rcx
                	addq	%rbx, %rcx
                	addq	%r12, %rcx

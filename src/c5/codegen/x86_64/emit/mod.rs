@@ -155,9 +155,24 @@ fn scratch(code: &mut CodeBuf, s: Scratch) -> Reg {
         return Reg::R10;
     }
     let r = Reg(plan.regs[s.0]);
+    // An earlier site's borrow of the register left its value in that
+    // slot: the slot this site keeps it in already, or one it is reloaded
+    // from to store in this site's; with none, the value is not live here.
+    if let Some(slot) = code.take_pending_reg(r.0) {
+        match plan.keep[s.0] {
+            Some(keep) if keep == slot => code.carry_scratch(s.0),
+            Some(_) => emit_mov_r_mem(code, r, Reg(slot.0), slot.1),
+            None => {}
+        }
+    }
     if code.take_scratch(s.0)
         && let Some((base, disp)) = plan.keep[s.0]
     {
+        // The slot may hold another register's pending value: it goes back
+        // to its register before this one's takes its place.
+        if let Some(other) = code.take_pending_slot((base, disp)) {
+            emit_mov_r_mem(code, Reg(other), Reg(base), disp);
+        }
         code.note_kept(keep::BORROW_AREA as u32);
         emit_mov_mem_r(code, Reg(base), disp, r);
     }
@@ -184,6 +199,49 @@ fn begin_site(code: &mut CodeBuf, plan: Option<ScratchPlan>) {
             emit_mov_r_mem(code, Reg(r), Reg(slot.0), slot.1);
         }
     }
+}
+
+/// Begin the site of an instruction that reads the registers in `reads`
+/// and writes a value into those in `defines`, as [`begin_site`] does but
+/// for a register an ended site borrowed that the instruction does not
+/// read: its value stays in the slot, pending, until a site reads it, takes
+/// it as scratch ([`scratch`]) or the block ends. One the instruction
+/// writes a value into is given up, the value it held no longer live.
+fn begin_inst_site(code: &mut CodeBuf, plan: Option<ScratchPlan>, reads: u16, defines: u16) {
+    let pending = code.take_pending();
+    code.set_scratch(plan);
+    let mut kept = [None; 2];
+    for (k, p) in pending.into_iter().enumerate() {
+        let Some((r, slot)) = p else { continue };
+        let bit = 1u16 << r;
+        if plan.is_some_and(|q| q.regs[k] == r && q.keep[k] == Some(slot)) {
+            code.carry_scratch(k);
+        } else if reads & bit != 0 {
+            emit_mov_r_mem(code, Reg(r), Reg(slot.0), slot.1);
+        } else if defines & bit == 0 {
+            kept[k] = Some((r, slot));
+        }
+    }
+    code.set_pending(kept);
+}
+
+/// End an instruction's site ([`end_scratch`]). A borrow
+/// [`begin_inst_site`] kept and the lowering did not take stays pending
+/// beside the site's own, or is reloaded where the site's own takes its
+/// place.
+fn end_inst_site(code: &mut CodeBuf) -> Emit {
+    let left = code.take_pending();
+    let ended = end_scratch(code);
+    let mut pending = code.pending();
+    for (p, l) in pending.iter_mut().zip(left) {
+        match (p.is_none(), l) {
+            (true, l) => *p = l,
+            (false, Some((r, slot))) => emit_mov_r_mem(code, Reg(r), Reg(slot.0), slot.1),
+            (false, None) => {}
+        }
+    }
+    code.set_pending(pending);
+    ended
 }
 
 /// Reload the registers ended sites borrowed, ahead of code no site plans.

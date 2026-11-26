@@ -234,7 +234,6 @@ Disassembly of section .text:
                	bsrq	%rcx, %rax
                	cmovel	%r10d, %eax
                	xorl	$0x3f, %eax
-               	movq	0x18(%rsp), %r10
                	movq	%rax, %r11
                	xorq	$0x3f, %r11
                	shlxq	%rax, %rcx, %rax
@@ -246,6 +245,7 @@ Disassembly of section .text:
                	shrq	%rbx
                	movq	%rdi, %rdx
                	shrq	%rdx
+               	movq	0x18(%rsp), %r10
                	movq	%r10, 0x20(%rsp)
                	movq	%rsi, %r10
                	shlq	$0x3f, %r10
@@ -285,12 +285,12 @@ Disassembly of section .text:
                	cmpq	%r8, %rdi
                	setb	%cl
                	movzbq	%cl, %rcx
-               	movq	0x20(%rsp), %r10
                	andq	%rcx, %rax
                	orq	%rax, %rdx
                	xorq	$0x1, %rdx
                	leaq	(%r11,%rdx), %rax
                	xorl	%ecx, %ecx
+               	movq	0x20(%rsp), %r10
                	movq	%r9, %rdx
                	xorq	%r10, %rdx
                	xorq	%rdx, %rax

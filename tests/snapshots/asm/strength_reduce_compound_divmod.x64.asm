@@ -2393,7 +2393,6 @@ Disassembly of section .text:
                	andq	$-0xfff801, %rdx        # imm = 0xFF0007FF
                	shlq	$0xb, %rax
                	orq	%rax, %rdx
-               	movq	0x10(%rsp), %r11
                	movabsq	$-0x100000000, %rsi     # imm = 0xFFFFFFFF00000000
                	andq	%r10, %rsi
                	orq	%rdx, %rsi
@@ -2473,6 +2472,7 @@ Disassembly of section .text:
                	sarq	$0x18, %r8
                	shlq	$0x18, %r8
                	sarq	$0x18, %r8
+               	movq	0x10(%rsp), %r11
                	movq	%r8, %rax
                	imulq	%r11
                	movq	%rdx, %rax

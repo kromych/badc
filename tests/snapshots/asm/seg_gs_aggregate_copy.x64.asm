@@ -413,7 +413,6 @@ Disassembly of section .text:
                	movq	%r11, %r10
                	addq	0x58(%rsp), %r10
                	movq	%r10, 0x58(%rsp)
-               	movq	0x8(%rsp), %r10
                	movq	%gs:(%rax), %r11
                	movq	%r11, 0x50(%rsp)
                	movq	%gs:(%rsi), %r11
@@ -423,10 +422,11 @@ Disassembly of section .text:
                	movq	%gs:(%rdx), %rdx
                	movq	%gs:(%rdi), %r11
                	movq	%r11, 0x38(%rsp)
+               	movq	0x8(%rsp), %r10
                	movq	%gs:(%r10), %r11
                	movq	%r11, 0x30(%rsp)
-               	movq	(%rsp), %r9
                	movq	%gs:(%r8), %r8
+               	movq	(%rsp), %r9
                	movq	%gs:(%r9), %r9
                	movl	$0x20, %eax
                	movq	%gs:(%rax), %r10

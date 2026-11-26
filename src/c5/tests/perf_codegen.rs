@@ -6305,6 +6305,37 @@ fn a_near_local_address_is_set_by_each_call() {
     );
 }
 
+/// x86-64: a scratch register a site borrowed stays in its slot past an
+/// instruction that does not read it, and the next site borrowing it into
+/// the same slot uses it as it is: no load of a slot into a register is
+/// followed, across one instruction naming neither, by a store of that
+/// register back into the slot. The fixture's vector lanes keep the
+/// scratch pair borrowed from one lane to the next.
+#[test]
+fn a_borrowed_scratch_is_not_reloaded_to_be_stored_back() {
+    const SRC: &str = include_str!("../../../tests/fixtures/c/values_saved_around_calls.c");
+    let insns = x64_insns(&function_bytes(
+        &object_at(SRC, Target::LinuxX64, true),
+        "main",
+    ));
+    // `mov r64, [rsp + disp]` / `mov [rsp + disp], r64`.
+    let slot_mov = |i: &X64Insn, op: u16| {
+        (i.op == op && i.rex_w() && !i.reg_form() && i.mem_base() == Some(4))
+            .then(|| (i.regs().0, i.disp))
+    };
+    for w in insns.windows(3) {
+        let (Some((r, d)), Some(back)) = (slot_mov(&w[0], 0x8B), slot_mov(&w[2], 0x89)) else {
+            continue;
+        };
+        let (a, b) = w[1].regs();
+        assert!(
+            back != (r, d) || w[1].modrm.is_none() || a == r || b == r,
+            "r{r} reloaded from [rsp + {d:#x}] and stored back at {:#x}: {insns:x?}",
+            w[0].at
+        );
+    }
+}
+
 /// AArch64: a select's zero arm is `xzr`: no register holds the constant
 /// and no instruction sets it, so each function is the compare, the
 /// `csel` reading `xzr`, and the return, with the subtraction ahead.

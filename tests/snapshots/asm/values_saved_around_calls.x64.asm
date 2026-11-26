@@ -567,9 +567,7 @@ Disassembly of section .text:
                	vpinsrd	$0x1, %edx, %xmm4, %xmm4
                	vpextrd	$0x2, %xmm3, %esi
                	movslq	%esi, %rsi
-               	movq	0x48(%rsp), %r11
                	xorq	%r10, %rsi
-               	movq	%r11, 0x48(%rsp)
                	vpinsrd	$0x2, %esi, %xmm4, %xmm4
                	vpextrd	$0x3, %xmm3, %edi
                	movslq	%edi, %rdi
@@ -605,7 +603,6 @@ Disassembly of section .text:
                	movq	0x48(%rsp), %r9
                	vpinsrd	$0x2, %r9d, %xmm1, %xmm1
                	vpinsrd	$0x3, %r8d, %xmm1, %xmm1
-               	nop
                	jmp	<addr>
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax

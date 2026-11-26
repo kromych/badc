@@ -228,8 +228,8 @@ Disassembly of section .text:
                	subq	$0x1, %r10
                	jne	<addr>
                	movq	%r12, %rsp
-               	movq	-0x70(%rbp), %r10
                	xorl	%r8d, %r8d
+               	movq	-0x70(%rbp), %r10
                	cmpl	%r15d, %r8d
                	jge	<addr>
                	xorl	%eax, %eax

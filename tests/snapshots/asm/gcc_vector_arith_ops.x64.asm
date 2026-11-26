@@ -1007,8 +1007,8 @@ Disassembly of section .text:
                	movw	%si, 0x42(%rsp)
                	movw	%di, 0x44(%rsp)
                	movw	%r8w, 0x46(%rsp)
-               	movq	-0x50(%rbp), %r10
                	movw	%r9w, 0x48(%rsp)
+               	movq	-0x50(%rbp), %r10
                	movw	%r10w, 0x4a(%rsp)
                	movw	%r11w, 0x4c(%rsp)
                	movw	%ax, 0x4e(%rsp)
@@ -1085,8 +1085,8 @@ Disassembly of section .text:
                	movw	%si, 0x42(%rsp)
                	movw	%di, 0x44(%rsp)
                	movw	%r8w, 0x46(%rsp)
-               	movq	-0x50(%rbp), %r10
                	movw	%r9w, 0x48(%rsp)
+               	movq	-0x50(%rbp), %r10
                	movw	%r10w, 0x4a(%rsp)
                	movw	%r11w, 0x4c(%rsp)
                	movw	%dx, 0x4e(%rsp)
@@ -1222,9 +1222,9 @@ Disassembly of section .text:
                	movw	%di, 0x44(%rsp)
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	movw	%r8w, 0x46(%rsp)
-               	movq	-0x50(%rbp), %r10
                	andq	$0xffff, %r9            # imm = 0xFFFF
                	movw	%r9w, 0x48(%rsp)
+               	movq	-0x50(%rbp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movw	%r10w, 0x4a(%rsp)
                	andq	$0xffff, %r11           # imm = 0xFFFF
@@ -1306,9 +1306,9 @@ Disassembly of section .text:
                	movw	%di, 0x44(%rsp)
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	movw	%r8w, 0x46(%rsp)
-               	movq	-0x50(%rbp), %r10
                	andq	$0xffff, %r9            # imm = 0xFFFF
                	movw	%r9w, 0x48(%rsp)
+               	movq	-0x50(%rbp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movw	%r10w, 0x4a(%rsp)
                	andq	$0xffff, %r11           # imm = 0xFFFF
@@ -1476,12 +1476,12 @@ Disassembly of section .text:
                	movl	%r11d, %eax
                	xorl	%edx, %edx
                	divl	%r10d
-               	movq	-0x50(%rbp), %r10
                	movl	%ecx, 0x40(%rsp)
                	movl	%edi, 0x44(%rsp)
                	movl	%r8d, 0x48(%rsp)
                	movl	%edx, 0x4c(%rsp)
                	xorl	%ecx, %ecx
+               	movq	-0x50(%rbp), %r10
                	movl	0xe0(%rsp,%rcx,4), %edi
                	movl	0xf0(%rsp,%rcx,4), %r8d
                	movl	%edi, %eax
@@ -1640,12 +1640,12 @@ Disassembly of section .text:
                	movq	%r11, %rax
                	cqto
                	idivq	%r10
-               	movq	-0x50(%rbp), %r10
                	movl	%ecx, 0x40(%rsp)
                	movl	%edi, 0x44(%rsp)
                	movl	%r8d, 0x48(%rsp)
                	movl	%edx, 0x4c(%rsp)
                	xorl	%ecx, %ecx
+               	movq	-0x50(%rbp), %r10
                	movl	0x100(%rsp,%rcx,4), %edi
                	movl	0x110(%rsp,%rcx,4), %r8d
                	movl	%edi, %eax
@@ -5382,9 +5382,9 @@ Disassembly of section .text:
                	movw	%di, 0x24(%rsp)
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	movw	%r8w, 0x26(%rsp)
-               	movq	-0x50(%rbp), %r10
                	andq	$0xffff, %r9            # imm = 0xFFFF
                	movw	%r9w, 0x28(%rsp)
+               	movq	-0x50(%rbp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movw	%r10w, 0x2a(%rsp)
                	andq	$0xffff, %r11           # imm = 0xFFFF
@@ -5444,9 +5444,9 @@ Disassembly of section .text:
                	movw	%di, 0x44(%rsp)
                	andq	$0xffff, %r8            # imm = 0xFFFF
                	movw	%r8w, 0x46(%rsp)
-               	movq	-0x50(%rbp), %r10
                	andq	$0xffff, %r9            # imm = 0xFFFF
                	movw	%r9w, 0x48(%rsp)
+               	movq	-0x50(%rbp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movw	%r10w, 0x4a(%rsp)
                	andq	$0xffff, %r11           # imm = 0xFFFF

@@ -1377,9 +1377,9 @@ Disassembly of section .text:
                	shlxq	%r10, %rbx, %rbx
                	shlq	%rbx
                	shrxq	%rcx, %r11, %rcx
-               	movq	0x28(%rsp), %r10
                	orq	%rbx, %rcx
                	andq	%r8, %rcx
+               	movq	0x28(%rsp), %r10
                	andq	%r10, %r9
                	orq	%r9, %rcx
                	andq	%r8, %r10

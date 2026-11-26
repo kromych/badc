@@ -165,9 +165,9 @@ Disassembly of section .text:
                	subq	%rdi, %rax
                	addq	%rbp, %rax
                	subq	%r15, %rax
-               	movq	0x58(%rsp), %r10
                	addq	%r14, %rax
                	subq	%r11, %rax
+               	movq	0x58(%rsp), %r10
                	addq	%r10, %rax
                	movq	<rip>, %r14 # <addr>
                	movsd	%xmm0, 0x60(%rsp)

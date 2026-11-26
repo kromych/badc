@@ -124,7 +124,6 @@ Disassembly of section .text:
                	movq	%r9, 0x38(%rsp)
                	leaq	(%r10,%r11), %r9
                	movq	%r9, 0x58(%rsp)
-               	movq	0x38(%rsp), %r9
                	movl	0xac(%rsp), %ebx
                	movq	0x58(%rsp), %r10
                	movl	%r10d, %r10d
@@ -154,6 +153,7 @@ Disassembly of section .text:
                	movl	%r10d, %r10d
                	xorq	%r10, %r12
                	rorl	$0x19, %r12d
+               	movq	0x38(%rsp), %r9
                	addq	%r9, %r14
                	movl	%ebx, %ebx
                	movl	%r14d, %r10d

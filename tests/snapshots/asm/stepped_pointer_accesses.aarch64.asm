@@ -267,21 +267,20 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x3, x0
                	stur	xzr, [x29, #-0x8]
                	movi	d0, #0000000000000000
                	b	<addr>
-               	ldur	x0, [x29, #-0x8]
-               	ldr	d1, [x3, x0, lsl #3]
-               	ldur	x0, [x29, #-0x8]
-               	ldr	s2, [x1, x0, lsl #2]
+               	ldur	x3, [x29, #-0x8]
+               	ldr	d1, [x0, x3, lsl #3]
+               	ldur	x3, [x29, #-0x8]
+               	ldr	s2, [x1, x3, lsl #2]
                	fcvt	d2, s2
                	fmadd	d0, d1, d2, d0
-               	ldur	x0, [x29, #-0x8]
-               	add	x0, x0, #0x1
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	cmp	x0, x2
+               	ldur	x3, [x29, #-0x8]
+               	add	x3, x3, #0x1
+               	stur	x3, [x29, #-0x8]
+               	ldur	x3, [x29, #-0x8]
+               	cmp	x3, x2
                	b.lt	<addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

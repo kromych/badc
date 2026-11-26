@@ -54,12 +54,13 @@ Disassembly of section .text:
                	movw	$0x6463, -0x26(%rbp)    # imm = 0x6463
                	movw	$0x0, -0x1e(%rbp)
                	leaq	-0x28(%rbp), %rax
-               	leaq	-0x20(%rbp), %rdx
+               	leaq	-0x20(%rbp), %rcx
                	movw	$0x6665, -0x24(%rbp)    # imm = 0x6665
                	movw	$0x0, -0x1c(%rbp)
-               	movl	$0x6, %ecx
-               	movq	%rdx, %rdi
+               	movl	$0x6, %edx
+               	movq	%rcx, %rdi
                	movq	%rax, %rsi
+               	movq	%rdx, %rcx
                	rep		movsb	(%rsi), %es:(%rdi)
                	movsbq	-0x20(%rbp), %rax
                	cmpl	$0x61, %eax

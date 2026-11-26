@@ -76,14 +76,14 @@ Disassembly of section .text:
                	mov	x22, x0
                	adrp	x0, <page>
                	str	w22, [x0, #0x28]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	xzr, [x2, #0x8]
-               	str	xzr, [x2]
                	str	xzr, [x1, #0x8]
                	str	xzr, [x1]
+               	str	xzr, [x0, #0x8]
+               	str	xzr, [x0]
                	adrp	x21, <page>
                	bl	<addr>
                	str	x0, [x21, #0x20]

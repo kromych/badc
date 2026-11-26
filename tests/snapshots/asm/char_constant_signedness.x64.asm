@@ -49,17 +49,17 @@ Disassembly of section .text:
 <main>:
                	subq	$0x18, %rsp
                	movl	$0x80, 0x8(%rsp)
-               	movl	0x8(%rsp), %ecx
-               	movsbq	%cl, %rcx
-               	cmpl	$-0x80, %ecx
+               	movl	0x8(%rsp), %eax
+               	movsbq	%al, %rax
+               	cmpl	$-0x80, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x18, %rsp
                	retq
                	movl	$0xff, 0x8(%rsp)
-               	movl	0x8(%rsp), %ecx
-               	movsbq	%cl, %rcx
-               	cmpl	$-0x1, %ecx
+               	movl	0x8(%rsp), %eax
+               	movsbq	%al, %rax
+               	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x18, %rsp

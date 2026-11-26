@@ -19,7 +19,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=12
     v13  Imm(0)                                           -> -
     v14  Imm(0)                                           -> -
     v15  Imm(1)                                           -> -
-    v16  Imm(1)                                           -> x0
+    v16  Imm(1)                                           -> -
     v17  StoreLocal { off=-12, value=v16, kind=I64 }      -> -
     v18  LocalAddr(-12)                                   -> -
     v19  Imm(0)                                           -> -
@@ -30,7 +30,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=12
     v24  Imm(0)                                           -> -
     v25  Imm(0)                                           -> -
     v26  Imm(2)                                           -> -
-    v27  Imm(2)                                           -> x0
+    v27  Imm(2)                                           -> -
     v28  StoreLocal { off=-12, disp=24, value=v27, kind=I64 } -> -
     v29  Imm(0)                                           -> -
     v30  Imm(1)                                           -> -
@@ -46,7 +46,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=12
     v40  Imm(10)                                          -> -
     v41  Imm(10)                                          -> -
     v42  Imm(11)                                          -> -
-    v43  Imm(11)                                          -> x0
+    v43  Imm(11)                                          -> -
     v44  StoreLocal { off=-12, disp=32, value=v43, kind=I64 } -> -
     v45  LocalAddr(-12)                                   -> -
     v46  Imm(1)                                           -> -
@@ -57,7 +57,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=12
     v51  Imm(10)                                          -> -
     v52  Imm(10)                                          -> -
     v53  Imm(12)                                          -> -
-    v54  Imm(12)                                          -> x0
+    v54  Imm(12)                                          -> -
     v55  StoreLocal { off=-12, disp=56, value=v54, kind=I64 } -> -
     v56  Imm(1)                                           -> -
     v57  Imm(2)                                           -> -
@@ -73,7 +73,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=12
     v67  Imm(20)                                          -> -
     v68  Imm(20)                                          -> -
     v69  Imm(21)                                          -> -
-    v70  Imm(21)                                          -> x0
+    v70  Imm(21)                                          -> -
     v71  StoreLocal { off=-12, disp=64, value=v70, kind=I64 } -> -
     v72  LocalAddr(-12)                                   -> -
     v73  Imm(2)                                           -> -
@@ -84,7 +84,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=12
     v78  Imm(20)                                          -> -
     v79  Imm(20)                                          -> -
     v80  Imm(22)                                          -> -
-    v81  Imm(22)                                          -> x0
+    v81  Imm(22)                                          -> -
     v82  StoreLocal { off=-12, disp=88, value=v81, kind=I64 } -> -
     v83  Imm(2)                                           -> -
     v84  Imm(3)                                           -> -

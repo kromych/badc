@@ -33,21 +33,21 @@ Disassembly of section .text:
                	movq	$0x2222, <rip> # imm = 0x2222
                                                 # <addr>
                	movl	$0x6, <rip> # <addr>
-               	movl	<rip>, %esi # <addr>
-               	cmpl	$0x9, %esi
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	<rip>, %rsi # <addr>
-               	cmpq	$0x1111, %rsi           # imm = 0x1111
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x1111, %rax           # imm = 0x1111
                	jne	<addr>
-               	movl	<rip>, %esi # <addr>
-               	cmpl	$0x4, %esi
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	<rip>, %rsi # <addr>
-               	cmpq	$0x2222, %rsi           # imm = 0x2222
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x2222, %rax           # imm = 0x2222
                	jne	<addr>
                	movq	$0x1111, <rip> # imm = 0x1111
                                                 # <addr>

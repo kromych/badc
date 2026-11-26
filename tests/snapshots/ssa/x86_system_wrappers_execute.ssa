@@ -109,7 +109,7 @@ fn ent_pc=1358 n_params=0 variadic=false locals=1
     v95  BinopI { op=and, lhs=v78, rhs_imm=134217728 }    -> x2
     terminator Bz { cond=v95, target=b10, fall=b5 }   (exit_acc=v95)
   block 5  start_pc=0
-    v96  Imm(3735928559)                                  -> x0
+    v96  Imm(3735928559)                                  -> -
     v97  StoreLocal { off=-1, value=v96, kind=I32 }       -> -
     v98  Imm(0)                                           -> -
     v99  LocalAddr(-1)                                    -> -

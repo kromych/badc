@@ -32,7 +32,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v22  Imm(4096)                                        -> -
     v23  Imm(0)                                           -> -
     v24  Imm(1)                                           -> -
-    v25  Imm(1)                                           -> x0
+    v25  Imm(1)                                           -> -
     v26  Store { addr=v8, disp=0, value=v25, kind=I8 }    -> -
     v27  Imm(0)                                           -> -
     v28  Imm(4096)                                        -> -
@@ -46,7 +46,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v36  Imm(4096)                                        -> -
     v37  Imm(1)                                           -> -
     v38  Imm(2)                                           -> -
-    v39  Imm(2)                                           -> x1
+    v39  Imm(2)                                           -> -
     v40  Store { addr=v35, disp=0, value=v39, kind=I8 }   -> -
     v41  Imm(0)                                           -> -
     v42  Imm(8192)                                        -> -
@@ -60,7 +60,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v50  Imm(4096)                                        -> -
     v51  Imm(2)                                           -> -
     v52  Imm(3)                                           -> -
-    v53  Imm(3)                                           -> x1
+    v53  Imm(3)                                           -> -
     v54  Store { addr=v49, disp=0, value=v53, kind=I8 }   -> -
     v55  Imm(0)                                           -> -
     v56  Imm(12288)                                       -> -
@@ -74,7 +74,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v64  Imm(4096)                                        -> -
     v65  Imm(3)                                           -> -
     v66  Imm(4)                                           -> -
-    v67  Imm(4)                                           -> x1
+    v67  Imm(4)                                           -> -
     v68  Store { addr=v63, disp=0, value=v67, kind=I8 }   -> -
     v69  Imm(0)                                           -> -
     v70  Imm(16384)                                       -> -

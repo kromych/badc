@@ -46,7 +46,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator JumpTable { idx=v34, table=2 }   [b10, b33, b35, b36, b37, b38, b39, b40]   (exit_acc=v34)
   block 10  start_pc=0
     v43  Imm(20)                                          -> -
-    v44  Imm(7)                                           -> x1
+    v44  Imm(7)                                           -> -
     v45  StoreLocal { off=-1, value=v44, kind=I32, volatile } -> -
     v46  LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v47  Extend { value=v46, kind=I32 }                   -> -
@@ -80,7 +80,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Jmp(b13)   (exit_acc=v66)
   block 20  start_pc=0
     v67  Imm(27)                                          -> -
-    v68  Imm(9)                                           -> x1
+    v68  Imm(9)                                           -> -
     v69  StoreLocal { off=-1, value=v68, kind=I32, volatile } -> -
     v70  LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v71  Extend { value=v70, kind=I32 }                   -> -

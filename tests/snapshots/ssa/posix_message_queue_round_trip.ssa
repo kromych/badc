@@ -25,11 +25,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=31
     v19  StoreLocal { off=-16, disp=56, value=v1, kind=I64 } -> -
     v20  LocalAddr(-16)                                   -> -
     v21  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> -
-    v22  Imm(4)                                           -> x0
+    v22  Imm(4)                                           -> -
     v23  StoreLocal { off=-16, disp=8, value=v22, kind=I64 } -> -
     v24  LocalAddr(-16)                                   -> -
     v25  BinopI { op=add, lhs=v3, rhs_imm=16 }            -> -
-    v26  Imm(64)                                          -> x0
+    v26  Imm(64)                                          -> -
     v27  ImmData(1)                                       -> -
     v28  StoreLocal { off=-16, disp=16, value=v26, kind=I64 } -> -
     terminator Jmp(b4)   (exit_acc=v1)
@@ -296,7 +296,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=31
     terminator Jmp(b8)   (exit_acc=v218)
   block 33  start_pc=0
     v225 LocalAddr(-16)                                   -> -
-    v226 Imm(2048)                                        -> x0
+    v226 Imm(2048)                                        -> -
     v227 StoreLocal { off=-16, value=v226, kind=I64 }     -> -
     v228 Extend { value=v41, kind=I32 }                   -> -
     v229 LocalAddr(-16)                                   -> -

@@ -97,7 +97,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v74  ImmData(2176)                                    -> x1
     v75  Imm(0)                                           -> -
     v76  Binop { op=add, lhs=v74, rhs=v71 }               -> -
-    v77  Imm(29)                                          -> x6
+    v77  Imm(29)                                          -> -
     v78  StoreIndexed { base=v74, index=v71, scale=1, value=v77, kind=I8 } -> -
     v79  Imm(0)                                           -> -
     v80  BinopI { op=add, lhs=v71, rhs_imm=1 }            -> x0
@@ -173,7 +173,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v143 Imm(0)                                           -> -
     v144 Imm(0)                                           -> -
     v145 Imm(195)                                         -> -
-    v146 Imm(195)                                         -> x0
+    v146 Imm(195)                                         -> -
     v147 Store { addr=v86, disp=1, value=v146, kind=I8 pc_rel } -> -
     v148 ImmData(2256)                                    -> -
     v149 Imm(0)                                           -> -

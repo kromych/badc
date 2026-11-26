@@ -58,8 +58,8 @@ Disassembly of section .text:
 <main>:
                	subq	$0x18, %rsp
                	movw	$0x0, 0x8(%rsp)
-               	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
-               	movq	%rcx, <rip> # <addr>
+               	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
+               	movq	%rax, <rip> # <addr>
                	movl	$0x0, <rip> # <addr>
                	leaq	0x8(%rsp), %rdi
                	callq	<addr>

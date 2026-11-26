@@ -10,10 +10,10 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
     v6   Imm(0)                                           -> -
-    v7   Imm(1)                                           -> x0
+    v7   Imm(1)                                           -> -
     v8   Store { addr=v1, disp=0, value=v7, kind=I8, volatile } -> -
     v9   Imm(0)                                           -> -
-    v10  Imm(2)                                           -> x0
+    v10  Imm(2)                                           -> -
     v11  Store { addr=v3, disp=0, value=v10, kind=I8, volatile } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=1 ---

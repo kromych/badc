@@ -46,7 +46,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v34  Imm(0)                                           -> -
     v35  Imm(0)                                           -> -
     v36  Imm(120)                                         -> -
-    v37  Imm(120)                                         -> x1
+    v37  Imm(120)                                         -> -
     v38  Imm(0)                                           -> -
     v39  Imm(1)                                           -> -
     v40  BinopI { op=add, lhs=v30, rhs_imm=1 }            -> -

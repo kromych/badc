@@ -81,8 +81,8 @@ Disassembly of section .text:
                	movss	%xmm0, -0x68(%rbp)
                	movl	$0x0, -0x60(%rbp)
                	movl	$0x0, -0x58(%rbp)
-               	movsd	<rip>, %xmm2 # <addr>
-               	movsd	%xmm2, -0x50(%rbp)
+               	movsd	<rip>, %xmm1 # <addr>
+               	movsd	%xmm1, -0x50(%rbp)
                	movq	$0x0, -0x48(%rbp)
                	movq	$0x0, -0x40(%rbp)
                	leaq	-0x60(%rbp), %rax

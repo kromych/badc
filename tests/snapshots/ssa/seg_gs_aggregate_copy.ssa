@@ -332,11 +332,11 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 pc_rel } -> -
     v4   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
     v5   Imm(0)                                           -> -
-    v6   Imm(287454020)                                   -> x0
+    v6   Imm(287454020)                                   -> -
     v7   Store { addr=v1, disp=8, value=v6, kind=I32 pc_rel } -> -
     v8   Imm(8)                                           -> -
     v9   BinopI { op=add, lhs=v1, rhs_imm=16 }            -> -
-    v10  Imm(1432778632)                                  -> x0
+    v10  Imm(1432778632)                                  -> -
     v11  Store { addr=v1, disp=16, value=v10, kind=I32 pc_rel } -> -
     v12  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> -
     v13  Imm(81985529216486895)                           -> x2
@@ -477,17 +477,17 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v128 Imm(0)                                           -> -
     v129 Imm(0)                                           -> -
     v130 ImmData(16)                                      -> x0
-    v131 SegLoad { addr=v130, kind=I64, seg=Gs }          -> x1
+    v131 SegLoad { addr=v130, kind=I64, seg=Gs }          -> x7
     v132 Imm(0)                                           -> -
-    v133 BinopI { op=add, lhs=v130, rhs_imm=8 }           -> x2
+    v133 BinopI { op=add, lhs=v130, rhs_imm=8 }           -> x1
     v134 SegLoad { addr=v133, kind=I64, seg=Gs }          -> x8
     v135 Imm(0)                                           -> -
     v136 Imm(0)                                           -> -
-    v137 BinopI { op=add, lhs=v130, rhs_imm=16 }          -> x6
+    v137 BinopI { op=add, lhs=v130, rhs_imm=16 }          -> x2
     v138 SegLoad { addr=v137, kind=I64, seg=Gs }          -> x9
     v139 Imm(0)                                           -> -
     v140 Imm(0)                                           -> -
-    v141 BinopI { op=add, lhs=v130, rhs_imm=24 }          -> x7
+    v141 BinopI { op=add, lhs=v130, rhs_imm=24 }          -> x6
     v142 SegLoad { addr=v141, kind=I64, seg=Gs }          -> x10
     v143 Imm(0)                                           -> -
     v144 Imm(0)                                           -> -
@@ -502,27 +502,27 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v153 LifetimeEnd(0)                                   -> -
     v154 Imm(0)                                           -> -
     v155 Imm(0)                                           -> -
-    v156 BinopI { op=eq, lhs=v131, rhs_imm=-77129852519530769 } -> x1
+    v156 BinopI { op=eq, lhs=v131, rhs_imm=-77129852519530769 } -> x7
     v157 Imm(0)                                           -> -
     terminator Bz { cond=v156, target=b14, fall=b11 }   (exit_acc=v156)
   block 11  start_pc=0
     v528 Imm(0)                                           -> -
     v529 BinopI { op=and, lhs=v134, rhs_imm=4294967295 }  -> -
-    v530 BinopI { op=eq, lhs=v134, rhs_imm=287454020 }    -> x1
+    v530 BinopI { op=eq, lhs=v134, rhs_imm=287454020 }    -> x7
     v531 Imm(0)                                           -> -
     v532 Imm(0)                                           -> -
     terminator Bz { cond=v530, target=b14, fall=b12 }   (exit_acc=v530)
   block 12  start_pc=0
     v533 Imm(0)                                           -> -
     v534 BinopI { op=and, lhs=v138, rhs_imm=4294967295 }  -> -
-    v535 BinopI { op=eq, lhs=v138, rhs_imm=1432778632 }   -> x1
+    v535 BinopI { op=eq, lhs=v138, rhs_imm=1432778632 }   -> x7
     v536 Imm(0)                                           -> -
     v537 Imm(0)                                           -> -
     terminator Bz { cond=v535, target=b14, fall=b13 }   (exit_acc=v535)
   block 13  start_pc=0
     v538 Imm(0)                                           -> -
     v539 Imm(0)                                           -> -
-    v540 BinopI { op=eq, lhs=v142, rhs_imm=81985529216486895 } -> x1
+    v540 BinopI { op=eq, lhs=v142, rhs_imm=81985529216486895 } -> x7
     v541 Imm(0)                                           -> -
     v542 Extend { value=v540, kind=I32 }                  -> -
     v543 Extend { value=v540, kind=I32 }                  -> -
@@ -538,7 +538,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     terminator Return(v158)   (exit_acc=v158)
   block 15  start_pc=0
     v164 ImmData(80)                                      -> -
-    v165 Imm(0)                                           -> x1
+    v165 Imm(0)                                           -> -
     v166 Store { addr=v164, disp=0, value=v165, kind=I64 pc_rel } -> -
     v167 BinopI { op=add, lhs=v164, rhs_imm=8 }           -> -
     v168 Store { addr=v164, disp=8, value=v165, kind=I32 pc_rel } -> -
@@ -669,8 +669,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v262 Imm(0)                                           -> x0
     v263 Imm(32)                                          -> x7
     v264 Imm(-77129852519530769)                          -> x1
-    v265 Imm(287454020)                                   -> x2
-    v266 Imm(1432778632)                                  -> x6
+    v265 Imm(287454020)                                   -> -
+    v266 Imm(1432778632)                                  -> -
     v267 Imm(81985529216486895)                           -> x8
     v268 SegStore { addr=v262, value=v264, kind=I64, seg=Gs } -> -
     v269 Imm(0)                                           -> -

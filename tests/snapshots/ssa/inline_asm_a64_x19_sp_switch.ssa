@@ -4,19 +4,19 @@ fn ent_pc=0 n_params=1 variadic=false locals=67
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(5)                                           -> x0
+    v1   Imm(5)                                           -> -
     v2   Imm(0)                                           -> -
     v3   Imm(0)                                           -> -
     v4   StoreLocal { off=-65, value=v1, kind=I64, volatile } -> -
     v5   Imm(2)                                           -> -
-    v6   Imm(10)                                          -> x0
+    v6   Imm(10)                                          -> -
     v7   StoreLocal { off=-66, value=v6, kind=I64, volatile } -> -
     v8   Imm(3)                                           -> -
-    v9   Imm(15)                                          -> x0
+    v9   Imm(15)                                          -> -
     v10  StoreLocal { off=-67, value=v9, kind=I64, volatile } -> -
     v11  LocalAddr(-64)                                   -> -
     v12  Imm(0)                                           -> -
-    v13  Imm(1)                                           -> x0
+    v13  Imm(1)                                           -> -
     v14  StoreLocal { off=-64, value=v13, kind=I8, volatile } -> -
     v15  LoadLocal { off=-65, kind=I64, volatile }        -> x0
     v16  LoadLocal { off=-66, kind=I64, volatile }        -> x1

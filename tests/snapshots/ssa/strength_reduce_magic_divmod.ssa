@@ -5,25 +5,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> -
-    v2   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 pc_rel } -> -
     v4   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
-    v5   Imm(1)                                           -> x0
+    v5   Imm(1)                                           -> -
     v6   Store { addr=v1, disp=8, value=v5, kind=I64 pc_rel } -> -
     v7   BinopI { op=add, lhs=v1, rhs_imm=16 }            -> -
-    v8   Imm(-1)                                          -> x0
+    v8   Imm(-1)                                          -> -
     v9   Store { addr=v1, disp=16, value=v8, kind=I64 pc_rel } -> -
     v10  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> -
-    v11  Imm(2)                                           -> x0
+    v11  Imm(2)                                           -> -
     v12  Store { addr=v1, disp=24, value=v11, kind=I64 pc_rel } -> -
     v13  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> -
-    v14  Imm(-2)                                          -> x0
+    v14  Imm(-2)                                          -> -
     v15  Store { addr=v1, disp=32, value=v14, kind=I64 pc_rel } -> -
     v16  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> -
-    v17  Imm(2147483647)                                  -> x0
+    v17  Imm(2147483647)                                  -> -
     v18  Store { addr=v1, disp=40, value=v17, kind=I64 pc_rel } -> -
     v19  BinopI { op=add, lhs=v1, rhs_imm=48 }            -> -
-    v20  Imm(-2147483648)                                 -> x0
+    v20  Imm(-2147483648)                                 -> -
     v21  Store { addr=v1, disp=48, value=v20, kind=I64 pc_rel } -> -
     v22  BinopI { op=add, lhs=v1, rhs_imm=56 }            -> -
     v23  Imm(9223372036854775807)                         -> x0
@@ -32,10 +32,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v26  Imm(-9223372036854775808)                        -> x0
     v27  Store { addr=v1, disp=64, value=v26, kind=I64 pc_rel } -> -
     v28  BinopI { op=add, lhs=v1, rhs_imm=72 }            -> -
-    v29  Imm(1000000007)                                  -> x0
+    v29  Imm(1000000007)                                  -> -
     v30  Store { addr=v1, disp=72, value=v29, kind=I64 pc_rel } -> -
     v31  BinopI { op=add, lhs=v1, rhs_imm=80 }            -> -
-    v32  Imm(-1000000007)                                 -> x0
+    v32  Imm(-1000000007)                                 -> -
     v33  Store { addr=v1, disp=80, value=v32, kind=I64 pc_rel } -> -
     v34  BinopI { op=add, lhs=v1, rhs_imm=88 }            -> -
     v35  Imm(4294967295)                                  -> x0
@@ -128,7 +128,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v84  Imm(0)                                           -> -
     terminator Jmp(b7)   (exit_acc=v82)
   block 4  start_pc=0
-    v101 Imm(3)                                           -> x0
+    v101 Imm(3)                                           -> -
     v102 StoreLocal { off=-53, value=v101, kind=I32, volatile } -> -
     v103 ImmData(336)                                     -> -
     v104 Extend { value=v95, kind=I32 }                   -> -
@@ -187,7 +187,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v94  Imm(0)                                           -> -
     terminator Jmp(b12)   (exit_acc=v92)
   block 9  start_pc=0
-    v158 Imm(5)                                           -> x0
+    v158 Imm(5)                                           -> -
     v159 StoreLocal { off=-52, value=v158, kind=I32, volatile } -> -
     v160 ImmData(336)                                     -> -
     v161 Extend { value=v152, kind=I32 }                  -> -
@@ -246,7 +246,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v151 Imm(0)                                           -> -
     terminator Jmp(b17)   (exit_acc=v149)
   block 14  start_pc=0
-    v216 Imm(6)                                           -> x0
+    v216 Imm(6)                                           -> -
     v217 StoreLocal { off=-51, value=v216, kind=I32, volatile } -> -
     v218 ImmData(336)                                     -> -
     v219 Extend { value=v210, kind=I32 }                  -> -
@@ -306,7 +306,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v209 Imm(0)                                           -> -
     terminator Jmp(b22)   (exit_acc=v206)
   block 19  start_pc=0
-    v273 Imm(7)                                           -> x0
+    v273 Imm(7)                                           -> -
     v274 StoreLocal { off=-50, value=v273, kind=I32, volatile } -> -
     v275 ImmData(336)                                     -> -
     v276 Extend { value=v267, kind=I32 }                  -> -
@@ -365,7 +365,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v266 Imm(0)                                           -> -
     terminator Jmp(b27)   (exit_acc=v264)
   block 24  start_pc=0
-    v330 Imm(10)                                          -> x0
+    v330 Imm(10)                                          -> -
     v331 StoreLocal { off=-49, value=v330, kind=I32, volatile } -> -
     v332 ImmData(336)                                     -> -
     v333 Extend { value=v324, kind=I32 }                  -> -
@@ -424,7 +424,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v323 Imm(0)                                           -> -
     terminator Jmp(b32)   (exit_acc=v321)
   block 29  start_pc=0
-    v387 Imm(100)                                         -> x0
+    v387 Imm(100)                                         -> -
     v388 StoreLocal { off=-48, value=v387, kind=I32, volatile } -> -
     v389 ImmData(336)                                     -> -
     v390 Extend { value=v381, kind=I32 }                  -> -
@@ -483,7 +483,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v380 Imm(0)                                           -> -
     terminator Jmp(b37)   (exit_acc=v378)
   block 34  start_pc=0
-    v445 Imm(1000)                                        -> x0
+    v445 Imm(1000)                                        -> -
     v446 StoreLocal { off=-47, value=v445, kind=I32, volatile } -> -
     v447 ImmData(336)                                     -> -
     v448 Extend { value=v439, kind=I32 }                  -> -
@@ -543,7 +543,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v438 Imm(0)                                           -> -
     terminator Jmp(b42)   (exit_acc=v435)
   block 39  start_pc=0
-    v502 Imm(65535)                                       -> x0
+    v502 Imm(65535)                                       -> -
     v503 StoreLocal { off=-46, value=v502, kind=I32, volatile } -> -
     v504 ImmData(336)                                     -> -
     v505 Extend { value=v496, kind=I32 }                  -> -
@@ -602,7 +602,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v495 Imm(0)                                           -> -
     terminator Jmp(b47)   (exit_acc=v493)
   block 44  start_pc=0
-    v559 Imm(65537)                                       -> x0
+    v559 Imm(65537)                                       -> -
     v560 StoreLocal { off=-45, value=v559, kind=I32, volatile } -> -
     v561 ImmData(336)                                     -> -
     v562 Extend { value=v553, kind=I32 }                  -> -
@@ -661,7 +661,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v552 Imm(0)                                           -> -
     terminator Jmp(b52)   (exit_acc=v550)
   block 49  start_pc=0
-    v616 Imm(2147483647)                                  -> x0
+    v616 Imm(2147483647)                                  -> -
     v617 StoreLocal { off=-44, value=v616, kind=I32, volatile } -> -
     v618 ImmData(336)                                     -> -
     v619 Extend { value=v610, kind=I32 }                  -> -
@@ -720,7 +720,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v609 Imm(0)                                           -> -
     terminator Jmp(b57)   (exit_acc=v607)
   block 54  start_pc=0
-    v674 Imm(-3)                                          -> x0
+    v674 Imm(-3)                                          -> -
     v675 StoreLocal { off=-43, value=v674, kind=I32, volatile } -> -
     v676 ImmData(336)                                     -> -
     v677 Extend { value=v668, kind=I32 }                  -> -
@@ -784,7 +784,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v667 Imm(0)                                           -> -
     terminator Jmp(b62)   (exit_acc=v664)
   block 59  start_pc=0
-    v735 Imm(-7)                                          -> x0
+    v735 Imm(-7)                                          -> -
     v736 StoreLocal { off=-42, value=v735, kind=I32, volatile } -> -
     v737 ImmData(336)                                     -> -
     v738 Extend { value=v729, kind=I32 }                  -> -
@@ -847,7 +847,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v728 Imm(0)                                           -> -
     terminator Jmp(b67)   (exit_acc=v726)
   block 64  start_pc=0
-    v796 Imm(-100)                                        -> x0
+    v796 Imm(-100)                                        -> -
     v797 StoreLocal { off=-41, value=v796, kind=I32, volatile } -> -
     v798 ImmData(336)                                     -> -
     v799 Extend { value=v790, kind=I32 }                  -> -
@@ -910,7 +910,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v789 Imm(0)                                           -> -
     terminator Jmp(b72)   (exit_acc=v787)
   block 69  start_pc=0
-    v857 Imm(-2147483648)                                 -> x0
+    v857 Imm(-2147483648)                                 -> -
     v858 StoreLocal { off=-40, value=v857, kind=I32, volatile } -> -
     v859 ImmData(336)                                     -> -
     v860 Extend { value=v851, kind=I32 }                  -> -
@@ -968,7 +968,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v850 Imm(0)                                           -> -
     terminator Jmp(b77)   (exit_acc=v848)
   block 74  start_pc=0
-    v913 Imm(1)                                           -> x0
+    v913 Imm(1)                                           -> -
     v914 StoreLocal { off=-39, value=v913, kind=I32, volatile } -> -
     v915 ImmData(336)                                     -> -
     v916 Extend { value=v907, kind=I32 }                  -> -
@@ -1017,7 +1017,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v906 Imm(0)                                           -> -
     terminator Jmp(b82)   (exit_acc=v904)
   block 79  start_pc=0
-    v960 Imm(8)                                           -> x0
+    v960 Imm(8)                                           -> -
     v961 StoreLocal { off=-38, value=v960, kind=I32, volatile } -> -
     v962 ImmData(336)                                     -> -
     v963 Extend { value=v954, kind=I32 }                  -> -
@@ -1073,7 +1073,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v953 Imm(0)                                           -> -
     terminator Jmp(b87)   (exit_acc=v951)
   block 84  start_pc=0
-    v1014 Imm(-8)                                          -> x0
+    v1014 Imm(-8)                                          -> -
     v1015 StoreLocal { off=-37, value=v1014, kind=I32, volatile } -> -
     v1016 ImmData(336)                                     -> -
     v1017 Extend { value=v1008, kind=I32 }                 -> -
@@ -1131,7 +1131,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1007 Imm(0)                                           -> -
     terminator Jmp(b92)   (exit_acc=v1005)
   block 89  start_pc=0
-    v1071 Imm(1073741824)                                  -> x0
+    v1071 Imm(1073741824)                                  -> -
     v1072 StoreLocal { off=-36, value=v1071, kind=I32, volatile } -> -
     v1073 ImmData(336)                                     -> -
     v1074 Extend { value=v1065, kind=I32 }                 -> -
@@ -1188,7 +1188,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1064 Imm(0)                                           -> -
     terminator Jmp(b97)   (exit_acc=v1061)
   block 94  start_pc=0
-    v1125 Imm(3)                                           -> x0
+    v1125 Imm(3)                                           -> -
     v1126 StoreLocal { off=-35, value=v1125, kind=I32, volatile } -> -
     v1127 ImmData(416)                                     -> -
     v1128 Extend { value=v1119, kind=I32 }                 -> -
@@ -1239,7 +1239,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1118 Imm(0)                                           -> -
     terminator Jmp(b102)   (exit_acc=v1116)
   block 99  start_pc=0
-    v1174 Imm(7)                                           -> x0
+    v1174 Imm(7)                                           -> -
     v1175 StoreLocal { off=-34, value=v1174, kind=I32, volatile } -> -
     v1176 ImmData(416)                                     -> -
     v1177 Extend { value=v1168, kind=I32 }                 -> -
@@ -1298,7 +1298,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1167 Imm(0)                                           -> -
     terminator Jmp(b107)   (exit_acc=v1165)
   block 104  start_pc=0
-    v1232 Imm(10)                                          -> x0
+    v1232 Imm(10)                                          -> -
     v1233 StoreLocal { off=-33, value=v1232, kind=I32, volatile } -> -
     v1234 ImmData(416)                                     -> -
     v1235 Extend { value=v1226, kind=I32 }                 -> -
@@ -1352,7 +1352,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1225 Imm(0)                                           -> -
     terminator Jmp(b112)   (exit_acc=v1222)
   block 109  start_pc=0
-    v1283 Imm(14)                                          -> x0
+    v1283 Imm(14)                                          -> -
     v1284 StoreLocal { off=-32, value=v1283, kind=I32, volatile } -> -
     v1285 ImmData(416)                                     -> -
     v1286 Extend { value=v1277, kind=I32 }                 -> -
@@ -1405,7 +1405,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1276 Imm(0)                                           -> -
     terminator Jmp(b117)   (exit_acc=v1274)
   block 114  start_pc=0
-    v1334 Imm(100)                                         -> x0
+    v1334 Imm(100)                                         -> -
     v1335 StoreLocal { off=-31, value=v1334, kind=I32, volatile } -> -
     v1336 ImmData(416)                                     -> -
     v1337 Extend { value=v1328, kind=I32 }                 -> -
@@ -1458,7 +1458,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1327 Imm(0)                                           -> -
     terminator Jmp(b122)   (exit_acc=v1325)
   block 119  start_pc=0
-    v1385 Imm(1000)                                        -> x0
+    v1385 Imm(1000)                                        -> -
     v1386 StoreLocal { off=-30, value=v1385, kind=I32, volatile } -> -
     v1387 ImmData(416)                                     -> -
     v1388 Extend { value=v1379, kind=I32 }                 -> -
@@ -1511,7 +1511,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1378 Imm(0)                                           -> -
     terminator Jmp(b127)   (exit_acc=v1376)
   block 124  start_pc=0
-    v1437 Imm(2147483647)                                  -> x0
+    v1437 Imm(2147483647)                                  -> -
     v1438 StoreLocal { off=-29, value=v1437, kind=I32, volatile } -> -
     v1439 ImmData(416)                                     -> -
     v1440 Extend { value=v1431, kind=I32 }                 -> -
@@ -1571,7 +1571,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1430 Imm(0)                                           -> -
     terminator Jmp(b132)   (exit_acc=v1427)
   block 129  start_pc=0
-    v1495 Imm(2147483649)                                  -> x0
+    v1495 Imm(2147483649)                                  -> -
     v1496 StoreLocal { off=-28, value=v1495, kind=I32, volatile } -> -
     v1497 ImmData(416)                                     -> -
     v1498 Extend { value=v1489, kind=I32 }                 -> -
@@ -1621,7 +1621,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1488 Imm(0)                                           -> -
     terminator Jmp(b137)   (exit_acc=v1485)
   block 134  start_pc=0
-    v1542 Imm(4294967291)                                  -> x0
+    v1542 Imm(4294967291)                                  -> -
     v1543 StoreLocal { off=-27, value=v1542, kind=I32, volatile } -> -
     v1544 ImmData(416)                                     -> -
     v1545 Extend { value=v1536, kind=I32 }                 -> -
@@ -1670,7 +1670,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1535 Imm(0)                                           -> -
     terminator Jmp(b142)   (exit_acc=v1533)
   block 139  start_pc=0
-    v1589 Imm(1)                                           -> x0
+    v1589 Imm(1)                                           -> -
     v1590 StoreLocal { off=-26, value=v1589, kind=I32, volatile } -> -
     v1591 ImmData(416)                                     -> -
     v1592 Extend { value=v1583, kind=I32 }                 -> -
@@ -1716,7 +1716,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1582 Imm(0)                                           -> -
     terminator Jmp(b147)   (exit_acc=v1580)
   block 144  start_pc=0
-    v1633 Imm(16)                                          -> x0
+    v1633 Imm(16)                                          -> -
     v1634 StoreLocal { off=-25, value=v1633, kind=I32, volatile } -> -
     v1635 ImmData(416)                                     -> -
     v1636 Extend { value=v1627, kind=I32 }                 -> -
@@ -1763,7 +1763,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1626 Imm(0)                                           -> -
     terminator Jmp(b152)   (exit_acc=v1624)
   block 149  start_pc=0
-    v1678 Imm(3)                                           -> x0
+    v1678 Imm(3)                                           -> -
     v1679 StoreLocal { off=-24, value=v1678, kind=I64, volatile } -> -
     v1680 ImmData(16)                                      -> -
     v1681 Extend { value=v1672, kind=I32 }                 -> -
@@ -1818,7 +1818,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1671 Imm(0)                                           -> -
     terminator Jmp(b157)   (exit_acc=v1669)
   block 154  start_pc=0
-    v1731 Imm(7)                                           -> x0
+    v1731 Imm(7)                                           -> -
     v1732 StoreLocal { off=-23, value=v1731, kind=I64, volatile } -> -
     v1733 ImmData(16)                                      -> -
     v1734 Extend { value=v1725, kind=I32 }                 -> -
@@ -1875,7 +1875,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1724 Imm(0)                                           -> -
     terminator Jmp(b162)   (exit_acc=v1722)
   block 159  start_pc=0
-    v1786 Imm(10)                                          -> x0
+    v1786 Imm(10)                                          -> -
     v1787 StoreLocal { off=-22, value=v1786, kind=I64, volatile } -> -
     v1788 ImmData(16)                                      -> -
     v1789 Extend { value=v1780, kind=I32 }                 -> -
@@ -1932,7 +1932,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1779 Imm(0)                                           -> -
     terminator Jmp(b167)   (exit_acc=v1777)
   block 164  start_pc=0
-    v1841 Imm(1000)                                        -> x0
+    v1841 Imm(1000)                                        -> -
     v1842 StoreLocal { off=-21, value=v1841, kind=I64, volatile } -> -
     v1843 ImmData(16)                                      -> -
     v1844 Extend { value=v1835, kind=I32 }                 -> -
@@ -1989,7 +1989,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1834 Imm(0)                                           -> -
     terminator Jmp(b172)   (exit_acc=v1832)
   block 169  start_pc=0
-    v1897 Imm(1000000007)                                  -> x0
+    v1897 Imm(1000000007)                                  -> -
     v1898 StoreLocal { off=-20, value=v1897, kind=I64, volatile } -> -
     v1899 ImmData(16)                                      -> -
     v1900 Extend { value=v1891, kind=I32 }                 -> -
@@ -2106,7 +2106,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v1947 Imm(0)                                           -> -
     terminator Jmp(b182)   (exit_acc=v1945)
   block 179  start_pc=0
-    v2009 Imm(-3)                                          -> x0
+    v2009 Imm(-3)                                          -> -
     v2010 StoreLocal { off=-18, value=v2009, kind=I64, volatile } -> -
     v2011 ImmData(16)                                      -> -
     v2012 Extend { value=v2003, kind=I32 }                 -> -
@@ -2165,7 +2165,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2002 Imm(0)                                           -> -
     terminator Jmp(b187)   (exit_acc=v2000)
   block 184  start_pc=0
-    v2066 Imm(-7)                                          -> x0
+    v2066 Imm(-7)                                          -> -
     v2067 StoreLocal { off=-17, value=v2066, kind=I64, volatile } -> -
     v2068 ImmData(16)                                      -> -
     v2069 Extend { value=v2060, kind=I32 }                 -> -
@@ -2226,7 +2226,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2059 Imm(0)                                           -> -
     terminator Jmp(b192)   (exit_acc=v2057)
   block 189  start_pc=0
-    v2126 Imm(-1000000007)                                 -> x0
+    v2126 Imm(-1000000007)                                 -> -
     v2127 StoreLocal { off=-16, value=v2126, kind=I64, volatile } -> -
     v2128 ImmData(16)                                      -> -
     v2129 Extend { value=v2120, kind=I32 }                 -> -
@@ -2346,7 +2346,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2180 Imm(0)                                           -> -
     terminator Jmp(b202)   (exit_acc=v2178)
   block 199  start_pc=0
-    v2241 Imm(1)                                           -> x0
+    v2241 Imm(1)                                           -> -
     v2242 StoreLocal { off=-14, value=v2241, kind=I64, volatile } -> -
     v2243 ImmData(16)                                      -> -
     v2244 Extend { value=v2235, kind=I32 }                 -> -
@@ -2392,7 +2392,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2234 Imm(0)                                           -> -
     terminator Jmp(b207)   (exit_acc=v2232)
   block 204  start_pc=0
-    v2285 Imm(1024)                                        -> x0
+    v2285 Imm(1024)                                        -> -
     v2286 StoreLocal { off=-13, value=v2285, kind=I64, volatile } -> -
     v2287 ImmData(16)                                      -> -
     v2288 Extend { value=v2279, kind=I32 }                 -> -
@@ -2446,7 +2446,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2278 Imm(0)                                           -> -
     terminator Jmp(b212)   (exit_acc=v2276)
   block 209  start_pc=0
-    v2337 Imm(-1024)                                       -> x0
+    v2337 Imm(-1024)                                       -> -
     v2338 StoreLocal { off=-12, value=v2337, kind=I64, volatile } -> -
     v2339 ImmData(16)                                      -> -
     v2340 Extend { value=v2331, kind=I32 }                 -> -
@@ -2502,7 +2502,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2330 Imm(0)                                           -> -
     terminator Jmp(b217)   (exit_acc=v2328)
   block 214  start_pc=0
-    v2391 Imm(3)                                           -> x0
+    v2391 Imm(3)                                           -> -
     v2392 StoreLocal { off=-11, value=v2391, kind=I64, volatile } -> -
     v2393 ImmData(176)                                     -> -
     v2394 Extend { value=v2385, kind=I32 }                 -> -
@@ -2555,7 +2555,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2384 Imm(0)                                           -> -
     terminator Jmp(b222)   (exit_acc=v2382)
   block 219  start_pc=0
-    v2442 Imm(7)                                           -> x0
+    v2442 Imm(7)                                           -> -
     v2443 StoreLocal { off=-10, value=v2442, kind=I64, volatile } -> -
     v2444 ImmData(176)                                     -> -
     v2445 Extend { value=v2436, kind=I32 }                 -> -
@@ -2614,7 +2614,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2435 Imm(0)                                           -> -
     terminator Jmp(b227)   (exit_acc=v2433)
   block 224  start_pc=0
-    v2499 Imm(10)                                          -> x0
+    v2499 Imm(10)                                          -> -
     v2500 StoreLocal { off=-9, value=v2499, kind=I64, volatile } -> -
     v2501 ImmData(176)                                     -> -
     v2502 Extend { value=v2493, kind=I32 }                 -> -
@@ -2669,7 +2669,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2492 Imm(0)                                           -> -
     terminator Jmp(b232)   (exit_acc=v2490)
   block 229  start_pc=0
-    v2552 Imm(14)                                          -> x0
+    v2552 Imm(14)                                          -> -
     v2553 StoreLocal { off=-8, value=v2552, kind=I64, volatile } -> -
     v2554 ImmData(176)                                     -> -
     v2555 Extend { value=v2546, kind=I32 }                 -> -
@@ -2724,7 +2724,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2545 Imm(0)                                           -> -
     terminator Jmp(b237)   (exit_acc=v2543)
   block 234  start_pc=0
-    v2606 Imm(1000000007)                                  -> x0
+    v2606 Imm(1000000007)                                  -> -
     v2607 StoreLocal { off=-7, value=v2606, kind=I64, volatile } -> -
     v2608 ImmData(176)                                     -> -
     v2609 Extend { value=v2600, kind=I32 }                 -> -
@@ -2827,7 +2827,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2650 Imm(0)                                           -> -
     terminator Jmp(b247)   (exit_acc=v2648)
   block 244  start_pc=0
-    v2704 Imm(-5)                                          -> x0
+    v2704 Imm(-5)                                          -> -
     v2705 StoreLocal { off=-5, value=v2704, kind=I64, volatile } -> -
     v2706 ImmData(176)                                     -> -
     v2707 Extend { value=v2698, kind=I32 }                 -> -
@@ -2876,7 +2876,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2697 Imm(0)                                           -> -
     terminator Jmp(b252)   (exit_acc=v2695)
   block 249  start_pc=0
-    v2751 Imm(1)                                           -> x0
+    v2751 Imm(1)                                           -> -
     v2752 StoreLocal { off=-4, value=v2751, kind=I64, volatile } -> -
     v2753 ImmData(176)                                     -> -
     v2754 Extend { value=v2745, kind=I32 }                 -> -
@@ -2922,7 +2922,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     v2744 Imm(0)                                           -> -
     terminator Jmp(b257)   (exit_acc=v2742)
   block 254  start_pc=0
-    v2797 Imm(1024)                                        -> x0
+    v2797 Imm(1024)                                        -> -
     v2798 StoreLocal { off=-3, value=v2797, kind=I64, volatile } -> -
     v2799 ImmData(176)                                     -> -
     v2800 Extend { value=v2791, kind=I32 }                 -> -
@@ -2958,7 +2958,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=53
     terminator Bz { cond=v2793, target=b258, fall=b254 }   (exit_acc=v2793)
   block 258  start_pc=0
     v2779 Imm(0)                                           -> -
-    v2780 Imm(-12345)                                      -> x0
+    v2780 Imm(-12345)                                      -> -
     v2781 StoreLocal { off=-2, value=v2780, kind=I32, volatile } -> -
     v2782 Imm(-1234567890123)                              -> x0
     v2783 StoreLocal { off=-1, value=v2782, kind=I64, volatile } -> -

@@ -67,7 +67,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v10  CallExt { binding_idx=13, args=[v9], fp_arg_mask=0x0 } -> x0
     v11  Imm(0)                                           -> -
     v12  Imm(0)                                           -> -
-    v13  Imm(0)                                           -> x1
+    v13  Imm(0)                                           -> -
     v14  Imm(0)                                           -> -
     v15  Store { addr=v10, disp=0, value=v3, kind=I64 }   -> -
     v16  Imm(0)                                           -> -
@@ -98,7 +98,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
   block 4  start_pc=0
     v43  Imm(24)                                          -> -
     v44  CallExt { binding_idx=13, args=[v43], fp_arg_mask=0x0 } -> x1
-    v45  Imm(0)                                           -> x0
+    v45  Imm(0)                                           -> -
     v46  Store { addr=v44, disp=0, value=v3, kind=I64 }   -> -
     v47  BinopI { op=add, lhs=v44, rhs_imm=8 }            -> -
     v48  Store { addr=v44, disp=8, value=v45, kind=I64 }  -> -
@@ -141,7 +141,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
   block 12  start_pc=0
     v63  Imm(24)                                          -> -
     v64  CallExt { binding_idx=13, args=[v63], fp_arg_mask=0x0 } -> x1
-    v65  Imm(0)                                           -> x0
+    v65  Imm(0)                                           -> -
     v66  Store { addr=v64, disp=0, value=v3, kind=I64 }   -> -
     v67  BinopI { op=add, lhs=v64, rhs_imm=8 }            -> -
     v68  Store { addr=v64, disp=8, value=v65, kind=I64 }  -> -

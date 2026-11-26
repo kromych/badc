@@ -33,7 +33,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v15  Imm(108)                                         -> -
     v16  LocalAddr(-3)                                    -> -
     v17  BinopI { op=add, lhs=v1, rhs_imm=6 }             -> -
-    v18  Imm(1634496360)                                  -> x1
+    v18  Imm(1634496360)                                  -> -
     v19  Imm(97)                                          -> -
     v20  LocalAddr(-3)                                    -> -
     v21  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> -
@@ -47,13 +47,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v29  Imm(0)                                           -> -
     v30  LocalAddr(-3)                                    -> -
     v31  BinopI { op=add, lhs=v30, rhs_imm=10 }           -> -
-    v32  Imm(0)                                           -> x1
+    v32  Imm(0)                                           -> -
     v33  LocalAddr(-3)                                    -> -
     v34  BinopI { op=add, lhs=v30, rhs_imm=11 }           -> -
     v35  StoreLocal { off=-3, disp=8, value=v32, kind=I32 } -> -
     v36  LocalAddr(-3)                                    -> -
     v37  BinopI { op=add, lhs=v30, rhs_imm=12 }           -> -
-    v38  Imm(0)                                           -> x1
+    v38  Imm(0)                                           -> -
     v39  LocalAddr(-3)                                    -> -
     v40  BinopI { op=add, lhs=v30, rhs_imm=13 }           -> -
     v41  StoreLocal { off=-3, disp=12, value=v38, kind=I16 } -> -
@@ -171,7 +171,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v129 LocalAddr(-5)                                    -> -
     v130 BinopI { op=add, lhs=v125, rhs_imm=4 }           -> -
     v131 StoreLocal { off=-5, disp=4, value=v128, kind=I32 } -> -
-    v132 Imm(5)                                           -> x0
+    v132 Imm(5)                                           -> -
     v133 LocalAddr(-5)                                    -> -
     v134 BinopI { op=add, lhs=v125, rhs_imm=8 }           -> -
     v135 StoreLocal { off=-5, disp=8, value=v132, kind=I32 } -> -

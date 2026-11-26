@@ -364,7 +364,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=4
     v328 Binop { op=ne, lhs=v59, rhs=v319 }               -> x0
     terminator Bz { cond=v328, target=b22, fall=b83 }   (exit_acc=v328)
   block 22  start_pc=0
-    v67  Imm(1)                                           -> x0
+    v67  Imm(1)                                           -> -
     v68  StoreLocal { off=-2, value=v67, kind=I32, volatile } -> -
     terminator Jmp(b38)   (exit_acc=v68)
   block 23  start_pc=0

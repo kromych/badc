@@ -358,7 +358,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v262 Extend { value=v261, kind=I32, nsw }             -> x2
     v263 BinopI { op=shl, lhs=v262, rhs_imm=2 }           -> -
     v264 Binop { op=add, lhs=v259, rhs=v263 }             -> -
-    v265 Imm(77)                                          -> x6
+    v265 Imm(77)                                          -> -
     v266 StoreIndexed { base=v259, index=v262, scale=4, value=v265, kind=I32 } -> -
     v267 Imm(0)                                           -> -
     v268 BinopI { op=shl, lhs=v6, rhs_imm=2 }             -> x2

@@ -693,10 +693,10 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v8   Imm(-4503599627370496)                           -> d0
     v9   LocalAddr(-31)                                   -> -
     v10  StoreLocal { off=-31, value=v8, kind=F64 }       -> -
-    v11  Imm(1)                                           -> x0
+    v11  Imm(1)                                           -> -
     v12  LocalAddr(-31)                                   -> -
     v13  BinopI { op=add, lhs=v4, rhs_imm=8 }             -> -
-    v14  Imm(1)                                           -> x1
+    v14  Imm(1)                                           -> -
     v15  Imm(0)                                           -> x13
     v16  LocalAddr(-31)                                   -> -
     v17  BinopI { op=add, lhs=v4, rhs_imm=12 }            -> -
@@ -711,7 +711,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v26  StoreLocal { off=-31, disp=24, value=v23, kind=F64 } -> -
     v27  LocalAddr(-31)                                   -> -
     v28  BinopI { op=add, lhs=v4, rhs_imm=32 }            -> -
-    v29  Imm(1)                                           -> x1
+    v29  Imm(1)                                           -> -
     v30  LocalAddr(-31)                                   -> -
     v31  BinopI { op=add, lhs=v4, rhs_imm=36 }            -> -
     v32  StoreLocal { off=-31, disp=32, value=v29, kind=I64 } -> -
@@ -724,7 +724,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v39  StoreLocal { off=-31, disp=48, value=v36, kind=F64 } -> -
     v40  LocalAddr(-31)                                   -> -
     v41  BinopI { op=add, lhs=v37, rhs_imm=56 }           -> -
-    v42  Imm(1)                                           -> x1
+    v42  Imm(1)                                           -> -
     v43  LocalAddr(-31)                                   -> -
     v44  BinopI { op=add, lhs=v37, rhs_imm=60 }           -> -
     v45  StoreLocal { off=-31, disp=56, value=v42, kind=I64 } -> -
@@ -736,7 +736,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v51  StoreLocal { off=-31, disp=72, value=v15, kind=F64 } -> -
     v52  LocalAddr(-31)                                   -> -
     v53  BinopI { op=add, lhs=v37, rhs_imm=80 }           -> -
-    v54  Imm(1)                                           -> x1
+    v54  Imm(1)                                           -> -
     v55  LocalAddr(-31)                                   -> -
     v56  BinopI { op=add, lhs=v37, rhs_imm=84 }           -> -
     v57  StoreLocal { off=-31, disp=80, value=v54, kind=I64 } -> -
@@ -749,7 +749,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v64  StoreLocal { off=-31, disp=96, value=v61, kind=F64 } -> -
     v65  LocalAddr(-31)                                   -> -
     v66  BinopI { op=add, lhs=v58, rhs_imm=104 }          -> -
-    v67  Imm(1)                                           -> x1
+    v67  Imm(1)                                           -> -
     v68  LocalAddr(-31)                                   -> -
     v69  BinopI { op=add, lhs=v58, rhs_imm=108 }          -> -
     v70  StoreLocal { off=-31, disp=104, value=v67, kind=I64 } -> -
@@ -762,7 +762,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v77  StoreLocal { off=-31, disp=120, value=v74, kind=F64 } -> -
     v78  LocalAddr(-31)                                   -> -
     v79  BinopI { op=add, lhs=v58, rhs_imm=128 }          -> -
-    v80  Imm(4294967296)                                  -> x1
+    v80  Imm(4294967296)                                  -> x0
     v81  LocalAddr(-31)                                   -> -
     v82  BinopI { op=add, lhs=v81, rhs_imm=132 }          -> -
     v83  StoreLocal { off=-31, disp=128, value=v80, kind=I64 } -> -
@@ -775,7 +775,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v90  StoreLocal { off=-31, disp=144, value=v87, kind=F64 } -> -
     v91  LocalAddr(-31)                                   -> -
     v92  BinopI { op=add, lhs=v81, rhs_imm=152 }          -> -
-    v93  Imm(0)                                           -> x1
+    v93  Imm(0)                                           -> -
     v94  LocalAddr(-31)                                   -> -
     v95  BinopI { op=add, lhs=v81, rhs_imm=156 }          -> -
     v96  StoreLocal { off=-31, disp=152, value=v93, kind=I64 } -> -
@@ -788,7 +788,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v103 StoreLocal { off=-31, disp=168, value=v100, kind=F64 } -> -
     v104 LocalAddr(-31)                                   -> -
     v105 BinopI { op=add, lhs=v81, rhs_imm=176 }          -> -
-    v106 Imm(0)                                           -> x1
+    v106 Imm(0)                                           -> -
     v107 LocalAddr(-31)                                   -> -
     v108 BinopI { op=add, lhs=v107, rhs_imm=180 }         -> -
     v109 StoreLocal { off=-31, disp=176, value=v106, kind=I64 } -> -
@@ -801,7 +801,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v116 StoreLocal { off=-31, disp=192, value=v113, kind=F64 } -> -
     v117 LocalAddr(-31)                                   -> -
     v118 BinopI { op=add, lhs=v107, rhs_imm=200 }         -> -
-    v119 Imm(0)                                           -> x1
+    v119 Imm(0)                                           -> -
     v120 LocalAddr(-31)                                   -> -
     v121 BinopI { op=add, lhs=v107, rhs_imm=204 }         -> -
     v122 StoreLocal { off=-31, disp=200, value=v119, kind=I64 } -> -
@@ -813,7 +813,7 @@ fn ent_pc=63 n_params=0 variadic=false locals=31
     v128 StoreLocal { off=-31, disp=216, value=v15, kind=F64 } -> -
     v129 LocalAddr(-31)                                   -> -
     v130 BinopI { op=add, lhs=v107, rhs_imm=224 }         -> -
-    v131 Imm(0)                                           -> x1
+    v131 Imm(0)                                           -> -
     v132 LocalAddr(-31)                                   -> -
     v133 BinopI { op=add, lhs=v132, rhs_imm=228 }         -> -
     v134 StoreLocal { off=-31, disp=224, value=v131, kind=I64 } -> -

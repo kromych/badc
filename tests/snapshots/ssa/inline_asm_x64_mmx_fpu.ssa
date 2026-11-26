@@ -4,7 +4,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
+    v1   Imm(0)                                           -> -
     v2   StoreLocal { off=-1, value=v1, kind=I64 }        -> -
     v3   ImmData(16)                                      -> -
     v4   Load { addr=v3, disp=0, kind=I32, volatile pc_rel } -> x0

@@ -57,8 +57,8 @@ Disassembly of section .text:
                	movl	$0x1, <rip> # <addr>
                	movq	$0x1001, <rip> # imm = 0x1001
                                                 # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x1001, %rcx           # imm = 0x1001
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x1001, %rax           # imm = 0x1001
                	je	<addr>
                	movl	$0x5, %eax
                	retq

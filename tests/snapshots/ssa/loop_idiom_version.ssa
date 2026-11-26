@@ -245,7 +245,7 @@ fn ent_pc=8 n_params=4 variadic=false locals=1
     v23  BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> -
     v24  Extend { value=v7, kind=I32 }                    -> -
     v25  Extend { value=v7, kind=I32 }                    -> -
-    v26  Imm(0)                                           -> x2
+    v26  Imm(0)                                           -> -
     v27  StoreLocal { off=-1, value=v26, kind=I32, volatile } -> -
     terminator Jmp(b5)   (exit_acc=v27)
   block 4  start_pc=0
@@ -401,7 +401,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v89  Binop { op=add, lhs=v85, rhs=v62 }               -> x1
     v90  Extend { value=v70, kind=I32 }                   -> -
     v91  Extend { value=v70, kind=I32 }                   -> -
-    v92  Imm(0)                                           -> x2
+    v92  Imm(0)                                           -> -
     v93  StoreLocal { off=-3, value=v92, kind=I32, volatile } -> -
     terminator Jmp(b22)   (exit_acc=v93)
   block 21  start_pc=0
@@ -577,7 +577,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v144 Binop { op=add, lhs=v142, rhs=v103 }             -> x1
     v145 Extend { value=v129, kind=I32 }                  -> -
     v146 Extend { value=v129, kind=I32 }                  -> -
-    v147 Imm(0)                                           -> x2
+    v147 Imm(0)                                           -> -
     v148 StoreLocal { off=-2, value=v147, kind=I32, volatile } -> -
     terminator Jmp(b48)   (exit_acc=v148)
   block 47  start_pc=0
@@ -653,7 +653,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v164 Binop { op=add, lhs=v162, rhs=v103 }             -> x1
     v165 Extend { value=v129, kind=I32 }                  -> -
     v166 Extend { value=v129, kind=I32 }                  -> -
-    v167 Imm(0)                                           -> x2
+    v167 Imm(0)                                           -> -
     v168 StoreLocal { off=-1, value=v167, kind=I32, volatile } -> -
     terminator Jmp(b58)   (exit_acc=v168)
   block 57  start_pc=0
@@ -880,7 +880,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v352 Imm(1)                                           -> -
     v353 Imm(1)                                           -> -
     v354 Imm(16909060)                                    -> -
-    v355 Imm(16909060)                                    -> x0
+    v355 Imm(16909060)                                    -> -
     v356 Store { addr=v346, disp=0, value=v355, kind=I32 pc_rel } -> -
     v357 ImmData(208)                                     -> -
     v358 Imm(0)                                           -> -
@@ -903,7 +903,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v375 Imm(2)                                           -> -
     v376 Imm(2)                                           -> -
     v377 Imm(33818120)                                    -> -
-    v378 Imm(33818120)                                    -> x0
+    v378 Imm(33818120)                                    -> -
     v379 Store { addr=v346, disp=4, value=v378, kind=I32 pc_rel } -> -
     v380 ImmData(208)                                     -> -
     v381 Imm(1)                                           -> -
@@ -926,7 +926,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v398 Imm(3)                                           -> -
     v399 Imm(3)                                           -> -
     v400 Imm(50727180)                                    -> -
-    v401 Imm(50727180)                                    -> x0
+    v401 Imm(50727180)                                    -> -
     v402 Store { addr=v346, disp=8, value=v401, kind=I32 pc_rel } -> -
     v403 ImmData(208)                                     -> -
     v404 Imm(2)                                           -> -
@@ -949,7 +949,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v421 Imm(4)                                           -> -
     v422 Imm(4)                                           -> -
     v423 Imm(67636240)                                    -> -
-    v424 Imm(67636240)                                    -> x0
+    v424 Imm(67636240)                                    -> -
     v425 Store { addr=v346, disp=12, value=v424, kind=I32 pc_rel } -> -
     v426 ImmData(208)                                     -> -
     v427 Imm(3)                                           -> -
@@ -972,7 +972,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v444 Imm(5)                                           -> -
     v445 Imm(5)                                           -> -
     v446 Imm(84545300)                                    -> -
-    v447 Imm(84545300)                                    -> x0
+    v447 Imm(84545300)                                    -> -
     v448 Store { addr=v346, disp=16, value=v447, kind=I32 pc_rel } -> -
     v449 ImmData(208)                                     -> -
     v450 Imm(4)                                           -> -
@@ -995,7 +995,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v467 Imm(6)                                           -> -
     v468 Imm(6)                                           -> -
     v469 Imm(101454360)                                   -> -
-    v470 Imm(101454360)                                   -> x0
+    v470 Imm(101454360)                                   -> -
     v471 Store { addr=v461, disp=20, value=v470, kind=I32 pc_rel } -> -
     v472 ImmData(208)                                     -> -
     v473 Imm(5)                                           -> -
@@ -1018,7 +1018,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v490 Imm(7)                                           -> -
     v491 Imm(7)                                           -> -
     v492 Imm(118363420)                                   -> -
-    v493 Imm(118363420)                                   -> x0
+    v493 Imm(118363420)                                   -> -
     v494 Store { addr=v461, disp=24, value=v493, kind=I32 pc_rel } -> -
     v495 ImmData(208)                                     -> -
     v496 Imm(6)                                           -> -
@@ -1041,7 +1041,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v513 Imm(8)                                           -> -
     v514 Imm(8)                                           -> -
     v515 Imm(135272480)                                   -> -
-    v516 Imm(135272480)                                   -> x0
+    v516 Imm(135272480)                                   -> -
     v517 Store { addr=v461, disp=28, value=v516, kind=I32 pc_rel } -> -
     v518 ImmData(208)                                     -> -
     v519 Imm(7)                                           -> -
@@ -1064,7 +1064,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v536 Imm(9)                                           -> -
     v537 Imm(9)                                           -> -
     v538 Imm(152181540)                                   -> -
-    v539 Imm(152181540)                                   -> x0
+    v539 Imm(152181540)                                   -> -
     v540 Store { addr=v461, disp=32, value=v539, kind=I32 pc_rel } -> -
     v541 ImmData(208)                                     -> -
     v542 Imm(8)                                           -> -
@@ -1087,7 +1087,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v559 Imm(10)                                          -> -
     v560 Imm(10)                                          -> -
     v561 Imm(169090600)                                   -> -
-    v562 Imm(169090600)                                   -> x0
+    v562 Imm(169090600)                                   -> -
     v563 Store { addr=v553, disp=36, value=v562, kind=I32 pc_rel } -> -
     v564 ImmData(208)                                     -> -
     v565 Imm(9)                                           -> -
@@ -1110,7 +1110,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v582 Imm(11)                                          -> -
     v583 Imm(11)                                          -> -
     v584 Imm(185999660)                                   -> -
-    v585 Imm(185999660)                                   -> x0
+    v585 Imm(185999660)                                   -> -
     v586 Store { addr=v553, disp=40, value=v585, kind=I32 pc_rel } -> -
     v587 ImmData(208)                                     -> -
     v588 Imm(10)                                          -> -
@@ -1133,7 +1133,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v605 Imm(12)                                          -> -
     v606 Imm(12)                                          -> -
     v607 Imm(202908720)                                   -> -
-    v608 Imm(202908720)                                   -> x0
+    v608 Imm(202908720)                                   -> -
     v609 Store { addr=v553, disp=44, value=v608, kind=I32 pc_rel } -> -
     v610 ImmData(208)                                     -> -
     v611 Imm(11)                                          -> -
@@ -1156,7 +1156,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v628 Imm(13)                                          -> -
     v629 Imm(13)                                          -> -
     v630 Imm(219817780)                                   -> -
-    v631 Imm(219817780)                                   -> x0
+    v631 Imm(219817780)                                   -> -
     v632 Store { addr=v553, disp=48, value=v631, kind=I32 pc_rel } -> -
     v633 ImmData(208)                                     -> -
     v634 Imm(12)                                          -> -
@@ -1179,7 +1179,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v651 Imm(14)                                          -> -
     v652 Imm(14)                                          -> -
     v653 Imm(236726840)                                   -> -
-    v654 Imm(236726840)                                   -> x0
+    v654 Imm(236726840)                                   -> -
     v655 Store { addr=v553, disp=52, value=v654, kind=I32 pc_rel } -> -
     v656 ImmData(208)                                     -> -
     v657 Imm(13)                                          -> -
@@ -1202,7 +1202,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v674 Imm(15)                                          -> -
     v675 Imm(15)                                          -> -
     v676 Imm(253635900)                                   -> -
-    v677 Imm(253635900)                                   -> x1
+    v677 Imm(253635900)                                   -> -
     v678 Store { addr=v668, disp=56, value=v677, kind=I32 pc_rel } -> -
     v679 ImmData(208)                                     -> -
     v680 Imm(14)                                          -> -
@@ -1225,7 +1225,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v697 Imm(16)                                          -> -
     v698 Imm(16)                                          -> -
     v699 Imm(270544960)                                   -> -
-    v700 Imm(270544960)                                   -> x1
+    v700 Imm(270544960)                                   -> -
     v701 Store { addr=v668, disp=60, value=v700, kind=I32 pc_rel } -> -
     v702 ImmData(208)                                     -> -
     v703 Imm(15)                                          -> -

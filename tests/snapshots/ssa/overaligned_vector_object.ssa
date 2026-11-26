@@ -31,11 +31,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v17  ImmData(128)                                     -> -
     v18  Imm(8)                                           -> -
     v19  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
-    v20  Imm(19)                                          -> x0
+    v20  Imm(19)                                          -> -
     v21  Store { addr=v1, disp=8, value=v20, kind=I32 pc_rel } -> -
     v22  ImmData(160)                                     -> -
     v23  Imm(0)                                           -> -
-    v24  Imm(23)                                          -> x0
+    v24  Imm(23)                                          -> -
     v25  Store { addr=v9, disp=0, value=v24, kind=I32 pc_rel } -> -
     v26  ImmData(1)                                       -> -
     v27  ImmData(8)                                       -> -
@@ -146,15 +146,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v127 Imm(8)                                           -> -
     v128 Imm(0)                                           -> -
     v129 LocalAddr(-17)                                   -> -
-    v130 Imm(11)                                          -> x0
+    v130 Imm(11)                                          -> -
     v131 StoreLocal { off=-17, value=v130, kind=I32 }     -> -
     v132 LocalAddr(-17)                                   -> -
     v133 BinopI { op=add, lhs=v101, rhs_imm=12 }          -> -
-    v134 Imm(13)                                          -> x0
+    v134 Imm(13)                                          -> -
     v135 StoreLocal { off=-17, disp=12, value=v134, kind=I32 } -> -
     v136 LocalAddr(-16)                                   -> -
     v137 BinopI { op=add, lhs=v113, rhs_imm=4 }           -> -
-    v138 Imm(17)                                          -> x0
+    v138 Imm(17)                                          -> -
     v139 StoreLocal { off=-16, disp=4, value=v138, kind=I32 } -> -
     v140 LocalAddr(-17)                                   -> -
     v141 LoadLocal { off=-17, kind=I32 }                  -> -

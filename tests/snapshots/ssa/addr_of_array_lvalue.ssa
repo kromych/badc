@@ -25,12 +25,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v19  BinopI { op=add, lhs=v15, rhs_imm=80 }           -> -
     v20  Imm(12)                                          -> -
     v21  BinopI { op=add, lhs=v15, rhs_imm=92 }           -> -
-    v22  Imm(42)                                          -> x0
+    v22  Imm(42)                                          -> -
     v23  Store { addr=v15, disp=92, value=v22, kind=I32 pc_rel } -> -
     v24  Imm(0)                                           -> -
     v25  BinopI { op=add, lhs=v15, rhs_imm=32 }           -> -
     v26  BinopI { op=add, lhs=v15, rhs_imm=44 }           -> -
-    v27  Imm(7)                                           -> x0
+    v27  Imm(7)                                           -> -
     v28  Store { addr=v15, disp=44, value=v27, kind=I32 pc_rel } -> -
     v29  ImmData(80)                                      -> -
     v30  Imm(8)                                           -> -

@@ -70,8 +70,8 @@ Disassembly of section .text:
                	movq	$0x0, 0x1b8(%rsp)
                	movq	0x18(%rsp), %r10
                	movl	%r10d, 0x118(%rsp)
-               	leaq	<rip>, %rcx
-               	movq	%rcx, 0x128(%rsp)
+               	leaq	<rip>, %rax
+               	movq	%rax, 0x128(%rsp)
                	movq	$0xc, 0x130(%rsp)
                	movq	$0x0, 0x198(%rsp)
                	movl	$0x1, 0x144(%rsp)
@@ -141,8 +141,8 @@ Disassembly of section .text:
                	movq	$0x0, 0x260(%rsp)
                	movq	0x18(%rsp), %r10
                	movl	%r10d, 0x1c0(%rsp)
-               	leaq	0x20(%rsp), %rcx
-               	movq	%rcx, 0x1d0(%rsp)
+               	leaq	0x20(%rsp), %rax
+               	movq	%rax, 0x1d0(%rsp)
                	movq	$0x8, 0x1d8(%rsp)
                	movq	$0x0, 0x240(%rsp)
                	leaq	0x1c0(%rsp), %rdi

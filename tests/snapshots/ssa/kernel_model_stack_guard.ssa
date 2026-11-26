@@ -11,7 +11,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v5   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> -
     v6   LocalAddr(-2)                                    -> -
     v7   StoreLocal { off=-2, value=v1, kind=I32 }        -> -
-    v8   Imm(16)                                          -> x0
+    v8   Imm(16)                                          -> -
     v9   LocalAddr(-2)                                    -> -
     v10  BinopI { op=add, lhs=v6, rhs_imm=4 }             -> -
     v11  StoreLocal { off=-2, disp=4, value=v8, kind=I32 } -> -

@@ -29,47 +29,47 @@ Disassembly of section .text:
                	movq	%rsi, 0x20(%rdi)
                	movq	$0x1, (%rdi)
                	movq	$0x0, 0x28(%rdi)
-               	movabsq	$0x100000001, %rcx      # imm = 0x100000001
+               	movabsq	$0x100000001, %rax      # imm = 0x100000001
                	movq	%rsi, 0x50(%rdi)
-               	movq	%rcx, 0x30(%rdi)
+               	movq	%rax, 0x30(%rdi)
                	movq	$0x0, 0x58(%rdi)
-               	movabsq	$0x200000001, %rcx      # imm = 0x200000001
+               	movabsq	$0x200000001, %rax      # imm = 0x200000001
                	movq	%rsi, 0x80(%rdi)
-               	movq	%rcx, 0x60(%rdi)
+               	movq	%rax, 0x60(%rdi)
                	movq	$0x0, 0x88(%rdi)
                	movabsq	$0x300000001, %rax      # imm = 0x300000001
                	movq	%rsi, 0xb0(%rdi)
                	movq	%rax, 0x90(%rdi)
                	movq	$0x0, 0xb8(%rdi)
-               	movabsq	$0x400000001, %rcx      # imm = 0x400000001
+               	movabsq	$0x400000001, %rax      # imm = 0x400000001
                	movq	%rsi, 0xe0(%rdi)
-               	movq	%rcx, 0xc0(%rdi)
+               	movq	%rax, 0xc0(%rdi)
                	movq	$0x0, 0xe8(%rdi)
-               	movabsq	$0x500000001, %rcx      # imm = 0x500000001
+               	movabsq	$0x500000001, %rax      # imm = 0x500000001
                	movq	%rsi, 0x110(%rdi)
-               	movq	%rcx, 0xf0(%rdi)
+               	movq	%rax, 0xf0(%rdi)
                	movq	$0x0, 0x118(%rdi)
-               	movabsq	$0x600000001, %rcx      # imm = 0x600000001
+               	movabsq	$0x600000001, %rax      # imm = 0x600000001
                	movq	%rsi, 0x140(%rdi)
-               	movq	%rcx, 0x120(%rdi)
+               	movq	%rax, 0x120(%rdi)
                	movq	$0x0, 0x148(%rdi)
-               	movabsq	$0x700000001, %rcx      # imm = 0x700000001
+               	movabsq	$0x700000001, %rax      # imm = 0x700000001
                	movq	%rsi, 0x170(%rdi)
-               	movq	%rcx, 0x150(%rdi)
+               	movq	%rax, 0x150(%rdi)
                	movq	$0x0, 0x178(%rdi)
                	movabsq	$0x2000000002, %rax     # imm = 0x2000000002
                	movq	%rsi, 0x1a0(%rdi)
                	movq	%rax, 0x180(%rdi)
                	movq	$0x0, 0x1a8(%rdi)
                	movq	$0xb00, 0x190(%rdi)     # imm = 0xB00
-               	movabsq	$0x2100000002, %rcx     # imm = 0x2100000002
+               	movabsq	$0x2100000002, %rax     # imm = 0x2100000002
                	movq	%rsi, 0x1d0(%rdi)
-               	movq	%rcx, 0x1b0(%rdi)
+               	movq	%rax, 0x1b0(%rdi)
                	movq	$0x0, 0x1d8(%rdi)
                	movq	$0x1600, 0x1c0(%rdi)    # imm = 0x1600
-               	movabsq	$0x2200000002, %rcx     # imm = 0x2200000002
+               	movabsq	$0x2200000002, %rax     # imm = 0x2200000002
                	movq	%rsi, 0x200(%rdi)
-               	movq	%rcx, 0x1e0(%rdi)
+               	movq	%rax, 0x1e0(%rdi)
                	movq	$0x0, 0x208(%rdi)
                	movq	$0x2100, 0x1f0(%rdi)    # imm = 0x2100
                	retq

@@ -230,7 +230,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=2
     v2   Imm(0)                                           -> -
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> -
-    v5   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> -
     v6   StoreLocal { off=-1, value=v5, kind=I64, volatile } -> -
     v7   StoreLocal { off=-2, value=v5, kind=I64, volatile } -> -
     terminator Jmp(b2)   (exit_acc=v7)
@@ -698,7 +698,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=26
     v350 LifetimeEnd(-25)                                 -> -
     terminator Return(v348)   (exit_acc=v348)
   block 24  start_pc=0
-    v351 Imm(1)                                           -> x0
+    v351 Imm(1)                                           -> -
     v352 StoreLocal { off=-26, value=v351, kind=I64 }     -> -
     v353 LocalAddr(-25)                                   -> -
     v354 Imm(10)                                          -> -

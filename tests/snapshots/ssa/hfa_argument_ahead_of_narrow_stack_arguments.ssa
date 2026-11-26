@@ -120,7 +120,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(1065353216)                                  -> d0 [f32]
+    v1   Imm(1065353216)                                  -> - [f32]
     v2   StoreLocal { off=-1, value=v1, kind=F32, volatile } -> -
     v3   LoadLocal { off=-1, kind=F32, volatile }         -> d0 [f32]
     v4   LocalAddr(-3)                                    -> x0

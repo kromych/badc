@@ -71,8 +71,8 @@ Disassembly of section .text:
                	addq	$0x58, %rsp
                	retq
                	leaq	0x10(%rsp), %rax
-               	leaq	<rip>, %rdx
-               	movups	(%rdx), %xmm14
+               	leaq	<rip>, %rcx
+               	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	0x20(%rsp), %rax
                	xorps	%xmm14, %xmm14
@@ -83,18 +83,18 @@ Disassembly of section .text:
                	movw	$0x6564, 0x28(%rsp)     # imm = 0x6564
                	movb	$0x0, 0x2a(%rsp)
                	movl	$0x2, 0x2c(%rsp)
-               	leaq	0x30(%rsp), %rsi
+               	leaq	0x30(%rsp), %rax
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rsi)
+               	movups	%xmm14, (%rax)
                	movw	$0x6261, 0x30(%rsp)     # imm = 0x6261
                	movb	$0x0, 0x32(%rsp)
                	movl	$0x1, 0x34(%rsp)
                	movw	$0x6564, 0x38(%rsp)     # imm = 0x6564
                	movb	$0x0, 0x3a(%rsp)
                	movl	$0x7, 0x3c(%rsp)
-               	leaq	0x40(%rsp), %rsi
+               	leaq	0x40(%rsp), %rax
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rsi)
+               	movups	%xmm14, (%rax)
                	movw	$0x6261, 0x40(%rsp)     # imm = 0x6261
                	movb	$0x0, 0x42(%rsp)
                	movl	$0x7, 0x44(%rsp)

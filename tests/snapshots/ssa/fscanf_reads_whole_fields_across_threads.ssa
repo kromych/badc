@@ -81,7 +81,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=2
     v4   Imm(0)                                           -> -
     v5   Store { addr=v3, disp=0, value=v1, kind=I32 pc_rel } -> -
     v6   ImmData(80)                                      -> -
-    v7   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> -
     v8   Imm(8)                                           -> -
     v9   BinopI { op=add, lhs=v6, rhs_imm=8 }             -> -
     v10  ImmData(96)                                      -> -

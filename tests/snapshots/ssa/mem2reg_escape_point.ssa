@@ -47,7 +47,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v14  Imm(5)                                           -> -
     v15  Imm(0)                                           -> -
     v16  Imm(10)                                          -> -
-    v17  Imm(10)                                          -> x0
+    v17  Imm(10)                                          -> -
     v18  StoreLocal { off=-1, value=v17, kind=I32 }       -> -
     v19  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v19)
@@ -93,7 +93,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     terminator Return(v21)   (exit_acc=v21)
   block 8  start_pc=0
     v22  Imm(10)                                          -> -
-    v23  Imm(10)                                          -> x0
+    v23  Imm(10)                                          -> -
     v24  StoreLocal { off=-1, value=v23, kind=I32 }       -> -
     v25  Imm(10)                                          -> -
     v26  LocalAddr(-1)                                    -> -

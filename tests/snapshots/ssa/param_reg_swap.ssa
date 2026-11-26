@@ -357,7 +357,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v28  Imm(2)                                           -> -
     v29  BinopI { op=add, lhs=v7, rhs_imm=2 }             -> -
     v30  Imm(2)                                           -> -
-    v31  Imm(50462976)                                    -> x0
+    v31  Imm(50462976)                                    -> -
     v32  Imm(2)                                           -> -
     v33  Imm(3)                                           -> -
     v34  Imm(3)                                           -> -
@@ -397,7 +397,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v68  Imm(6)                                           -> -
     v69  BinopI { op=add, lhs=v7, rhs_imm=6 }             -> -
     v70  Imm(6)                                           -> -
-    v71  Imm(117835012)                                   -> x0
+    v71  Imm(117835012)                                   -> -
     v72  Imm(6)                                           -> -
     v73  Imm(7)                                           -> -
     v74  Imm(7)                                           -> -
@@ -437,7 +437,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v108 Imm(10)                                          -> -
     v109 BinopI { op=add, lhs=v97, rhs_imm=10 }           -> -
     v110 Imm(10)                                          -> -
-    v111 Imm(185207048)                                   -> x0
+    v111 Imm(185207048)                                   -> -
     v112 Imm(10)                                          -> -
     v113 Imm(11)                                          -> -
     v114 Imm(11)                                          -> -
@@ -477,7 +477,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v148 Imm(14)                                          -> -
     v149 BinopI { op=add, lhs=v97, rhs_imm=14 }           -> -
     v150 Imm(14)                                          -> -
-    v151 Imm(252579084)                                   -> x0
+    v151 Imm(252579084)                                   -> -
     v152 Imm(14)                                          -> -
     v153 Imm(15)                                          -> -
     v154 Imm(15)                                          -> -

@@ -348,7 +348,7 @@ fn ent_pc=2 n_params=5 variadic=false locals=10
     v19  Imm(0)                                           -> -
     v20  Imm(0)                                           -> -
     v21  Imm(0)                                           -> -
-    v22  Imm(0)                                           -> x2
+    v22  Imm(0)                                           -> -
     v23  StoreLocal { off=-10, value=v22, kind=I64 }      -> -
     v24  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> -
     v25  StoreLocal { off=-10, disp=8, value=v22, kind=I64 } -> -

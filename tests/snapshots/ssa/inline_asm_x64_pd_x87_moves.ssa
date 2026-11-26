@@ -78,11 +78,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
   block 9  start_pc=0
     v162 Imm(1075838976)                                  -> d0 [f32]
     v163 StoreLocal { off=-13, value=v162, kind=F32 }     -> -
-    v164 Imm(0)                                           -> d1
-    v165 Imm(0)                                           -> d2 [f32]
+    v164 Imm(0)                                           -> -
+    v165 Imm(0)                                           -> - [f32]
     v166 StoreLocal { off=-12, value=v165, kind=F32 }     -> -
     v167 StoreLocal { off=-11, value=v165, kind=F32 }     -> -
-    v168 Imm(-4618441417868443648)                        -> d2
+    v168 Imm(-4618441417868443648)                        -> d1
     v169 StoreLocal { off=-10, value=v168, kind=F64 }     -> -
     v170 StoreLocal { off=-9, value=v164, kind=F64 }      -> -
     v171 StoreLocal { off=-8, value=v164, kind=F64 }      -> -
@@ -142,7 +142,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
     v198 LocalAddr(-6)                                    -> x0
     v199 ImmData(8)                                       -> x1
     v200 Mcpy { dst=v198, src=v199, size=10, align=8 }    -> -
-    v201 Imm(0)                                           -> d0
+    v201 Imm(0)                                           -> -
     v202 StoreLocal { off=-7, value=v201, kind=F64 }      -> -
     v203 LocalAddr(-4)                                    -> -
     v204 Imm(170)                                         -> -
@@ -162,7 +162,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
     v218 BinopI { op=add, lhs=v203, rhs_imm=7 }           -> -
     v219 StoreLocal { off=-4, value=v217, kind=I64 }      -> -
     v220 BinopI { op=add, lhs=v203, rhs_imm=8 }           -> -
-    v221 Imm(43690)                                       -> x0
+    v221 Imm(43690)                                       -> -
     v222 BinopI { op=add, lhs=v203, rhs_imm=9 }           -> -
     v223 StoreLocal { off=-4, disp=8, value=v221, kind=I16 } -> -
     v224 LocalAddr(-4)                                    -> -

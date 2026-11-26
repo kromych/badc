@@ -30,10 +30,10 @@ Disassembly of section .text:
                	movl	$0x1, <rip> # <addr>
                	movl	$0xb, 0x8(%rsp)
                	movl	$0xb, 0xc(%rsp)
-               	movabsq	$0xb0000000b, %rcx      # imm = 0xB0000000B
-               	movq	%rcx, 0x10(%rsp)
-               	movq	%rcx, 0x18(%rsp)
-               	movq	%rcx, 0x20(%rsp)
+               	movabsq	$0xb0000000b, %rax      # imm = 0xB0000000B
+               	movq	%rax, 0x10(%rsp)
+               	movq	%rax, 0x18(%rsp)
+               	movq	%rax, 0x20(%rsp)
                	movl	$0xb, 0x28(%rsp)
                	movl	0x8(%rsp), %eax
                	movl	%eax, 0x2c(%rsp)
@@ -77,10 +77,10 @@ Disassembly of section .text:
                	movl	$0x1, <rip> # <addr>
                	movl	$0x13, 0x8(%rsp)
                	movl	$0x13, 0xc(%rsp)
-               	movabsq	$0x1300000013, %rcx     # imm = 0x1300000013
-               	movq	%rcx, 0x10(%rsp)
-               	movq	%rcx, 0x18(%rsp)
-               	movq	%rcx, 0x20(%rsp)
+               	movabsq	$0x1300000013, %rax     # imm = 0x1300000013
+               	movq	%rax, 0x10(%rsp)
+               	movq	%rax, 0x18(%rsp)
+               	movq	%rax, 0x20(%rsp)
                	movl	$0x13, 0x28(%rsp)
                	movl	0x8(%rsp), %eax
                	movl	%eax, 0x2c(%rsp)

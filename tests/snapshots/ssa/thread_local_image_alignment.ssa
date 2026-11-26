@@ -23,16 +23,16 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     terminator Return(v12)   (exit_acc=v12)
   block 2  start_pc=0
     v15  TlsAddr(16)                                      -> -
-    v16  Imm(3)                                           -> x1
+    v16  Imm(3)                                           -> -
     v17  Store { addr=v3, disp=0, value=v16, kind=I64 }   -> -
     v18  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> -
-    v19  Imm(4)                                           -> x1
+    v19  Imm(4)                                           -> -
     v20  Store { addr=v3, disp=8, value=v19, kind=I64 }   -> -
     v21  TlsAddr(0)                                       -> x1
-    v22  Imm(1)                                           -> x2
+    v22  Imm(1)                                           -> -
     v23  Store { addr=v21, disp=0, value=v22, kind=I8 }   -> -
     v24  TlsAddr(32)                                      -> x2
-    v25  Imm(2)                                           -> x6
+    v25  Imm(2)                                           -> -
     v26  Store { addr=v24, disp=0, value=v25, kind=I8 }   -> -
     v27  Load { addr=v3, disp=0, kind=I64 }               -> x2
     v28  Load { addr=v3, disp=8, kind=I64 }               -> x0

@@ -37,23 +37,23 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     v23  BinopI { op=lt, lhs=v21, rhs_imm=20000 }         -> x0
     terminator Bz { cond=v23, target=b19, fall=b3 }   (exit_acc=v23)
   block 3  start_pc=0
-    v24  ImmData(64)                                      -> x1
-    v25  Imm(1)                                           -> x0
+    v24  ImmData(64)                                      -> x0
+    v25  Imm(1)                                           -> -
     v26  AtomicRmw { op=Add, addr=v24, value=v25, width=4, order=SeqCst } -> -
     v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> -
     v28  Extend { value=v26, kind=I32 }                   -> -
     v29  BinopI { op=add, lhs=v26, rhs_imm=1 }            -> -
     v30  Extend { value=v29, kind=I32 }                   -> -
-    v31  ImmData(48)                                      -> x1
+    v31  ImmData(48)                                      -> x0
     v32  AtomicRmw { op=Sub, addr=v31, value=v25, width=8, order=SeqCst } -> -
     v33  BinopI { op=sub, lhs=v32, rhs_imm=1 }            -> -
-    v34  ImmData(68)                                      -> x1
+    v34  ImmData(68)                                      -> x0
     v35  AtomicRmw { op=Add, addr=v34, value=v25, width=1, order=SeqCst } -> -
     v36  BinopI { op=and, lhs=v35, rhs_imm=255 }          -> -
     v37  BinopI { op=add, lhs=v36, rhs_imm=1 }            -> -
     v38  BinopI { op=and, lhs=v37, rhs_imm=255 }          -> -
     v39  ImmData(72)                                      -> x0
-    v40  Imm(8)                                           -> x1
+    v40  Imm(8)                                           -> -
     v41  AtomicRmw { op=Add, addr=v39, value=v40, width=8, order=SeqCst } -> -
     v42  BinopI { op=add, lhs=v41, rhs_imm=8 }            -> -
     v43  ImmData(56)                                      -> x2
@@ -227,7 +227,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     terminator Bz { cond=v181, target=b1, fall=b18 }   (exit_acc=v181)
   block 18  start_pc=0
     v185 ImmData(320132)                                  -> x0
-    v186 Imm(1)                                           -> x1
+    v186 Imm(1)                                           -> -
     v187 AtomicRmw { op=Add, addr=v185, value=v186, width=4, order=SeqCst } -> -
     v188 BinopI { op=shl, lhs=v187, rhs_imm=32 }          -> -
     v189 Extend { value=v187, kind=I32 }                  -> -

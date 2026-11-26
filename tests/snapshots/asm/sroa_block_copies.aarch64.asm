@@ -312,7 +312,7 @@ Disassembly of section .text:
                	ret
 
 <wide_copy>:
-               	add	x3, x1, #0x1
+               	add	x2, x1, #0x1
                	str	x1, [x0]
                	str	xzr, [x0, #0x8]
                	str	xzr, [x0, #0x10]
@@ -328,7 +328,7 @@ Disassembly of section .text:
                	str	xzr, [x0, #0x60]
                	str	xzr, [x0, #0x68]
                	str	xzr, [x0, #0x70]
-               	str	x3, [x0, #0x78]
+               	str	x2, [x0, #0x78]
                	ret
 
 <fp_copy>:

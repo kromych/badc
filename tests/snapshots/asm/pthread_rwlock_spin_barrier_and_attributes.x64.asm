@@ -83,13 +83,13 @@ Disassembly of section .text:
                	addq	$0x1a0, %rsp            # imm = 0x1A0
                	retq
                	movq	$0x0, 0x50(%rsp)
-               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
-               	movabsq	$0x4600000000, %rdx     # imm = 0x4600000000
+               	movabsq	$0x100000000, %rax      # imm = 0x100000000
+               	movabsq	$0x4600000000, %rcx     # imm = 0x4600000000
                	movq	$0x0, 0x70(%rsp)
                	movq	$0x0, 0x78(%rsp)
                	movq	$0x0, 0x80(%rsp)
-               	movq	%rdx, 0x60(%rsp)
-               	movq	%rcx, 0x58(%rsp)
+               	movq	%rcx, 0x60(%rsp)
+               	movq	%rax, 0x58(%rsp)
                	movq	$0x4, 0x68(%rsp)
                	leaq	0x50(%rsp), %rdi
                	leaq	0x30(%rsp), %rsi

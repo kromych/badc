@@ -352,7 +352,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=10
     v1   LocalAddr(-8)                                    -> x7
     v2   ImmData(616)                                     -> x0
     v3   Mcpy { dst=v1, src=v2, size=64, align=8 }        -> -
-    v4   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> -
     v5   StoreLocal { off=-10, value=v4, kind=I64 }       -> -
     v6   LocalAddr(-9)                                    -> x0
     v7   Mzero { dst=v6, size=8, align=8 }                -> -
@@ -570,7 +570,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=23
     v0   AllocaInit(0)                                    -> -
     v1   Undef                                            -> -
     v2   Imm(0)                                           -> -
-    v3   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> -
     v4   StoreLocal { off=-23, value=v3, kind=I32 }       -> -
     v5   StoreLocal { off=-22, value=v3, kind=I32 }       -> -
     v6   StoreLocal { off=-21, value=v3, kind=F64 }       -> -

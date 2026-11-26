@@ -198,9 +198,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	sturh	wzr, [x29, #-0x48]
-               	stur	x1, [x29, #-0x50]
+               	stur	x0, [x29, #-0x50]
                	ldur	w0, [x29, #-0x4f]
                	and	x0, x0, #0xffffffffc0000000
                	orr	x0, x0, #0x3fffffff
@@ -269,9 +269,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	stur	wzr, [x29, #-0x38]
-               	stur	x1, [x29, #-0x40]
+               	stur	x0, [x29, #-0x40]
                	ldur	x0, [x29, #-0x3f]
                	and	x0, x0, #0xf000000000000000
                	orr	x0, x0, #0xffffffffffffff
@@ -297,18 +297,18 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
+               	mov	x0, #0x1                // =1
                	stur	wzr, [x29, #-0x28]
-               	mov	x2, #0x1                // =1
+               	mov	x1, #0x1                // =1
                	stur	wzr, [x29, #-0x18]
                	stur	wzr, [x29, #-0x8]
-               	mov	x3, #0x1                // =1
-               	movk	x3, #0xffff, lsl #32
-               	movk	x3, #0x3fff, lsl #48
-               	stur	x2, [x29, #-0x20]
-               	stur	x1, [x29, #-0x30]
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0xffff, lsl #32
+               	movk	x2, #0x3fff, lsl #48
+               	stur	x1, [x29, #-0x20]
+               	stur	x0, [x29, #-0x30]
                	mov	x0, #0x3fffffff         // =1073741823
-               	stur	x3, [x29, #-0x10]
+               	stur	x2, [x29, #-0x10]
                	ldur	w1, [x29, #-0x1f]
                	and	x1, x1, #0xffffffffc0000000
                	orr	x1, x1, x0

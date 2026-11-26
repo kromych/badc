@@ -158,7 +158,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v13  Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v8)
   block 1  start_pc=0
-    v17  Imm(0)                                           -> x8
+    v17  Imm(0)                                           -> -
     v18  Store { addr=v14, disp=0, value=v17, kind=I64 }  -> -
     v19  BinopI { op=add, lhs=v14, rhs_imm=8 }            -> x0
     v20  Imm(0)                                           -> -

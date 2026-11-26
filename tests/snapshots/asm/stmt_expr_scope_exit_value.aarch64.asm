@@ -104,42 +104,42 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	mov	x3, #0x1                // =1
-               	mov	x4, #0x2                // =2
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x2                // =2
                	mov	x1, #0x1                // =1
                	str	w1, [x0, #0x20]
                	adrp	x1, <page>
-               	str	w4, [x1, #0x24]
-               	ldrsw	x4, [x0, #0x20]
-               	add	x4, x4, #0x1
-               	str	w4, [x0, #0x20]
                	str	w3, [x1, #0x24]
                	ldrsw	x3, [x0, #0x20]
-               	cmp	w3, #0x2
+               	add	x3, x3, #0x1
+               	str	w3, [x0, #0x20]
+               	str	w2, [x1, #0x24]
+               	ldrsw	x2, [x0, #0x20]
+               	cmp	w2, #0x2
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x3, #0xb                // =11
-               	mov	x4, #0x1                // =1
-               	str	w4, [x0, #0x20]
-               	str	w3, [x1, #0x24]
-               	ldrsw	x3, [x0, #0x20]
-               	cmp	w3, #0x1
-               	b.ne	<addr>
+               	mov	x2, #0xb                // =11
                	mov	x3, #0x1                // =1
                	str	w3, [x0, #0x20]
+               	str	w2, [x1, #0x24]
+               	ldrsw	x2, [x0, #0x20]
+               	cmp	w2, #0x1
+               	b.ne	<addr>
+               	mov	x2, #0x1                // =1
+               	str	w2, [x0, #0x20]
                	str	wzr, [x1, #0x24]
-               	ldrsw	x3, [x0, #0x20]
-               	cmp	w3, #0x1
+               	ldrsw	x2, [x0, #0x20]
+               	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x1                // =1
-               	str	w4, [x0, #0x20]
-               	str	w3, [x1, #0x24]
+               	mov	x2, #0x4                // =4
+               	mov	x3, #0x1                // =1
+               	str	w3, [x0, #0x20]
+               	str	w2, [x1, #0x24]
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0x1

@@ -89,16 +89,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v56)   (exit_acc=v56)
   block 14  start_pc=0
     v57  ImmData(640)                                     -> -
-    v58  Imm(11)                                          -> x0
+    v58  Imm(11)                                          -> -
     v59  Store { addr=v9, disp=0, value=v58, kind=I32 pc_rel } -> -
     v60  ImmData(256)                                     -> -
-    v61  Imm(22)                                          -> x0
+    v61  Imm(22)                                          -> -
     v62  Store { addr=v25, disp=0, value=v61, kind=I32 pc_rel } -> -
     v63  ImmData(896)                                     -> -
-    v64  Imm(33)                                          -> x0
+    v64  Imm(33)                                          -> -
     v65  Store { addr=v41, disp=0, value=v64, kind=I32 pc_rel } -> -
     v66  ImmData(384)                                     -> -
-    v67  Imm(44)                                          -> x0
+    v67  Imm(44)                                          -> -
     v68  Store { addr=v49, disp=0, value=v67, kind=I32 pc_rel } -> -
     v69  Load { addr=v9, disp=0, kind=I32 pc_rel }        -> x0
     v70  BinopI { op=ne, lhs=v69, rhs_imm=11 }            -> x0

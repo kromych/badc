@@ -27,12 +27,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
   block 2  start_pc=0
     v18  LocalAddr(-2)                                    -> -
     v19  Imm(0)                                           -> -
-    v20  Imm(5)                                           -> x0
+    v20  Imm(5)                                           -> -
     v21  StoreLocal { off=-2, value=v20, kind=I64 }       -> -
     v22  LocalAddr(-2)                                    -> -
     v23  Imm(8)                                           -> -
     v24  BinopI { op=add, lhs=v18, rhs_imm=8 }            -> -
-    v25  Imm(9)                                           -> x0
+    v25  Imm(9)                                           -> -
     v26  StoreLocal { off=-2, disp=8, value=v25, kind=I64 } -> -
     v27  Imm(0)                                           -> -
     v28  Imm(0)                                           -> x0

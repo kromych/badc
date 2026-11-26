@@ -129,7 +129,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=33
   block 15  start_pc=0
     v96  Phi { incoming=[b14:v94, b58:v217], kind=I64 }   -> x3
     v97  CallExt { binding_idx=45, args=[], fp_arg_mask=0x0 } -> x0
-    v98  Imm(0)                                           -> x1
+    v98  Imm(0)                                           -> -
     v99  Store { addr=v97, disp=0, value=v98, kind=I32 }  -> -
     v100 Extend { value=v96, kind=I32 }                   -> -
     v101 BinopI { op=eq, lhs=v96, rhs_imm=0 }             -> -
@@ -166,7 +166,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=33
   block 19  start_pc=0
     v240 Phi { incoming=[b26:v96, b18:v238, b27:v96], kind=I64 } -> x3
     v241 CallExt { binding_idx=45, args=[], fp_arg_mask=0x0 } -> x0
-    v242 Imm(0)                                           -> x1
+    v242 Imm(0)                                           -> -
     v243 Store { addr=v241, disp=0, value=v242, kind=I32 } -> -
     v244 Extend { value=v240, kind=I32 }                  -> -
     v245 BinopI { op=eq, lhs=v240, rhs_imm=0 }            -> -

@@ -191,15 +191,15 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x18, %eax
                	jmp	<addr>
-               	leaq	0x68(%rsp), %rcx
-               	leaq	0x48(%rsp), %rax
-               	movq	%rax, 0x68(%rsp)
+               	leaq	0x68(%rsp), %rax
+               	leaq	0x48(%rsp), %rcx
+               	movq	%rcx, 0x68(%rsp)
                	movq	$0x1, 0x70(%rsp)
                	xorl	%edx, %edx
                	movq	%rdx, 0x88(%rsp)
                	movq	%rdx, 0x90(%rsp)
                	movq	%rdx, 0xb8(%rsp)
-               	movq	%rcx, 0x98(%rsp)
+               	movq	%rax, 0x98(%rsp)
                	movq	$0x1, 0xa0(%rsp)
                	leaq	<rip>, %rax # <addr>
                	movq	%rax, 0xa8(%rsp)

@@ -92,7 +92,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=20
     v40  LoadLocal { off=-20, kind=I64 }                  -> x0
     v41  Imm(0)                                           -> -
     v42  LocalAddr(-20)                                   -> -
-    v43  Imm(1000)                                        -> x1
+    v43  Imm(1000)                                        -> -
     v44  StoreLocal { off=-20, value=v43, kind=I64 }      -> -
     v45  Imm(21)                                          -> -
     v46  LocalAddr(-20)                                   -> -

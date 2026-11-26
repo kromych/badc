@@ -193,7 +193,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v106)
   block 15  start_pc=0
     v108 ImmData(88)                                      -> -
-    v109 Imm(0)                                           -> x0
+    v109 Imm(0)                                           -> -
     v110 Store { addr=v108, disp=0, value=v109, kind=I64 pc_rel } -> -
     v111 Imm(0)                                           -> -
     v112 Imm(0)                                           -> -
@@ -229,7 +229,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v134)
   block 19  start_pc=0
     v136 ImmData(96)                                      -> -
-    v137 Imm(2147483648)                                  -> x0
+    v137 Imm(2147483648)                                  -> -
     v138 Store { addr=v136, disp=0, value=v137, kind=I32 pc_rel } -> -
     v139 Imm(0)                                           -> -
     v140 ImmData(96)                                      -> -

@@ -9,7 +9,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Bz { cond=v2, target=b2, fall=b1 }   (exit_acc=v2)
   block 1  start_pc=0
     v3   ImmData(16)                                      -> -
-    v4   Imm(2)                                           -> x0
+    v4   Imm(2)                                           -> -
     v5   Store { addr=v1, disp=0, value=v4, kind=I32 pc_rel } -> -
     terminator Jmp(b2)   (exit_acc=v5)
   block 2  start_pc=0

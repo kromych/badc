@@ -12,7 +12,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=82
     v6   Imm(0)                                           -> -
     v7   Imm(-2147483647)                                 -> -
     v8   Imm(0)                                           -> -
-    v9   Imm(0)                                           -> x0
+    v9   Imm(0)                                           -> -
     v10  StoreLocal { off=-81, value=v9, kind=I32 }       -> -
     v11  StoreLocal { off=-80, value=v9, kind=I32 }       -> -
     v12  Imm(-1234567890)                                 -> -

@@ -72,11 +72,11 @@ fn ent_pc=3 n_params=3 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(6)                                           -> x0
+    v1   Imm(6)                                           -> -
     v2   Imm(0)                                           -> -
-    v3   Imm(77)                                          -> x1
+    v3   Imm(77)                                          -> -
     v4   Imm(0)                                           -> -
-    v5   LocalAddr(-1)                                    -> x2
+    v5   LocalAddr(-1)                                    -> x1
     v6   Imm(0)                                           -> -
     v7   StoreLocal { off=-1, value=v1, kind=I8 }         -> -
     v8   LocalAddr(-1)                                    -> -
@@ -94,11 +94,11 @@ fn ent_pc=4 n_params=3 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(4)                                           -> x0
+    v1   Imm(4)                                           -> -
     v2   Imm(0)                                           -> -
-    v3   Imm(11)                                          -> x1
+    v3   Imm(11)                                          -> -
     v4   Imm(0)                                           -> -
-    v5   LocalAddr(-1)                                    -> x2
+    v5   LocalAddr(-1)                                    -> x1
     v6   Imm(0)                                           -> -
     v7   StoreLocal { off=-1, value=v1, kind=I16 }        -> -
     v8   LocalAddr(-1)                                    -> -
@@ -224,22 +224,22 @@ fn ent_pc=14 n_params=0 variadic=false locals=5
     v5   ImmData(16)                                      -> x1
     v6   Mcpy { dst=v4, src=v5, size=3, align=8 }         -> -
     v7   LocalAddr(-2)                                    -> x9
-    v8   Imm(1)                                           -> x0
+    v8   Imm(1)                                           -> -
     v9   StoreLocal { off=-2, value=v8, kind=I8 }         -> -
     v10  LocalAddr(-2)                                    -> -
     v11  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> -
-    v12  Imm(7)                                           -> x0
+    v12  Imm(7)                                           -> -
     v13  StoreLocal { off=-2, disp=1, value=v12, kind=I32 } -> -
     v14  LocalAddr(-5)                                    -> -
-    v15  Imm(2)                                           -> x0
+    v15  Imm(2)                                           -> -
     v16  StoreLocal { off=-5, value=v15, kind=I16 }       -> -
     v17  LocalAddr(-5)                                    -> -
     v18  BinopI { op=add, lhs=v14, rhs_imm=2 }            -> -
-    v19  Imm(9)                                           -> x0
+    v19  Imm(9)                                           -> -
     v20  StoreLocal { off=-5, disp=2, value=v19, kind=I32 } -> -
     v21  LocalAddr(-3)                                    -> -
     v22  Imm(4)                                           -> -
-    v23  Imm(1284)                                        -> x0
+    v23  Imm(1284)                                        -> -
     v24  LocalAddr(-3)                                    -> -
     v25  BinopI { op=add, lhs=v21, rhs_imm=1 }            -> -
     v26  Imm(5)                                           -> -
@@ -247,7 +247,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=5
     v28  LocalAddr(-3)                                    -> -
     v29  BinopI { op=add, lhs=v21, rhs_imm=1 }            -> -
     v30  BinopI { op=add, lhs=v21, rhs_imm=2 }            -> -
-    v31  Imm(6)                                           -> x0
+    v31  Imm(6)                                           -> -
     v32  StoreLocal { off=-3, disp=2, value=v31, kind=I32 } -> -
     v33  LocalAddr(-2)                                    -> -
     v34  Imm(42)                                          -> -

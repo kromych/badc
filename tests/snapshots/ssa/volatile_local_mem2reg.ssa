@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
     v2   StoreLocal { off=-1, value=v1, kind=I32, volatile } -> -
-    v3   Imm(2)                                           -> x1
+    v3   Imm(2)                                           -> -
     v4   StoreLocal { off=-1, value=v3, kind=I32, volatile } -> -
     v5   LoadLocal { off=-1, kind=I32, volatile }         -> x1
     v6   Imm(0)                                           -> -

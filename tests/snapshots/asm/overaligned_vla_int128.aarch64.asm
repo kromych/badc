@@ -82,8 +82,8 @@ Disassembly of section .text:
                	str	w3, [x1, #0x20]
                	str	x2, [x0]
                	str	xzr, [x0, #0x8]
-               	mov	x2, #0x6                // =6
-               	str	x2, [x0, #0x10]
+               	mov	x1, #0x6                // =6
+               	str	x1, [x0, #0x10]
                	str	xzr, [x0, #0x18]
                	mov	x0, #0x8                // =8
                	mov	sp, x29

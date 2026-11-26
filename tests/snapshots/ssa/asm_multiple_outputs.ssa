@@ -322,7 +322,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v44  LifetimeEnd(-2)                                  -> -
     terminator Return(v42)   (exit_acc=v42)
   block 7  start_pc=0
-    v45  Imm(5)                                           -> x0
+    v45  Imm(5)                                           -> -
     v46  StoreLocal { off=-2, value=v45, kind=I64 }       -> -
     v47  StoreLocal { off=-1, value=v45, kind=I64 }       -> -
     v48  LocalAddr(-2)                                    -> -
@@ -346,7 +346,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v62  LifetimeEnd(-2)                                  -> -
     terminator Return(v60)   (exit_acc=v60)
   block 10  start_pc=0
-    v63  Imm(5)                                           -> x0
+    v63  Imm(5)                                           -> -
     v64  StoreLocal { off=-1, value=v63, kind=I64 }       -> -
     v65  LocalAddr(-2)                                    -> -
     v66  LocalAddr(-1)                                    -> -

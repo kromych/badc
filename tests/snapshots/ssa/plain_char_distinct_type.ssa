@@ -15,7 +15,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v9   Imm(0)                                           -> -
     v10  ImmData(16)                                      -> -
     v11  Imm(255)                                         -> -
-    v12  Imm(-1)                                          -> x0
+    v12  Imm(-1)                                          -> -
     v13  Store { addr=v10, disp=0, value=v12, kind=I8 pc_rel } -> -
     v14  Imm(-1)                                          -> -
     v15  Imm(1)                                           -> -

@@ -113,11 +113,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=15
     v64  Mzero { dst=v63, size=56, align=8 }              -> -
     v65  LocalAddr(-7)                                    -> -
     v66  BinopI { op=add, lhs=v63, rhs_imm=20 }           -> -
-    v67  Imm(70)                                          -> x0
+    v67  Imm(70)                                          -> -
     v68  StoreLocal { off=-7, disp=20, value=v67, kind=I32 } -> -
     v69  LocalAddr(-7)                                    -> -
     v70  BinopI { op=add, lhs=v63, rhs_imm=12 }           -> -
-    v71  Imm(1)                                           -> x0
+    v71  Imm(1)                                           -> -
     v72  StoreLocal { off=-7, disp=12, value=v71, kind=I32 } -> -
     v73  ImmData(24)                                      -> -
     v74  ImmData(26)                                      -> -

@@ -28,15 +28,15 @@ Disassembly of section .text:
 <main>:
                	subq	$0x38, %rsp
                	xorl	%eax, %eax
-               	leaq	(%rsp), %rsi
+               	leaq	(%rsp), %rcx
                	movq	$0x8, (%rsp)
                	movq	$0x3, 0x8(%rsp)
                	leaq	0x10(%rsp), %rdx
                	movq	$0x2, 0x10(%rsp)
                	movq	$0x1, 0x18(%rsp)
-               	leaq	0x10(%rdx), %rcx
-               	movups	(%rsi), %xmm14
-               	movups	%xmm14, (%rcx)
+               	leaq	0x10(%rdx), %rsi
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rsi)
                	movq	%rax, %rcx
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi

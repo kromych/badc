@@ -33,7 +33,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
     v9   ImmData(132)                                     -> -
-    v10  Imm(1)                                           -> x0
+    v10  Imm(1)                                           -> -
     v11  Store { addr=v9, disp=0, value=v10, kind=I32 pc_rel } -> -
     terminator Jmp(b2)   (exit_acc=v11)
   block 2  start_pc=0
@@ -218,7 +218,7 @@ fn ent_pc=18 n_params=1 variadic=false locals=0
     v7   ImmData(40)                                      -> -
     v8   CallExt { binding_idx=212, args=[v7], fp_arg_mask=0x0 } -> x0
     v9   ImmData(188)                                     -> -
-    v10  Imm(1)                                           -> x0
+    v10  Imm(1)                                           -> -
     v11  Store { addr=v9, disp=0, value=v10, kind=I32 pc_rel } -> -
     v12  ImmData(80)                                      -> -
     v13  ImmData(40)                                      -> -
@@ -752,7 +752,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=9
     v386 ImmData(40)                                      -> -
     v387 CallExt { binding_idx=212, args=[v386], fp_arg_mask=0x0 } -> x0
     v388 ImmData(188)                                     -> -
-    v389 Imm(2)                                           -> x0
+    v389 Imm(2)                                           -> -
     v390 Store { addr=v388, disp=0, value=v389, kind=I32 pc_rel } -> -
     v391 ImmData(80)                                      -> -
     v392 CallExt { binding_idx=224, args=[v391], fp_arg_mask=0x0 } -> x0

@@ -17,7 +17,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=7
     v9   Mzero { dst=v8, size=16, align=8 }               -> -
     v10  LocalAddr(-7)                                    -> x0
     v11  Mzero { dst=v10, size=8, align=8 }               -> -
-    v12  Imm(0)                                           -> x0
+    v12  Imm(0)                                           -> -
     v13  StoreLocal { off=-6, value=v12, kind=F64 }       -> -
     v14  StoreLocal { off=-5, value=v12, kind=I32 }       -> -
     v15  LocalAddr(-2)                                    -> -
@@ -27,7 +27,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=7
     v19  LocalAddr(-2)                                    -> -
     v20  Imm(0)                                           -> -
     v21  InlineAsm { template="invvpid %0, %1", ops=2, args=[v19, v20] } -> -
-    v22  Imm(0)                                           -> x0
+    v22  Imm(0)                                           -> -
     v23  StoreLocal { off=-4, value=v22, kind=I32 }       -> -
     v24  LocalAddr(-3)                                    -> x0
     v25  ImmData(8)                                       -> x1

@@ -305,7 +305,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v299 Imm(0)                                           -> -
     v300 Imm(0)                                           -> -
     v301 BinopI { op=add, lhs=v293, rhs_imm=4 }           -> -
-    v302 Imm(3)                                           -> x0
+    v302 Imm(3)                                           -> -
     v303 LocalAddr(-1)                                    -> -
     v304 Imm(3)                                           -> -
     v305 StoreLocal { off=-1, value=v302, kind=I64 }      -> -
@@ -329,7 +329,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v323 Imm(9223354444668731392)                         -> -
     v324 LocalAddr(-1)                                    -> -
     v325 BinopI { op=add, lhs=v293, rhs_imm=6 }           -> -
-    v326 Imm(4)                                           -> x0
+    v326 Imm(4)                                           -> -
     v327 StoreLocal { off=-1, disp=6, value=v326, kind=I8 } -> -
     v328 LocalAddr(-1)                                    -> -
     v329 LoadLocal { off=-1, kind=I8 }                    -> x0

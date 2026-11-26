@@ -993,14 +993,14 @@ Disassembly of section .text:
                	movq	%rax, 0x8(%rsp)
                	movabsq	$0x8090a0b0c0d0e0f, %rax # imm = 0x8090A0B0C0D0E0F
                	movq	%rax, 0x10(%rsp)
-               	leaq	(%rsp), %rcx
+               	leaq	(%rsp), %rax
                	movl	$0x4050607, 0x18(%rsp)  # imm = 0x4050607
                	movw	$0x203, 0x1c(%rsp)      # imm = 0x203
                	movb	$0x1, 0x1e(%rsp)
-               	movzbq	-0x40(%rbp), %rax
-               	movb	%al, 0x1f(%rsp)
+               	movzbq	-0x40(%rbp), %rcx
+               	movb	%cl, 0x1f(%rsp)
                	leaq	0x20(%rsp), %rdx
-               	vmovups	(%rcx), %ymm14
+               	vmovups	(%rax), %ymm14
                	vmovups	%ymm14, (%rdx)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3

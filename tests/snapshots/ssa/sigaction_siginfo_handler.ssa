@@ -53,13 +53,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=38
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-38)                                   -> x1
+    v1   LocalAddr(-38)                                   -> x0
     v2   Imm(0)                                           -> -
     v3   Imm(0)                                           -> -
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
     v6   Imm(0)                                           -> -
-    v7   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> -
     v8   Imm(0)                                           -> -
     v9   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
     v10  StoreLocal { off=-38, disp=8, value=v7, kind=I64 } -> -
@@ -94,11 +94,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=38
     v39  BinopI { op=add, lhs=v1, rhs_imm=128 }           -> -
     v40  StoreLocal { off=-38, disp=128, value=v7, kind=I64 } -> -
     v41  BinopI { op=add, lhs=v1, rhs_imm=136 }           -> -
-    v42  Imm(4)                                           -> x2
+    v42  Imm(4)                                           -> -
     v43  BinopI { op=add, lhs=v1, rhs_imm=144 }           -> -
     v44  StoreLocal { off=-38, disp=144, value=v7, kind=I64 } -> -
     v45  LocalAddr(-38)                                   -> -
-    v46  ImmCode(ent_pc=0)                                -> x0
+    v46  ImmCode(ent_pc=0)                                -> x1
     v47  StoreLocal { off=-38, value=v46, kind=I64 }      -> -
     v48  LocalAddr(-38)                                   -> -
     v49  BinopI { op=add, lhs=v1, rhs_imm=136 }           -> -

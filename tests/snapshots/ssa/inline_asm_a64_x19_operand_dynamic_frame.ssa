@@ -8,11 +8,11 @@ fn ent_pc=1 n_params=2 variadic=false locals=516
     v2   Imm(0)                                           -> -
     v3   Imm(40)                                          -> -
     v4   Imm(0)                                           -> -
-    v5   Imm(5)                                           -> x1
+    v5   Imm(5)                                           -> -
     v6   StoreLocal { off=-516, value=v5, kind=I64, volatile } -> -
-    v7   Imm(7)                                           -> x1
+    v7   Imm(7)                                           -> -
     v8   StoreLocal { off=-515, value=v7, kind=I64, volatile } -> -
-    v9   Imm(11)                                          -> x1
+    v9   Imm(11)                                          -> -
     v10  StoreLocal { off=-514, value=v9, kind=I64, volatile } -> -
     v11  Undef                                            -> -
     v12  Imm(0)                                           -> -
@@ -20,7 +20,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=516
     v14  Imm(0)                                           -> -
     v15  LocalAddr(-512)                                  -> -
     v16  Imm(0)                                           -> -
-    v17  Imm(1)                                           -> x1
+    v17  Imm(1)                                           -> -
     v18  StoreLocal { off=-512, value=v17, kind=I8, volatile } -> -
     v19  Imm(0)                                           -> -
     v20  Intrinsic { kind=Alloca, args=[v1] }             -> x1
@@ -31,7 +31,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=516
     terminator Jmp(b2)   (exit_acc=v24)
   block 1  start_pc=0
     v64  Binop { op=add, lhs=v20, rhs=v62 }               -> -
-    v65  Imm(3)                                           -> x2
+    v65  Imm(3)                                           -> -
     v66  StoreIndexed { base=v20, index=v62, scale=1, value=v65, kind=I8 } -> -
     v67  BinopI { op=add, lhs=v62, rhs_imm=1 }            -> x0
     terminator Jmp(b2)   (exit_acc=v67)

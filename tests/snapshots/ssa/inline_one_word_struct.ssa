@@ -14,7 +14,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v8   BinopI { op=add, lhs=v5, rhs_imm=0 }             -> -
     v9   Imm(1)                                           -> -
     v10  Imm(1)                                           -> -
-    v11  Imm(100)                                         -> x0
+    v11  Imm(100)                                         -> -
     v12  StoreLocal { off=-5, value=v11, kind=I64 }       -> -
     v13  Imm(0)                                           -> -
     v14  Imm(1)                                           -> -
@@ -27,7 +27,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v21  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> -
     v22  Imm(2)                                           -> -
     v23  Imm(2)                                           -> -
-    v24  Imm(200)                                         -> x0
+    v24  Imm(200)                                         -> -
     v25  StoreLocal { off=-5, disp=8, value=v24, kind=I64 } -> -
     v26  Imm(1)                                           -> -
     v27  Imm(2)                                           -> -
@@ -40,7 +40,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v34  BinopI { op=add, lhs=v5, rhs_imm=16 }            -> -
     v35  Imm(3)                                           -> -
     v36  Imm(3)                                           -> -
-    v37  Imm(300)                                         -> x0
+    v37  Imm(300)                                         -> -
     v38  StoreLocal { off=-5, disp=16, value=v37, kind=I64 } -> -
     v39  Imm(2)                                           -> -
     v40  Imm(3)                                           -> -
@@ -53,7 +53,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v47  BinopI { op=add, lhs=v5, rhs_imm=24 }            -> -
     v48  Imm(4)                                           -> -
     v49  Imm(4)                                           -> -
-    v50  Imm(400)                                         -> x0
+    v50  Imm(400)                                         -> -
     v51  StoreLocal { off=-5, disp=24, value=v50, kind=I64 } -> -
     v52  Imm(3)                                           -> -
     v53  Imm(4)                                           -> -
@@ -66,7 +66,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v60  BinopI { op=add, lhs=v5, rhs_imm=32 }            -> -
     v61  Imm(5)                                           -> -
     v62  Imm(5)                                           -> -
-    v63  Imm(500)                                         -> x0
+    v63  Imm(500)                                         -> -
     v64  StoreLocal { off=-5, disp=32, value=v63, kind=I64 } -> -
     v65  Imm(4)                                           -> -
     v66  Imm(5)                                           -> -

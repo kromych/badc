@@ -58,14 +58,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v44  BinopI { op=add, lhs=v42, rhs_imm=256 }          -> -
     v45  Imm(56)                                          -> -
     v46  BinopI { op=add, lhs=v42, rhs_imm=312 }          -> -
-    v47  Imm(42)                                          -> x0
+    v47  Imm(42)                                          -> -
     v48  Store { addr=v42, disp=312, value=v47, kind=I64 pc_rel } -> -
     v49  ImmData(656)                                     -> -
     v50  Imm(384)                                         -> -
     v51  BinopI { op=add, lhs=v49, rhs_imm=384 }          -> -
     v52  Imm(120)                                         -> -
     v53  BinopI { op=add, lhs=v49, rhs_imm=504 }          -> -
-    v54  Imm(-1)                                          -> x0
+    v54  Imm(-1)                                          -> -
     v55  Store { addr=v49, disp=504, value=v54, kind=I64 pc_rel } -> -
     v56  Load { addr=v42, disp=312, kind=I64 pc_rel }     -> x0
     v57  BinopI { op=ne, lhs=v56, rhs_imm=42 }            -> x0

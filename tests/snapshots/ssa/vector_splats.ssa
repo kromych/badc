@@ -1699,12 +1699,12 @@ fn ent_pc=32 n_params=0 variadic=false locals=12
   spill_count=2 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(305419905)                                   -> x0
+    v1   Imm(305419905)                                   -> -
     v2   StoreLocal { off=-4, value=v1, kind=I32, volatile } -> -
     v3   Imm(9218247941278745377)                         -> x0
     v4   StoreLocal { off=-3, value=v3, kind=I64, volatile } -> -
     v5   Imm(1076887552)                                  -> - [f32]
-    v6   Imm(3224371200)                                  -> d0 [f32]
+    v6   Imm(3224371200)                                  -> - [f32]
     v7   StoreLocal { off=-2, value=v6, kind=F32, volatile } -> -
     v8   Imm(9094988921128908188)                         -> d0
     v9   StoreLocal { off=-1, value=v8, kind=F64, volatile } -> -

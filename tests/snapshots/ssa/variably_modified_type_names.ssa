@@ -52,7 +52,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v42  BinopI { op=add, lhs=v12, rhs_imm=16 }           -> -
     v43  Imm(8)                                           -> -
     v44  BinopI { op=add, lhs=v42, rhs_imm=8 }            -> -
-    v45  Imm(7)                                           -> x1
+    v45  Imm(7)                                           -> -
     v46  StoreLocal { off=-6, disp=24, value=v45, kind=I32 } -> -
     v47  LocalAddr(-6)                                    -> -
     v48  Imm(16)                                          -> -

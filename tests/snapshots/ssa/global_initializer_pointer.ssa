@@ -14,7 +14,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
     v6   ImmData(4)                                       -> -
-    v7   Imm(11)                                          -> x0
+    v7   Imm(11)                                          -> -
     v8   Store { addr=v6, disp=0, value=v7, kind=I32 pc_rel } -> -
     v9   ImmData(8)                                       -> -
     v10  Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x0

@@ -31,8 +31,8 @@ Disassembly of section .text:
                	movl	$0x800000, 0x58(%rsp)   # imm = 0x800000
                	movl	$0x7fc00000, 0x60(%rsp) # imm = 0x7FC00000
                	movl	$0x80000000, 0x68(%rsp) # imm = 0x80000000
-               	movsd	<rip>, %xmm1
-               	movsd	%xmm1, 0x70(%rsp)
+               	movsd	<rip>, %xmm0
+               	movsd	%xmm0, 0x70(%rsp)
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm14
                	movsd	%xmm14, 0x78(%rsp)
@@ -50,8 +50,8 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	0x20(%rsp)
-               	movsd	0x78(%rsp), %xmm1
-               	movq	%xmm1, %rax
+               	movsd	0x78(%rsp), %xmm0
+               	movq	%xmm0, %rax
                	shrq	$0x34, %rax
                	andq	$0x7ff, %rax            # imm = 0x7FF
                	testl	%eax, %eax
@@ -61,8 +61,8 @@ Disassembly of section .text:
                	retq
                	cmpl	$0x7ff, %eax            # imm = 0x7FF
                	je	<addr>
-               	movsd	0x70(%rsp), %xmm1
-               	movq	%xmm1, %rax
+               	movsd	0x70(%rsp), %xmm0
+               	movq	%xmm0, %rax
                	shrq	$0x34, %rax
                	andq	$0x7ff, %rax            # imm = 0x7FF
                	testl	%eax, %eax

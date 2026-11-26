@@ -75,13 +75,13 @@ Disassembly of section .text:
 <make_p1>:
                	subq	$0x28, %rsp
                	movq	%rdi, (%rsp)
-               	leaq	0x18(%rsp), %rdx
+               	leaq	0x18(%rsp), %rcx
                	movb	$0x6, 0x18(%rsp)
                	movl	$0x4d, 0x19(%rsp)
                	movq	(%rsp), %rax
-               	movl	(%rdx), %r10d
+               	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
-               	movzbq	0x4(%rdx), %r10
+               	movzbq	0x4(%rcx), %r10
                	movb	%r10b, 0x4(%rax)
                	addq	$0x28, %rsp
                	retq
@@ -89,13 +89,13 @@ Disassembly of section .text:
 <make_p2>:
                	subq	$0x28, %rsp
                	movq	%rdi, (%rsp)
-               	leaq	0x18(%rsp), %rdx
+               	leaq	0x18(%rsp), %rcx
                	movw	$0x4, 0x18(%rsp)
                	movl	$0xb, 0x1a(%rsp)
                	movq	(%rsp), %rax
-               	movl	(%rdx), %r10d
+               	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
-               	movzwq	0x4(%rdx), %r10
+               	movzwq	0x4(%rcx), %r10
                	movw	%r10w, 0x4(%rax)
                	addq	$0x28, %rsp
                	retq

@@ -431,7 +431,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 14  start_pc=0
     v210 ImmData(80)                                      -> -
     v211 Imm(0)                                           -> -
-    v212 Imm(55454)                                       -> x0
+    v212 Imm(55454)                                       -> -
     v213 Store { addr=v210, disp=0, value=v212, kind=I64, volatile pc_rel } -> -
     v214 Imm(0)                                           -> x0
     v215 LifetimeEnd(0)                                   -> -

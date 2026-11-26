@@ -31,7 +31,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v22  Imm(0)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
   block 5  start_pc=0
-    v8   Imm(1)                                           -> x0
+    v8   Imm(1)                                           -> -
     v9   StoreLocal { off=-1, value=v8, kind=I32, volatile } -> -
     v10  ImmData(16)                                      -> -
     v11  Imm(7)                                           -> -

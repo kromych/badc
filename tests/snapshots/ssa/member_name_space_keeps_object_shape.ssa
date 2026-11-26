@@ -502,7 +502,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v485 Imm(20)                                          -> -
     v486 Imm(20)                                          -> -
     v487 Imm(20)                                          -> -
-    v488 Imm(20)                                          -> x1
+    v488 Imm(20)                                          -> -
     v489 Store { addr=v324, disp=32, value=v488, kind=I32 pc_rel } -> -
     v490 Imm(0)                                           -> -
     v491 Imm(1)                                           -> -
@@ -519,7 +519,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v502 Imm(20)                                          -> -
     v503 Imm(20)                                          -> -
     v504 Imm(21)                                          -> -
-    v505 Imm(21)                                          -> x2
+    v505 Imm(21)                                          -> -
     v506 Store { addr=v495, disp=36, value=v505, kind=I32 pc_rel } -> -
     v507 Imm(1)                                           -> -
     v508 Imm(2)                                           -> -

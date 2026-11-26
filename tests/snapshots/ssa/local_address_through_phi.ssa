@@ -52,7 +52,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=8
     v11  LocalAddr(-8)                                    -> x0
     v12  Imm(0)                                           -> -
     v13  Binop { op=add, lhs=v11, rhs=v7 }                -> -
-    v14  Imm(0)                                           -> x2
+    v14  Imm(0)                                           -> -
     v15  StoreIndexed { base=v11, index=v7, scale=1, value=v14, kind=I8 } -> -
     v16  LocalAddr(-8)                                    -> -
     v17  Imm(0)                                           -> -

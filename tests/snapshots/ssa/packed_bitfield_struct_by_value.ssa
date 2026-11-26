@@ -113,7 +113,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v100 BinopI { op=or, lhs=v99, rhs_imm=703710 }        -> x0
     v101 Store { addr=v83, disp=8, value=v100, kind=I32, align=1 pc_rel } -> -
     v102 BinopI { op=add, lhs=v83, rhs_imm=11 }           -> -
-    v103 Imm(9)                                           -> x0
+    v103 Imm(9)                                           -> -
     v104 Store { addr=v83, disp=11, value=v103, kind=I8 pc_rel } -> -
     v105 LocalAddr(-2)                                    -> x0
     v106 Mcpy { dst=v105, src=v83, size=12, align=1 }     -> -

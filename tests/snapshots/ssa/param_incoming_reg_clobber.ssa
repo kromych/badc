@@ -16,7 +16,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v10  Imm(1)                                           -> -
     v11  Imm(1)                                           -> -
     v12  Imm(1)                                           -> -
-    v13  Imm(513)                                         -> x0
+    v13  Imm(513)                                         -> -
     v14  Imm(0)                                           -> -
     v15  Imm(1)                                           -> -
     v16  Imm(1)                                           -> -
@@ -40,7 +40,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v34  Imm(3)                                           -> -
     v35  Imm(3)                                           -> -
     v36  Imm(3)                                           -> -
-    v37  Imm(1027)                                        -> x0
+    v37  Imm(1027)                                        -> -
     v38  Imm(2)                                           -> -
     v39  Imm(3)                                           -> -
     v40  Imm(3)                                           -> -
@@ -64,7 +64,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v58  Imm(5)                                           -> -
     v59  Imm(5)                                           -> -
     v60  Imm(5)                                           -> -
-    v61  Imm(1541)                                        -> x0
+    v61  Imm(1541)                                        -> -
     v62  Imm(4)                                           -> -
     v63  Imm(5)                                           -> -
     v64  Imm(5)                                           -> -
@@ -88,7 +88,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v82  Imm(7)                                           -> -
     v83  Imm(7)                                           -> -
     v84  Imm(7)                                           -> -
-    v85  Imm(2055)                                        -> x0
+    v85  Imm(2055)                                        -> -
     v86  Imm(6)                                           -> -
     v87  Imm(7)                                           -> -
     v88  Imm(7)                                           -> -

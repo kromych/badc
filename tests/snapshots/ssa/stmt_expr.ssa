@@ -107,7 +107,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v88  Imm(2)                                           -> -
     v89  ImmData(16)                                      -> -
     v90  Load { addr=v72, disp=0, kind=I32 pc_rel }       -> -
-    v91  Imm(3)                                           -> x0
+    v91  Imm(3)                                           -> -
     v92  Store { addr=v72, disp=0, value=v91, kind=I32 pc_rel } -> -
     v93  Imm(3)                                           -> -
     v94  Imm(3)                                           -> -
@@ -149,7 +149,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v128 Imm(0)                                           -> -
     v129 ImmData(16)                                      -> -
     v130 Load { addr=v72, disp=0, kind=I32 pc_rel }       -> -
-    v131 Imm(2)                                           -> x0
+    v131 Imm(2)                                           -> -
     v132 Store { addr=v72, disp=0, value=v131, kind=I32 pc_rel } -> -
     v133 Imm(2)                                           -> -
     v134 Imm(2)                                           -> -
@@ -206,7 +206,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v177 Imm(0)                                           -> -
     v178 ImmData(16)                                      -> -
     v179 Load { addr=v152, disp=0, kind=I32 pc_rel }      -> -
-    v180 Imm(3)                                           -> x1
+    v180 Imm(3)                                           -> -
     v181 Store { addr=v152, disp=0, value=v180, kind=I32 pc_rel } -> -
     v182 Imm(3)                                           -> -
     v183 Imm(3)                                           -> -
@@ -232,7 +232,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v200 Imm(0)                                           -> -
     v201 ImmData(16)                                      -> -
     v202 Load { addr=v152, disp=0, kind=I32 pc_rel }      -> -
-    v203 Imm(1)                                           -> x1
+    v203 Imm(1)                                           -> -
     v204 Store { addr=v152, disp=0, value=v203, kind=I32 pc_rel } -> -
     v205 Imm(1)                                           -> -
     v206 Imm(1)                                           -> -

@@ -12,7 +12,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=22
     v12  Extend { value=v8, kind=I32 }                    -> -
     v13  BinopI { op=shl, lhs=v8, rhs_imm=2 }             -> -
     v14  Binop { op=add, lhs=v11, rhs=v13 }               -> -
-    v15  Imm(3735928559)                                  -> x2
+    v15  Imm(3735928559)                                  -> -
     v16  StoreIndexed { base=v11, index=v8, scale=4, value=v15, kind=I32 } -> -
     v17  Extend { value=v8, kind=I32 }                    -> -
     v18  BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x0
@@ -70,7 +70,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=22
     v58  Extend { value=v54, kind=I32 }                   -> -
     v59  BinopI { op=shl, lhs=v54, rhs_imm=2 }            -> -
     v60  Binop { op=add, lhs=v20, rhs=v59 }               -> -
-    v61  Imm(305419896)                                   -> x2
+    v61  Imm(305419896)                                   -> -
     v62  StoreIndexed { base=v20, index=v54, scale=4, value=v61, kind=I32 } -> -
     v63  Extend { value=v54, kind=I32 }                   -> -
     v64  BinopI { op=add, lhs=v54, rhs_imm=1 }            -> x0

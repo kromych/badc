@@ -5,7 +5,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> -
-    v2   Imm(10000)                                       -> x0
+    v2   Imm(10000)                                       -> -
     v3   Store { addr=v1, disp=0, value=v2, kind=I32, volatile pc_rel } -> -
     v4   Load { addr=v1, disp=0, kind=I32, volatile pc_rel } -> x0
     v5   Extend { value=v4, kind=I32 }                    -> -
@@ -48,7 +48,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v8)   (exit_acc=v8)
   block 6  start_pc=0
     v9   ImmData(16)                                      -> -
-    v10  Imm(1)                                           -> x0
+    v10  Imm(1)                                           -> -
     v11  Store { addr=v9, disp=0, value=v10, kind=I32, volatile pc_rel } -> -
     v12  Load { addr=v9, disp=0, kind=I32, volatile pc_rel } -> x0
     v13  Extend { value=v12, kind=I32 }                   -> -

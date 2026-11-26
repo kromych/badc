@@ -141,7 +141,7 @@ fn ent_pc=0 n_params=5 variadic=false locals=1
     v135 Imm(0)                                           -> -
     v136 LocalAddr(-1)                                    -> -
     v137 ImmData(40)                                      -> -
-    v138 Imm(0)                                           -> x1
+    v138 Imm(0)                                           -> -
     v139 Store { addr=v137, disp=0, value=v138, kind=I8 pc_rel } -> -
     v140 Imm(0)                                           -> -
     v141 Imm(0)                                           -> -

@@ -27,7 +27,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v21  CallExt { binding_idx=146, args=[], fp_arg_mask=0x0 } -> x6
     v22  ImmData(14)                                      -> -
     v23  CallExt { binding_idx=26, args=[v22, v21], fp_arg_mask=0x0 } -> x0
-    v24  Imm(0)                                           -> x0
+    v24  Imm(0)                                           -> -
     v25  StoreLocal { off=-1, value=v24, kind=I64 }       -> -
     v26  LocalAddr(-1)                                    -> -
     v27  CallExt { binding_idx=241, args=[v26], fp_arg_mask=0x0 } -> x0
@@ -54,7 +54,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v48  ImmData(31)                                      -> -
     v49  CallExt { binding_idx=26, args=[v48, v43, v45, v47], fp_arg_mask=0x0 } -> x0
     v50  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
-    v51  Imm(13)                                          -> x1
+    v51  Imm(13)                                          -> -
     v52  Store { addr=v50, disp=0, value=v51, kind=I32 }  -> -
     v53  ImmData(41)                                      -> -
     v54  CallExt { binding_idx=61, args=[v53], fp_arg_mask=0x0 } -> x0

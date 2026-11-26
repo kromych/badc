@@ -37,15 +37,15 @@ Disassembly of section .text:
                	incq	%rbx
                	cmpl	$0x4e20, %ebx           # imm = 0x4E20
                	jge	<addr>
-               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rax # <addr>
                	lock
-               	addl	$0x1, (%rcx)
-               	leaq	<rip>, %rcx # <addr>
+               	addl	$0x1, (%rax)
+               	leaq	<rip>, %rax # <addr>
                	lock
-               	subq	$0x1, (%rcx)
-               	leaq	<rip>, %rcx # <addr>
+               	subq	$0x1, (%rax)
+               	leaq	<rip>, %rax # <addr>
                	lock
-               	addb	$0x1, (%rcx)
+               	addb	$0x1, (%rax)
                	leaq	<rip>, %rax # <addr>
                	lock
                	addq	$0x8, (%rax)

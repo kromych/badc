@@ -77,13 +77,13 @@ Disassembly of section .text:
 <main>:
                	subq	$0x28, %rsp
                	subq	$0x20, %rsp
+               	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
-               	movsd	<rip>, %xmm2
                	leaq	0x20(%rsp), %r9
                	movq	$0x0, 0x20(%rsp)
                	movq	$0x0, 0x28(%rsp)
-               	movsd	%xmm1, 0x30(%rsp)
-               	movsd	%xmm2, 0x38(%rsp)
+               	movsd	%xmm0, 0x30(%rsp)
+               	movsd	%xmm1, 0x38(%rsp)
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)

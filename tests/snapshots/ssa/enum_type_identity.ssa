@@ -89,7 +89,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v82  Imm(0)                                           -> -
     v83  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> -
     v84  Imm(0)                                           -> -
-    v85  Imm(2)                                           -> x0
+    v85  Imm(2)                                           -> -
     v86  StoreLocal { off=-2, disp=4, value=v85, kind=I32 } -> -
     v87  LocalAddr(-2)                                    -> -
     v88  Imm(4)                                           -> -

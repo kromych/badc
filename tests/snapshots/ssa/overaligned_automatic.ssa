@@ -31,17 +31,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v22  LocalAddr(-21)                                   -> -
     v23  Imm(0)                                           -> -
-    v24  Imm(11)                                          -> x0
+    v24  Imm(11)                                          -> -
     v25  StoreLocal { off=-21, value=v24, kind=I8 }       -> -
     v26  LocalAddr(-23)                                   -> -
     v27  Imm(12)                                          -> -
     v28  BinopI { op=add, lhs=v5, rhs_imm=12 }            -> -
-    v29  Imm(22)                                          -> x0
+    v29  Imm(22)                                          -> -
     v30  StoreLocal { off=-23, disp=12, value=v29, kind=I32 } -> -
-    v31  Imm(33)                                          -> x0
+    v31  Imm(33)                                          -> -
     v32  StoreLocal { off=-22, value=v31, kind=I64 }      -> -
     v33  LocalAddr(-24)                                   -> -
-    v34  Imm(44)                                          -> x0
+    v34  Imm(44)                                          -> -
     v35  StoreLocal { off=-24, value=v34, kind=I32 }      -> -
     v36  LocalAddr(-21)                                   -> -
     v37  LocalAddr(-23)                                   -> -

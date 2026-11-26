@@ -42,13 +42,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v25  ImmData(256)                                     -> -
     v26  Imm(0)                                           -> -
-    v27  Imm(1)                                           -> x0
+    v27  Imm(1)                                           -> -
     v28  Store { addr=v1, disp=0, value=v27, kind=I8 pc_rel } -> -
     v29  ImmData(384)                                     -> -
-    v30  Imm(2)                                           -> x0
+    v30  Imm(2)                                           -> -
     v31  Store { addr=v9, disp=0, value=v30, kind=I8 pc_rel } -> -
     v32  ImmData(512)                                     -> -
-    v33  Imm(3)                                           -> x0
+    v33  Imm(3)                                           -> -
     v34  Store { addr=v17, disp=0, value=v33, kind=I8 pc_rel } -> -
     v35  ImmData(768)                                     -> -
     v36  Imm(4)                                           -> x0

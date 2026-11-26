@@ -36,12 +36,12 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	addq	$0x18, %rsp
                	retq
-               	movss	<rip>, %xmm1 # <addr>
-               	ucomiss	%xmm1, %xmm1
+               	movss	<rip>, %xmm0 # <addr>
+               	ucomiss	%xmm0, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movss	<rip>, %xmm1 # <addr>
-               	comiss	<rip>, %xmm1 # <addr>
+               	movss	<rip>, %xmm0 # <addr>
+               	comiss	<rip>, %xmm0 # <addr>
                	jbe	<addr>
                	movl	$0x7fc00000, 0x8(%rsp)  # imm = 0x7FC00000
                	movl	0x8(%rsp), %eax

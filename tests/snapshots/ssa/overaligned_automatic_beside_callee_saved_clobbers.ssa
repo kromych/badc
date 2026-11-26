@@ -83,7 +83,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v0   AllocaInit(-1)                                   -> -
     v1   Imm(10)                                          -> x2
     v2   Imm(0)                                           -> -
-    v3   Imm(5)                                           -> x0
+    v3   Imm(5)                                           -> -
     v4   StoreLocal { off=-12, value=v3, kind=I64 }       -> -
     v5   LocalAddr(-11)                                   -> x0
     v6   ImmData(8)                                       -> x1

@@ -407,7 +407,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=0
     terminator Jmp(b7)
   block 7  start_pc=0
     v20  ImmData(128)                                     -> -
-    v21  Imm(1)                                           -> x0
+    v21  Imm(1)                                           -> -
     v22  Store { addr=v20, disp=0, value=v21, kind=I32 pc_rel } -> -
     terminator Jmp(b3)   (exit_acc=v22)
   block 8  start_pc=0
@@ -416,7 +416,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=0
     terminator Jmp(b10)
   block 10  start_pc=0
     v17  ImmData(128)                                     -> -
-    v18  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> -
     v19  Store { addr=v17, disp=0, value=v18, kind=I32 pc_rel } -> -
     terminator Jmp(b3)   (exit_acc=v19)
   block 11  start_pc=0
@@ -437,7 +437,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=0
     terminator Jmp(b10)
   block 19  start_pc=0
     v23  ImmData(128)                                     -> -
-    v24  Imm(2)                                           -> x0
+    v24  Imm(2)                                           -> -
     v25  Store { addr=v23, disp=0, value=v24, kind=I32 pc_rel } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=10 ---
@@ -863,7 +863,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=85
     terminator Jmp(b45)
   block 45  start_pc=0
     v391 ImmData(128)                                     -> -
-    v392 Imm(1)                                           -> x0
+    v392 Imm(1)                                           -> -
     v393 Store { addr=v391, disp=0, value=v392, kind=I32 pc_rel } -> -
     terminator Jmp(b41)   (exit_acc=v393)
   block 46  start_pc=0
@@ -872,7 +872,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=85
     terminator Jmp(b48)
   block 48  start_pc=0
     v388 ImmData(128)                                     -> -
-    v389 Imm(0)                                           -> x0
+    v389 Imm(0)                                           -> -
     v390 Store { addr=v388, disp=0, value=v389, kind=I32 pc_rel } -> -
     terminator Jmp(b41)   (exit_acc=v390)
   block 49  start_pc=0
@@ -893,7 +893,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=85
     terminator Jmp(b48)
   block 57  start_pc=0
     v394 ImmData(128)                                     -> -
-    v395 Imm(2)                                           -> x0
+    v395 Imm(2)                                           -> -
     v396 Store { addr=v394, disp=0, value=v395, kind=I32 pc_rel } -> -
     v397 ImmData(132)                                     -> -
     v398 Load { addr=v397, disp=0, kind=I32 pc_rel }      -> x0

@@ -978,7 +978,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v72  Imm(19088743)                                    -> -
     v73  Imm(0)                                           -> -
     v74  Imm(0)                                           -> -
-    v75  Imm(19088743)                                    -> x0
+    v75  Imm(19088743)                                    -> -
     v76  StoreLocal { off=-23, value=v75, kind=I64 }      -> -
     v77  Imm(0)                                           -> -
     v78  Imm(1)                                           -> -
@@ -996,7 +996,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v90  Imm(38177486)                                    -> -
     v91  Imm(1048576)                                     -> -
     v92  Imm(1048576)                                     -> -
-    v93  Imm(39226062)                                    -> x0
+    v93  Imm(39226062)                                    -> -
     v94  StoreLocal { off=-23, disp=8, value=v93, kind=I64 } -> -
     v95  Imm(1)                                           -> -
     v96  Imm(2)                                           -> -
@@ -1014,7 +1014,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v108 Imm(57266229)                                    -> -
     v109 Imm(2097152)                                     -> -
     v110 Imm(2097152)                                     -> -
-    v111 Imm(55169077)                                    -> x0
+    v111 Imm(55169077)                                    -> -
     v112 StoreLocal { off=-23, disp=16, value=v111, kind=I64 } -> -
     v113 Imm(2)                                           -> -
     v114 Imm(3)                                           -> -
@@ -1032,7 +1032,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v126 Imm(76354972)                                    -> -
     v127 Imm(3145728)                                     -> -
     v128 Imm(3145728)                                     -> -
-    v129 Imm(79500700)                                    -> x0
+    v129 Imm(79500700)                                    -> -
     v130 StoreLocal { off=-23, disp=24, value=v129, kind=I64 } -> -
     v131 Imm(3)                                           -> -
     v132 Imm(4)                                           -> -
@@ -1050,7 +1050,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v144 Imm(95443715)                                    -> -
     v145 Imm(4194304)                                     -> -
     v146 Imm(4194304)                                     -> -
-    v147 Imm(99638019)                                    -> x0
+    v147 Imm(99638019)                                    -> -
     v148 StoreLocal { off=-23, disp=32, value=v147, kind=I64 } -> -
     v149 Imm(4)                                           -> -
     v150 Imm(5)                                           -> -
@@ -1068,7 +1068,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v162 Imm(114532458)                                   -> -
     v163 Imm(5242880)                                     -> -
     v164 Imm(5242880)                                     -> -
-    v165 Imm(109289578)                                   -> x0
+    v165 Imm(109289578)                                   -> -
     v166 StoreLocal { off=-23, disp=40, value=v165, kind=I64 } -> -
     v167 Imm(5)                                           -> -
     v168 Imm(6)                                           -> -
@@ -1086,7 +1086,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v180 Imm(133621201)                                   -> -
     v181 Imm(6291456)                                     -> -
     v182 Imm(6291456)                                     -> -
-    v183 Imm(127329745)                                   -> x0
+    v183 Imm(127329745)                                   -> -
     v184 StoreLocal { off=-23, disp=48, value=v183, kind=I64 } -> -
     v185 Imm(6)                                           -> -
     v186 Imm(7)                                           -> -
@@ -1104,7 +1104,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v198 Imm(152709944)                                   -> -
     v199 Imm(7340032)                                     -> -
     v200 Imm(7340032)                                     -> -
-    v201 Imm(157952824)                                   -> x0
+    v201 Imm(157952824)                                   -> -
     v202 StoreLocal { off=-23, disp=56, value=v201, kind=I64 } -> -
     v203 Imm(7)                                           -> -
     v204 Imm(8)                                           -> -
@@ -1122,7 +1122,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v216 Imm(171798687)                                   -> -
     v217 Imm(8388608)                                     -> -
     v218 Imm(8388608)                                     -> -
-    v219 Imm(180187295)                                   -> x0
+    v219 Imm(180187295)                                   -> -
     v220 StoreLocal { off=-23, disp=64, value=v219, kind=I64 } -> -
     v221 Imm(8)                                           -> -
     v222 Imm(9)                                           -> -
@@ -1140,7 +1140,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v234 Imm(190887430)                                   -> -
     v235 Imm(9437184)                                     -> -
     v236 Imm(9437184)                                     -> -
-    v237 Imm(200324614)                                   -> x0
+    v237 Imm(200324614)                                   -> -
     v238 StoreLocal { off=-23, disp=72, value=v237, kind=I64 } -> -
     v239 Imm(9)                                           -> -
     v240 Imm(10)                                          -> -
@@ -1158,7 +1158,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=29
     v252 Imm(209976173)                                   -> -
     v253 Imm(10485760)                                    -> -
     v254 Imm(10485760)                                    -> -
-    v255 Imm(203684717)                                   -> x0
+    v255 Imm(203684717)                                   -> -
     v256 StoreLocal { off=-23, disp=80, value=v255, kind=I64 } -> -
     v257 Imm(10)                                          -> -
     v258 Imm(11)                                          -> -

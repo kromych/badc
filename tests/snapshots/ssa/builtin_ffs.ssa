@@ -152,7 +152,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v146 Imm(1)                                           -> -
     v147 Imm(1)                                           -> -
     v148 Imm(0)                                           -> -
-    v149 Imm(16711680)                                    -> x0
+    v149 Imm(16711680)                                    -> -
     v150 StoreLocal { off=-2, value=v149, kind=I32, volatile } -> -
     v151 LoadLocal { off=-2, kind=I32, volatile }         -> x0
     v152 BinopI { op=and, lhs=v151, rhs_imm=4294967295 }  -> -

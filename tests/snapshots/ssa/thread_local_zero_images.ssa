@@ -144,20 +144,20 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v84  TlsAddr(64)                                      -> x1
     v85  Imm(99)                                          -> -
     v86  BinopI { op=add, lhs=v84, rhs_imm=99 }           -> -
-    v87  Imm(1)                                           -> x2
+    v87  Imm(1)                                           -> -
     v88  Store { addr=v84, disp=99, value=v87, kind=I8 }  -> -
     v89  TlsAddr(192)                                     -> x2
     v90  Imm(31)                                          -> -
     v91  BinopI { op=add, lhs=v89, rhs_imm=31 }           -> -
-    v92  Imm(2)                                           -> x6
+    v92  Imm(2)                                           -> -
     v93  Store { addr=v89, disp=31, value=v92, kind=I8 }  -> -
     v94  TlsAddr(224)                                     -> x6
-    v95  Imm(4)                                           -> x7
+    v95  Imm(4)                                           -> -
     v96  Store { addr=v94, disp=0, value=v95, kind=I32 }  -> -
     v97  TlsAddr(32)                                      -> -
     v98  Imm(12)                                          -> -
     v99  BinopI { op=add, lhs=v43, rhs_imm=12 }           -> -
-    v100 Imm(9)                                           -> x7
+    v100 Imm(9)                                           -> -
     v101 Store { addr=v43, disp=12, value=v100, kind=I32 } -> -
     v102 TlsAddr(8)                                       -> x0
     v103 Load { addr=v102, disp=0, kind=I64 }             -> x0

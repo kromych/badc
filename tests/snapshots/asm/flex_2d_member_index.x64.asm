@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	subq	$0x28, %rsp
-               	leaq	(%rsp), %rcx
+               	leaq	(%rsp), %rax
                	movq	$0x0, 0x8(%rsp)
                	movq	$0x0, 0x10(%rsp)
                	movl	$0x0, 0x18(%rsp)
@@ -45,15 +45,15 @@ Disassembly of section .text:
                	movw	$0x3332, 0x18(%rsp)     # imm = 0x3332
                	movw	$0x3534, 0x1a(%rsp)     # imm = 0x3534
                	movb	$-0x55, 0x11(%rsp)
-               	leaq	0x4(%rcx), %rdx
-               	leaq	0x16(%rcx), %rax
-               	subq	%rdx, %rax
+               	leaq	0x4(%rax), %rcx
+               	addq	$0x16, %rax
+               	subq	%rcx, %rax
                	cmpq	$0x12, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x28, %rsp
                	retq
-               	leaq	0x18(%rdx), %rax
+               	leaq	0x18(%rcx), %rax
                	leaq	(%rsp), %rcx
                	subq	%rcx, %rax
                	cmpq	$0x1c, %rax

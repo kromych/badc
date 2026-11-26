@@ -764,7 +764,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v251 Imm(5)                                           -> -
     v252 Imm(5)                                           -> -
     v253 Imm(5)                                           -> -
-    v254 Imm(1541)                                        -> x0
+    v254 Imm(1541)                                        -> -
     v255 Imm(0)                                           -> -
     v256 Imm(1)                                           -> -
     v257 Imm(1)                                           -> -
@@ -788,7 +788,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v275 Imm(7)                                           -> -
     v276 Imm(7)                                           -> -
     v277 Imm(7)                                           -> -
-    v278 Imm(2055)                                        -> x0
+    v278 Imm(2055)                                        -> -
     v279 Imm(2)                                           -> -
     v280 Imm(3)                                           -> -
     v281 Imm(3)                                           -> -
@@ -812,7 +812,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v299 Imm(9)                                           -> -
     v300 Imm(9)                                           -> -
     v301 Imm(9)                                           -> -
-    v302 Imm(2569)                                        -> x0
+    v302 Imm(2569)                                        -> -
     v303 Imm(4)                                           -> -
     v304 Imm(5)                                           -> -
     v305 Imm(5)                                           -> -
@@ -836,7 +836,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v323 Imm(11)                                          -> -
     v324 Imm(11)                                          -> -
     v325 Imm(11)                                          -> -
-    v326 Imm(3083)                                        -> x0
+    v326 Imm(3083)                                        -> -
     v327 Imm(6)                                           -> -
     v328 Imm(7)                                           -> -
     v329 Imm(7)                                           -> -

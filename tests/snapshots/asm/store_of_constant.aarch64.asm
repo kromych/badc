@@ -27,12 +27,12 @@ Disassembly of section .text:
                	ret
 
 <put_q>:
-               	mov	x2, #0x7fffffff         // =2147483647
-               	str	x2, [x0]
-               	mov	x2, #0x80000000         // =2147483648
-               	str	x2, [x0, #0x8]
-               	mov	x2, #-0x80000001        // =-2147483649
-               	str	x2, [x0, #0x10]
+               	mov	x1, #0x7fffffff         // =2147483647
+               	str	x1, [x0]
+               	mov	x1, #0x80000000         // =2147483648
+               	str	x1, [x0, #0x8]
+               	mov	x1, #-0x80000001        // =-2147483649
+               	str	x1, [x0, #0x10]
                	str	xzr, [x0, #0x18]
                	ret
 
@@ -56,9 +56,9 @@ Disassembly of section .text:
                	ret
 
 <put_volatile>:
-               	mov	x2, #0xbeef             // =48879
-               	movk	x2, #0xdead, lsl #16
-               	str	w2, [x0]
+               	mov	x1, #0xbeef             // =48879
+               	movk	x1, #0xdead, lsl #16
+               	str	w1, [x0]
                	str	wzr, [x0, #0x10]
                	ret
 
@@ -71,11 +71,11 @@ Disassembly of section .text:
                	ret
 
 <put_float>:
-               	fmov	s1, #1.50000000
-               	str	s1, [x0]
+               	fmov	s0, #1.50000000
+               	str	s0, [x0]
                	mov	x16, #0x80000000        // =2147483648
-               	fmov	s1, w16
-               	str	s1, [x0, #0x4]
+               	fmov	s0, w16
+               	str	s0, [x0, #0x4]
                	str	xzr, [x1]
                	mov	x16, #-0x8000000000000000 // =-9223372036854775808
                	fmov	d0, x16

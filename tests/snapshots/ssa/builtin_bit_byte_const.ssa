@@ -55,7 +55,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v23  Imm(-1)                                          -> -
     v24  Imm(3)                                           -> -
     v25  Imm(0)                                           -> -
-    v26  Imm(305419896)                                   -> x0
+    v26  Imm(305419896)                                   -> -
     v27  StoreLocal { off=-1, value=v26, kind=I32, volatile } -> -
     v28  LoadLocal { off=-1, kind=U32, volatile }         -> x0
     v29  Bswap { value=v28, width=4 }                     -> x0
@@ -65,7 +65,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v34  Imm(8)                                           -> x0
     terminator Return(v34)   (exit_acc=v34)
   block 2  start_pc=0
-    v35  Imm(4660)                                        -> x0
+    v35  Imm(4660)                                        -> -
     v36  StoreLocal { off=-2, value=v35, kind=I16, volatile } -> -
     v37  LoadLocal { off=-2, kind=U16, volatile }         -> x0
     v38  Bswap { value=v37, width=2 }                     -> x0

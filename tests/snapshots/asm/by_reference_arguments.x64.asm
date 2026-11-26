@@ -210,11 +210,11 @@ Disassembly of section .text:
                	movq	$0x1, 0x68(%rsp)
                	movq	$0x2, 0x70(%rsp)
                	movq	$0x3, 0x78(%rsp)
-               	leaq	0x58(%rsp), %rdi
-               	movabsq	$0x500000004, %r8       # imm = 0x500000004
-               	movq	%r8, 0x58(%rsp)
+               	leaq	0x58(%rsp), %rax
+               	movabsq	$0x500000004, %rcx      # imm = 0x500000004
+               	movq	%rcx, 0x58(%rsp)
                	movl	$0x6, 0x60(%rsp)
-               	leaq	0x80(%rsp), %r8
+               	leaq	0x80(%rsp), %rcx
                	movq	$0x1, 0x80(%rsp)
                	movq	$0x2, 0x88(%rsp)
                	movq	$0x3, 0x90(%rsp)
@@ -225,7 +225,7 @@ Disassembly of section .text:
                	movq	%r11, 0x8(%rsp)
                	movq	0x10(%r10), %r11
                	movq	%r11, 0x10(%rsp)
-               	movq	%rdi, %r10
+               	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x18(%rsp)
                	movzbq	0x8(%r10), %r11
@@ -236,7 +236,7 @@ Disassembly of section .text:
                	movb	%r11b, 0x22(%rsp)
                	movzbq	0xb(%r10), %r11
                	movb	%r11b, 0x23(%rsp)
-               	movq	%r8, %r10
+               	movq	%rcx, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x28(%rsp)
                	movq	0x8(%r10), %r11

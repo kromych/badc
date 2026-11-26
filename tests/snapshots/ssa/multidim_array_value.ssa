@@ -114,7 +114,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=3
     v91  BinopI { op=add, lhs=v87, rhs_imm=80 }           -> -
     v92  Imm(12)                                          -> -
     v93  BinopI { op=add, lhs=v87, rhs_imm=92 }           -> -
-    v94  Imm(42)                                          -> x0
+    v94  Imm(42)                                          -> -
     v95  Store { addr=v87, disp=92, value=v94, kind=I32 pc_rel } -> -
     v96  Imm(1)                                           -> -
     v97  Imm(2)                                           -> -

@@ -75,7 +75,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v61  BinopI { op=add, lhs=v57, rhs_imm=80 }           -> -
     v62  Imm(12)                                          -> -
     v63  BinopI { op=add, lhs=v57, rhs_imm=92 }           -> -
-    v64  Imm(42)                                          -> x0
+    v64  Imm(42)                                          -> -
     v65  Store { addr=v57, disp=92, value=v64, kind=I32 pc_rel } -> -
     v66  Imm(0)                                           -> -
     v67  Imm(6)                                           -> -

@@ -164,7 +164,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=6
     v142 Imm(1)                                           -> -
     v143 Imm(1)                                           -> -
     v144 Imm(1)                                           -> -
-    v145 Imm(1)                                           -> x0
+    v145 Imm(1)                                           -> -
     v146 StoreLocal { off=-3, value=v145, kind=I32 }      -> -
     v147 Imm(1)                                           -> -
     v148 StoreLocal { off=-6, value=v145, kind=I32 }      -> -
@@ -189,7 +189,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=6
     v171 LifetimeEnd(0)                                   -> -
     terminator Return(v169)   (exit_acc=v169)
   block 16  start_pc=0
-    v172 Imm(4)                                           -> x0
+    v172 Imm(4)                                           -> -
     v173 StoreLocal { off=-5, value=v172, kind=I32, volatile } -> -
     v174 StoreLocal { off=-4, value=v172, kind=I32, volatile } -> -
     v175 StoreLocal { off=-2, value=v172, kind=I32 }      -> -

@@ -11,7 +11,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1024
     v5   Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v1)
   block 1  start_pc=0
-    v9   Imm(0)                                           -> x6
+    v9   Imm(0)                                           -> -
     v10  Store { addr=v6, disp=0, value=v9, kind=I64, volatile } -> -
     v11  BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x0
     v12  Imm(0)                                           -> -
@@ -30,7 +30,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1024
     v19  LocalAddr(-1024)                                 -> -
     v20  BinopI { op=and, lhs=v16, rhs_imm=4294967295 }   -> -
     v21  Binop { op=add, lhs=v1, rhs=v16 }                -> x2
-    v22  Imm(170)                                         -> x6
+    v22  Imm(170)                                         -> -
     v23  Store { addr=v21, disp=0, value=v22, kind=I8, volatile } -> -
     v24  BinopI { op=and, lhs=v16, rhs_imm=4294967295 }   -> -
     v25  BinopI { op=add, lhs=v16, rhs_imm=1 }            -> x0
@@ -449,7 +449,7 @@ fn ent_pc=16 n_params=1 variadic=false locals=1
     v11  Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v6)
   block 1  start_pc=0
-    v15  Imm(0)                                           -> x2
+    v15  Imm(0)                                           -> -
     v16  Store { addr=v12, disp=0, value=v15, kind=I64 }  -> -
     v17  BinopI { op=add, lhs=v12, rhs_imm=8 }            -> x0
     v18  Imm(0)                                           -> -
@@ -484,7 +484,7 @@ fn ent_pc=17 n_params=1 variadic=false locals=1
     v10  Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v5)
   block 1  start_pc=0
-    v14  Imm(0)                                           -> x2
+    v14  Imm(0)                                           -> -
     v15  Store { addr=v11, disp=0, value=v14, kind=I64 }  -> -
     v16  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x0
     v17  Imm(0)                                           -> -

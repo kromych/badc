@@ -6,7 +6,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(42)                                          -> -
     v2   Imm(42)                                          -> -
-    v3   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> -
     v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
     v5   LocalAddr(-1)                                    -> -
     v6   InlineAsm { template="movnti %1, %0\n\tsfence", ops=2, args=[v5, v2] } -> -

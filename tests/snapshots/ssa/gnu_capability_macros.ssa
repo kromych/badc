@@ -172,13 +172,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v128 LifetimeEnd(-9)                                  -> -
     terminator Return(v122)   (exit_acc=v122)
   block 20  start_pc=0
-    v129 Imm(1)                                           -> x1
+    v129 Imm(1)                                           -> -
     v130 Imm(0)                                           -> -
     v131 Imm(0)                                           -> -
     v132 Imm(0)                                           -> x0
     v133 Imm(0)                                           -> -
     v134 Imm(0)                                           -> -
-    v135 LocalAddr(-29)                                   -> x6
+    v135 LocalAddr(-29)                                   -> x1
     v136 Imm(0)                                           -> -
     v137 StoreLocal { off=-29, value=v129, kind=I64 }     -> -
     v138 Imm(0)                                           -> -
@@ -190,7 +190,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v144 Imm(0)                                           -> -
     v145 Imm(0)                                           -> -
     v146 Imm(0)                                           -> -
-    v147 LocalAddr(-4)                                    -> x7
+    v147 LocalAddr(-4)                                    -> x6
     v148 StoreLocal { off=-4, value=v129, kind=I64 }      -> -
     v149 BinopI { op=add, lhs=v147, rhs_imm=8 }           -> -
     v150 StoreLocal { off=-4, disp=8, value=v132, kind=I64 } -> -
@@ -201,7 +201,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v155 Imm(0)                                           -> -
     v156 Imm(0)                                           -> -
     v157 Imm(0)                                           -> -
-    v158 LocalAddr(-2)                                    -> x1
+    v158 LocalAddr(-2)                                    -> x7
     v159 StoreLocal { off=-2, value=v55, kind=I64 }       -> -
     v160 BinopI { op=add, lhs=v158, rhs_imm=8 }           -> -
     v161 StoreLocal { off=-2, disp=8, value=v132, kind=I64 } -> -

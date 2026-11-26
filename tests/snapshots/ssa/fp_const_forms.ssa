@@ -124,7 +124,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(32)                                      -> -
-    v2   Imm(0)                                           -> d0
+    v2   Imm(0)                                           -> -
     v3   Store { addr=v1, disp=0, value=v2, kind=F64 pc_rel } -> -
     v4   Imm(8)                                           -> -
     v5   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
@@ -139,19 +139,19 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v14  Imm(4599075939470750515)                         -> d0
     v15  Store { addr=v1, disp=24, value=v14, kind=F64 pc_rel } -> -
     v16  ImmData(64)                                      -> -
-    v17  Imm(0)                                           -> d0 [f32]
+    v17  Imm(0)                                           -> - [f32]
     v18  Store { addr=v16, disp=0, value=v17, kind=F32 pc_rel } -> -
     v19  Imm(4)                                           -> -
     v20  BinopI { op=add, lhs=v16, rhs_imm=4 }            -> -
     v21  Imm(1075838976)                                  -> - [f32]
-    v22  Imm(3223322624)                                  -> d0 [f32]
+    v22  Imm(3223322624)                                  -> - [f32]
     v23  Store { addr=v16, disp=4, value=v22, kind=F32 pc_rel } -> -
     v24  BinopI { op=add, lhs=v16, rhs_imm=8 }            -> -
-    v25  Imm(1232348160)                                  -> d0 [f32]
+    v25  Imm(1232348160)                                  -> - [f32]
     v26  Store { addr=v16, disp=8, value=v25, kind=F32 pc_rel } -> -
     v27  Imm(12)                                          -> -
     v28  BinopI { op=add, lhs=v16, rhs_imm=12 }           -> -
-    v29  Imm(1036831949)                                  -> d0 [f32]
+    v29  Imm(1036831949)                                  -> - [f32]
     v30  Store { addr=v16, disp=12, value=v29, kind=F32 pc_rel } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=12 ---

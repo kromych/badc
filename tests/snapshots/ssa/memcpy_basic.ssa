@@ -26,7 +26,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v20  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> -
     v21  Imm(0)                                           -> -
     v22  BinopI { op=add, lhs=v6, rhs_imm=2 }             -> -
-    v23  Imm(1094795585)                                  -> x1
+    v23  Imm(1094795585)                                  -> -
     v24  BinopI { op=add, lhs=v6, rhs_imm=3 }             -> -
     v25  Store { addr=v6, disp=0, value=v23, kind=I32, align=1 } -> -
     v26  Imm(0)                                           -> -

@@ -195,12 +195,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v186 Imm(7)                                           -> -
     v187 Imm(2)                                           -> -
     v188 Imm(0)                                           -> -
-    v189 Imm(10)                                          -> x0
+    v189 Imm(10)                                          -> -
     v190 Imm(0)                                           -> -
     v191 Imm(0)                                           -> -
     v192 Imm(14)                                          -> -
     v193 Imm(0)                                           -> -
-    v194 Imm(14)                                          -> x1
+    v194 Imm(14)                                          -> -
     v195 Imm(0)                                           -> -
     v196 Imm(0)                                           -> -
     v197 Imm(0)                                           -> -

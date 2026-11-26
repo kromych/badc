@@ -991,7 +991,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v783 Imm(0)                                           -> - [f32]
     v784 Imm(0)                                           -> - [f32]
     v785 Imm(1067450368)                                  -> - [f32]
-    v786 Imm(3214934016)                                  -> d0 [f32]
+    v786 Imm(3214934016)                                  -> - [f32]
     v787 StoreLocal { off=-6, value=v786, kind=F32 }      -> -
     v788 Imm(0)                                           -> -
     v789 Imm(1)                                           -> -
@@ -1006,7 +1006,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v798 Imm(1065353216)                                  -> - [f32]
     v799 Imm(1056964608)                                  -> - [f32]
     v800 Imm(1067450368)                                  -> - [f32]
-    v801 Imm(3208642560)                                  -> d0 [f32]
+    v801 Imm(3208642560)                                  -> - [f32]
     v802 StoreLocal { off=-6, disp=4, value=v801, kind=F32 } -> -
     v803 Imm(1)                                           -> -
     v804 Imm(2)                                           -> -
@@ -1021,7 +1021,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v813 Imm(1073741824)                                  -> - [f32]
     v814 Imm(1065353216)                                  -> - [f32]
     v815 Imm(1067450368)                                  -> - [f32]
-    v816 Imm(3196059648)                                  -> d0 [f32]
+    v816 Imm(3196059648)                                  -> - [f32]
     v817 StoreLocal { off=-6, disp=8, value=v816, kind=F32 } -> -
     v818 Imm(2)                                           -> -
     v819 Imm(3)                                           -> -
@@ -1036,7 +1036,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v828 Imm(1077936128)                                  -> - [f32]
     v829 Imm(1069547520)                                  -> - [f32]
     v830 Imm(1067450368)                                  -> - [f32]
-    v831 Imm(1048576000)                                  -> d0 [f32]
+    v831 Imm(1048576000)                                  -> - [f32]
     v832 StoreLocal { off=-6, disp=12, value=v831, kind=F32 } -> -
     v833 Imm(3)                                           -> -
     v834 Imm(4)                                           -> -
@@ -1051,7 +1051,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v843 Imm(1082130432)                                  -> - [f32]
     v844 Imm(1073741824)                                  -> - [f32]
     v845 Imm(1067450368)                                  -> - [f32]
-    v846 Imm(1061158912)                                  -> d0 [f32]
+    v846 Imm(1061158912)                                  -> - [f32]
     v847 StoreLocal { off=-6, disp=16, value=v846, kind=F32 } -> -
     v848 Imm(4)                                           -> -
     v849 Imm(5)                                           -> -
@@ -1066,7 +1066,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v858 Imm(1084227584)                                  -> - [f32]
     v859 Imm(1075838976)                                  -> - [f32]
     v860 Imm(1067450368)                                  -> - [f32]
-    v861 Imm(1067450368)                                  -> d0 [f32]
+    v861 Imm(1067450368)                                  -> - [f32]
     v862 StoreLocal { off=-6, disp=20, value=v861, kind=F32 } -> -
     v863 Imm(5)                                           -> -
     v864 Imm(6)                                           -> -
@@ -1081,7 +1081,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v873 Imm(1086324736)                                  -> - [f32]
     v874 Imm(1077936128)                                  -> - [f32]
     v875 Imm(1067450368)                                  -> - [f32]
-    v876 Imm(1071644672)                                  -> d0 [f32]
+    v876 Imm(1071644672)                                  -> - [f32]
     v877 StoreLocal { off=-6, disp=24, value=v876, kind=F32 } -> -
     v878 Imm(6)                                           -> -
     v879 Imm(7)                                           -> -
@@ -1096,7 +1096,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v888 Imm(1088421888)                                  -> - [f32]
     v889 Imm(1080033280)                                  -> - [f32]
     v890 Imm(1067450368)                                  -> - [f32]
-    v891 Imm(1074790400)                                  -> d0 [f32]
+    v891 Imm(1074790400)                                  -> - [f32]
     v892 StoreLocal { off=-6, disp=28, value=v891, kind=F32 } -> -
     v893 Imm(7)                                           -> -
     v894 Imm(8)                                           -> -
@@ -1113,7 +1113,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v905 BinopI { op=add, lhs=v902, rhs_imm=0 }           -> -
     v906 Imm(1120403456)                                  -> - [f32]
     v907 Imm(0)                                           -> - [f32]
-    v908 Imm(1120403456)                                  -> d0 [f32]
+    v908 Imm(1120403456)                                  -> - [f32]
     v909 StoreLocal { off=-28, value=v908, kind=F32 }     -> -
     v910 Imm(0)                                           -> -
     v911 Imm(1)                                           -> -
@@ -1126,7 +1126,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v918 BinopI { op=add, lhs=v902, rhs_imm=4 }           -> -
     v919 Imm(1120403456)                                  -> - [f32]
     v920 Imm(1065353216)                                  -> - [f32]
-    v921 Imm(1120534528)                                  -> d0 [f32]
+    v921 Imm(1120534528)                                  -> - [f32]
     v922 StoreLocal { off=-28, disp=4, value=v921, kind=F32 } -> -
     v923 Imm(1)                                           -> -
     v924 Imm(2)                                           -> -
@@ -1139,7 +1139,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v931 BinopI { op=add, lhs=v902, rhs_imm=8 }           -> -
     v932 Imm(1120403456)                                  -> - [f32]
     v933 Imm(1073741824)                                  -> - [f32]
-    v934 Imm(1120665600)                                  -> d0 [f32]
+    v934 Imm(1120665600)                                  -> - [f32]
     v935 StoreLocal { off=-28, disp=8, value=v934, kind=F32 } -> -
     v936 Imm(2)                                           -> -
     v937 Imm(3)                                           -> -
@@ -1152,7 +1152,7 @@ fn ent_pc=1341 n_params=0 variadic=false locals=32
     v944 BinopI { op=add, lhs=v902, rhs_imm=12 }          -> -
     v945 Imm(1120403456)                                  -> - [f32]
     v946 Imm(1077936128)                                  -> - [f32]
-    v947 Imm(1120796672)                                  -> d0 [f32]
+    v947 Imm(1120796672)                                  -> - [f32]
     v948 StoreLocal { off=-28, disp=12, value=v947, kind=F32 } -> -
     v949 Imm(3)                                           -> -
     v950 Imm(4)                                           -> -

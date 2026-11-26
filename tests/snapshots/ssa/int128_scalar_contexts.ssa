@@ -1451,7 +1451,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(-1)                                   -> -
-    v1   Imm(5)                                           -> x0
+    v1   Imm(5)                                           -> -
     v2   StoreLocal { off=-3, value=v1, kind=I32 }        -> -
     v3   LocalAddr(-3)                                    -> x0
     v4   ImmData(48)                                      -> -
@@ -1469,7 +1469,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v14  LifetimeEnd(-3)                                  -> -
     terminator Return(v12)   (exit_acc=v12)
   block 2  start_pc=0
-    v15  Imm(0)                                           -> x0
+    v15  Imm(0)                                           -> -
     v16  StoreLocal { off=-2, value=v15, kind=I64 }       -> -
     v17  LocalAddr(-2)                                    -> x0
     v18  ImmData(64)                                      -> -
@@ -1506,9 +1506,9 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v45  BinopI { op=add, lhs=v40, rhs_imm=1 }            -> -
     v46  Imm(2)                                           -> -
     v47  BinopI { op=add, lhs=v40, rhs_imm=2 }            -> -
-    v48  Imm(120)                                         -> x1
+    v48  Imm(120)                                         -> -
     v49  Store { addr=v40, disp=2, value=v48, kind=I8 }   -> -
-    v50  Imm(30840)                                       -> x1
+    v50  Imm(30840)                                       -> -
     v51  Store { addr=v40, disp=0, value=v50, kind=I16, align=1 } -> -
     v52  Imm(0)                                           -> -
     v53  BinopI { op=add, lhs=v40, rhs_imm=2 }            -> -
@@ -1681,7 +1681,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v109 Load { addr=v108, disp=0, kind=I64 pc_rel }      -> x0
     v110 BinopI { op=shl, lhs=v109, rhs_imm=2 }           -> -
     v111 Binop { op=add, lhs=v61, rhs=v110 }              -> -
-    v112 Imm(33)                                          -> x2
+    v112 Imm(33)                                          -> -
     v113 StoreIndexed { base=v61, index=v109, scale=4, value=v112, kind=I32 } -> -
     v114 BinopI { op=add, lhs=v61, rhs_imm=12 }           -> -
     v115 Load { addr=v61, disp=12, kind=I32 pc_rel }      -> x0
@@ -1693,7 +1693,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
   block 22  start_pc=0
     v118 ImmData(16)                                      -> -
     v119 BinopI { op=add, lhs=v61, rhs_imm=12 }           -> x6
-    v120 Imm(30)                                          -> x0
+    v120 Imm(30)                                          -> -
     v121 Store { addr=v119, disp=0, value=v120, kind=I32 } -> -
     v122 ImmData(48)                                      -> -
     v123 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x7

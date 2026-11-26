@@ -4,7 +4,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(100)                                         -> x0
+    v1   Imm(100)                                         -> -
     v2   StoreLocal { off=-4, value=v1, kind=I32 }        -> -
     v3   LocalAddr(-4)                                    -> x1
     v4   AtomicLoad { addr=v3, width=4, order=SeqCst }    -> x0
@@ -333,7 +333,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v253 LifetimeEnd(-4)                                  -> -
     terminator Return(v247)   (exit_acc=v247)
   block 39  start_pc=0
-    v254 Imm(200)                                         -> x0
+    v254 Imm(200)                                         -> -
     v255 StoreLocal { off=-3, value=v254, kind=I8 }       -> -
     v256 LocalAddr(-3)                                    -> x1
     v257 Imm(100)                                         -> x0
@@ -367,7 +367,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v279 LifetimeEnd(-4)                                  -> -
     terminator Return(v273)   (exit_acc=v273)
   block 43  start_pc=0
-    v280 Imm(40000)                                       -> x0
+    v280 Imm(40000)                                       -> -
     v281 StoreLocal { off=-2, value=v280, kind=I16 }      -> -
     v282 LocalAddr(-2)                                    -> x1
     v283 Imm(30000)                                       -> x0

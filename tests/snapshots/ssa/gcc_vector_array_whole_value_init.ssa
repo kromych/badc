@@ -730,7 +730,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v894 BinopI { op=add, lhs=v882, rhs_imm=32 }          -> -
     v895 Imm(0)                                           -> -
     v896 Imm(0)                                           -> -
-    v897 Imm(6)                                           -> x0
+    v897 Imm(6)                                           -> -
     v898 LocalAddr(-120)                                  -> -
     v899 BinopI { op=add, lhs=v882, rhs_imm=48 }          -> -
     v900 StoreLocal { off=-120, disp=48, value=v897, kind=I32 } -> -

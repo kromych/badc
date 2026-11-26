@@ -84,9 +84,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v66  Imm(0)                                           -> -
     v67  Imm(0)                                           -> -
     v68  Imm(0)                                           -> -
-    v69  Imm(3)                                           -> x0
+    v69  Imm(3)                                           -> -
     v70  StoreLocal { off=-2, value=v69, kind=I32, volatile } -> -
-    v71  Imm(5)                                           -> x0
+    v71  Imm(5)                                           -> -
     v72  StoreLocal { off=-1, value=v71, kind=I32, volatile } -> -
     v73  LoadLocal { off=-2, kind=I32, volatile }         -> x3
     v74  LoadLocal { off=-1, kind=I32, volatile }         -> x12
@@ -145,7 +145,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v127 Imm(7)                                           -> -
     v128 LocalAddr(-5)                                    -> -
     v129 BinopI { op=add, lhs=v121, rhs_imm=2 }           -> -
-    v130 Imm(101124105)                                   -> x0
+    v130 Imm(101124105)                                   -> -
     v131 Imm(6)                                           -> -
     v132 LocalAddr(-5)                                    -> -
     v133 BinopI { op=add, lhs=v121, rhs_imm=3 }           -> -

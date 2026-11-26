@@ -144,18 +144,18 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%r11
                	retq
-               	movq	%fs:0x0, %rcx
-               	addq	$-0xa0, %rcx
-               	xorl	%edx, %edx
-               	movl	$0x64, (%rcx)
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x80, %rcx
-               	movl	$0x64, (%rcx)
+               	movq	%fs:0x0, %rax
+               	addq	$-0xa0, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x64, (%rax)
+               	movq	%fs:0x0, %rax
+               	addq	$-0x80, %rax
+               	movl	$0x64, (%rax)
                	movq	%fs:0x0, %rax
                	addq	$-0x50, %rax
                	movsd	<rip>, %xmm0
                	movsd	%xmm0, 0x8(%rax)
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	popq	%r11
                	retq
 

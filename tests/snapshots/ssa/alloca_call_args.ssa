@@ -56,7 +56,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Jmp(b2)   (exit_acc=v11)
   block 1  start_pc=0
     v19  Binop { op=add, lhs=v4, rhs=v17 }                -> -
-    v20  Imm(7)                                           -> x2
+    v20  Imm(7)                                           -> -
     v21  StoreIndexed { base=v4, index=v17, scale=1, value=v20, kind=I8 } -> -
     v22  BinopI { op=add, lhs=v17, rhs_imm=4096 }         -> x0
     terminator Jmp(b2)   (exit_acc=v22)

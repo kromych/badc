@@ -18,7 +18,7 @@ fn ent_pc=0 n_params=6 variadic=false locals=0
     v12  Imm(0)                                           -> -
     v13  Imm(0)                                           -> -
     v14  Imm(0)                                           -> -
-    v15  Imm(1)                                           -> x0
+    v15  Imm(1)                                           -> -
     v16  Store { addr=v3, disp=0, value=v15, kind=I32 }   -> -
     v17  Imm(0)                                           -> -
     v18  Load { addr=v5, disp=0, kind=I64 }               -> x0
@@ -44,11 +44,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v4   LocalAddr(-8)                                    -> x0
     v5   Imm(16)                                          -> -
     v6   BinopI { op=add, lhs=v4, rhs_imm=16 }            -> -
-    v7   Imm(3)                                           -> x1
+    v7   Imm(3)                                           -> -
     v8   StoreLocal { off=-8, disp=16, value=v7, kind=I64 } -> -
     v9   LocalAddr(-4)                                    -> x1
     v10  BinopI { op=add, lhs=v9, rhs_imm=16 }            -> -
-    v11  Imm(7)                                           -> x2
+    v11  Imm(7)                                           -> -
     v12  StoreLocal { off=-4, disp=16, value=v11, kind=I64 } -> -
     v13  LocalAddr(-10)                                   -> -
     v14  LocalAddr(-8)                                    -> -
@@ -57,7 +57,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v17  Imm(9)                                           -> -
     v18  Imm(5)                                           -> -
     v19  Imm(9)                                           -> -
-    v20  Imm(0)                                           -> x2
+    v20  Imm(0)                                           -> -
     v21  StoreLocal { off=-9, value=v20, kind=I32 }       -> -
     v22  LoadLocal { off=-10, kind=I64 }                  -> -
     v23  LocalAddr(-9)                                    -> -

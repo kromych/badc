@@ -81,15 +81,15 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	str	xzr, [sp, #0x50]
-               	mov	x1, #0x100000000        // =4294967296
-               	mov	x2, #0x4600000000       // =300647710720
-               	mov	x3, #0x4                // =4
+               	mov	x0, #0x100000000        // =4294967296
+               	mov	x1, #0x4600000000       // =300647710720
+               	mov	x2, #0x4                // =4
                	str	xzr, [sp, #0x70]
                	str	xzr, [sp, #0x78]
                	str	xzr, [sp, #0x80]
-               	str	x2, [sp, #0x60]
-               	str	x1, [sp, #0x58]
-               	str	x3, [sp, #0x68]
+               	str	x1, [sp, #0x60]
+               	str	x0, [sp, #0x58]
+               	str	x2, [sp, #0x68]
                	sub	x0, x29, #0x150
                	sub	x1, x29, #0x170
                	bl	<addr>

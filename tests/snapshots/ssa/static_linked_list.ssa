@@ -9,17 +9,17 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v3   Undef                                            -> -
     v4   Imm(0)                                           -> -
     v5   ImmData(16)                                      -> -
-    v6   Imm(1)                                           -> x0
+    v6   Imm(1)                                           -> -
     v7   Store { addr=v5, disp=0, value=v6, kind=I32 pc_rel } -> -
     v8   BinopI { op=add, lhs=v5, rhs_imm=8 }             -> -
     v9   ImmData(32)                                      -> x0
     v10  Store { addr=v5, disp=8, value=v9, kind=I64 pc_rel } -> -
-    v11  Imm(2)                                           -> x0
+    v11  Imm(2)                                           -> -
     v12  Store { addr=v9, disp=0, value=v11, kind=I32 pc_rel } -> -
     v13  BinopI { op=add, lhs=v9, rhs_imm=8 }             -> -
     v14  ImmData(48)                                      -> x0
     v15  Store { addr=v9, disp=8, value=v14, kind=I64 pc_rel } -> -
-    v16  Imm(3)                                           -> x0
+    v16  Imm(3)                                           -> -
     v17  Store { addr=v14, disp=0, value=v16, kind=I32 pc_rel } -> -
     v18  BinopI { op=add, lhs=v14, rhs_imm=8 }            -> -
     v19  Imm(0)                                           -> x1

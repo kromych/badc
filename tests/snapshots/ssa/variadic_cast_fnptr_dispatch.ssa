@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> -
-    v2   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
     v3   StoreLocal { off=-4, value=v2, kind=I8 }         -> -
     v4   ImmData(32)                                      -> -
     v5   Load { addr=v4, disp=0, kind=I64 pc_rel }        -> [spill 0]

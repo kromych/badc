@@ -505,10 +505,10 @@ Disassembly of section .text:
                	movl	$0x80038002, 0x24(%rsp) # imm = 0x80038002
                	movl	$0x80058004, 0x28(%rsp) # imm = 0x80058004
                	movl	$0x80078006, 0x2c(%rsp) # imm = 0x80078006
-               	leaq	0x20(%rsp), %rcx
+               	leaq	0x20(%rsp), %rax
                	movl	$0x80098008, 0x30(%rsp) # imm = 0x80098008
                	movl	$0x800b800a, 0x34(%rsp) # imm = 0x800B800A
-               	leaq	0x2(%rcx), %rdi
+               	leaq	0x2(%rax), %rdi
                	movl	$0xa, %esi
                	callq	<addr>
                	cmpw	$0x0, 0x22(%rsp)

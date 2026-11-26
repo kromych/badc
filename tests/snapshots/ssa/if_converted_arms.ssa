@@ -464,7 +464,7 @@ fn ent_pc=17 n_params=3 variadic=false locals=0
     v7   Imm(0)                                           -> -
     v8   Load { addr=v1, disp=0, kind=I8 }                -> x0
     v9   Imm(0)                                           -> -
-    v10  Imm(0)                                           -> x1
+    v10  Imm(0)                                           -> -
     v11  Store { addr=v1, disp=0, value=v10, kind=I8 }    -> -
     v12  Extend { value=v8, kind=I8 }                     -> -
     v13  BinopI { op=ne, lhs=v8, rhs_imm=0 }              -> -
@@ -736,7 +736,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=10
     v195 LifetimeEnd(-5)                                  -> -
     terminator Return(v190)   (exit_acc=v190)
   block 30  start_pc=0
-    v196 Imm(0)                                           -> d0
+    v196 Imm(0)                                           -> -
     v197 StoreLocal { off=-1, value=v196, kind=F64, volatile } -> -
     v198 LoadLocal { off=-1, kind=F64, volatile }         -> d0
     v199 LoadLocal { off=-1, kind=F64, volatile }         -> d1
@@ -983,7 +983,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=10
     v339 BinopI { op=lt, lhs=v337, rhs_imm=2 }            -> x0
     terminator Bz { cond=v339, target=b54, fall=b44 }   (exit_acc=v339)
   block 54  start_pc=0
-    v353 Imm(3)                                           -> x0
+    v353 Imm(3)                                           -> -
     v354 StoreLocal { off=-8, value=v353, kind=I8 }       -> -
     v355 LocalAddr(-8)                                    -> -
     v356 Imm(5)                                           -> -

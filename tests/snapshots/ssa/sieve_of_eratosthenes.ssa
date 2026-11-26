@@ -36,7 +36,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v28  ImmData(16)                                      -> -
     v29  Extend { value=v25, kind=I32 }                   -> -
     v30  Binop { op=add, lhs=v2, rhs=v25 }                -> -
-    v31  Imm(1)                                           -> x6
+    v31  Imm(1)                                           -> -
     v32  StoreIndexed { base=v2, index=v25, scale=1, value=v31, kind=I8 } -> -
     v33  Extend { value=v25, kind=I32 }                   -> -
     v34  Extend { value=v4, kind=I32 }                    -> -

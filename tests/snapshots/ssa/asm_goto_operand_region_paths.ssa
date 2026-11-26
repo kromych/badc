@@ -33,14 +33,14 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v7   Imm(0)                                           -> -
     v8   Imm(0)                                           -> -
     v9   Imm(0)                                           -> -
-    v10  Imm(9)                                           -> x1
+    v10  Imm(9)                                           -> -
     v11  Store { addr=v5, disp=0, value=v10, kind=I8 }    -> -
     v12  Imm(0)                                           -> -
     v13  Imm(0)                                           -> -
     v14  Imm(8)                                           -> -
     v15  Imm(8)                                           -> -
     v16  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> -
-    v17  Imm(7)                                           -> x1
+    v17  Imm(7)                                           -> -
     v18  Store { addr=v5, disp=8, value=v17, kind=I8 }    -> -
     v19  Imm(0)                                           -> -
     v20  Imm(0)                                           -> -
@@ -144,10 +144,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Return(v13)   (exit_acc=v13)
   block 11  start_pc=0
     v14  Imm(4)                                           -> -
-    v15  Imm(4)                                           -> x1
+    v15  Imm(4)                                           -> -
     v16  LocalAddr(-13)                                   -> x0
     v17  StoreLocal { off=-13, value=v15, kind=I64 }      -> -
-    v18  Imm(2)                                           -> x1
+    v18  Imm(2)                                           -> -
     v19  LocalAddr(-13)                                   -> -
     v20  BinopI { op=add, lhs=v16, rhs_imm=8 }            -> -
     v21  StoreLocal { off=-13, disp=8, value=v18, kind=I64 } -> -
@@ -187,10 +187,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v119, target=b13, fall=b17 }   (exit_acc=v119)
   block 17  start_pc=0
     v25  Imm(0)                                           -> -
-    v26  Imm(0)                                           -> x1
+    v26  Imm(0)                                           -> -
     v27  LocalAddr(-14)                                   -> x0
     v28  StoreLocal { off=-14, value=v26, kind=I64 }      -> -
-    v29  Imm(2)                                           -> x1
+    v29  Imm(2)                                           -> -
     v30  LocalAddr(-14)                                   -> -
     v31  BinopI { op=add, lhs=v27, rhs_imm=8 }            -> -
     v32  StoreLocal { off=-14, disp=8, value=v29, kind=I64 } -> -

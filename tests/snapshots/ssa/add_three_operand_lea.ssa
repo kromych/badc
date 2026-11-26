@@ -32,7 +32,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v20  Imm(2)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
   block 4  start_pc=0
-    v21  Imm(-5)                                          -> x6
+    v21  Imm(-5)                                          -> -
     v22  StoreLocal { off=-1, value=v21, kind=I64, volatile } -> -
     v23  LoadLocal { off=-1, kind=I64, volatile }         -> x6
     v24  LoadLocal { off=-2, kind=I64, volatile }         -> x7
@@ -43,7 +43,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v27  Imm(3)                                           -> -
     terminator Return(v1)   (exit_acc=v1)
   block 6  start_pc=0
-    v28  Imm(2000000000)                                  -> x0
+    v28  Imm(2000000000)                                  -> -
     v29  StoreLocal { off=-4, value=v28, kind=I32, volatile } -> -
     v30  StoreLocal { off=-5, value=v28, kind=I32, volatile } -> -
     v31  LoadLocal { off=-4, kind=I32, volatile }         -> x0

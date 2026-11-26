@@ -4,20 +4,20 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(8388608)                                     -> d0 [f32]
+    v1   Imm(8388608)                                     -> - [f32]
     v2   Imm(2)                                           -> -
     v3   Imm(1073741824)                                  -> - [f32]
-    v4   Imm(4194304)                                     -> d1 [f32]
+    v4   Imm(4194304)                                     -> - [f32]
     v5   StoreLocal { off=-6, value=v4, kind=F32, volatile } -> -
     v6   StoreLocal { off=-5, value=v1, kind=F32, volatile } -> -
-    v7   Imm(2143289344)                                  -> d0 [f32]
+    v7   Imm(2143289344)                                  -> - [f32]
     v8   StoreLocal { off=-4, value=v7, kind=F32, volatile } -> -
     v9   Imm(0)                                           -> - [f32]
-    v10  Imm(2147483648)                                  -> d1 [f32]
+    v10  Imm(2147483648)                                  -> - [f32]
     v11  StoreLocal { off=-3, value=v10, kind=F32, volatile } -> -
     v12  Imm(4503599627370496)                            -> -
     v13  Imm(4611686018427387904)                         -> -
-    v14  Imm(2251799813685248)                            -> d1
+    v14  Imm(2251799813685248)                            -> d0
     v15  StoreLocal { off=-2, value=v14, kind=F64, volatile } -> -
     v16  Imm(4607182418800017408)                         -> x0
     v17  StoreLocal { off=-1, value=v16, kind=F64, volatile } -> -
@@ -28,7 +28,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
     v22  Imm(9218868437227405312)                         -> x0
     v23  StoreLocal { off=-179, value=v22, kind=F80, volatile } -> -
     v24  Imm(0)                                           -> -
-    v25  LoadLocal { off=-1, kind=F64, volatile }         -> d1
+    v25  LoadLocal { off=-1, kind=F64, volatile }         -> d0
     v26  Imm(0)                                           -> -
     v27  Imm(0)                                           -> -
     v28  Imm(0)                                           -> -
@@ -96,7 +96,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
     v296 Imm(0)                                           -> -
     v297 Imm(1)                                           -> -
     v298 Imm(0)                                           -> -
-    v299 LoadLocal { off=-2, kind=F64, volatile }         -> d1
+    v299 LoadLocal { off=-2, kind=F64, volatile }         -> d0
     v300 Imm(0)                                           -> -
     v301 Imm(0)                                           -> -
     v302 Imm(0)                                           -> -
@@ -125,7 +125,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
     v348 Imm(0)                                           -> -
     v349 Imm(1)                                           -> -
     v350 Imm(0)                                           -> -
-    v351 Imm(2139095040)                                  -> d1 [f32]
+    v351 Imm(2139095040)                                  -> - [f32]
     v352 Imm(0)                                           -> -
     v353 StoreLocal { off=-7, value=v351, kind=F32 }      -> -
     v354 Imm(0)                                           -> -
@@ -183,7 +183,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=7
     v426 Imm(0)                                           -> -
     v427 Imm(0)                                           -> -
     v428 Imm(0)                                           -> -
-    v429 Imm(1065353216)                                  -> d0 [f32]
+    v429 Imm(1065353216)                                  -> - [f32]
     v430 Imm(0)                                           -> -
     v431 StoreLocal { off=-7, value=v429, kind=F32 }      -> -
     v432 Imm(0)                                           -> -

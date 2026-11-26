@@ -3710,41 +3710,41 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x10, %ebx
-               	movapd	%xmm2, %xmm7
-               	movapd	%xmm4, %xmm8
-               	mulsd	%xmm8, %xmm7
-               	movsd	%xmm7, 0xa0(%rsp)
+               	movapd	%xmm2, %xmm6
+               	movapd	%xmm4, %xmm7
+               	mulsd	%xmm7, %xmm6
+               	movsd	%xmm6, 0xa0(%rsp)
                	movq	$0x0, 0xa8(%rsp)
-               	movsd	0xa0(%rsp), %xmm7
-               	movsd	0xa8(%rsp), %xmm8
-               	vaddsd	%xmm8, %xmm7, %xmm9
-               	vdppd	$0x12, %xmm1, %xmm0, %xmm7
-               	vpermilpd	$0x0, %xmm7, %xmm8 # xmm8 = xmm7[0,0]
-               	movq	%xmm8, %rax
+               	movsd	0xa0(%rsp), %xmm6
+               	movsd	0xa8(%rsp), %xmm7
+               	vaddsd	%xmm7, %xmm6, %xmm8
+               	vdppd	$0x12, %xmm1, %xmm0, %xmm6
+               	vpermilpd	$0x0, %xmm6, %xmm7 # xmm7 = xmm6[0,0]
+               	movq	%xmm7, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	vpermilpd	$0x1, %xmm7, %xmm7 # xmm7 = xmm7[1,0]
-               	movq	%xmm7, %rax
-               	movq	%xmm9, %rcx
+               	vpermilpd	$0x1, %xmm6, %xmm6 # xmm6 = xmm6[1,0]
+               	movq	%xmm6, %rax
+               	movq	%xmm8, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x10, %ebx
                	movq	$0x0, 0xb0(%rsp)
-               	movapd	%xmm3, %xmm7
-               	movapd	%xmm5, %xmm8
-               	mulsd	%xmm8, %xmm7
-               	movsd	%xmm7, 0xb8(%rsp)
-               	movsd	0xb0(%rsp), %xmm7
-               	movsd	0xb8(%rsp), %xmm8
-               	vaddsd	%xmm8, %xmm7, %xmm8
-               	vdppd	$0x23, %xmm1, %xmm0, %xmm7
-               	vpermilpd	$0x0, %xmm7, %xmm9 # xmm9 = xmm7[0,0]
-               	movq	%xmm9, %rcx
-               	movq	%xmm8, %rax
+               	movapd	%xmm3, %xmm6
+               	movapd	%xmm5, %xmm7
+               	mulsd	%xmm7, %xmm6
+               	movsd	%xmm6, 0xb8(%rsp)
+               	movsd	0xb0(%rsp), %xmm6
+               	movsd	0xb8(%rsp), %xmm7
+               	vaddsd	%xmm7, %xmm6, %xmm7
+               	vdppd	$0x23, %xmm1, %xmm0, %xmm6
+               	vpermilpd	$0x0, %xmm6, %xmm8 # xmm8 = xmm6[0,0]
+               	movq	%xmm8, %rcx
+               	movq	%xmm7, %rax
                	cmpq	%rax, %rcx
                	jne	<addr>
-               	vpermilpd	$0x1, %xmm7, %xmm7 # xmm7 = xmm7[1,0]
-               	movq	%xmm7, %rcx
+               	vpermilpd	$0x1, %xmm6, %xmm6 # xmm6 = xmm6[1,0]
+               	movq	%xmm6, %rcx
                	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x10, %ebx

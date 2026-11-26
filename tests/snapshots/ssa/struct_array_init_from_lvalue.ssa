@@ -196,7 +196,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v190 Imm(0)                                           -> x0
     v191 Imm(0)                                           -> -
     v192 Imm(1)                                           -> -
-    v193 Imm(8)                                           -> x1
+    v193 Imm(8)                                           -> -
     v194 Imm(0)                                           -> -
     v195 Imm(0)                                           -> -
     v196 Imm(0)                                           -> -
@@ -204,11 +204,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v198 Imm(0)                                           -> -
     v199 Imm(0)                                           -> -
     v200 Imm(0)                                           -> -
-    v201 LocalAddr(-6)                                    -> x6
+    v201 LocalAddr(-6)                                    -> x1
     v202 Imm(0)                                           -> -
     v203 StoreLocal { off=-6, value=v193, kind=I64 }      -> -
     v204 Imm(0)                                           -> -
-    v205 Imm(3)                                           -> x1
+    v205 Imm(3)                                           -> -
     v206 Imm(0)                                           -> -
     v207 StoreLocal { off=-6, disp=8, value=v205, kind=I64 } -> -
     v208 LifetimeEnd(0)                                   -> -
@@ -280,7 +280,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v274 Imm(0)                                           -> -
     v275 Imm(0)                                           -> -
     v276 Imm(1)                                           -> -
-    v277 Imm(2)                                           -> x1
+    v277 Imm(2)                                           -> -
     v278 Imm(0)                                           -> -
     v279 Imm(0)                                           -> -
     v280 Imm(0)                                           -> -
@@ -292,12 +292,12 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v286 Imm(0)                                           -> -
     v287 StoreLocal { off=-4, value=v277, kind=I64 }      -> -
     v288 Imm(0)                                           -> -
-    v289 Imm(1)                                           -> x1
+    v289 Imm(1)                                           -> -
     v290 Imm(0)                                           -> -
     v291 StoreLocal { off=-4, disp=8, value=v289, kind=I64 } -> -
     v292 LocalAddr(-6)                                    -> -
     v293 LocalAddr(-4)                                    -> -
-    v294 BinopI { op=add, lhs=v285, rhs_imm=16 }          -> x1
+    v294 BinopI { op=add, lhs=v285, rhs_imm=16 }          -> x6
     v295 Mcpy { dst=v294, src=v201, size=16, align=8 }    -> -
     v296 LocalAddr(-4)                                    -> -
     v297 Imm(2)                                           -> -

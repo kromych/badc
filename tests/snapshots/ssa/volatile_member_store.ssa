@@ -6,7 +6,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> -
     v2   Imm(41)                                          -> -
-    v3   Imm(41)                                          -> x0
+    v3   Imm(41)                                          -> -
     v4   Store { addr=v1, disp=0, value=v3, kind=I64, volatile pc_rel } -> -
     v5   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x0
     v6   BinopI { op=ne, lhs=v5, rhs_imm=41 }             -> x0
@@ -37,7 +37,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v24  ImmData(16)                                      -> -
     v25  Imm(7)                                           -> -
-    v26  Imm(7)                                           -> x0
+    v26  Imm(7)                                           -> -
     v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
     v28  Store { addr=v1, disp=8, value=v26, kind=I64, volatile pc_rel } -> -
     v29  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -

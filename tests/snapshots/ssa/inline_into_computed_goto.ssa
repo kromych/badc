@@ -97,17 +97,17 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-7)                                    -> -
     v2   Imm(0)                                           -> -
-    v3   Imm(103)                                         -> x0
+    v3   Imm(103)                                         -> -
     v4   StoreLocal { off=-7, value=v3, kind=I64 }        -> -
     v5   LocalAddr(-7)                                    -> -
     v6   Imm(8)                                           -> -
     v7   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
-    v8   Imm(201)                                         -> x0
+    v8   Imm(201)                                         -> -
     v9   StoreLocal { off=-7, disp=8, value=v8, kind=I64 } -> -
     v10  LocalAddr(-7)                                    -> -
     v11  Imm(16)                                          -> -
     v12  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> -
-    v13  Imm(300)                                         -> x0
+    v13  Imm(300)                                         -> -
     v14  StoreLocal { off=-7, disp=16, value=v13, kind=I64 } -> -
     v15  LocalAddr(-4)                                    -> x7
     v16  ImmData(8)                                       -> x0

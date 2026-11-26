@@ -302,16 +302,16 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax # <addr>
-               	movq	%gs:(%rax), %rcx
-               	leaq	0x8(%rax), %rdx
-               	movq	%gs:(%rdx), %r8
-               	leaq	0x10(%rax), %rsi
-               	movq	%gs:(%rsi), %r9
-               	leaq	0x18(%rax), %rdi
-               	movq	%gs:(%rdi), %r10
+               	movq	%gs:(%rax), %rdi
+               	leaq	0x8(%rax), %rcx
+               	movq	%gs:(%rcx), %r8
+               	leaq	0x10(%rax), %rdx
+               	movq	%gs:(%rdx), %r9
+               	leaq	0x18(%rax), %rsi
+               	movq	%gs:(%rsi), %r10
                	movq	%r10, (%rsp)
                	movabsq	$-0x112053135014111, %r10 # imm = 0xFEEDFACECAFEBEEF
-               	cmpq	%r10, %rcx
+               	cmpq	%r10, %rdi
                	movq	(%rsp), %r10
                	jne	<addr>
                	cmpl	$0x11223344, %r8d       # imm = 0x11223344
@@ -319,7 +319,7 @@ Disassembly of section .text:
                	cmpl	$0x55667788, %r9d       # imm = 0x55667788
                	jne	<addr>
                	movabsq	$0x123456789abcdef, %r9 # imm = 0x123456789ABCDEF
-               	movq	%r10, %rcx
+               	movq	%r10, %rdi
                	cmpq	%r9, %r10
                	je	<addr>
                	movl	$0x3, %eax
@@ -331,11 +331,11 @@ Disassembly of section .text:
                	movq	$0x0, <rip> # <addr>
                	movq	%gs:(%rax), %rax
                	movq	%rax, <rip> # <addr>
+               	movq	%gs:(%rcx), %rcx
+               	movq	%rcx, <rip> # <addr>
                	movq	%gs:(%rdx), %rcx
                	movq	%rcx, <rip> # <addr>
                	movq	%gs:(%rsi), %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movq	%gs:(%rdi), %rcx
                	movq	%rcx, <rip> # <addr>
                	movabsq	$-0x112053135014111, %r11 # imm = 0xFEEDFACECAFEBEEF
                	cmpq	%r11, %rax

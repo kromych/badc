@@ -177,14 +177,14 @@ Disassembly of section .text:
                	addq	$0x188, %rsp            # imm = 0x188
                	retq
                	movq	$0x0, 0xd0(%rsp)
-               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
+               	movabsq	$0x100000000, %rax      # imm = 0x100000000
                	movq	$0x0, 0xe0(%rsp)
                	movq	$0x0, 0xe8(%rsp)
                	movq	$0x0, 0xf0(%rsp)
                	movq	$0x0, 0xf8(%rsp)
                	movq	$0x0, 0x100(%rsp)
                	movq	$0x0, 0x108(%rsp)
-               	movq	%rcx, 0xd8(%rsp)
+               	movq	%rax, 0xd8(%rsp)
                	movl	$0x1, %edi
                	leaq	0xd0(%rsp), %rsi
                	leaq	0x50(%rsp), %rdx

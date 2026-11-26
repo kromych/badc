@@ -70,12 +70,12 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
                	movq	$0x4, 0x8(%rax)
+               	movq	%fs:0x0, %rcx
+               	addq	$-0x38, %rcx
                	movq	%fs:0x0, %rdx
-               	addq	$-0x38, %rdx
-               	movq	%fs:0x0, %rsi
-               	addq	$-0x36, %rsi
-               	movb	$0x5, (%rsi)
+               	addq	$-0x36, %rdx
                	movb	$0x5, (%rdx)
+               	movb	$0x5, (%rcx)
                	testb	$0xf, %al
                	jne	<addr>
                	movq	0x8(%rax), %rax

@@ -40,7 +40,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x130
-               	sub	x1, x29, #0x130
+               	sub	x0, x29, #0x130
                	str	xzr, [sp, #0x8]
                	str	xzr, [sp, #0x10]
                	str	xzr, [sp, #0x18]
@@ -57,13 +57,13 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0xc0]
                	stur	xzr, [x29, #-0xb8]
                	stur	xzr, [x29, #-0xb0]
-               	mov	x2, #0x4                // =4
+               	mov	x1, #0x4                // =4
                	stur	xzr, [x29, #-0xa0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x0, [sp]
-               	stur	x2, [x29, #-0xa8]
-               	add	x0, x1, #0x8
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	x2, [sp]
+               	stur	x1, [x29, #-0xa8]
+               	add	x0, x0, #0x8
                	bl	<addr>
                	mov	x0, #0xa                // =10
                	sub	x1, x29, #0x130

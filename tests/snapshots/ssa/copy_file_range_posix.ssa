@@ -71,7 +71,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v41  LifetimeEnd(-3)                                  -> -
     terminator Return(v38)   (exit_acc=v38)
   block 8  start_pc=0
-    v42  Imm(4)                                           -> x0
+    v42  Imm(4)                                           -> -
     v43  StoreLocal { off=-5, value=v42, kind=I64 }       -> -
     v44  Imm(0)                                           -> x9
     v45  StoreLocal { off=-4, value=v44, kind=I64 }       -> -
@@ -283,7 +283,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v191 LifetimeEnd(-3)                                  -> -
     terminator Return(v188)   (exit_acc=v188)
   block 39  start_pc=0
-    v192 Imm(13)                                          -> x0
+    v192 Imm(13)                                          -> -
     v193 StoreLocal { off=-5, value=v192, kind=I64 }      -> -
     v194 Imm(0)                                           -> x9
     v195 StoreLocal { off=-4, value=v194, kind=I64 }      -> -
@@ -322,7 +322,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v222 LifetimeEnd(-3)                                  -> -
     terminator Return(v219)   (exit_acc=v219)
   block 43  start_pc=0
-    v223 Imm(16)                                          -> x0
+    v223 Imm(16)                                          -> -
     v224 StoreLocal { off=-5, value=v223, kind=I64 }      -> -
     v225 Imm(0)                                           -> x9
     v226 StoreLocal { off=-4, value=v225, kind=I64 }      -> -
@@ -359,7 +359,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v249 LifetimeEnd(-3)                                  -> -
     terminator Return(v246)   (exit_acc=v246)
   block 48  start_pc=0
-    v250 Imm(5)                                           -> x0
+    v250 Imm(5)                                           -> -
     v251 StoreLocal { off=-5, value=v250, kind=I64 }      -> -
     v252 StoreLocal { off=-4, value=v250, kind=I64 }      -> -
     v253 Imm(0)                                           -> -

@@ -1210,7 +1210,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v75  Imm(0)                                           -> -
     v76  ImmData(152)                                     -> -
     v77  Load { addr=v73, disp=0, kind=I32 pc_rel }       -> -
-    v78  Imm(1)                                           -> x0
+    v78  Imm(1)                                           -> -
     v79  Store { addr=v73, disp=0, value=v78, kind=I32 pc_rel } -> -
     v80  ImmData(16)                                      -> -
     v81  BinopI { op=add, lhs=v45, rhs_imm=24 }           -> -

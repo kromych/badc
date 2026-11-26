@@ -48,7 +48,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=0)                                -> -
     v2   Imm(0)                                           -> -
-    v3   Imm(-1)                                          -> x0
+    v3   Imm(-1)                                          -> -
     v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
     v5   LocalAddr(-1)                                    -> -
     v6   Imm(2)                                           -> -
@@ -67,7 +67,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v16  ImmCode(ent_pc=0)                                -> -
     v17  Imm(0)                                           -> -
-    v18  Imm(-1)                                          -> x0
+    v18  Imm(-1)                                          -> -
     v19  StoreLocal { off=-1, value=v18, kind=I32 }       -> -
     v20  LocalAddr(-1)                                    -> -
     v21  Imm(3)                                           -> -

@@ -188,7 +188,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(40)                                          -> -
-    v2   Imm(40)                                          -> x1
+    v2   Imm(40)                                          -> -
     v3   ImmData(16)                                      -> x0
     v4   SegStore { addr=v3, value=v2, kind=I32, seg=Gs } -> -
     v5   Imm(2)                                           -> -
@@ -233,7 +233,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v32  Imm(8)                                           -> -
     v33  Imm(0)                                           -> -
     v34  Imm(0)                                           -> -
-    v35  Imm(7)                                           -> x1
+    v35  Imm(7)                                           -> -
     v36  Imm(32)                                          -> x0
     v37  SegStore { addr=v36, value=v35, kind=I64, seg=Gs } -> -
     v38  Imm(0)                                           -> -
@@ -248,7 +248,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v47  Imm(2)                                           -> -
     v48  Imm(8)                                           -> -
     v49  Imm(16)                                          -> x0
-    v50  Imm(9)                                           -> x1
+    v50  Imm(9)                                           -> -
     v51  SegStore { addr=v49, value=v50, kind=I32, seg=Gs } -> -
     v52  Imm(0)                                           -> -
     v53  Imm(28)                                          -> x1

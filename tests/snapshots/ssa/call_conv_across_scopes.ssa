@@ -197,7 +197,7 @@ fn ent_pc=9 n_params=1 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> -
     v2   Imm(0)                                           -> -
-    v3   Imm(2)                                           -> x0
+    v3   Imm(2)                                           -> -
     v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
     v5   Imm(9)                                           -> -
     v6   Imm(0)                                           -> -

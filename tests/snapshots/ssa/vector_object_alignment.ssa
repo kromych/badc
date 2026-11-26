@@ -486,18 +486,18 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     terminator Jmp(b6)   (exit_acc=v288)
   block 27  start_pc=0
     v289 ImmData(496)                                     -> -
-    v290 Imm(1)                                           -> x0
+    v290 Imm(1)                                           -> -
     v291 Store { addr=v239, disp=0, value=v290, kind=I32 pc_rel } -> -
     v292 ImmData(512)                                     -> -
-    v293 Imm(2)                                           -> x0
+    v293 Imm(2)                                           -> -
     v294 Store { addr=v247, disp=0, value=v293, kind=I32 pc_rel } -> -
     v295 ImmData(544)                                     -> -
     v296 BinopI { op=add, lhs=v255, rhs_imm=32 }          -> -
-    v297 Imm(3)                                           -> x0
+    v297 Imm(3)                                           -> -
     v298 Store { addr=v255, disp=32, value=v297, kind=I32 pc_rel } -> -
     v299 ImmData(608)                                     -> -
     v300 BinopI { op=add, lhs=v272, rhs_imm=16 }          -> -
-    v301 Imm(4)                                           -> x0
+    v301 Imm(4)                                           -> -
     v302 Store { addr=v272, disp=16, value=v301, kind=I32 pc_rel } -> -
     v303 ImmData(496)                                     -> -
     v304 Load { addr=v239, disp=0, kind=I32 pc_rel }      -> x0
@@ -634,23 +634,23 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
   block 46  start_pc=0
     v169 ImmData(352)                                     -> -
     v170 BinopI { op=add, lhs=v5, rhs_imm=2 }             -> -
-    v171 Imm(3)                                           -> x0
+    v171 Imm(3)                                           -> -
     v172 Store { addr=v5, disp=2, value=v171, kind=I16 pc_rel } -> -
     v173 ImmData(368)                                     -> -
     v174 BinopI { op=add, lhs=v109, rhs_imm=12 }          -> -
-    v175 Imm(5)                                           -> x0
+    v175 Imm(5)                                           -> -
     v176 Store { addr=v109, disp=12, value=v175, kind=I32 pc_rel } -> -
     v177 ImmData(384)                                     -> -
     v178 BinopI { op=add, lhs=v117, rhs_imm=28 }          -> -
-    v179 Imm(7)                                           -> x0
+    v179 Imm(7)                                           -> -
     v180 Store { addr=v117, disp=28, value=v179, kind=I32 pc_rel } -> -
     v181 ImmData(416)                                     -> -
     v182 BinopI { op=add, lhs=v125, rhs_imm=16 }          -> -
-    v183 Imm(11)                                          -> x0
+    v183 Imm(11)                                          -> -
     v184 Store { addr=v125, disp=16, value=v183, kind=I32 pc_rel } -> -
     v185 ImmData(448)                                     -> -
     v186 BinopI { op=add, lhs=v142, rhs_imm=36 }          -> -
-    v187 Imm(13)                                          -> x0
+    v187 Imm(13)                                          -> -
     v188 Store { addr=v142, disp=36, value=v187, kind=I32 pc_rel } -> -
     v189 ImmData(352)                                     -> -
     v190 BinopI { op=add, lhs=v189, rhs_imm=2 }           -> -

@@ -296,7 +296,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     terminator Return(v185)   (exit_acc=v185)
   block 34  start_pc=0
     v186 ImmData(36)                                      -> -
-    v187 Imm(0)                                           -> x0
+    v187 Imm(0)                                           -> -
     v188 Store { addr=v174, disp=0, value=v187, kind=I8 pc_rel } -> -
     v189 Imm(0)                                           -> -
     v190 Imm(3)                                           -> -
@@ -323,7 +323,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v205 ImmData(36)                                      -> -
     v206 Imm(3)                                           -> -
     v207 BinopI { op=add, lhs=v193, rhs_imm=3 }           -> -
-    v208 Imm(0)                                           -> x0
+    v208 Imm(0)                                           -> -
     v209 Store { addr=v193, disp=3, value=v208, kind=I8 pc_rel } -> -
     v210 ImmData(20)                                      -> -
     v211 CallExt { binding_idx=120, args=[v193, v210], fp_arg_mask=0x0 } -> x0
@@ -379,7 +379,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
   block 45  start_pc=0
     v246 Imm(0)                                           -> -
     v247 Imm(0)                                           -> -
-    v248 Imm(97)                                          -> x0
+    v248 Imm(97)                                          -> -
     v249 Store { addr=v241, disp=0, value=v248, kind=I8 } -> -
     v250 Imm(0)                                           -> -
     v251 Imm(16)                                          -> -

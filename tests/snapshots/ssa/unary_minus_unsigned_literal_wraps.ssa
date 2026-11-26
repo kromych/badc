@@ -72,7 +72,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v52  LifetimeEnd(0)                                   -> -
     terminator Return(v22)   (exit_acc=v22)
   block 10  start_pc=0
-    v53  Imm(4294967295)                                  -> x0
+    v53  Imm(4294967295)                                  -> -
     v54  StoreLocal { off=-2, value=v53, kind=I32, volatile } -> -
     v55  LoadLocal { off=-2, kind=U32, volatile }         -> x0
     v56  BinopI { op=ne, lhs=v55, rhs_imm=4294967295 }    -> x0
@@ -94,7 +94,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v64  Imm(0)                                           -> -
     v65  Imm(0)                                           -> -
     v66  Imm(0)                                           -> -
-    v67  Imm(-1)                                          -> x0
+    v67  Imm(-1)                                          -> -
     v68  StoreLocal { off=-1, value=v67, kind=I32, volatile } -> -
     v69  LoadLocal { off=-1, kind=I32, volatile }         -> x0
     v70  BinopI { op=ne, lhs=v69, rhs_imm=-1 }            -> x0

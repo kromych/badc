@@ -11,13 +11,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v5   Imm(0)                                           -> -
     v6   Imm(0)                                           -> -
     v7   Imm(0)                                           -> -
-    v8   Imm(1)                                           -> x0
+    v8   Imm(1)                                           -> -
     v9   Store { addr=v4, disp=0, value=v8, kind=I8 }     -> -
     v10  Imm(0)                                           -> -
     v11  Imm(0)                                           -> -
     v12  Imm(1048575)                                     -> -
     v13  BinopI { op=add, lhs=v4, rhs_imm=1048575 }       -> x0
-    v14  Imm(2)                                           -> x2
+    v14  Imm(2)                                           -> -
     v15  Store { addr=v13, disp=0, value=v14, kind=I8 }   -> -
     v16  Imm(4096)                                        -> x0
     v17  Imm(0)                                           -> -
@@ -26,7 +26,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v23  Imm(0)                                           -> -
     v24  Imm(0)                                           -> -
     v25  Binop { op=add, lhs=v4, rhs=v18 }                -> -
-    v26  Imm(3)                                           -> x2
+    v26  Imm(3)                                           -> -
     v27  StoreIndexed { base=v4, index=v18, scale=1, value=v26, kind=I8 } -> -
     v28  Imm(0)                                           -> -
     v29  BinopI { op=add, lhs=v18, rhs_imm=4096 }         -> x0

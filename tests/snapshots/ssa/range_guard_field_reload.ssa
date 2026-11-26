@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> -
     v3   Imm(0)                                           -> -
-    v4   Imm(1)                                           -> x0
+    v4   Imm(1)                                           -> -
     v5   Store { addr=v1, disp=0, value=v4, kind=I64 }    -> -
     v6   Imm(0)                                           -> -
     v7   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
@@ -31,10 +31,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> -
-    v2   Imm(100)                                         -> x0
+    v2   Imm(100)                                         -> -
     v3   Store { addr=v1, disp=0, value=v2, kind=I64, volatile pc_rel } -> -
     v4   ImmData(24)                                      -> -
-    v5   Imm(7)                                           -> x0
+    v5   Imm(7)                                           -> -
     v6   Store { addr=v4, disp=0, value=v5, kind=I32, volatile pc_rel } -> -
     v7   LocalAddr(-3)                                    -> -
     v8   ImmData(8)                                       -> -
@@ -87,7 +87,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v18  Imm(9223372036854775804)                         -> x0
     v19  Store { addr=v16, disp=0, value=v18, kind=I64, volatile pc_rel } -> -
     v20  ImmData(24)                                      -> -
-    v21  Imm(9)                                           -> x0
+    v21  Imm(9)                                           -> -
     v22  Store { addr=v20, disp=0, value=v21, kind=I32, volatile pc_rel } -> -
     v23  LocalAddr(-3)                                    -> -
     v24  ImmData(8)                                       -> -

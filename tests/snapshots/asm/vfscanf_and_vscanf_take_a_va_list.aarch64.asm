@@ -109,8 +109,8 @@ Disassembly of section .text:
                	stur	wzr, [x29, #-0x30]
                	stur	wzr, [x29, #-0x28]
                	sturh	wzr, [x29, #-0x20]
-               	sub	x1, x29, #0x18
-               	str	xzr, [x1]
+               	sub	x0, x29, #0x18
+               	str	xzr, [x0]
                	sturb	wzr, [x29, #-0x10]
                	sub	x0, x29, #0x8
                	str	wzr, [x0]

@@ -46,7 +46,7 @@ Disassembly of section .text:
 
 <check>:
                	subq	$0x138, %rsp            # imm = 0x138
-               	leaq	(%rsp), %rcx
+               	leaq	(%rsp), %rax
                	movq	$0x0, 0x8(%rsp)
                	movq	$0x0, 0x10(%rsp)
                	movq	$0x0, 0x18(%rsp)
@@ -64,10 +64,10 @@ Disassembly of section .text:
                	movq	$0x0, 0x78(%rsp)
                	movq	$0x0, 0x80(%rsp)
                	movq	$0x0, 0x90(%rsp)
-               	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, (%rsp)
+               	leaq	-<rip>, %rcx # <addr>
+               	movq	%rcx, (%rsp)
                	movq	$0x4, 0x88(%rsp)
-               	leaq	0x8(%rcx), %rdi
+               	leaq	0x8(%rax), %rdi
                	callq	<addr>
                	movl	$0xa, %edi
                	leaq	(%rsp), %rsi

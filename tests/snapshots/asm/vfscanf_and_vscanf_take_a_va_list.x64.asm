@@ -105,8 +105,8 @@ Disassembly of section .text:
                	movl	$0x0, 0x20(%rsp)
                	movl	$0x0, 0x28(%rsp)
                	movw	$0x0, 0x30(%rsp)
-               	leaq	0x38(%rsp), %rcx
-               	movq	$0x0, (%rcx)
+               	leaq	0x38(%rsp), %rax
+               	movq	$0x0, (%rax)
                	movb	$0x0, 0x40(%rsp)
                	leaq	0x48(%rsp), %rax
                	movl	$0x0, (%rax)

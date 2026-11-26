@@ -39,7 +39,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v26  BinopI { op=add, lhs=v21, rhs_imm=-1 }           -> x0
     v27  Imm(0)                                           -> -
     v28  Binop { op=add, lhs=v24, rhs=v26 }               -> -
-    v29  Imm(0)                                           -> x2
+    v29  Imm(0)                                           -> -
     v30  StoreIndexed { base=v24, index=v26, scale=1, value=v29, kind=I8 } -> -
     terminator Jmp(b6)   (exit_acc=v30)
   block 6  start_pc=0

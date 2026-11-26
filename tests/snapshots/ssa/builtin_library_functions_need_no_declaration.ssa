@@ -28,17 +28,17 @@ fn ent_pc=7 n_params=0 variadic=false locals=11
   spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(-7)                                          -> x0
+    v1   Imm(-7)                                          -> -
     v2   StoreLocal { off=-7, value=v1, kind=I32, volatile } -> -
-    v3   Imm(-8)                                          -> x0
+    v3   Imm(-8)                                          -> -
     v4   StoreLocal { off=-6, value=v3, kind=I64, volatile } -> -
-    v5   Imm(-9)                                          -> x0
+    v5   Imm(-9)                                          -> -
     v6   StoreLocal { off=-5, value=v5, kind=I64, volatile } -> -
     v7   Imm(4612811918334230528)                         -> -
     v8   Imm(-4610560118520545280)                        -> d0
     v9   StoreLocal { off=-4, value=v8, kind=F64, volatile } -> -
     v10  Imm(1069547520)                                  -> - [f32]
-    v11  Imm(3217031168)                                  -> d0 [f32]
+    v11  Imm(3217031168)                                  -> - [f32]
     v12  StoreLocal { off=-3, value=v11, kind=F32, volatile } -> -
     v13  Imm(4614500768194494464)                         -> -
     v14  Imm(-4608871268660281344)                        -> x0
@@ -186,9 +186,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=11
     v128 LifetimeEnd(-11)                                 -> -
     terminator Return(v127)   (exit_acc=v127)
   block 15  start_pc=0
-    v129 Imm(6)                                           -> x0
+    v129 Imm(6)                                           -> -
     v130 StoreLocal { off=-2, value=v129, kind=I64, volatile } -> -
-    v131 Imm(3)                                           -> x0
+    v131 Imm(3)                                           -> -
     v132 StoreLocal { off=-1, value=v131, kind=I32, volatile } -> -
     v133 LocalAddr(-11)                                   -> -
     v134 Imm(120)                                         -> -

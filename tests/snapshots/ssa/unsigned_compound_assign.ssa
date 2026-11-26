@@ -16,7 +16,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(1000)                                        -> x0
+    v1   Imm(1000)                                        -> -
     v2   Imm(0)                                           -> -
     v3   Imm(0)                                           -> -
     v4   StoreLocal { off=-1, value=v1, kind=I64, volatile } -> -
@@ -142,7 +142,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v101 LocalAddr(-4)                                    -> -
     v102 Imm(16)                                          -> -
     v103 BinopI { op=add, lhs=v83, rhs_imm=16 }           -> -
-    v104 Imm(40)                                          -> x1
+    v104 Imm(40)                                          -> -
     v105 StoreLocal { off=-4, disp=16, value=v104, kind=I32 } -> -
     v106 LocalAddr(-4)                                    -> -
     v107 StoreLocal { off=-1, value=v83, kind=I64, volatile } -> -

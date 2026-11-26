@@ -4,11 +4,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(-86)                                         -> x0
+    v1   Imm(-86)                                         -> -
     v2   StoreLocal { off=-4, value=v1, kind=I8, volatile } -> -
     v3   StoreLocal { off=-3, value=v1, kind=I16, volatile } -> -
     v4   StoreLocal { off=-2, value=v1, kind=I32, volatile } -> -
-    v5   Imm(4294967210)                                  -> x0
+    v5   Imm(4294967210)                                  -> -
     v6   StoreLocal { off=-1, value=v5, kind=I32, volatile } -> -
     v7   LoadLocal { off=-4, kind=I8, volatile }          -> x0
     v8   Imm(0)                                           -> -

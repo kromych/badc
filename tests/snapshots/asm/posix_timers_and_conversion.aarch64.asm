@@ -191,14 +191,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	stur	xzr, [x29, #-0xb0]
-               	mov	x1, #0x100000000        // =4294967296
+               	mov	x0, #0x100000000        // =4294967296
                	stur	xzr, [x29, #-0xa0]
                	stur	xzr, [x29, #-0x98]
                	stur	xzr, [x29, #-0x90]
                	stur	xzr, [x29, #-0x88]
                	stur	xzr, [x29, #-0x80]
                	stur	xzr, [x29, #-0x78]
-               	stur	x1, [x29, #-0xa8]
+               	stur	x0, [x29, #-0xa8]
                	mov	x0, #0x1                // =1
                	sub	x1, x29, #0xb0
                	sub	x2, x29, #0x130

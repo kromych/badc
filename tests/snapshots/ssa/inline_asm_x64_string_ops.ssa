@@ -85,12 +85,12 @@ fn ent_pc=4 n_params=0 variadic=false locals=5
     v64  Imm(97)                                          -> -
     v65  Imm(97)                                          -> -
     v66  Imm(97)                                          -> -
-    v67  Imm(25185)                                       -> x0
+    v67  Imm(25185)                                       -> -
     v68  LocalAddr(-4)                                    -> -
     v69  Imm(0)                                           -> -
     v70  BinopI { op=add, lhs=v68, rhs_imm=0 }            -> -
     v71  Imm(0)                                           -> -
-    v72  Imm(0)                                           -> x1
+    v72  Imm(0)                                           -> -
     v73  Imm(0)                                           -> -
     v74  Imm(1)                                           -> -
     v75  Imm(1)                                           -> -
@@ -121,12 +121,12 @@ fn ent_pc=4 n_params=0 variadic=false locals=5
     v100 Imm(99)                                          -> -
     v101 Imm(99)                                          -> -
     v102 Imm(99)                                          -> -
-    v103 Imm(25699)                                       -> x0
+    v103 Imm(25699)                                       -> -
     v104 LocalAddr(-4)                                    -> -
     v105 Imm(2)                                           -> -
     v106 BinopI { op=add, lhs=v68, rhs_imm=2 }            -> -
     v107 Imm(0)                                           -> -
-    v108 Imm(0)                                           -> x1
+    v108 Imm(0)                                           -> -
     v109 Imm(2)                                           -> -
     v110 Imm(3)                                           -> -
     v111 Imm(3)                                           -> -
@@ -157,12 +157,12 @@ fn ent_pc=4 n_params=0 variadic=false locals=5
     v136 Imm(101)                                         -> -
     v137 Imm(101)                                         -> -
     v138 Imm(101)                                         -> -
-    v139 Imm(26213)                                       -> x1
-    v140 LocalAddr(-4)                                    -> x2
+    v139 Imm(26213)                                       -> -
+    v140 LocalAddr(-4)                                    -> x1
     v141 Imm(4)                                           -> -
     v142 BinopI { op=add, lhs=v140, rhs_imm=4 }           -> -
     v143 Imm(0)                                           -> -
-    v144 Imm(0)                                           -> x6
+    v144 Imm(0)                                           -> -
     v145 Imm(4)                                           -> -
     v146 Imm(5)                                           -> -
     v147 Imm(5)                                           -> -
@@ -189,7 +189,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=5
     v168 LocalAddr(-4)                                    -> -
     v169 LocalAddr(-5)                                    -> -
     v170 Imm(6)                                           -> -
-    v171 Imm(6)                                           -> x1
+    v171 Imm(6)                                           -> x2
     v172 InlineAsm { template="rep movsb # byte copy", ops=3, args=[v140, v132, v171] } -> x7
     v173 Imm(0)                                           -> -
     v174 Imm(0)                                           -> -
@@ -317,7 +317,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=5
   block 14  start_pc=0
     v284 LocalAddr(-3)                                    -> x0
     v285 Imm(0)                                           -> -
-    v286 Imm(305397760)                                   -> x1
+    v286 Imm(305397760)                                   -> -
     v287 LocalAddr(-3)                                    -> -
     v288 Imm(2)                                           -> -
     v289 BinopI { op=add, lhs=v284, rhs_imm=2 }           -> -

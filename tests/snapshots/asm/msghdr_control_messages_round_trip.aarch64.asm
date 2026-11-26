@@ -41,12 +41,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xa                // =10
+               	mov	x0, #0xa                // =10
                	stur	xzr, [x29, #-0x90]
-               	mov	x2, #0x100000000000000  // =72057594037927936
+               	mov	x1, #0x100000000000000  // =72057594037927936
                	stur	wzr, [x29, #-0x80]
-               	stur	x1, [x29, #-0x98]
-               	stur	x2, [x29, #-0x88]
+               	stur	x0, [x29, #-0x98]
+               	stur	x1, [x29, #-0x88]
                	mov	x0, x20
                	sub	x1, x29, #0x98
                	mov	x2, #0x1c               // =28

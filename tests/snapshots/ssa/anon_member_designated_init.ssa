@@ -16,11 +16,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=17
   spill_count=2 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
+    v1   Imm(0)                                           -> -
     v2   StoreLocal { off=-17, value=v1, kind=I32 }       -> -
-    v3   Imm(7)                                           -> x0
+    v3   Imm(7)                                           -> -
     v4   StoreLocal { off=-6, value=v3, kind=I32, volatile } -> -
-    v5   Imm(16)                                          -> x0
+    v5   Imm(16)                                          -> -
     v6   StoreLocal { off=-5, value=v5, kind=I64, volatile } -> -
     v7   LocalAddr(-17)                                   -> x0
     v8   StoreLocal { off=-4, value=v7, kind=I64, volatile } -> -
@@ -59,14 +59,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=17
     v143 Imm(0)                                           -> -
     v144 LocalAddr(-16)                                   -> x7
     v145 Mzero { dst=v144, size=24, align=8 }             -> -
-    v146 Imm(3)                                           -> x0
+    v146 Imm(3)                                           -> -
     v147 LocalAddr(-16)                                   -> -
     v148 StoreLocal { off=-16, value=v146, kind=I32 }     -> -
     v149 LocalAddr(-17)                                   -> x0
     v150 LocalAddr(-16)                                   -> -
     v151 BinopI { op=add, lhs=v144, rhs_imm=8 }           -> -
     v152 StoreLocal { off=-16, disp=8, value=v149, kind=I64 } -> -
-    v153 Imm(8)                                           -> x0
+    v153 Imm(8)                                           -> -
     v154 LocalAddr(-16)                                   -> -
     v155 BinopI { op=add, lhs=v144, rhs_imm=16 }          -> -
     v156 StoreLocal { off=-16, disp=16, value=v153, kind=I64 } -> -
@@ -111,18 +111,18 @@ fn ent_pc=2 n_params=0 variadic=false locals=17
   block 7  start_pc=0
     v50  LocalAddr(-10)                                   -> x7
     v51  Mzero { dst=v50, size=32, align=8 }              -> -
-    v52  Imm(5)                                           -> x0
+    v52  Imm(5)                                           -> -
     v53  LocalAddr(-10)                                   -> -
     v54  StoreLocal { off=-10, value=v52, kind=I32 }      -> -
     v55  LocalAddr(-17)                                   -> -
     v56  LocalAddr(-10)                                   -> -
     v57  BinopI { op=add, lhs=v50, rhs_imm=8 }            -> -
     v58  StoreLocal { off=-10, disp=8, value=v30, kind=I64 } -> -
-    v59  Imm(4)                                           -> x0
+    v59  Imm(4)                                           -> -
     v60  LocalAddr(-10)                                   -> -
     v61  BinopI { op=add, lhs=v50, rhs_imm=16 }           -> -
     v62  StoreLocal { off=-10, disp=16, value=v59, kind=I64 } -> -
-    v63  Imm(9)                                           -> x0
+    v63  Imm(9)                                           -> -
     v64  LocalAddr(-10)                                   -> -
     v65  BinopI { op=add, lhs=v50, rhs_imm=24 }           -> -
     v66  StoreLocal { off=-10, disp=24, value=v63, kind=I32 } -> -

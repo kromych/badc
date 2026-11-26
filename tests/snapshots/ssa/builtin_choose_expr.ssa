@@ -43,7 +43,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=24
     v56  Extend { value=v52, kind=I32 }                   -> -
     v57  BinopI { op=shl, lhs=v52, rhs_imm=3 }            -> x2
     v58  Binop { op=add, lhs=v55, rhs=v57 }               -> x1
-    v59  Imm(-1)                                          -> x2
+    v59  Imm(-1)                                          -> -
     v60  Store { addr=v58, disp=0, value=v59, kind=I64, volatile } -> -
     v61  Extend { value=v52, kind=I32 }                   -> -
     v62  BinopI { op=add, lhs=v52, rhs_imm=1 }            -> x0
@@ -72,7 +72,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=24
   block 5  start_pc=0
     v36  LocalAddr(-24)                                   -> x0
     v37  BinopI { op=add, lhs=v36, rhs_imm=56 }           -> -
-    v38  Imm(1)                                           -> x1
+    v38  Imm(1)                                           -> -
     v39  StoreLocal { off=-24, disp=56, value=v38, kind=I8 } -> -
     v40  LocalAddr(-24)                                   -> -
     v41  BinopI { op=add, lhs=v36, rhs_imm=56 }           -> x0

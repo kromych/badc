@@ -4,7 +4,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
+    v1   Imm(0)                                           -> -
     v2   StoreLocal { off=-5, value=v1, kind=I32 }        -> -
     v3   StoreLocal { off=-4, value=v1, kind=I32 }        -> -
     v4   StoreLocal { off=-3, value=v1, kind=F64 }        -> -

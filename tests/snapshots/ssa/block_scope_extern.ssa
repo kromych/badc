@@ -50,7 +50,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v31)   (exit_acc=v31)
   block 7  start_pc=0
     v32  ImmData(12)                                      -> -
-    v33  Imm(9)                                           -> x0
+    v33  Imm(9)                                           -> -
     v34  Store { addr=v13, disp=0, value=v33, kind=I32 pc_rel } -> -
     v35  Imm(9)                                           -> -
     v36  Imm(1)                                           -> -

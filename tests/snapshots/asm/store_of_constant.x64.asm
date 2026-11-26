@@ -34,10 +34,10 @@ Disassembly of section .text:
 
 <put_q>:
                	movq	$0x7fffffff, (%rdi)     # imm = 0x7FFFFFFF
-               	movl	$0x80000000, %ecx       # imm = 0x80000000
-               	movq	%rcx, 0x8(%rdi)
-               	movabsq	$-0x80000001, %rcx      # imm = 0xFFFFFFFF7FFFFFFF
-               	movq	%rcx, 0x10(%rdi)
+               	movl	$0x80000000, %eax       # imm = 0x80000000
+               	movq	%rax, 0x8(%rdi)
+               	movabsq	$-0x80000001, %rax      # imm = 0xFFFFFFFF7FFFFFFF
+               	movq	%rax, 0x10(%rdi)
                	movq	$0x0, 0x18(%rdi)
                	retq
 

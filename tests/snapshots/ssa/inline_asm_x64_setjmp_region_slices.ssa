@@ -67,7 +67,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Return(v14)   (exit_acc=v14)
   block 3  start_pc=0
     v15  ImmData(96)                                      -> -
-    v16  Imm(1)                                           -> x0
+    v16  Imm(1)                                           -> -
     v17  Store { addr=v8, disp=0, value=v16, kind=I32 pc_rel } -> -
     v18  Imm(4)                                           -> -
     v19  Call { target_pc=1, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0

@@ -78,7 +78,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v15  Imm(211)                                         -> -
     v16  Imm(211)                                         -> -
     v17  Imm(211)                                         -> -
-    v18  Imm(211)                                         -> x0
+    v18  Imm(211)                                         -> -
     v19  Store { addr=v12, disp=0, value=v18, kind=I32 pc_rel } -> -
     v20  Imm(216)                                         -> -
     v21  Imm(222)                                         -> -

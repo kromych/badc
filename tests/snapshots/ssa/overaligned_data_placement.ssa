@@ -116,13 +116,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v74  Imm(11)                                          -> x0
     v75  Store { addr=v9, disp=0, value=v74, kind=I32 pc_rel } -> -
     v76  ImmData(512)                                     -> -
-    v77  Imm(22)                                          -> x1
+    v77  Imm(22)                                          -> -
     v78  Store { addr=v41, disp=0, value=v77, kind=I32 pc_rel } -> -
     v79  ImmData(1408)                                    -> -
-    v80  Imm(33)                                          -> x1
+    v80  Imm(33)                                          -> -
     v81  Store { addr=v57, disp=0, value=v80, kind=I32 pc_rel } -> -
     v82  ImmData(768)                                     -> -
-    v83  Imm(44)                                          -> x1
+    v83  Imm(44)                                          -> -
     v84  Store { addr=v65, disp=0, value=v83, kind=I32 pc_rel } -> -
     v85  Load { addr=v9, disp=0, kind=I32 pc_rel }        -> x1
     v86  BinopI { op=ne, lhs=v85, rhs_imm=11 }            -> x1

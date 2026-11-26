@@ -2012,7 +2012,7 @@ fn ent_pc=492 n_params=0 variadic=false locals=80
     v1885 Imm(0)                                           -> -
     v1886 BinopI { op=add, lhs=v1883, rhs_imm=0 }          -> -
     v1887 Imm(4294967295)                                  -> -
-    v1888 Imm(-1)                                          -> x0
+    v1888 Imm(-1)                                          -> -
     v1889 Imm(0)                                           -> -
     v1890 Imm(1)                                           -> -
     v1891 Imm(1)                                           -> -
@@ -2038,7 +2038,7 @@ fn ent_pc=492 n_params=0 variadic=false locals=80
     v1911 Imm(8)                                           -> -
     v1912 BinopI { op=add, lhs=v1909, rhs_imm=8 }          -> -
     v1913 Imm(4294967295)                                  -> -
-    v1914 Imm(-1)                                          -> x0
+    v1914 Imm(-1)                                          -> -
     v1915 Imm(2)                                           -> -
     v1916 Imm(3)                                           -> -
     v1917 Imm(3)                                           -> -

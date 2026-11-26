@@ -4,7 +4,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
+    v1   Imm(0)                                           -> -
     v2   StoreLocal { off=-2, value=v1, kind=I32, volatile } -> -
     v3   Imm(5)                                           -> x0
     v4   StoreLocal { off=-1, value=v3, kind=I32, volatile } -> -
@@ -39,7 +39,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v25  Imm(7)                                           -> -
     v26  ImmData(16)                                      -> -
     v27  Load { addr=v21, disp=0, kind=I32 pc_rel }       -> -
-    v28  Imm(1)                                           -> x1
+    v28  Imm(1)                                           -> -
     v29  Store { addr=v21, disp=0, value=v28, kind=I32 pc_rel } -> -
     v30  Imm(7)                                           -> -
     v31  Imm(7)                                           -> -
@@ -64,7 +64,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v51  Imm(0)                                           -> -
     v52  ImmData(16)                                      -> -
     v53  Load { addr=v21, disp=0, kind=I32 pc_rel }       -> -
-    v54  Imm(1)                                           -> x1
+    v54  Imm(1)                                           -> -
     v55  Store { addr=v21, disp=0, value=v54, kind=I32 pc_rel } -> -
     v56  Imm(0)                                           -> -
     v57  Imm(0)                                           -> -

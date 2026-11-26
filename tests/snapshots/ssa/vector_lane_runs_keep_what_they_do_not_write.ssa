@@ -380,7 +380,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=64
     v7   Extend { value=v3, kind=I32 }                    -> -
     v8   BinopI { op=shl, lhs=v3, rhs_imm=3 }             -> x2
     v9   Binop { op=add, lhs=v6, rhs=v8 }                 -> x1
-    v10  Imm(-1)                                          -> x2
+    v10  Imm(-1)                                          -> -
     v11  Store { addr=v9, disp=0, value=v10, kind=I64, volatile } -> -
     v12  Extend { value=v3, kind=I32 }                    -> -
     v13  BinopI { op=add, lhs=v3, rhs_imm=1 }             -> x0
@@ -471,7 +471,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v6   Imm(0)                                           -> -
     v7   Imm(0)                                           -> -
     v8   Imm(0)                                           -> -
-    v9   Imm(0)                                           -> x0
+    v9   Imm(0)                                           -> -
     v10  Imm(0)                                           -> -
     v11  Imm(0)                                           -> -
     v12  Imm(0)                                           -> -
@@ -480,7 +480,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v15  Imm(0)                                           -> -
     v16  Imm(0)                                           -> -
     v17  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> -
-    v18  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
+    v18  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
     v19  Imm(0)                                           -> -
     v20  Store { addr=v1, disp=0, value=v18, kind=I64, align=4 } -> -
     v21  Imm(0)                                           -> -
@@ -492,7 +492,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=7
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(7)                                           -> x0
+    v1   Imm(7)                                           -> -
     v2   StoreLocal { off=-1, value=v1, kind=I32, volatile } -> -
     v3   LocalAddr(-51)                                   -> x9
     v4   ImmData(8)                                       -> x0
@@ -567,7 +567,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=7
     v65  LifetimeEnd(-51)                                 -> -
     terminator Return(v56)   (exit_acc=v56)
   block 5  start_pc=0
-    v66  Imm(0)                                           -> x0
+    v66  Imm(0)                                           -> -
     v67  StoreLocal { off=-7, value=v66, kind=I32 }       -> -
     v68  LocalAddr(-51)                                   -> x9
     v69  LoadLocal { off=-1, kind=I32, volatile }         -> x7

@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
+               	incq	%rax
+               	movl	%eax, <rip> # <addr>
                	movl	$0xb, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax

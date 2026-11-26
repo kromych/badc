@@ -84,7 +84,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v58  Imm(48)                                          -> -
     v59  BinopI { op=add, lhs=v57, rhs_imm=48 }           -> -
     v60  Load { addr=v57, disp=48, kind=I64, volatile pc_rel } -> x0
-    v61  Imm(0)                                           -> x1
+    v61  Imm(0)                                           -> -
     v62  StoreLocal { off=-2, value=v61, kind=I64 }       -> -
     v63  ImmData(80)                                      -> -
     v64  LocalAddr(-2)                                    -> x1

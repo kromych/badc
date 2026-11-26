@@ -122,10 +122,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
+    v1   Imm(0)                                           -> -
     v2   StoreLocal { off=-1, value=v1, kind=I16 }        -> -
     v3   ImmData(80)                                      -> -
-    v4   Imm(-9223372036854775808)                        -> x1
+    v4   Imm(-9223372036854775808)                        -> x0
     v5   Store { addr=v3, disp=0, value=v4, kind=I64 pc_rel } -> -
     v6   BinopI { op=add, lhs=v3, rhs_imm=8 }             -> -
     v7   Store { addr=v3, disp=8, value=v1, kind=I32 pc_rel } -> -

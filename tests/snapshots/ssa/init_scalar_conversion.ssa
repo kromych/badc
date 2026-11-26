@@ -94,19 +94,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v24  Imm(0)                                           -> -
     v25  Imm(0)                                           -> -
     v26  Imm(0)                                           -> -
-    v27  Imm(0)                                           -> d0
+    v27  Imm(0)                                           -> -
     v28  Imm(0)                                           -> -
     v29  Imm(0)                                           -> -
     v30  Imm(0)                                           -> -
     v31  Imm(0)                                           -> -
     v32  Imm(0)                                           -> -
     v33  Imm(0)                                           -> -
-    v34  Imm(4650599933957636096)                         -> d1
+    v34  Imm(4650599933957636096)                         -> d0
     v35  Imm(0)                                           -> -
     v36  Imm(0)                                           -> -
     v37  Imm(0)                                           -> -
     v38  Imm(0)                                           -> -
-    v39  Imm(4647961106050973696)                         -> d2
+    v39  Imm(4647961106050973696)                         -> d1
     v40  Imm(0)                                           -> -
     v41  Imm(0)                                           -> -
     v42  Imm(0)                                           -> -
@@ -214,7 +214,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v172 LifetimeEnd(0)                                   -> -
     terminator Return(v167)   (exit_acc=v167)
   block 2  start_pc=0
-    v173 Imm(0)                                           -> d0
+    v173 Imm(0)                                           -> -
     v174 LocalAddr(-4)                                    -> x9
     v175 StoreLocal { off=-4, value=v173, kind=F64 }      -> -
     v176 LocalAddr(-4)                                    -> -

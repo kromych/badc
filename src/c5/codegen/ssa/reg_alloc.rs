@@ -2017,6 +2017,31 @@ fn allocate_keeping(
     for &v in call_set.keys().chain(stack_load.keys()).chain(&fp_literals) {
         use_counts[v as usize] = 0;
     }
+    // A store whose own value is unread can take a constant from its
+    // encoding. When every reader of an `Imm` is such a store, the stores
+    // are marked and the `Imm` loses its readers, so it is never
+    // materialized and takes no place; ahead of the branch fusion, a dead
+    // `Imm(0)` no longer counts as a flag-writing `xor`.
+    let candidates: Vec<(usize, ValueId)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|&(v, _)| use_counts[v] == 0)
+        .filter_map(|(v, inst)| Some((v, store_immediate(func, inst, target)?)))
+        .collect();
+    let mut imm_readers: Vec<u32> = vec![0; func.insts.len()];
+    for &(_, c) in &candidates {
+        imm_readers[c as usize] += 1;
+    }
+    let mut imm_store: Vec<bool> = vec![false; func.insts.len()];
+    for &(v, c) in &candidates {
+        imm_store[v] = imm_readers[c as usize] == use_counts[c as usize];
+    }
+    for &(v, c) in &candidates {
+        if imm_store[v] {
+            use_counts[c as usize] = 0;
+        }
+    }
     // Likewise a constant the SVE rows reading it take from their encoding.
     if target.is_aarch64() {
         super::sve_alloc::drop_encoded_reads(func, &mut use_counts);
@@ -2625,31 +2650,6 @@ fn allocate_keeping(
         if let Some(v) = shr_imm_v {
             let slot = &mut use_counts[v as usize];
             *slot = slot.saturating_sub(1);
-        }
-    }
-    // A store whose own value is unread can take a constant from its
-    // encoding. When every reader of an `Imm` is such a store, the stores
-    // are marked and the `Imm` loses its readers, so it is never
-    // materialized; ahead of the branch fusion below, a dead `Imm(0)` no
-    // longer counts as a flag-writing `xor`.
-    let candidates: Vec<(usize, ValueId)> = func
-        .insts
-        .iter()
-        .enumerate()
-        .filter(|&(v, _)| use_counts[v] == 0)
-        .filter_map(|(v, inst)| Some((v, store_immediate(func, inst, target)?)))
-        .collect();
-    let mut imm_readers: Vec<u32> = vec![0; func.insts.len()];
-    for &(_, c) in &candidates {
-        imm_readers[c as usize] += 1;
-    }
-    let mut imm_store: Vec<bool> = vec![false; func.insts.len()];
-    for &(v, c) in &candidates {
-        imm_store[v] = imm_readers[c as usize] == use_counts[c as usize];
-    }
-    for &(v, c) in &candidates {
-        if imm_store[v] {
-            use_counts[c as usize] = 0;
         }
     }
     // Likewise the increment an aarch64 select alone reads, of its other arm.
@@ -8920,6 +8920,11 @@ int main(void) { return 0; }
         for (store, imm) in [(2, 1), (4, 3), (6, 5), (8, 7), (10, 9), (12, 11), (14, 13)] {
             assert!(x64.imm_store[store], "store v{store}");
             assert!(x64.is_unread(imm), "v{imm}");
+            assert_eq!(
+                x64.places[imm as usize],
+                Place::None,
+                "v{imm} holds a place"
+            );
         }
         assert!(x64.imm_store[15]);
         // AArch64 has no store immediate, but reads zero out of xzr / wzr,
@@ -8934,6 +8939,7 @@ int main(void) { return 0; }
             .collect();
         assert_eq!(marked, [12]);
         assert!(a64.is_unread(11));
+        assert_eq!(a64.places[11], Place::None);
         assert_eq!(a64.use_counts[13], 2);
     }
 

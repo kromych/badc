@@ -193,7 +193,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=11
   block 3  start_pc=0
     v29  ImmData(40)                                      -> -
     v30  Imm(0)                                           -> -
-    v31  Imm(99)                                          -> x0
+    v31  Imm(99)                                          -> -
     v32  Store { addr=v29, disp=0, value=v31, kind=I64 pc_rel } -> -
     v33  BinopI { op=add, lhs=v29, rhs_imm=48 }           -> -
     v34  Imm(20)                                          -> -
@@ -301,7 +301,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=11
     v116 LocalAddr(-11)                                   -> -
     v117 Imm(16)                                          -> -
     v118 BinopI { op=add, lhs=v116, rhs_imm=16 }          -> -
-    v119 Imm(99)                                          -> x0
+    v119 Imm(99)                                          -> -
     v120 StoreLocal { off=-11, disp=16, value=v119, kind=I64 } -> -
     v121 LocalAddr(-11)                                   -> -
     v122 BinopI { op=add, lhs=v116, rhs_imm=48 }          -> -

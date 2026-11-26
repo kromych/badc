@@ -176,7 +176,7 @@ fn ent_pc=3 n_params=3 variadic=false locals=2
     v8   BinopI { op=mul, lhs=v1, rhs_imm=-7046029254386353131 } -> x0
     v9   Extend { value=v8, kind=I32 }                    -> -
     v10  StoreLocal { off=-1, value=v8, kind=I32, volatile } -> -
-    v11  Imm(0)                                           -> x0
+    v11  Imm(0)                                           -> -
     v12  Imm(2454267027)                                  -> x1
     v13  ImmData(1056)                                    -> x7
     v14  StoreLocal { off=-2, value=v11, kind=I64, volatile } -> -
@@ -290,7 +290,7 @@ fn ent_pc=5 n_params=3 variadic=false locals=2
     v8   BinopI { op=shru, lhs=v1, rhs_imm=7 }            -> x7
     v9   BinopI { op=and, lhs=v8, rhs_imm=4294967295 }    -> -
     v10  StoreLocal { off=-1, value=v8, kind=I32, volatile } -> -
-    v11  Imm(0)                                           -> x0
+    v11  Imm(0)                                           -> -
     v12  Imm(2654435761)                                  -> x1
     v13  StoreLocal { off=-2, value=v11, kind=I64, volatile } -> -
     terminator Jmp(b2)   (exit_acc=v13)

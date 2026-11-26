@@ -174,11 +174,11 @@ fn ent_pc=5 n_params=1 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(192)                                     -> -
     v2   Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x0
-    v3   Imm(100)                                         -> x1
+    v3   Imm(100)                                         -> -
     v4   Store { addr=v2, disp=0, value=v3, kind=I64 }    -> -
     v5   Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x0
     v6   BinopI { op=add, lhs=v5, rhs_imm=24 }            -> -
-    v7   Imm(400)                                         -> x1
+    v7   Imm(400)                                         -> -
     v8   Store { addr=v5, disp=24, value=v7, kind=I64 }   -> -
     v9   LoadLocal { off=2, kind=I64 }                    -> x3
     v10  LocalAddr(-4)                                    -> -

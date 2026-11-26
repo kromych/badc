@@ -249,11 +249,11 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v138 Imm(7)                                           -> x0
     terminator Return(v138)   (exit_acc=v138)
   block 23  start_pc=0
-    v139 TlsAddr(0)                                       -> x1
-    v140 Imm(0)                                           -> x2
-    v141 Imm(100)                                         -> x0
+    v139 TlsAddr(0)                                       -> x0
+    v140 Imm(0)                                           -> x1
+    v141 Imm(100)                                         -> -
     v142 Store { addr=v139, disp=0, value=v141, kind=I32 } -> -
-    v143 TlsAddr(32)                                      -> x1
+    v143 TlsAddr(32)                                      -> x0
     v144 Store { addr=v143, disp=0, value=v141, kind=I32 } -> -
     v145 TlsAddr(80)                                      -> x0
     v146 BinopI { op=add, lhs=v145, rhs_imm=8 }           -> -

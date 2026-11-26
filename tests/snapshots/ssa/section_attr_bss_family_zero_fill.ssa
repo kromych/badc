@@ -213,21 +213,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 25  start_pc=0
     v160 ImmData(8192)                                    -> -
     v161 Imm(0)                                           -> -
-    v162 Imm(9)                                           -> x0
+    v162 Imm(9)                                           -> -
     v163 Store { addr=v160, disp=0, value=v162, kind=I64 pc_rel } -> -
     v164 Imm(4088)                                        -> -
     v165 BinopI { op=add, lhs=v160, rhs_imm=4088 }        -> -
-    v166 Imm(1)                                           -> x0
+    v166 Imm(1)                                           -> -
     v167 Store { addr=v160, disp=4088, value=v166, kind=I64 pc_rel } -> -
     v168 ImmData(12288)                                   -> x0
     v169 Imm(16383)                                       -> -
     v170 BinopI { op=add, lhs=v168, rhs_imm=16383 }       -> x0
-    v171 Imm(7)                                           -> x1
+    v171 Imm(7)                                           -> -
     v172 Store { addr=v170, disp=0, value=v171, kind=I8 } -> -
     v173 ImmData(28672)                                   -> -
     v174 Imm(56)                                          -> -
     v175 BinopI { op=add, lhs=v58, rhs_imm=56 }           -> -
-    v176 Imm(5)                                           -> x1
+    v176 Imm(5)                                           -> -
     v177 Store { addr=v58, disp=56, value=v176, kind=I64 pc_rel } -> -
     v178 Load { addr=v160, disp=0, kind=I64 pc_rel }      -> x1
     v179 Load { addr=v160, disp=4088, kind=I64 pc_rel }   -> x2

@@ -300,7 +300,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v12  Imm(0)                                           -> -
     v13  Imm(5)                                           -> -
     v14  Imm(5)                                           -> -
-    v15  Imm(15)                                          -> x0
+    v15  Imm(15)                                          -> -
     v16  StoreLocal { off=-1, value=v15, kind=I64 }       -> -
     v17  Imm(0)                                           -> -
     v18  Imm(0)                                           -> -
@@ -337,7 +337,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v45  LifetimeEnd(-1)                                  -> -
     terminator Return(v44)   (exit_acc=v44)
   block 4  start_pc=0
-    v46  Imm(4)                                           -> x0
+    v46  Imm(4)                                           -> -
     v47  StoreLocal { off=-1, value=v46, kind=I64 }       -> -
     v48  Imm(1)                                           -> -
     v49  Imm(5)                                           -> -
@@ -359,7 +359,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v61  LifetimeEnd(-1)                                  -> -
     terminator Return(v60)   (exit_acc=v60)
   block 7  start_pc=0
-    v62  Imm(0)                                           -> x0
+    v62  Imm(0)                                           -> -
     v63  StoreLocal { off=-1, value=v62, kind=I64 }       -> -
     v64  Imm(4)                                           -> -
     v65  Imm(5)                                           -> -
@@ -435,7 +435,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v115 LifetimeEnd(-1)                                  -> -
     terminator Return(v114)   (exit_acc=v114)
   block 18  start_pc=0
-    v116 Imm(0)                                           -> x0
+    v116 Imm(0)                                           -> -
     v117 StoreLocal { off=-1, value=v116, kind=I64 }      -> -
     v118 Imm(2)                                           -> -
     v119 LocalAddr(-1)                                    -> -

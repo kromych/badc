@@ -9,7 +9,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=4
     v3   LoadLocal { off=-1, kind=I64, volatile }         -> x0
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
-    v6   Imm(1)                                           -> x1
+    v6   Imm(1)                                           -> -
     v7   Store { addr=v3, disp=0, value=v6, kind=I32 }    -> -
     v8   Imm(0)                                           -> -
     v9   BinopI { op=add, lhs=v3, rhs_imm=4 }             -> -
@@ -21,7 +21,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=4
     v15  Imm(0)                                           -> -
     v16  Imm(0)                                           -> -
     v17  BinopI { op=add, lhs=v3, rhs_imm=16 }            -> -
-    v18  Imm(44)                                          -> x1
+    v18  Imm(44)                                          -> -
     v19  Store { addr=v3, disp=16, value=v18, kind=I16 }  -> -
     v20  Imm(0)                                           -> -
     v21  BinopI { op=add, lhs=v3, rhs_imm=18 }            -> -
@@ -43,19 +43,19 @@ fn ent_pc=9 n_params=0 variadic=false locals=4
     v37  BinopI { op=add, lhs=v3, rhs_imm=4 }             -> -
     v38  Imm(99)                                          -> -
     v39  Imm(100)                                         -> -
-    v40  Imm(100)                                         -> x1
+    v40  Imm(100)                                         -> -
     v41  Store { addr=v3, disp=4, value=v40, kind=I32 }   -> -
     v42  Imm(0)                                           -> -
     v43  Imm(10)                                          -> -
     v44  Imm(10)                                          -> -
     v45  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> -
     v46  Imm(777)                                         -> -
-    v47  Imm(787)                                         -> x1
+    v47  Imm(787)                                         -> -
     v48  Store { addr=v3, disp=8, value=v47, kind=I64 }   -> -
     v49  Imm(0)                                           -> -
     v50  BinopI { op=add, lhs=v3, rhs_imm=18 }            -> -
     v51  Imm(5)                                           -> -
-    v52  Imm(6)                                           -> x1
+    v52  Imm(6)                                           -> -
     v53  Store { addr=v3, disp=18, value=v52, kind=I8 }   -> -
     v54  Imm(0)                                           -> -
     v55  BinopI { op=add, lhs=v3, rhs_imm=4 }             -> -

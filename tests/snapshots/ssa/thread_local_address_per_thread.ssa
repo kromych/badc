@@ -38,7 +38,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     terminator Return(v23)   (exit_acc=v23)
   block 5  start_pc=0
     v24  TlsAddr(0)                                       -> -
-    v25  Imm(0)                                           -> x1
+    v25  Imm(0)                                           -> -
     v26  Store { addr=v4, disp=0, value=v25, kind=I64 }   -> -
     v27  TlsAddr(8)                                       -> -
     v28  Store { addr=v9, disp=0, value=v25, kind=I64 }   -> -

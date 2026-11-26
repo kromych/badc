@@ -1225,7 +1225,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Return(v241)   (exit_acc=v241)
   block 50  start_pc=0
     v246 ImmData(40)                                      -> -
-    v247 Imm(1075838976)                                  -> d0 [f32]
+    v247 Imm(1075838976)                                  -> - [f32]
     v248 Store { addr=v246, disp=0, value=v247, kind=F32, volatile pc_rel } -> -
     v249 Load { addr=v246, disp=0, kind=F32, volatile pc_rel } -> d0 [f32]
     v250 Imm(0)                                           -> -
@@ -1394,7 +1394,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
   block 53  start_pc=0
     v408 ImmData(40)                                      -> -
     v409 Imm(1080033280)                                  -> - [f32]
-    v410 Imm(3227516928)                                  -> d0 [f32]
+    v410 Imm(3227516928)                                  -> - [f32]
     v411 Store { addr=v408, disp=0, value=v410, kind=F32, volatile pc_rel } -> -
     v412 Load { addr=v408, disp=0, kind=F32, volatile pc_rel } -> d0 [f32]
     v413 Imm(0)                                           -> -
@@ -1762,7 +1762,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Return(v766)   (exit_acc=v766)
   block 58  start_pc=0
     v767 ImmData(16)                                      -> -
-    v768 Imm(5)                                           -> x0
+    v768 Imm(5)                                           -> -
     v769 Store { addr=v767, disp=0, value=v768, kind=I64, volatile pc_rel } -> -
     v770 ImmData(24)                                      -> -
     v771 Imm(0)                                           -> x6
@@ -1947,10 +1947,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Return(v947)   (exit_acc=v947)
   block 60  start_pc=0
     v948 ImmData(16)                                      -> -
-    v949 Imm(0)                                           -> x0
+    v949 Imm(0)                                           -> -
     v950 Store { addr=v948, disp=0, value=v949, kind=I64, volatile pc_rel } -> -
     v951 ImmData(24)                                      -> -
-    v952 Imm(3)                                           -> x0
+    v952 Imm(3)                                           -> -
     v953 Store { addr=v951, disp=0, value=v952, kind=I64, volatile pc_rel } -> -
     v954 ImmData(32)                                      -> -
     v955 Imm(4609434218613702656)                         -> d0

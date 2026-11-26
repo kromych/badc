@@ -27,15 +27,15 @@ Disassembly of section .text:
 
 <main>:
                	pushq	%rax
-               	movq	<rip>, %rdx # <addr>
-               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %rcx # <addr>
                	movl	$0x4, <rip> # <addr>
                	movq	$0x1234abcd, <rip> # imm = 0x1234ABCD
                                                 # <addr>
                	movl	$0x4, <rip> # <addr>
                	movq	$0x1234abcd, <rip> # imm = 0x1234ABCD
                                                 # <addr>
-               	cmpq	$0x1234abcd, %rdx       # imm = 0x1234ABCD
+               	cmpq	$0x1234abcd, %rax       # imm = 0x1234ABCD
                	jne	<addr>
                	movl	$0x1, %eax
                	testl	%eax, %eax
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%r11
                	retq
-               	cmpq	$0x1234abcd, %rsi       # imm = 0x1234ABCD
+               	cmpq	$0x1234abcd, %rcx       # imm = 0x1234ABCD
                	jne	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>

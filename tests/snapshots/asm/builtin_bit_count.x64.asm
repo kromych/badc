@@ -28,28 +28,28 @@ Disassembly of section .text:
 <main>:
                	subq	$0x18, %rsp
                	movl	$0xff00ff, (%rsp)       # imm = 0xFF00FF
-               	movl	(%rsp), %ecx
-               	popcntl	%ecx, %ecx
-               	cmpl	$0x10, %ecx
+               	movl	(%rsp), %eax
+               	popcntl	%eax, %eax
+               	cmpl	$0x10, %eax
                	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x18, %rsp
                	retq
-               	movl	(%rsp), %ecx
+               	movl	(%rsp), %eax
                	movl	$0x3f, %r11d
-               	bsrl	%ecx, %ecx
-               	cmovel	%r11d, %ecx
-               	xorl	$0x1f, %ecx
-               	cmpl	$0x8, %ecx
+               	bsrl	%eax, %eax
+               	cmovel	%r11d, %eax
+               	xorl	$0x1f, %eax
+               	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x16, %eax
                	addq	$0x18, %rsp
                	retq
-               	movl	(%rsp), %ecx
+               	movl	(%rsp), %eax
                	movl	$0x20, %r11d
-               	bsfl	%ecx, %ecx
-               	cmovel	%r11d, %ecx
-               	testl	%ecx, %ecx
+               	bsfl	%eax, %eax
+               	cmovel	%r11d, %eax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x17, %eax
                	addq	$0x18, %rsp

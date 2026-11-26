@@ -695,15 +695,15 @@ fn ent_pc=9 n_params=2 variadic=false locals=1
     v29  BinopI { op=add, lhs=v27, rhs_imm=2 }            -> x13
     v30  Extend { value=v29, kind=I32, nsw }              -> -
     v31  Extend { value=v29, kind=I32 }                   -> -
-    v32  Intrinsic { kind=AllocaSave, args=[] }           -> x1
+    v32  Intrinsic { kind=AllocaSave, args=[] }           -> x0
     v33  Imm(0)                                           -> -
     v34  Imm(0)                                           -> -
     v35  Imm(0)                                           -> -
-    v36  Intrinsic { kind=Alloca, args=[v1] }             -> x2
+    v36  Intrinsic { kind=Alloca, args=[v1] }             -> x1
     v37  Imm(0)                                           -> -
     v38  Imm(0)                                           -> -
     v39  Imm(0)                                           -> -
-    v40  Imm(5)                                           -> x0
+    v40  Imm(5)                                           -> -
     v41  Store { addr=v36, disp=0, value=v40, kind=I8 }   -> -
     v42  ImmData(24)                                      -> -
     v43  Imm(0)                                           -> -

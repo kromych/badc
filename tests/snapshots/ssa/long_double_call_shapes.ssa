@@ -758,7 +758,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=6
     v282 LifetimeEnd(-251)                                -> -
     terminator Return(v279)   (exit_acc=v279)
   block 33  start_pc=0
-    v283 Imm(1)                                           -> x0
+    v283 Imm(1)                                           -> -
     v284 StoreLocal { off=-6, value=v283, kind=I32, volatile } -> -
     v285 LoadLocal { off=-250, kind=F80, volatile }       -> d0
     v286 LocalAddr(-324)                                  -> -
@@ -1161,7 +1161,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=6
   block 52  start_pc=0
     v600 Imm(4609434218613702656)                         -> d0
     v601 StoreLocal { off=-5, value=v600, kind=F64, volatile } -> -
-    v602 Imm(1056964608)                                  -> d0 [f32]
+    v602 Imm(1056964608)                                  -> - [f32]
     v603 StoreLocal { off=-4, value=v602, kind=F32, volatile } -> -
     v604 LoadLocal { off=-5, kind=F64, volatile }         -> d0
     v605 ImmData(32)                                      -> -

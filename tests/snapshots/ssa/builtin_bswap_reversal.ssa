@@ -37,9 +37,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(43981)                                       -> x0
+    v1   Imm(43981)                                       -> -
     v2   StoreLocal { off=-3, value=v1, kind=I16, volatile } -> -
-    v3   Imm(287454020)                                   -> x0
+    v3   Imm(287454020)                                   -> -
     v4   StoreLocal { off=-2, value=v3, kind=I32, volatile } -> -
     v5   Imm(72623859790382856)                           -> x0
     v6   StoreLocal { off=-1, value=v5, kind=I64, volatile } -> -

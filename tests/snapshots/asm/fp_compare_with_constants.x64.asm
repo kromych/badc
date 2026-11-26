@@ -408,8 +408,8 @@ Disassembly of section .text:
                	movl	%r13d, 0xa8(%rsp)
                	movsd	<rip>, %xmm0
                	movsd	%xmm0, 0xb0(%rsp)
-               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
-               	movq	%rcx, 0xb8(%rsp)
+               	movabsq	$0x100000000, %rax      # imm = 0x100000000
+               	movq	%rax, 0xb8(%rsp)
                	movl	%r13d, 0xc0(%rsp)
                	movsd	<rip>, %xmm0
                	movsd	%xmm0, 0xc8(%rsp)

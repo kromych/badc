@@ -236,7 +236,7 @@ fn ent_pc=26 n_params=0 variadic=false locals=54
     v120 LocalAddr(-30)                                   -> -
     v121 CallExt { binding_idx=388, args=[v120], fp_arg_mask=0x0 } -> x0
     v122 ImmData(160)                                     -> -
-    v123 Imm(0)                                           -> x0
+    v123 Imm(0)                                           -> -
     v124 Store { addr=v122, disp=0, value=v123, kind=I32 pc_rel } -> -
     v125 LocalAddr(-50)                                   -> -
     v126 ImmCode(ent_pc=25)                               -> -

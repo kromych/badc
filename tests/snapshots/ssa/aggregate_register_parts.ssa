@@ -1961,7 +1961,7 @@ fn ent_pc=39 n_params=0 variadic=false locals=14
     v701 Imm(0)                                           -> -
     v702 Imm(0)                                           -> -
     v703 LocalAddr(-1)                                    -> x7
-    v704 Imm(5)                                           -> x0
+    v704 Imm(5)                                           -> -
     v705 StoreLocal { off=-1, value=v704, kind=I8 }       -> -
     v706 Call { target_pc=12, args=[v703], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v707 RetPart(0, kind=I64)                             -> x0
@@ -1974,7 +1974,7 @@ fn ent_pc=39 n_params=0 variadic=false locals=14
     v714 Imm(0)                                           -> -
     v715 Imm(0)                                           -> -
     v716 LocalAddr(-1)                                    -> x7
-    v717 Imm(600)                                         -> x0
+    v717 Imm(600)                                         -> -
     v718 StoreLocal { off=-1, value=v717, kind=I16 }      -> -
     v719 Call { target_pc=13, args=[v716], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v720 RetPart(0, kind=I64)                             -> x0
@@ -1987,7 +1987,7 @@ fn ent_pc=39 n_params=0 variadic=false locals=14
     v727 Imm(0)                                           -> -
     v728 Imm(0)                                           -> -
     v729 LocalAddr(-1)                                    -> x7
-    v730 Imm(70000)                                       -> x0
+    v730 Imm(70000)                                       -> -
     v731 StoreLocal { off=-1, value=v730, kind=I32 }      -> -
     v732 Call { target_pc=14, args=[v729], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v733 RetPart(0, kind=I64)                             -> [spill 2]
@@ -2219,13 +2219,13 @@ fn ent_pc=39 n_params=0 variadic=false locals=14
     v933 Imm(0)                                           -> -
     v934 LocalAddr(-3)                                    -> x9
     v935 Imm(0)                                           -> -
-    v936 Imm(1)                                           -> x0
+    v936 Imm(1)                                           -> -
     v937 StoreLocal { off=-3, value=v936, kind=I64 }      -> -
     v938 Imm(0)                                           -> -
-    v939 Imm(2)                                           -> x0
+    v939 Imm(2)                                           -> -
     v940 StoreLocal { off=-3, disp=8, value=v939, kind=I64 } -> -
     v941 Imm(0)                                           -> -
-    v942 Imm(3)                                           -> x0
+    v942 Imm(3)                                           -> -
     v943 StoreLocal { off=-3, disp=16, value=v942, kind=I64 } -> -
     v944 Call { target_pc=18, args=[v930, v934], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v945 LocalAddr(-6)                                    -> -

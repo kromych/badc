@@ -41,8 +41,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	addq	$0x18, %rsp
                	retq
-               	movabsq	$0x600000005, %rcx      # imm = 0x600000005
-               	movq	%rcx, <rip> # <addr>
+               	movabsq	$0x600000005, %rax      # imm = 0x600000005
+               	movq	%rax, <rip> # <addr>
                	movl	$0x5, <rip> # <addr>
                	movl	$0x6, <rip> # <addr>
                	movl	<rip>, %eax # <addr>

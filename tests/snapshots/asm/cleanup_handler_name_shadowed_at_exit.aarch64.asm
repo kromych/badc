@@ -72,8 +72,8 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	adrp	x1, <page>
-               	str	wzr, [x1, #0x20]
+               	adrp	x0, <page>
+               	str	wzr, [x0, #0x20]
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	cmp	w0, #0xc

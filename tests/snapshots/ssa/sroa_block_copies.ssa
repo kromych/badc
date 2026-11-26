@@ -84,7 +84,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v6   Imm(0)                                           -> -
     v7   Imm(0)                                           -> -
     v8   Imm(0)                                           -> -
-    v9   Imm(7)                                           -> x0
+    v9   Imm(7)                                           -> -
     v10  Imm(0)                                           -> -
     v11  Imm(0)                                           -> -
     v12  Imm(0)                                           -> -
@@ -381,7 +381,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=4
     v23  Mcpy { dst=v6, src=v22, size=16, align=8 }       -> -
     v24  LocalAddr(-4)                                    -> -
     v25  BinopI { op=add, lhs=v6, rhs_imm=16 }            -> -
-    v26  Imm(1)                                           -> x0
+    v26  Imm(1)                                           -> -
     v27  StoreLocal { off=-4, disp=16, value=v26, kind=I64 } -> -
     v28  LocalAddr(-4)                                    -> -
     v29  LoadLocal { off=-4, kind=I64 }                   -> x0
@@ -449,11 +449,11 @@ fn ent_pc=15 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> -
     v3   Imm(0)                                           -> -
-    v4   Imm(-1)                                          -> x0
+    v4   Imm(-1)                                          -> -
     v5   Store { addr=v1, disp=0, value=v4, kind=I64 }    -> -
     v6   Imm(0)                                           -> -
     v7   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> -
-    v8   Imm(-2)                                          -> x0
+    v8   Imm(-2)                                          -> -
     v9   Store { addr=v1, disp=8, value=v8, kind=I64 }    -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=16 ---
@@ -576,7 +576,7 @@ fn ent_pc=20 n_params=2 variadic=false locals=0
     v3   Imm(0)                                           -> -
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
-    v6   Imm(1)                                           -> x1
+    v6   Imm(1)                                           -> -
     v7   Imm(0)                                           -> -
     v8   Imm(0)                                           -> -
     v9   Imm(0)                                           -> -
@@ -588,7 +588,7 @@ fn ent_pc=20 n_params=2 variadic=false locals=0
     v15  Imm(0)                                           -> -
     v16  Imm(0)                                           -> -
     v17  Imm(0)                                           -> -
-    v18  BinopI { op=add, lhs=v1, rhs_imm=2 }             -> x2
+    v18  BinopI { op=add, lhs=v1, rhs_imm=2 }             -> x1
     v19  Imm(0)                                           -> -
     v20  LoadLocal { off=2, kind=I64 }                    -> x0
     v21  Imm(0)                                           -> -
@@ -671,7 +671,7 @@ fn ent_pc=24 n_params=2 variadic=false locals=0
     v16  Imm(0)                                           -> -
     v17  Store { addr=v1, disp=0, value=v3, kind=I64 }    -> -
     v18  Imm(0)                                           -> -
-    v19  Imm(5)                                           -> x0
+    v19  Imm(5)                                           -> -
     v20  Store { addr=v1, disp=8, value=v19, kind=I64 }   -> -
     v21  Imm(0)                                           -> -
     v22  Load { addr=v1, disp=0, kind=I64 }               -> -
@@ -701,7 +701,7 @@ fn ent_pc=25 n_params=2 variadic=false locals=1
     v10  Imm(0)                                           -> -
     v11  BinopI { op=sub, lhs=v3, rhs_imm=1 }             -> x1
     v12  Binop { op=add, lhs=v7, rhs=v11 }                -> -
-    v13  Imm(3)                                           -> x2
+    v13  Imm(3)                                           -> -
     v14  StoreIndexed { base=v7, index=v11, scale=1, value=v13, kind=I8 } -> -
     v15  Imm(0)                                           -> -
     v16  Imm(0)                                           -> -
@@ -1253,15 +1253,15 @@ fn ent_pc=34 n_params=0 variadic=false locals=80
     v192 Extend { value=v2, kind=I32 }                    -> -
     v193 LocalAddr(-52)                                   -> -
     v194 StoreLocal { off=-52, value=v2, kind=I32 }       -> -
-    v195 Imm(2)                                           -> x0
+    v195 Imm(2)                                           -> -
     v196 LocalAddr(-52)                                   -> -
     v197 BinopI { op=add, lhs=v189, rhs_imm=8 }           -> -
     v198 StoreLocal { off=-52, disp=8, value=v195, kind=I64 } -> -
-    v199 Imm(3)                                           -> x0
+    v199 Imm(3)                                           -> -
     v200 LocalAddr(-52)                                   -> -
     v201 BinopI { op=add, lhs=v189, rhs_imm=16 }          -> -
     v202 StoreLocal { off=-52, disp=16, value=v199, kind=I64 } -> -
-    v203 Imm(120)                                         -> x0
+    v203 Imm(120)                                         -> -
     v204 LocalAddr(-52)                                   -> -
     v205 BinopI { op=add, lhs=v189, rhs_imm=24 }          -> -
     v206 StoreLocal { off=-52, disp=24, value=v203, kind=I8 } -> -
@@ -1953,7 +1953,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=80
     v828 Imm(0)                                           -> -
     v829 BinopI { op=add, lhs=v826, rhs_imm=0 }           -> -
     v830 Imm(0)                                           -> -
-    v831 Imm(0)                                           -> x0
+    v831 Imm(0)                                           -> -
     v832 StoreLocal { off=-48, value=v831, kind=I64 }     -> -
     v833 Imm(0)                                           -> -
     v834 Imm(1)                                           -> -

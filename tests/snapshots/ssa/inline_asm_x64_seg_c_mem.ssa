@@ -60,11 +60,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v38  ImmData(32)                                      -> -
     v39  Imm(8)                                           -> -
     v40  BinopI { op=add, lhs=v38, rhs_imm=8 }            -> -
-    v41  Imm(4369)                                        -> x0
+    v41  Imm(4369)                                        -> -
     v42  Store { addr=v38, disp=8, value=v41, kind=I64 pc_rel } -> -
     v43  Imm(24)                                          -> -
     v44  BinopI { op=add, lhs=v38, rhs_imm=24 }           -> -
-    v45  Imm(13107)                                       -> x0
+    v45  Imm(13107)                                       -> -
     v46  Store { addr=v38, disp=24, value=v45, kind=I64 pc_rel } -> -
     v47  Imm(158)                                         -> -
     v48  Imm(4097)                                        -> -

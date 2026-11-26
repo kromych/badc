@@ -30,7 +30,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(7)                                           -> x0
+    v1   Imm(7)                                           -> -
     v2   Imm(0)                                           -> -
     v3   BlockAddr(block=1)                               -> x1
     v4   Imm(0)                                           -> -

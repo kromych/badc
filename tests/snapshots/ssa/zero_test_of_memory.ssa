@@ -435,15 +435,15 @@ fn ent_pc=17 n_params=0 variadic=false locals=16
   block 10  start_pc=0
     v80  LocalAddr(-7)                                    -> -
     v81  BinopI { op=add, lhs=v80, rhs_imm=1 }            -> -
-    v82  Imm(-128)                                        -> x0
+    v82  Imm(-128)                                        -> -
     v83  StoreLocal { off=-7, disp=1, value=v82, kind=I8 } -> -
     v84  LocalAddr(-7)                                    -> -
     v85  BinopI { op=add, lhs=v80, rhs_imm=6 }            -> -
-    v86  Imm(-32768)                                      -> x0
+    v86  Imm(-32768)                                      -> -
     v87  StoreLocal { off=-7, disp=6, value=v86, kind=I16 } -> -
     v88  LocalAddr(-7)                                    -> -
     v89  BinopI { op=add, lhs=v80, rhs_imm=16 }           -> -
-    v90  Imm(-2147483648)                                 -> x0
+    v90  Imm(-2147483648)                                 -> -
     v91  StoreLocal { off=-7, disp=16, value=v90, kind=I32 } -> -
     v92  LocalAddr(-7)                                    -> -
     v93  BinopI { op=add, lhs=v80, rhs_imm=40 }           -> -
@@ -547,11 +547,11 @@ fn ent_pc=17 n_params=0 variadic=false locals=16
   block 20  start_pc=0
     v172 LocalAddr(-7)                                    -> -
     v173 BinopI { op=add, lhs=v172, rhs_imm=6 }           -> -
-    v174 Imm(256)                                         -> x0
+    v174 Imm(256)                                         -> -
     v175 StoreLocal { off=-7, disp=6, value=v174, kind=I16 } -> -
     v176 LocalAddr(-7)                                    -> -
     v177 BinopI { op=add, lhs=v172, rhs_imm=16 }          -> -
-    v178 Imm(65536)                                       -> x0
+    v178 Imm(65536)                                       -> -
     v179 StoreLocal { off=-7, disp=16, value=v178, kind=I32 } -> -
     v180 LocalAddr(-7)                                    -> -
     v181 BinopI { op=add, lhs=v172, rhs_imm=40 }          -> -
@@ -866,7 +866,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=16
     v434 LifetimeEnd(-7)                                  -> -
     terminator Return(v427)   (exit_acc=v427)
   block 49  start_pc=0
-    v435 Imm(5)                                           -> x0
+    v435 Imm(5)                                           -> -
     v436 StoreLocal { off=-12, value=v435, kind=I8 }      -> -
     v437 LocalAddr(-12)                                   -> -
     v438 LocalAddr(-12)                                   -> -

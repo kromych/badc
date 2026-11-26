@@ -5,37 +5,37 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(32)                                      -> -
-    v2   Imm(-1)                                          -> x0
+    v2   Imm(-1)                                          -> -
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 pc_rel } -> -
     v4   ImmData(40)                                      -> -
-    v5   Imm(305419896)                                   -> x0
+    v5   Imm(305419896)                                   -> -
     v6   Store { addr=v4, disp=0, value=v5, kind=I32 pc_rel } -> -
     v7   ImmData(44)                                      -> -
-    v8   Imm(-2)                                          -> x0
+    v8   Imm(-2)                                          -> -
     v9   Store { addr=v7, disp=0, value=v8, kind=I16 pc_rel } -> -
     v10  ImmData(46)                                      -> -
-    v11  Imm(-128)                                        -> x0
+    v11  Imm(-128)                                        -> -
     v12  Store { addr=v10, disp=0, value=v11, kind=I8 pc_rel } -> -
     v13  ImmData(47)                                      -> -
-    v14  Imm(255)                                         -> x0
+    v14  Imm(255)                                         -> -
     v15  Store { addr=v13, disp=0, value=v14, kind=I8 pc_rel } -> -
     v16  ImmData(48)                                      -> -
-    v17  Imm(65535)                                       -> x0
+    v17  Imm(65535)                                       -> -
     v18  Store { addr=v16, disp=0, value=v17, kind=I16 pc_rel } -> -
     v19  ImmData(52)                                      -> -
-    v20  Imm(2147483648)                                  -> x0
+    v20  Imm(2147483648)                                  -> -
     v21  Store { addr=v19, disp=0, value=v20, kind=I32 pc_rel } -> -
     v22  ImmData(56)                                      -> -
-    v23  Imm(122)                                         -> x0
+    v23  Imm(122)                                         -> -
     v24  Store { addr=v22, disp=0, value=v23, kind=I8 pc_rel } -> -
     v25  BinopI { op=add, lhs=v22, rhs_imm=2 }            -> -
-    v26  Imm(300)                                         -> x0
+    v26  Imm(300)                                         -> -
     v27  Store { addr=v22, disp=2, value=v26, kind=I16 pc_rel } -> -
     v28  BinopI { op=add, lhs=v22, rhs_imm=4 }            -> -
-    v29  Imm(-7)                                          -> x0
+    v29  Imm(-7)                                          -> -
     v30  Store { addr=v22, disp=4, value=v29, kind=I32 pc_rel } -> -
     v31  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> -
-    v32  Imm(2147483647)                                  -> x0
+    v32  Imm(2147483647)                                  -> -
     v33  Store { addr=v22, disp=8, value=v32, kind=I64 pc_rel } -> -
     v34  BinopI { op=add, lhs=v22, rhs_imm=16 }           -> -
     v35  Imm(4602678819172646912)                         -> d0
@@ -43,11 +43,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v37  ImmData(80)                                      -> -
     v38  Imm(12)                                          -> -
     v39  BinopI { op=add, lhs=v37, rhs_imm=12 }           -> -
-    v40  Imm(33)                                          -> x0
+    v40  Imm(33)                                          -> -
     v41  Store { addr=v37, disp=12, value=v40, kind=I32 pc_rel } -> -
     v42  Imm(28)                                          -> -
     v43  BinopI { op=add, lhs=v37, rhs_imm=28 }           -> -
-    v44  Imm(77)                                          -> x0
+    v44  Imm(77)                                          -> -
     v45  Store { addr=v37, disp=28, value=v44, kind=I32 pc_rel } -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -213,7 +213,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(112)                                     -> -
-    v2   Imm(5)                                           -> x0
+    v2   Imm(5)                                           -> -
     v3   Store { addr=v1, disp=0, value=v2, kind=I32, volatile pc_rel } -> -
     v4   Load { addr=v1, disp=0, kind=I32, volatile pc_rel } -> x0
     v5   BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x0

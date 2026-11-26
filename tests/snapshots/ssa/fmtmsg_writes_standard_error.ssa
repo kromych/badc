@@ -103,7 +103,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=35
     v83  LocalAddr(-32)                                   -> x7
     v84  Imm(0)                                           -> -
     v85  Binop { op=add, lhs=v83, rhs=v61 }               -> -
-    v86  Imm(0)                                           -> x0
+    v86  Imm(0)                                           -> -
     v87  StoreIndexed { base=v83, index=v61, scale=1, value=v86, kind=I8 } -> -
     v88  LocalAddr(-32)                                   -> -
     v89  Imm(0)                                           -> -

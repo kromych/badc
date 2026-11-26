@@ -62,11 +62,11 @@ Disassembly of section .text:
                	str	xzr, [sp, #0x1b0]
                	str	xzr, [sp, #0x1b8]
                	str	w22, [sp, #0x118]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x1, [sp, #0x128]
-               	mov	x1, #0xc                // =12
-               	str	x1, [sp, #0x130]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	x0, [sp, #0x128]
+               	mov	x0, #0xc                // =12
+               	str	x0, [sp, #0x130]
                	str	xzr, [sp, #0x198]
                	mov	x21, #0x1               // =1
                	str	w21, [sp, #0x144]
@@ -137,10 +137,10 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0xb8]
                	stur	xzr, [x29, #-0xb0]
                	str	w22, [sp, #0x1c0]
-               	sub	x1, x29, #0x2f0
-               	str	x1, [sp, #0x1d0]
-               	mov	x1, #0x8                // =8
-               	str	x1, [sp, #0x1d8]
+               	sub	x0, x29, #0x2f0
+               	str	x0, [sp, #0x1d0]
+               	mov	x0, #0x8                // =8
+               	str	x0, [sp, #0x1d8]
                	stur	xzr, [x29, #-0xd0]
                	sub	x0, x29, #0x150
                	bl	<addr>

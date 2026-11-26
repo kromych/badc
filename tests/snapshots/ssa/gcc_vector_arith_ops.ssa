@@ -12500,7 +12500,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v14122 Imm(5)                                           -> -
     v14123 Imm(40)                                          -> -
     v14124 BinopI { op=add, lhs=v14107, rhs_imm=2 }         -> -
-    v14125 Imm(2621506)                                     -> x2
+    v14125 Imm(2621506)                                     -> -
     v14126 BinopI { op=add, lhs=v14105, rhs_imm=3 }         -> -
     v14127 Imm(203)                                         -> -
     v14128 BinopI { op=add, lhs=v14106, rhs_imm=3 }         -> -
@@ -12528,7 +12528,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v14150 Imm(9)                                           -> -
     v14151 Imm(22)                                          -> -
     v14152 BinopI { op=add, lhs=v14107, rhs_imm=6 }         -> -
-    v14153 Imm(1441821)                                     -> x2
+    v14153 Imm(1441821)                                     -> -
     v14154 BinopI { op=add, lhs=v14105, rhs_imm=7 }         -> -
     v14155 Imm(207)                                         -> -
     v14156 BinopI { op=add, lhs=v14106, rhs_imm=7 }         -> -
@@ -12556,7 +12556,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v14178 Imm(1)                                           -> -
     v14179 Imm(3)                                           -> -
     v14180 BinopI { op=add, lhs=v14107, rhs_imm=10 }        -> -
-    v14181 Imm(67305985)                                    -> x2
+    v14181 Imm(67305985)                                    -> -
     v14182 BinopI { op=add, lhs=v14105, rhs_imm=11 }        -> -
     v14183 Imm(4)                                           -> -
     v14184 BinopI { op=add, lhs=v14106, rhs_imm=11 }        -> -
@@ -12584,7 +12584,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v14206 Imm(1)                                           -> -
     v14207 Imm(7)                                           -> -
     v14208 BinopI { op=add, lhs=v14107, rhs_imm=14 }        -> -
-    v14209 Imm(134678021)                                   -> x2
+    v14209 Imm(134678021)                                   -> -
     v14210 BinopI { op=add, lhs=v14105, rhs_imm=15 }        -> -
     v14211 Imm(8)                                           -> -
     v14212 BinopI { op=add, lhs=v14106, rhs_imm=15 }        -> -

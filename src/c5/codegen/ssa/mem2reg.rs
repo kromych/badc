@@ -1916,9 +1916,12 @@ fn split_address_phi_loads(func: &mut FunctionSsa) -> bool {
                     Some(last) => {
                         let mut cond = NO_VALUE;
                         p.terminator.for_each_operand(|c| cond = c);
+                        // Ahead of the condition its branch reads, unless it
+                        // is a phi, which heads its block.
                         if cond == last
                             && last != v
                             && quiet(&func.insts[last as usize])
+                            && !matches!(func.insts[last as usize], Inst::Phi { .. })
                             && !matches!(p.terminator, Terminator::Return(_))
                         {
                             At::Before(last)
@@ -2906,6 +2909,36 @@ mod tests {
             extern_imm_code_refs: Vec::new(),
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
+        }
+    }
+
+    /// A predecessor whose branch reads the phi heading it takes the read a
+    /// load through an address phi splits into after that phi: `e && (*i =
+    /// h)` ends in a block of one phi its branch tests, and `*h` below reads
+    /// the objects the phi merges. The SSA check holds after every pass.
+    #[test]
+    fn a_split_read_follows_the_phi_its_predecessor_branches_on() {
+        let src = "int a(int *e) {\n\
+                       int **g = 0; int ***h = &g; int ****i = &h;\n\
+                       if (e && (*i = h)) ;\n\
+                       return 0 == *h;\n\
+                   }\n\
+                   int b(void) { int c; return a(&c); }\n";
+        for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+            let opts = crate::CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true);
+            let program =
+                crate::Compiler::with_options(alloc::string::String::from(src), target, opts)
+                    .compile()
+                    .expect("compile");
+            let native = crate::NativeOptions {
+                output_kind: crate::OutputKind::Relocatable,
+                ..crate::NativeOptions::new()
+                    .with_optimize()
+                    .with_verify_ssa()
+            };
+            crate::c5::codegen::lower_for(&program, target, native).expect("lower");
         }
     }
 

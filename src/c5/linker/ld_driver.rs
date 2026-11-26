@@ -715,18 +715,10 @@ impl InputObject for LdsObject {
         &self.source
     }
     fn defined(&self) -> Vec<&str> {
-        self.symbols
-            .iter()
-            .filter(|s| (s.info >> 4) != 0 && s.shndx != 0 && !s.name.is_empty())
-            .map(|s| s.name.as_str())
-            .collect()
+        self.defined_globals().collect()
     }
     fn strong_undef(&self) -> Vec<&str> {
-        self.symbols
-            .iter()
-            .filter(|s| (s.info >> 4) == 1 && s.shndx == 0 && !s.name.is_empty())
-            .map(|s| s.name.as_str())
-            .collect()
+        self.strong_undefs().collect()
     }
 }
 

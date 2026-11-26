@@ -14,9 +14,9 @@ use alloc::vec::Vec;
 use hashbrown::HashMap;
 
 use super::{
-    Elf64Rela, Elf64Sym, MODULE, R_NONE, SHF_EXCLUDE, SHN_XINDEX, SHT_GROUP, SHT_LLVM_ADDRSIG,
-    SHT_LLVM_DEPENDENT_LIBRARIES, SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB,
-    SHT_SYMTAB_SHNDX,
+    Elf64Rela, Elf64Sym, MODULE, R_NONE, SHF_EXCLUDE, SHN_UNDEF, SHN_XINDEX, SHT_GROUP,
+    SHT_LLVM_ADDRSIG, SHT_LLVM_DEPENDENT_LIBRARIES, SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB,
+    SHT_SYMTAB, SHT_SYMTAB_SHNDX, STB_GLOBAL, STB_LOCAL,
 };
 
 /// One relocation, as read from a `.rela.<sec>` table.
@@ -102,6 +102,25 @@ impl LdsObject {
             Some(&k) => self.sections[k].name.clone(),
             None => format!("section symbol {}", sym.shndx),
         }
+    }
+
+    /// The global and weak names this object defines.
+    pub fn defined_globals(&self) -> impl Iterator<Item = &str> {
+        (self.symbols.iter())
+            .filter(|s| {
+                s.binding() != STB_LOCAL && s.shndx != u32::from(SHN_UNDEF) && !s.name.is_empty()
+            })
+            .map(|s| s.name.as_str())
+    }
+
+    /// The names this object references and does not define, but for its
+    /// weak references, which pull no archive member (gABI, Symbol Table).
+    pub fn strong_undefs(&self) -> impl Iterator<Item = &str> {
+        (self.symbols.iter())
+            .filter(|s| {
+                s.binding() == STB_GLOBAL && s.shndx == u32::from(SHN_UNDEF) && !s.name.is_empty()
+            })
+            .map(|s| s.name.as_str())
     }
 
     pub(super) fn section_data(&self, s: &RawSection) -> &[u8] {

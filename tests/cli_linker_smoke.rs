@@ -24662,3 +24662,74 @@ fn a_cpp_throw_through_the_static_vc_runtime_is_caught() {
     let out = Command::new(&exe).output().expect("run the image");
     assert_eq!(out.status.code(), Some(0), "{out:?}");
 }
+
+/// gABI, Symbol Table: a weak undefined reference pulls no archive member,
+/// and a name `-u` lists is a reference ahead of every input, which does.
+/// The driver's -T link selects members as `badc --ld -T` does.
+#[test]
+fn a_script_link_pulls_members_for_strong_and_command_line_references_only() {
+    let dir = tempdir("script-link-archive-pulls");
+    let asm = |name: &str, body: &str| {
+        let src = write_source(&dir, &format!("{name}.s"), body);
+        let obj = dir.join(format!("{name}.o"));
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64", "-c"])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "assemble",
+        );
+        obj
+    };
+    let weak = asm(
+        "weak",
+        ".text\n.globl _start\n.weak w\n_start:\nmovq w@GOTPCREL(%rip), %rax\nret\n",
+    );
+    let bare = asm("bare", ".text\n.globl _start\n_start:\nret\n");
+    let members = [
+        asm("w", ".text\n.globl w\nw:\nmovl $0x44444444, %eax\nret\n"),
+        asm("u", ".text\n.globl u\nu:\nmovl $0x55555555, %eax\nret\n"),
+    ];
+    let lib = dir.join("libwu.a");
+    run(
+        Command::new(badc())
+            .arg("--ar")
+            .arg("-o")
+            .arg(&lib)
+            .args(&members),
+        "archive the members",
+    );
+    let script = write_source(
+        &dir,
+        "s.lds",
+        "ENTRY(_start)\nSECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    // Whether the image holds `w`'s and `u`'s code.
+    let pulled = |kind: &str, start: &Path, opts: &[&str]| {
+        let out = dir.join("out");
+        let mut cmd = Command::new(badc());
+        if kind == "--ld" {
+            cmd.arg("--ld");
+        } else {
+            cmd.args(["-q", "--target=linux-x64"]);
+        }
+        cmd.args(opts).arg("-T").arg(&script).arg(start).arg(&lib);
+        run(cmd.arg("-o").arg(&out), "link");
+        let image = std::fs::read(&out).expect("read the image");
+        let has = |imm: u8| image.windows(5).any(|w| w == [0xb8, imm, imm, imm, imm]);
+        (has(0x44), has(0x55))
+    };
+    for kind in ["-T", "--ld"] {
+        assert_eq!(
+            pulled(kind, &weak, &[]),
+            (false, false),
+            "{kind}: a weak reference"
+        );
+        assert_eq!(
+            pulled(kind, &bare, &["-u", "u"]),
+            (false, true),
+            "{kind}: -u u"
+        );
+    }
+}

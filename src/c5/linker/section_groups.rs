@@ -44,6 +44,8 @@ pub(crate) struct SectionGroups {
     /// The data family each output section is placed in: the widest of its
     /// contributions', so one output section is one region.
     placed: BTreeMap<String, SectionFamily>,
+    /// The sections of displaced COMDAT groups, as `(unit, record)`.
+    dropped: hashbrown::HashSet<(usize, u32)>,
 }
 
 impl SectionGroups {
@@ -75,6 +77,7 @@ impl SectionGroups {
             pe,
             merges,
             placed: BTreeMap::new(),
+            dropped: hashbrown::HashSet::new(),
         };
         let rank = |f: SectionFamily| match f {
             SectionFamily::RoData => 0,
@@ -160,6 +163,12 @@ impl SectionGroups {
         self.pe
     }
 
+    /// Leave the sections of displaced COMDAT groups out of every group.
+    pub(crate) fn leaving_out(mut self, dropped: &hashbrown::HashSet<(usize, u32)>) -> Self {
+        self.dropped = dropped.clone();
+        self
+    }
+
     /// The output section the grouped input section `name` joins.
     pub(crate) fn output<'a>(&'a self, name: &'a str) -> &'a str {
         match self.pe {
@@ -184,8 +193,13 @@ impl SectionGroups {
         fam: SectionFamily,
     ) -> Vec<(usize, &'o InputSection)> {
         let mut v: Vec<(usize, &'o InputSection)> = (objs.iter().enumerate())
-            .flat_map(|(i, o)| o.sections.iter().map(move |s| (i, s)))
-            .filter(|(_, s)| grouped_by_name(&s.name) && self.placed_family(s) == fam)
+            .flat_map(|(i, o)| o.sections.iter().enumerate().map(move |(k, s)| (i, k, s)))
+            .filter(|&(i, k, s)| {
+                grouped_by_name(&s.name)
+                    && self.placed_family(s) == fam
+                    && !self.dropped.contains(&(i, k as u32))
+            })
+            .map(|(i, _, s)| (i, s))
             .collect();
         let folded_last = fam == SectionFamily::Text;
         v.sort_by_cached_key(|&(i, s)| {

@@ -1481,9 +1481,10 @@ fn translate_relocs(
     sects: &[Sect],
     raw: &[Option<RawSym>],
     symbols: &[NativeSymbol],
+    comdats: &[Comdat],
 ) -> Result<Relocs, C5Error> {
     let mut out = Relocs::default();
-    let mut inits: Vec<(&str, u32, Vec<InitTarget>)> = Vec::new();
+    let mut inits: Vec<(&str, u32, Option<u32>, Vec<InitTarget>)> = Vec::new();
     for s in sects {
         if (s.family == SectionFamily::Discard && s.init.is_none()) || s.nrelocs == 0 {
             continue;
@@ -1574,13 +1575,17 @@ fn translate_relocs(
             }
         }
         if s.init.is_some() {
-            inits.push((s.name.as_str(), s.base as u32, entries));
+            let group = s.record.and_then(|r| {
+                let g = comdats.iter().position(|g| g.sections.contains(&r))?;
+                Some(g as u32)
+            });
+            inits.push((s.name.as_str(), s.base as u32, group, entries));
         }
     }
     // A name's `$` suffix orders its contributions; GNU runs `.ctors`
     // from its end.
     inits.sort_by(|a, b| a.0.cmp(b.0).then(a.1.cmp(&b.1)));
-    for (name, _, mut entries) in inits {
+    for (name, _, group, mut entries) in inits {
         let table = init_table(name).unwrap();
         if name.starts_with(".ctors") {
             entries.reverse();
@@ -1589,6 +1594,7 @@ fn translate_relocs(
             .extend(entries.into_iter().map(|target| NativeInitFunc {
                 table: table.clone(),
                 target,
+                group,
             }));
     }
     out.text.sort_by_key(|r| r.offset);
@@ -2070,7 +2076,7 @@ pub fn parse_native_coff(
         &mut alternate_names,
         &mut weak_aliases,
     )?;
-    let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
+    let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols, &comdats)?;
     let pe_unwind = read_unwind(bytes, h.machine, &sects, &raw)?;
     let guard_fids = read_guard_fids(bytes, &sects, &raw)?;
     let resources = read_resources(bytes, h.machine, &sects, &raw)?;

@@ -1352,6 +1352,157 @@ int main(void) {{
     )
 }
 
+/// CPU time the calling thread has consumed, which waiting for a core does not advance.
+#[cfg(not(debug_assertions))]
+pub(crate) fn thread_cpu_time() -> core::time::Duration {
+    #[cfg(unix)]
+    {
+        #[repr(C)]
+        struct Timespec {
+            sec: core::ffi::c_long,
+            nsec: core::ffi::c_long,
+        }
+        #[cfg(target_vendor = "apple")]
+        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 16;
+        #[cfg(not(target_vendor = "apple"))]
+        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 3;
+        unsafe extern "C" {
+            fn clock_gettime(id: core::ffi::c_int, ts: *mut Timespec) -> core::ffi::c_int;
+        }
+        let mut ts = Timespec { sec: 0, nsec: 0 };
+        assert_eq!(
+            unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &mut ts) },
+            0
+        );
+        core::time::Duration::new(ts.sec as u64, ts.nsec as u32)
+    }
+    #[cfg(windows)]
+    {
+        unsafe extern "system" {
+            fn GetCurrentThread() -> *mut core::ffi::c_void;
+            fn GetThreadTimes(
+                thread: *mut core::ffi::c_void,
+                creation: *mut [u32; 2],
+                exit: *mut [u32; 2],
+                kernel: *mut [u32; 2],
+                user: *mut [u32; 2],
+            ) -> core::ffi::c_int;
+        }
+        let mut t = [[0u32; 2]; 4];
+        let [c, e, k, u] = &mut t;
+        assert_ne!(unsafe { GetThreadTimes(GetCurrentThread(), c, e, k, u) }, 0);
+        let hundred_ns = |f: [u32; 2]| (u64::from(f[1]) << 32) | u64::from(f[0]);
+        core::time::Duration::from_nanos((hundred_ns(t[2]) + hundred_ns(t[3])) * 100)
+    }
+}
+
+/// A function with more values live at once than the register allocator
+/// builds its interference graph over: values live across a loop and read
+/// only at the start of its body, then three regions of the body, each
+/// holding `N` integers, doubles or vectors live at once, computed from the
+/// running sum and read in two chains of opposite order. Spilled values of
+/// one region may share slots with those of another, never with the values
+/// live across the loop. It exits 0 when its sums match the same sums kept
+/// in arrays.
+// Used only by the release-only JIT test, so it is dead on a debug build.
+#[allow(dead_code)]
+pub fn crowded_values_source() -> String {
+    use core::fmt::Write;
+    const M: usize = 8;
+    const N: usize = 150;
+    let mut f = String::new();
+    for k in 0..M {
+        writeln!(f, "    unsigned long a{k} = p[{k}] * {} + {k};", 2 * k + 1).unwrap();
+    }
+    f.push_str("    unsigned long s = 0;\n    for (int i = 0; i < n; i++) {\n");
+    let chains = |f: &mut String, value: &dyn Fn(usize) -> String, first: &str, second: &str| {
+        for k in 0..N {
+            writeln!(f, "{}", value(k)).unwrap();
+        }
+        for k in 0..N {
+            writeln!(f, "        s = s * {};", first.replace('#', &k.to_string())).unwrap();
+        }
+        for k in (0..N).rev() {
+            writeln!(
+                f,
+                "        s = s * {};",
+                second.replace('#', &k.to_string())
+            )
+            .unwrap();
+        }
+    };
+    chains(
+        &mut f,
+        &|k| {
+            let a = k % M;
+            format!(
+                "        unsigned long b{k} = (s * {}) ^ p[(i + {k}) % 256] ^ a{a};",
+                2 * k + 1
+            )
+        },
+        "31 + b#",
+        "37 + b#",
+    );
+    chains(
+        &mut f,
+        &|k| {
+            let sh = k % 50;
+            format!("        double d{k} = (double)((s >> {sh}) & 1023) * 0.5;")
+        },
+        "41 + (unsigned long)d#",
+        "43 + (unsigned long)(d# * 3.0)",
+    );
+    chains(
+        &mut f,
+        &|k| {
+            let sh = k % 40;
+            format!("        v4u v{k} = (v4u){{(unsigned)(s >> {sh}), {k}, (unsigned)i, 1}};")
+        },
+        "47 + v#[0]",
+        "53 + v#[0] + v#[1] + v#[2]",
+    );
+    format!(
+        r#"typedef unsigned v4u __attribute__((vector_size(16)));
+enum {{ M = {M}, N = {N} }};
+__attribute__((noinline)) static unsigned long crowded(const unsigned long *p, int n) {{
+{f}    }}
+    return s;
+}}
+__attribute__((noinline)) static unsigned long reference(const unsigned long *p, int n) {{
+    static unsigned long a[M], b[N];
+    static double d[N];
+    static v4u v[N];
+    for (int k = 0; k < M; k++) a[k] = p[k] * (2 * k + 1) + k;
+    unsigned long s = 0;
+    for (int i = 0; i < n; i++) {{
+        for (int k = 0; k < N; k++) b[k] = (s * (2 * k + 1)) ^ p[(i + k) % 256] ^ a[k % M];
+        for (int k = 0; k < N; k++) s = s * 31 + b[k];
+        for (int k = N - 1; k >= 0; k--) s = s * 37 + b[k];
+        for (int k = 0; k < N; k++) d[k] = (double)((s >> (k % 50)) & 1023) * 0.5;
+        for (int k = 0; k < N; k++) s = s * 41 + (unsigned long)d[k];
+        for (int k = N - 1; k >= 0; k--) s = s * 43 + (unsigned long)(d[k] * 3.0);
+        for (int k = 0; k < N; k++) v[k] = (v4u){{(unsigned)(s >> (k % 40)), k, (unsigned)i, 1}};
+        for (int k = 0; k < N; k++) s = s * 47 + v[k][0];
+        for (int k = N - 1; k >= 0; k--) s = s * 53 + v[k][0] + v[k][1] + v[k][2];
+    }}
+    return s;
+}}
+static volatile int rounds = 3;
+int main(void) {{
+    static unsigned long p[256];
+    unsigned long x = 88172645463325252UL;
+    for (int k = 0; k < 256; k++) {{
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        p[k] = x;
+    }}
+    return crowded(p, rounds) != reference(p, rounds);
+}}
+"#
+    )
+}
+
 /// Objects at 8 KiB and 16 KiB alignment in `.data`, `.bss`, a named
 /// read-only section and the relro region, as the defining unit and the
 /// checking one; the second holds a thread-local, whose template the

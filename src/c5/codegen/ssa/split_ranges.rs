@@ -221,15 +221,27 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
     }
     // Point each run's uses at its copy. The window opens after the
     // copy, so the copy keeps reading the original value even when a
-    // later run of the same value shares the block.
+    // later run of the same value shares the block. A run visits its
+    // value's readers in the window, not every instruction there.
+    let sources: alloc::collections::BTreeSet<ValueId> =
+        runs.iter().map(|r| rewrite.remap[r.src as usize]).collect();
+    let mut readers: alloc::collections::BTreeMap<ValueId, Vec<ValueId>> = Default::default();
+    for (i, inst) in func.insts.iter().enumerate() {
+        if matches!(inst, Inst::Phi { .. }) {
+            continue;
+        }
+        inst.for_each_operand(|op| {
+            if sources.contains(&op) {
+                readers.entry(op).or_default().push(i as ValueId);
+            }
+        });
+    }
     for (k, r) in runs.iter().enumerate() {
         let new_src = rewrite.remap[r.src as usize];
-        let from = copy_id[k] + 1;
-        let to = rewrite.remap[r.last as usize];
-        for i in from..=to {
-            if matches!(func.insts[i as usize], Inst::Phi { .. }) {
-                continue;
-            }
+        let (from, to) = (copy_id[k] + 1, rewrite.remap[r.last as usize]);
+        let at = readers.get(&new_src).map_or(&[][..], |v| &v[..]);
+        let start = at.partition_point(|&i| i < from);
+        for &i in at[start..].iter().take_while(|&&i| i <= to) {
             func.insts[i as usize].for_each_operand_mut(|op| {
                 if *op == new_src {
                     *op = copy_id[k];

@@ -3745,517 +3745,517 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v36  Imm(64)                                          -> -
     v37  BinopI { op=add, lhs=v28, rhs_imm=64 }           -> -
     v38  Imm(80)                                          -> -
-    v39  BinopI { op=add, lhs=v28, rhs_imm=80 }           -> x14
+    v39  BinopI { op=add, lhs=v28, rhs_imm=80 }           -> [spill 111]
     v40  Imm(96)                                          -> -
-    v41  BinopI { op=add, lhs=v28, rhs_imm=96 }           -> x15
+    v41  BinopI { op=add, lhs=v28, rhs_imm=96 }           -> [spill 112]
     v42  Imm(112)                                         -> -
-    v43  BinopI { op=add, lhs=v28, rhs_imm=112 }          -> [spill 0]
+    v43  BinopI { op=add, lhs=v28, rhs_imm=112 }          -> [spill 113]
     v44  Imm(128)                                         -> -
-    v45  BinopI { op=add, lhs=v28, rhs_imm=128 }          -> [spill 1]
+    v45  BinopI { op=add, lhs=v28, rhs_imm=128 }          -> [spill 114]
     v46  Imm(144)                                         -> -
-    v47  BinopI { op=add, lhs=v28, rhs_imm=144 }          -> [spill 2]
+    v47  BinopI { op=add, lhs=v28, rhs_imm=144 }          -> [spill 115]
     v48  Imm(160)                                         -> -
-    v49  BinopI { op=add, lhs=v28, rhs_imm=160 }          -> [spill 3]
+    v49  BinopI { op=add, lhs=v28, rhs_imm=160 }          -> [spill 116]
     v50  Imm(176)                                         -> -
-    v51  BinopI { op=add, lhs=v28, rhs_imm=176 }          -> [spill 4]
+    v51  BinopI { op=add, lhs=v28, rhs_imm=176 }          -> [spill 117]
     v52  Imm(192)                                         -> -
-    v53  BinopI { op=add, lhs=v28, rhs_imm=192 }          -> [spill 5]
+    v53  BinopI { op=add, lhs=v28, rhs_imm=192 }          -> [spill 118]
     v54  Imm(208)                                         -> -
-    v55  BinopI { op=add, lhs=v28, rhs_imm=208 }          -> [spill 6]
+    v55  BinopI { op=add, lhs=v28, rhs_imm=208 }          -> [spill 119]
     v56  Imm(224)                                         -> -
-    v57  BinopI { op=add, lhs=v28, rhs_imm=224 }          -> [spill 7]
+    v57  BinopI { op=add, lhs=v28, rhs_imm=224 }          -> [spill 120]
     v58  Imm(240)                                         -> -
-    v59  BinopI { op=add, lhs=v28, rhs_imm=240 }          -> [spill 8]
+    v59  BinopI { op=add, lhs=v28, rhs_imm=240 }          -> [spill 121]
     v60  Imm(256)                                         -> -
-    v61  BinopI { op=add, lhs=v28, rhs_imm=256 }          -> [spill 9]
+    v61  BinopI { op=add, lhs=v28, rhs_imm=256 }          -> [spill 122]
     v62  Imm(272)                                         -> -
-    v63  BinopI { op=add, lhs=v28, rhs_imm=272 }          -> [spill 10]
+    v63  BinopI { op=add, lhs=v28, rhs_imm=272 }          -> [spill 123]
     v64  Imm(288)                                         -> -
-    v65  BinopI { op=add, lhs=v28, rhs_imm=288 }          -> [spill 11]
+    v65  BinopI { op=add, lhs=v28, rhs_imm=288 }          -> [spill 124]
     v66  Imm(304)                                         -> -
-    v67  BinopI { op=add, lhs=v28, rhs_imm=304 }          -> [spill 12]
+    v67  BinopI { op=add, lhs=v28, rhs_imm=304 }          -> [spill 125]
     v68  Imm(320)                                         -> -
-    v69  BinopI { op=add, lhs=v28, rhs_imm=320 }          -> [spill 13]
+    v69  BinopI { op=add, lhs=v28, rhs_imm=320 }          -> [spill 126]
     v70  Imm(336)                                         -> -
-    v71  BinopI { op=add, lhs=v28, rhs_imm=336 }          -> [spill 14]
+    v71  BinopI { op=add, lhs=v28, rhs_imm=336 }          -> [spill 127]
     v72  Imm(352)                                         -> -
-    v73  BinopI { op=add, lhs=v28, rhs_imm=352 }          -> [spill 15]
+    v73  BinopI { op=add, lhs=v28, rhs_imm=352 }          -> [spill 128]
     v74  Imm(368)                                         -> -
-    v75  BinopI { op=add, lhs=v28, rhs_imm=368 }          -> [spill 16]
+    v75  BinopI { op=add, lhs=v28, rhs_imm=368 }          -> [spill 129]
     v76  Imm(384)                                         -> -
-    v77  BinopI { op=add, lhs=v28, rhs_imm=384 }          -> [spill 17]
+    v77  BinopI { op=add, lhs=v28, rhs_imm=384 }          -> [spill 130]
     v78  Imm(400)                                         -> -
-    v79  BinopI { op=add, lhs=v28, rhs_imm=400 }          -> [spill 18]
+    v79  BinopI { op=add, lhs=v28, rhs_imm=400 }          -> [spill 131]
     v80  Imm(416)                                         -> -
-    v81  BinopI { op=add, lhs=v28, rhs_imm=416 }          -> [spill 19]
+    v81  BinopI { op=add, lhs=v28, rhs_imm=416 }          -> [spill 132]
     v82  Imm(432)                                         -> -
-    v83  BinopI { op=add, lhs=v28, rhs_imm=432 }          -> [spill 20]
+    v83  BinopI { op=add, lhs=v28, rhs_imm=432 }          -> [spill 133]
     v84  Imm(448)                                         -> -
-    v85  BinopI { op=add, lhs=v28, rhs_imm=448 }          -> [spill 21]
+    v85  BinopI { op=add, lhs=v28, rhs_imm=448 }          -> [spill 134]
     v86  Imm(464)                                         -> -
-    v87  BinopI { op=add, lhs=v28, rhs_imm=464 }          -> [spill 22]
+    v87  BinopI { op=add, lhs=v28, rhs_imm=464 }          -> [spill 135]
     v88  Imm(480)                                         -> -
-    v89  BinopI { op=add, lhs=v28, rhs_imm=480 }          -> [spill 23]
+    v89  BinopI { op=add, lhs=v28, rhs_imm=480 }          -> [spill 136]
     v90  Imm(496)                                         -> -
-    v91  BinopI { op=add, lhs=v28, rhs_imm=496 }          -> [spill 24]
+    v91  BinopI { op=add, lhs=v28, rhs_imm=496 }          -> [spill 137]
     v92  Imm(512)                                         -> -
-    v93  BinopI { op=add, lhs=v28, rhs_imm=512 }          -> [spill 25]
+    v93  BinopI { op=add, lhs=v28, rhs_imm=512 }          -> [spill 138]
     v94  Imm(528)                                         -> -
-    v95  BinopI { op=add, lhs=v28, rhs_imm=528 }          -> [spill 26]
+    v95  BinopI { op=add, lhs=v28, rhs_imm=528 }          -> [spill 139]
     v96  Imm(544)                                         -> -
-    v97  BinopI { op=add, lhs=v28, rhs_imm=544 }          -> [spill 27]
+    v97  BinopI { op=add, lhs=v28, rhs_imm=544 }          -> [spill 140]
     v98  Imm(560)                                         -> -
-    v99  BinopI { op=add, lhs=v28, rhs_imm=560 }          -> [spill 28]
+    v99  BinopI { op=add, lhs=v28, rhs_imm=560 }          -> [spill 141]
     v100 Imm(576)                                         -> -
-    v101 BinopI { op=add, lhs=v28, rhs_imm=576 }          -> [spill 29]
+    v101 BinopI { op=add, lhs=v28, rhs_imm=576 }          -> [spill 142]
     v102 Imm(592)                                         -> -
-    v103 BinopI { op=add, lhs=v28, rhs_imm=592 }          -> [spill 30]
+    v103 BinopI { op=add, lhs=v28, rhs_imm=592 }          -> [spill 143]
     v104 Imm(608)                                         -> -
-    v105 BinopI { op=add, lhs=v28, rhs_imm=608 }          -> [spill 31]
+    v105 BinopI { op=add, lhs=v28, rhs_imm=608 }          -> [spill 144]
     v106 Imm(624)                                         -> -
-    v107 BinopI { op=add, lhs=v28, rhs_imm=624 }          -> [spill 32]
+    v107 BinopI { op=add, lhs=v28, rhs_imm=624 }          -> [spill 145]
     v108 Imm(640)                                         -> -
-    v109 BinopI { op=add, lhs=v28, rhs_imm=640 }          -> [spill 33]
+    v109 BinopI { op=add, lhs=v28, rhs_imm=640 }          -> [spill 146]
     v110 Imm(656)                                         -> -
-    v111 BinopI { op=add, lhs=v28, rhs_imm=656 }          -> [spill 34]
+    v111 BinopI { op=add, lhs=v28, rhs_imm=656 }          -> [spill 147]
     v112 Imm(672)                                         -> -
-    v113 BinopI { op=add, lhs=v28, rhs_imm=672 }          -> [spill 35]
+    v113 BinopI { op=add, lhs=v28, rhs_imm=672 }          -> [spill 148]
     v114 Imm(688)                                         -> -
-    v115 BinopI { op=add, lhs=v28, rhs_imm=688 }          -> [spill 36]
+    v115 BinopI { op=add, lhs=v28, rhs_imm=688 }          -> [spill 149]
     v116 Imm(704)                                         -> -
-    v117 BinopI { op=add, lhs=v28, rhs_imm=704 }          -> [spill 37]
+    v117 BinopI { op=add, lhs=v28, rhs_imm=704 }          -> [spill 150]
     v118 Imm(720)                                         -> -
-    v119 BinopI { op=add, lhs=v28, rhs_imm=720 }          -> [spill 38]
+    v119 BinopI { op=add, lhs=v28, rhs_imm=720 }          -> [spill 151]
     v120 Imm(736)                                         -> -
-    v121 BinopI { op=add, lhs=v28, rhs_imm=736 }          -> [spill 39]
+    v121 BinopI { op=add, lhs=v28, rhs_imm=736 }          -> [spill 152]
     v122 Imm(752)                                         -> -
-    v123 BinopI { op=add, lhs=v28, rhs_imm=752 }          -> [spill 40]
+    v123 BinopI { op=add, lhs=v28, rhs_imm=752 }          -> [spill 153]
     v124 Imm(768)                                         -> -
-    v125 BinopI { op=add, lhs=v28, rhs_imm=768 }          -> [spill 41]
+    v125 BinopI { op=add, lhs=v28, rhs_imm=768 }          -> [spill 154]
     v126 Imm(784)                                         -> -
-    v127 BinopI { op=add, lhs=v28, rhs_imm=784 }          -> [spill 42]
+    v127 BinopI { op=add, lhs=v28, rhs_imm=784 }          -> [spill 155]
     v128 Imm(800)                                         -> -
-    v129 BinopI { op=add, lhs=v28, rhs_imm=800 }          -> [spill 43]
+    v129 BinopI { op=add, lhs=v28, rhs_imm=800 }          -> [spill 156]
     v130 Imm(816)                                         -> -
-    v131 BinopI { op=add, lhs=v28, rhs_imm=816 }          -> [spill 44]
+    v131 BinopI { op=add, lhs=v28, rhs_imm=816 }          -> [spill 157]
     v132 Imm(832)                                         -> -
-    v133 BinopI { op=add, lhs=v28, rhs_imm=832 }          -> [spill 45]
+    v133 BinopI { op=add, lhs=v28, rhs_imm=832 }          -> [spill 158]
     v134 Imm(848)                                         -> -
-    v135 BinopI { op=add, lhs=v28, rhs_imm=848 }          -> [spill 46]
+    v135 BinopI { op=add, lhs=v28, rhs_imm=848 }          -> [spill 159]
     v136 Imm(864)                                         -> -
-    v137 BinopI { op=add, lhs=v28, rhs_imm=864 }          -> [spill 47]
+    v137 BinopI { op=add, lhs=v28, rhs_imm=864 }          -> [spill 160]
     v138 Imm(880)                                         -> -
-    v139 BinopI { op=add, lhs=v28, rhs_imm=880 }          -> [spill 48]
+    v139 BinopI { op=add, lhs=v28, rhs_imm=880 }          -> [spill 161]
     v140 Imm(896)                                         -> -
-    v141 BinopI { op=add, lhs=v28, rhs_imm=896 }          -> [spill 49]
+    v141 BinopI { op=add, lhs=v28, rhs_imm=896 }          -> [spill 162]
     v142 Imm(912)                                         -> -
-    v143 BinopI { op=add, lhs=v28, rhs_imm=912 }          -> [spill 50]
+    v143 BinopI { op=add, lhs=v28, rhs_imm=912 }          -> [spill 163]
     v144 Imm(928)                                         -> -
-    v145 BinopI { op=add, lhs=v28, rhs_imm=928 }          -> [spill 51]
+    v145 BinopI { op=add, lhs=v28, rhs_imm=928 }          -> [spill 164]
     v146 Imm(944)                                         -> -
-    v147 BinopI { op=add, lhs=v28, rhs_imm=944 }          -> [spill 52]
+    v147 BinopI { op=add, lhs=v28, rhs_imm=944 }          -> [spill 165]
     v148 Imm(960)                                         -> -
-    v149 BinopI { op=add, lhs=v28, rhs_imm=960 }          -> [spill 53]
+    v149 BinopI { op=add, lhs=v28, rhs_imm=960 }          -> [spill 166]
     v150 Imm(976)                                         -> -
-    v151 BinopI { op=add, lhs=v28, rhs_imm=976 }          -> [spill 54]
+    v151 BinopI { op=add, lhs=v28, rhs_imm=976 }          -> [spill 167]
     v152 Imm(992)                                         -> -
-    v153 BinopI { op=add, lhs=v28, rhs_imm=992 }          -> [spill 55]
+    v153 BinopI { op=add, lhs=v28, rhs_imm=992 }          -> [spill 168]
     v154 Imm(1008)                                        -> -
-    v155 BinopI { op=add, lhs=v28, rhs_imm=1008 }         -> [spill 56]
+    v155 BinopI { op=add, lhs=v28, rhs_imm=1008 }         -> [spill 169]
     v156 Imm(1024)                                        -> -
-    v157 BinopI { op=add, lhs=v28, rhs_imm=1024 }         -> [spill 57]
+    v157 BinopI { op=add, lhs=v28, rhs_imm=1024 }         -> [spill 170]
     v158 Imm(1040)                                        -> -
-    v159 BinopI { op=add, lhs=v28, rhs_imm=1040 }         -> [spill 58]
+    v159 BinopI { op=add, lhs=v28, rhs_imm=1040 }         -> [spill 171]
     v160 Imm(1056)                                        -> -
-    v161 BinopI { op=add, lhs=v28, rhs_imm=1056 }         -> [spill 59]
+    v161 BinopI { op=add, lhs=v28, rhs_imm=1056 }         -> [spill 172]
     v162 Imm(1072)                                        -> -
-    v163 BinopI { op=add, lhs=v28, rhs_imm=1072 }         -> [spill 60]
+    v163 BinopI { op=add, lhs=v28, rhs_imm=1072 }         -> [spill 173]
     v164 Imm(1088)                                        -> -
-    v165 BinopI { op=add, lhs=v28, rhs_imm=1088 }         -> [spill 61]
+    v165 BinopI { op=add, lhs=v28, rhs_imm=1088 }         -> [spill 174]
     v166 Imm(1104)                                        -> -
-    v167 BinopI { op=add, lhs=v28, rhs_imm=1104 }         -> [spill 62]
+    v167 BinopI { op=add, lhs=v28, rhs_imm=1104 }         -> [spill 175]
     v168 Imm(1120)                                        -> -
-    v169 BinopI { op=add, lhs=v28, rhs_imm=1120 }         -> [spill 63]
+    v169 BinopI { op=add, lhs=v28, rhs_imm=1120 }         -> [spill 176]
     v170 Imm(1136)                                        -> -
-    v171 BinopI { op=add, lhs=v28, rhs_imm=1136 }         -> [spill 64]
+    v171 BinopI { op=add, lhs=v28, rhs_imm=1136 }         -> [spill 177]
     v172 Imm(1152)                                        -> -
-    v173 BinopI { op=add, lhs=v28, rhs_imm=1152 }         -> [spill 65]
+    v173 BinopI { op=add, lhs=v28, rhs_imm=1152 }         -> [spill 178]
     v174 Imm(1168)                                        -> -
-    v175 BinopI { op=add, lhs=v28, rhs_imm=1168 }         -> [spill 66]
+    v175 BinopI { op=add, lhs=v28, rhs_imm=1168 }         -> [spill 179]
     v176 Imm(1184)                                        -> -
-    v177 BinopI { op=add, lhs=v28, rhs_imm=1184 }         -> [spill 67]
+    v177 BinopI { op=add, lhs=v28, rhs_imm=1184 }         -> [spill 180]
     v178 Imm(1200)                                        -> -
-    v179 BinopI { op=add, lhs=v28, rhs_imm=1200 }         -> [spill 68]
+    v179 BinopI { op=add, lhs=v28, rhs_imm=1200 }         -> [spill 181]
     v180 Imm(1216)                                        -> -
-    v181 BinopI { op=add, lhs=v28, rhs_imm=1216 }         -> [spill 69]
+    v181 BinopI { op=add, lhs=v28, rhs_imm=1216 }         -> [spill 182]
     v182 Imm(1232)                                        -> -
-    v183 BinopI { op=add, lhs=v28, rhs_imm=1232 }         -> [spill 70]
+    v183 BinopI { op=add, lhs=v28, rhs_imm=1232 }         -> [spill 183]
     v184 Imm(1248)                                        -> -
-    v185 BinopI { op=add, lhs=v28, rhs_imm=1248 }         -> [spill 71]
+    v185 BinopI { op=add, lhs=v28, rhs_imm=1248 }         -> [spill 184]
     v186 Imm(1264)                                        -> -
-    v187 BinopI { op=add, lhs=v28, rhs_imm=1264 }         -> [spill 72]
+    v187 BinopI { op=add, lhs=v28, rhs_imm=1264 }         -> [spill 185]
     v188 Imm(1280)                                        -> -
-    v189 BinopI { op=add, lhs=v28, rhs_imm=1280 }         -> [spill 73]
+    v189 BinopI { op=add, lhs=v28, rhs_imm=1280 }         -> [spill 186]
     v190 Imm(1296)                                        -> -
-    v191 BinopI { op=add, lhs=v28, rhs_imm=1296 }         -> [spill 74]
+    v191 BinopI { op=add, lhs=v28, rhs_imm=1296 }         -> [spill 187]
     v192 Imm(1312)                                        -> -
-    v193 BinopI { op=add, lhs=v28, rhs_imm=1312 }         -> [spill 75]
+    v193 BinopI { op=add, lhs=v28, rhs_imm=1312 }         -> [spill 188]
     v194 Imm(1328)                                        -> -
-    v195 BinopI { op=add, lhs=v28, rhs_imm=1328 }         -> [spill 76]
+    v195 BinopI { op=add, lhs=v28, rhs_imm=1328 }         -> [spill 189]
     v196 Imm(1344)                                        -> -
-    v197 BinopI { op=add, lhs=v28, rhs_imm=1344 }         -> [spill 77]
+    v197 BinopI { op=add, lhs=v28, rhs_imm=1344 }         -> [spill 190]
     v198 Imm(1360)                                        -> -
-    v199 BinopI { op=add, lhs=v28, rhs_imm=1360 }         -> [spill 78]
+    v199 BinopI { op=add, lhs=v28, rhs_imm=1360 }         -> [spill 191]
     v200 Imm(1376)                                        -> -
-    v201 BinopI { op=add, lhs=v28, rhs_imm=1376 }         -> [spill 79]
+    v201 BinopI { op=add, lhs=v28, rhs_imm=1376 }         -> [spill 192]
     v202 Imm(1392)                                        -> -
-    v203 BinopI { op=add, lhs=v28, rhs_imm=1392 }         -> [spill 80]
+    v203 BinopI { op=add, lhs=v28, rhs_imm=1392 }         -> [spill 193]
     v204 Imm(1408)                                        -> -
-    v205 BinopI { op=add, lhs=v28, rhs_imm=1408 }         -> [spill 81]
+    v205 BinopI { op=add, lhs=v28, rhs_imm=1408 }         -> [spill 194]
     v206 Imm(1424)                                        -> -
-    v207 BinopI { op=add, lhs=v28, rhs_imm=1424 }         -> [spill 82]
+    v207 BinopI { op=add, lhs=v28, rhs_imm=1424 }         -> [spill 195]
     v208 Imm(1440)                                        -> -
-    v209 BinopI { op=add, lhs=v28, rhs_imm=1440 }         -> [spill 83]
+    v209 BinopI { op=add, lhs=v28, rhs_imm=1440 }         -> [spill 196]
     v210 Imm(1456)                                        -> -
-    v211 BinopI { op=add, lhs=v28, rhs_imm=1456 }         -> [spill 84]
+    v211 BinopI { op=add, lhs=v28, rhs_imm=1456 }         -> [spill 197]
     v212 Imm(1472)                                        -> -
-    v213 BinopI { op=add, lhs=v28, rhs_imm=1472 }         -> [spill 85]
+    v213 BinopI { op=add, lhs=v28, rhs_imm=1472 }         -> [spill 198]
     v214 Imm(1488)                                        -> -
-    v215 BinopI { op=add, lhs=v28, rhs_imm=1488 }         -> [spill 86]
+    v215 BinopI { op=add, lhs=v28, rhs_imm=1488 }         -> [spill 199]
     v216 Imm(1504)                                        -> -
-    v217 BinopI { op=add, lhs=v28, rhs_imm=1504 }         -> [spill 87]
+    v217 BinopI { op=add, lhs=v28, rhs_imm=1504 }         -> [spill 200]
     v218 Imm(1520)                                        -> -
-    v219 BinopI { op=add, lhs=v28, rhs_imm=1520 }         -> [spill 88]
+    v219 BinopI { op=add, lhs=v28, rhs_imm=1520 }         -> [spill 201]
     v220 Imm(1536)                                        -> -
-    v221 BinopI { op=add, lhs=v28, rhs_imm=1536 }         -> [spill 89]
+    v221 BinopI { op=add, lhs=v28, rhs_imm=1536 }         -> [spill 202]
     v222 Imm(1552)                                        -> -
-    v223 BinopI { op=add, lhs=v28, rhs_imm=1552 }         -> [spill 90]
+    v223 BinopI { op=add, lhs=v28, rhs_imm=1552 }         -> [spill 203]
     v224 Imm(1568)                                        -> -
-    v225 BinopI { op=add, lhs=v28, rhs_imm=1568 }         -> [spill 91]
+    v225 BinopI { op=add, lhs=v28, rhs_imm=1568 }         -> [spill 204]
     v226 Imm(1584)                                        -> -
-    v227 BinopI { op=add, lhs=v28, rhs_imm=1584 }         -> [spill 92]
+    v227 BinopI { op=add, lhs=v28, rhs_imm=1584 }         -> [spill 205]
     v228 Imm(1600)                                        -> -
-    v229 BinopI { op=add, lhs=v28, rhs_imm=1600 }         -> [spill 93]
+    v229 BinopI { op=add, lhs=v28, rhs_imm=1600 }         -> [spill 206]
     v230 Imm(1616)                                        -> -
-    v231 BinopI { op=add, lhs=v28, rhs_imm=1616 }         -> [spill 94]
+    v231 BinopI { op=add, lhs=v28, rhs_imm=1616 }         -> [spill 207]
     v232 Imm(1632)                                        -> -
-    v233 BinopI { op=add, lhs=v28, rhs_imm=1632 }         -> [spill 95]
+    v233 BinopI { op=add, lhs=v28, rhs_imm=1632 }         -> [spill 208]
     v234 Imm(1648)                                        -> -
-    v235 BinopI { op=add, lhs=v28, rhs_imm=1648 }         -> [spill 96]
+    v235 BinopI { op=add, lhs=v28, rhs_imm=1648 }         -> [spill 209]
     v236 Imm(1664)                                        -> -
-    v237 BinopI { op=add, lhs=v28, rhs_imm=1664 }         -> [spill 97]
+    v237 BinopI { op=add, lhs=v28, rhs_imm=1664 }         -> [spill 210]
     v238 Imm(1680)                                        -> -
-    v239 BinopI { op=add, lhs=v28, rhs_imm=1680 }         -> [spill 98]
+    v239 BinopI { op=add, lhs=v28, rhs_imm=1680 }         -> [spill 211]
     v240 Imm(1696)                                        -> -
-    v241 BinopI { op=add, lhs=v28, rhs_imm=1696 }         -> [spill 99]
+    v241 BinopI { op=add, lhs=v28, rhs_imm=1696 }         -> [spill 212]
     v242 Imm(1712)                                        -> -
-    v243 BinopI { op=add, lhs=v28, rhs_imm=1712 }         -> [spill 100]
+    v243 BinopI { op=add, lhs=v28, rhs_imm=1712 }         -> [spill 213]
     v244 Imm(1728)                                        -> -
-    v245 BinopI { op=add, lhs=v28, rhs_imm=1728 }         -> [spill 101]
+    v245 BinopI { op=add, lhs=v28, rhs_imm=1728 }         -> [spill 214]
     v246 Imm(1744)                                        -> -
-    v247 BinopI { op=add, lhs=v28, rhs_imm=1744 }         -> [spill 102]
+    v247 BinopI { op=add, lhs=v28, rhs_imm=1744 }         -> [spill 215]
     v248 Imm(1760)                                        -> -
-    v249 BinopI { op=add, lhs=v28, rhs_imm=1760 }         -> [spill 103]
+    v249 BinopI { op=add, lhs=v28, rhs_imm=1760 }         -> [spill 216]
     v250 Imm(1776)                                        -> -
-    v251 BinopI { op=add, lhs=v28, rhs_imm=1776 }         -> [spill 104]
+    v251 BinopI { op=add, lhs=v28, rhs_imm=1776 }         -> [spill 217]
     v252 Imm(1792)                                        -> -
-    v253 BinopI { op=add, lhs=v28, rhs_imm=1792 }         -> [spill 105]
+    v253 BinopI { op=add, lhs=v28, rhs_imm=1792 }         -> [spill 218]
     v254 Imm(1808)                                        -> -
-    v255 BinopI { op=add, lhs=v28, rhs_imm=1808 }         -> [spill 106]
+    v255 BinopI { op=add, lhs=v28, rhs_imm=1808 }         -> [spill 219]
     v256 Imm(1824)                                        -> -
-    v257 BinopI { op=add, lhs=v28, rhs_imm=1824 }         -> [spill 107]
+    v257 BinopI { op=add, lhs=v28, rhs_imm=1824 }         -> [spill 220]
     v258 Imm(1840)                                        -> -
-    v259 BinopI { op=add, lhs=v28, rhs_imm=1840 }         -> [spill 108]
+    v259 BinopI { op=add, lhs=v28, rhs_imm=1840 }         -> [spill 221]
     v260 Imm(1856)                                        -> -
-    v261 BinopI { op=add, lhs=v28, rhs_imm=1856 }         -> [spill 109]
+    v261 BinopI { op=add, lhs=v28, rhs_imm=1856 }         -> [spill 222]
     v262 Imm(1872)                                        -> -
-    v263 BinopI { op=add, lhs=v28, rhs_imm=1872 }         -> [spill 110]
+    v263 BinopI { op=add, lhs=v28, rhs_imm=1872 }         -> [spill 223]
     v264 Imm(1888)                                        -> -
-    v265 BinopI { op=add, lhs=v28, rhs_imm=1888 }         -> [spill 111]
+    v265 BinopI { op=add, lhs=v28, rhs_imm=1888 }         -> [spill 224]
     v266 Imm(1904)                                        -> -
-    v267 BinopI { op=add, lhs=v28, rhs_imm=1904 }         -> [spill 112]
+    v267 BinopI { op=add, lhs=v28, rhs_imm=1904 }         -> [spill 225]
     v268 Imm(1920)                                        -> -
-    v269 BinopI { op=add, lhs=v28, rhs_imm=1920 }         -> [spill 113]
+    v269 BinopI { op=add, lhs=v28, rhs_imm=1920 }         -> [spill 226]
     v270 Imm(1936)                                        -> -
-    v271 BinopI { op=add, lhs=v28, rhs_imm=1936 }         -> [spill 114]
+    v271 BinopI { op=add, lhs=v28, rhs_imm=1936 }         -> [spill 227]
     v272 Imm(1952)                                        -> -
-    v273 BinopI { op=add, lhs=v28, rhs_imm=1952 }         -> [spill 115]
+    v273 BinopI { op=add, lhs=v28, rhs_imm=1952 }         -> [spill 228]
     v274 Imm(1968)                                        -> -
-    v275 BinopI { op=add, lhs=v28, rhs_imm=1968 }         -> [spill 116]
+    v275 BinopI { op=add, lhs=v28, rhs_imm=1968 }         -> [spill 229]
     v276 Imm(1984)                                        -> -
-    v277 BinopI { op=add, lhs=v28, rhs_imm=1984 }         -> [spill 117]
+    v277 BinopI { op=add, lhs=v28, rhs_imm=1984 }         -> [spill 230]
     v278 Imm(2000)                                        -> -
-    v279 BinopI { op=add, lhs=v28, rhs_imm=2000 }         -> [spill 118]
+    v279 BinopI { op=add, lhs=v28, rhs_imm=2000 }         -> [spill 231]
     v280 Imm(2016)                                        -> -
-    v281 BinopI { op=add, lhs=v28, rhs_imm=2016 }         -> [spill 119]
+    v281 BinopI { op=add, lhs=v28, rhs_imm=2016 }         -> [spill 232]
     v282 Imm(2032)                                        -> -
-    v283 BinopI { op=add, lhs=v28, rhs_imm=2032 }         -> [spill 120]
+    v283 BinopI { op=add, lhs=v28, rhs_imm=2032 }         -> [spill 233]
     v284 Imm(2048)                                        -> -
-    v285 BinopI { op=add, lhs=v28, rhs_imm=2048 }         -> [spill 121]
+    v285 BinopI { op=add, lhs=v28, rhs_imm=2048 }         -> [spill 234]
     v286 Imm(2064)                                        -> -
-    v287 BinopI { op=add, lhs=v28, rhs_imm=2064 }         -> [spill 122]
+    v287 BinopI { op=add, lhs=v28, rhs_imm=2064 }         -> [spill 235]
     v288 Imm(2080)                                        -> -
-    v289 BinopI { op=add, lhs=v28, rhs_imm=2080 }         -> [spill 123]
+    v289 BinopI { op=add, lhs=v28, rhs_imm=2080 }         -> [spill 236]
     v290 Imm(2096)                                        -> -
-    v291 BinopI { op=add, lhs=v28, rhs_imm=2096 }         -> [spill 124]
+    v291 BinopI { op=add, lhs=v28, rhs_imm=2096 }         -> [spill 237]
     v292 Imm(2112)                                        -> -
-    v293 BinopI { op=add, lhs=v28, rhs_imm=2112 }         -> [spill 125]
+    v293 BinopI { op=add, lhs=v28, rhs_imm=2112 }         -> [spill 238]
     v294 Imm(2128)                                        -> -
-    v295 BinopI { op=add, lhs=v28, rhs_imm=2128 }         -> [spill 126]
+    v295 BinopI { op=add, lhs=v28, rhs_imm=2128 }         -> [spill 239]
     v296 Imm(2144)                                        -> -
-    v297 BinopI { op=add, lhs=v28, rhs_imm=2144 }         -> [spill 127]
+    v297 BinopI { op=add, lhs=v28, rhs_imm=2144 }         -> [spill 240]
     v298 Imm(2160)                                        -> -
-    v299 BinopI { op=add, lhs=v28, rhs_imm=2160 }         -> [spill 128]
+    v299 BinopI { op=add, lhs=v28, rhs_imm=2160 }         -> [spill 241]
     v300 Imm(2176)                                        -> -
-    v301 BinopI { op=add, lhs=v28, rhs_imm=2176 }         -> [spill 129]
+    v301 BinopI { op=add, lhs=v28, rhs_imm=2176 }         -> [spill 242]
     v302 Imm(2192)                                        -> -
-    v303 BinopI { op=add, lhs=v28, rhs_imm=2192 }         -> [spill 130]
+    v303 BinopI { op=add, lhs=v28, rhs_imm=2192 }         -> [spill 243]
     v304 Imm(2208)                                        -> -
-    v305 BinopI { op=add, lhs=v28, rhs_imm=2208 }         -> [spill 131]
+    v305 BinopI { op=add, lhs=v28, rhs_imm=2208 }         -> [spill 244]
     v306 Imm(2224)                                        -> -
-    v307 BinopI { op=add, lhs=v28, rhs_imm=2224 }         -> [spill 132]
+    v307 BinopI { op=add, lhs=v28, rhs_imm=2224 }         -> [spill 245]
     v308 Imm(2240)                                        -> -
-    v309 BinopI { op=add, lhs=v28, rhs_imm=2240 }         -> [spill 133]
+    v309 BinopI { op=add, lhs=v28, rhs_imm=2240 }         -> [spill 246]
     v310 Imm(2256)                                        -> -
-    v311 BinopI { op=add, lhs=v28, rhs_imm=2256 }         -> [spill 134]
+    v311 BinopI { op=add, lhs=v28, rhs_imm=2256 }         -> [spill 247]
     v312 Imm(2272)                                        -> -
-    v313 BinopI { op=add, lhs=v28, rhs_imm=2272 }         -> [spill 135]
+    v313 BinopI { op=add, lhs=v28, rhs_imm=2272 }         -> [spill 248]
     v314 Imm(2288)                                        -> -
-    v315 BinopI { op=add, lhs=v28, rhs_imm=2288 }         -> [spill 136]
+    v315 BinopI { op=add, lhs=v28, rhs_imm=2288 }         -> [spill 249]
     v316 Imm(2304)                                        -> -
-    v317 BinopI { op=add, lhs=v28, rhs_imm=2304 }         -> [spill 137]
+    v317 BinopI { op=add, lhs=v28, rhs_imm=2304 }         -> [spill 250]
     v318 Imm(2320)                                        -> -
-    v319 BinopI { op=add, lhs=v28, rhs_imm=2320 }         -> [spill 138]
+    v319 BinopI { op=add, lhs=v28, rhs_imm=2320 }         -> [spill 251]
     v320 Imm(2336)                                        -> -
-    v321 BinopI { op=add, lhs=v28, rhs_imm=2336 }         -> [spill 139]
+    v321 BinopI { op=add, lhs=v28, rhs_imm=2336 }         -> [spill 252]
     v322 Imm(2352)                                        -> -
-    v323 BinopI { op=add, lhs=v28, rhs_imm=2352 }         -> [spill 140]
+    v323 BinopI { op=add, lhs=v28, rhs_imm=2352 }         -> [spill 253]
     v324 Imm(2368)                                        -> -
-    v325 BinopI { op=add, lhs=v28, rhs_imm=2368 }         -> [spill 141]
+    v325 BinopI { op=add, lhs=v28, rhs_imm=2368 }         -> x14
     v326 Imm(2384)                                        -> -
-    v327 BinopI { op=add, lhs=v28, rhs_imm=2384 }         -> [spill 142]
+    v327 BinopI { op=add, lhs=v28, rhs_imm=2384 }         -> x15
     v328 Imm(2400)                                        -> -
-    v329 BinopI { op=add, lhs=v28, rhs_imm=2400 }         -> [spill 143]
+    v329 BinopI { op=add, lhs=v28, rhs_imm=2400 }         -> [spill 0]
     v330 Imm(2416)                                        -> -
-    v331 BinopI { op=add, lhs=v28, rhs_imm=2416 }         -> [spill 144]
+    v331 BinopI { op=add, lhs=v28, rhs_imm=2416 }         -> [spill 1]
     v332 Imm(2432)                                        -> -
-    v333 BinopI { op=add, lhs=v28, rhs_imm=2432 }         -> [spill 145]
+    v333 BinopI { op=add, lhs=v28, rhs_imm=2432 }         -> [spill 2]
     v334 Imm(2448)                                        -> -
-    v335 BinopI { op=add, lhs=v28, rhs_imm=2448 }         -> [spill 146]
+    v335 BinopI { op=add, lhs=v28, rhs_imm=2448 }         -> [spill 3]
     v336 Imm(2464)                                        -> -
-    v337 BinopI { op=add, lhs=v28, rhs_imm=2464 }         -> [spill 147]
+    v337 BinopI { op=add, lhs=v28, rhs_imm=2464 }         -> [spill 4]
     v338 Imm(2480)                                        -> -
-    v339 BinopI { op=add, lhs=v28, rhs_imm=2480 }         -> [spill 148]
+    v339 BinopI { op=add, lhs=v28, rhs_imm=2480 }         -> [spill 5]
     v340 Imm(2496)                                        -> -
-    v341 BinopI { op=add, lhs=v28, rhs_imm=2496 }         -> [spill 149]
+    v341 BinopI { op=add, lhs=v28, rhs_imm=2496 }         -> [spill 6]
     v342 Imm(2512)                                        -> -
-    v343 BinopI { op=add, lhs=v28, rhs_imm=2512 }         -> [spill 150]
+    v343 BinopI { op=add, lhs=v28, rhs_imm=2512 }         -> [spill 7]
     v344 Imm(2528)                                        -> -
-    v345 BinopI { op=add, lhs=v28, rhs_imm=2528 }         -> [spill 151]
+    v345 BinopI { op=add, lhs=v28, rhs_imm=2528 }         -> [spill 8]
     v346 Imm(2544)                                        -> -
-    v347 BinopI { op=add, lhs=v28, rhs_imm=2544 }         -> [spill 152]
+    v347 BinopI { op=add, lhs=v28, rhs_imm=2544 }         -> [spill 9]
     v348 Imm(2560)                                        -> -
-    v349 BinopI { op=add, lhs=v28, rhs_imm=2560 }         -> [spill 153]
+    v349 BinopI { op=add, lhs=v28, rhs_imm=2560 }         -> [spill 10]
     v350 Imm(2576)                                        -> -
-    v351 BinopI { op=add, lhs=v28, rhs_imm=2576 }         -> [spill 154]
+    v351 BinopI { op=add, lhs=v28, rhs_imm=2576 }         -> [spill 11]
     v352 Imm(2592)                                        -> -
-    v353 BinopI { op=add, lhs=v28, rhs_imm=2592 }         -> [spill 155]
+    v353 BinopI { op=add, lhs=v28, rhs_imm=2592 }         -> [spill 12]
     v354 Imm(2608)                                        -> -
-    v355 BinopI { op=add, lhs=v28, rhs_imm=2608 }         -> [spill 156]
+    v355 BinopI { op=add, lhs=v28, rhs_imm=2608 }         -> [spill 13]
     v356 Imm(2624)                                        -> -
-    v357 BinopI { op=add, lhs=v28, rhs_imm=2624 }         -> [spill 157]
+    v357 BinopI { op=add, lhs=v28, rhs_imm=2624 }         -> [spill 14]
     v358 Imm(2640)                                        -> -
-    v359 BinopI { op=add, lhs=v28, rhs_imm=2640 }         -> [spill 158]
+    v359 BinopI { op=add, lhs=v28, rhs_imm=2640 }         -> [spill 15]
     v360 Imm(2656)                                        -> -
-    v361 BinopI { op=add, lhs=v28, rhs_imm=2656 }         -> [spill 159]
+    v361 BinopI { op=add, lhs=v28, rhs_imm=2656 }         -> [spill 16]
     v362 Imm(2672)                                        -> -
-    v363 BinopI { op=add, lhs=v28, rhs_imm=2672 }         -> [spill 160]
+    v363 BinopI { op=add, lhs=v28, rhs_imm=2672 }         -> [spill 17]
     v364 Imm(2688)                                        -> -
-    v365 BinopI { op=add, lhs=v28, rhs_imm=2688 }         -> [spill 161]
+    v365 BinopI { op=add, lhs=v28, rhs_imm=2688 }         -> [spill 18]
     v366 Imm(2704)                                        -> -
-    v367 BinopI { op=add, lhs=v28, rhs_imm=2704 }         -> [spill 162]
+    v367 BinopI { op=add, lhs=v28, rhs_imm=2704 }         -> [spill 19]
     v368 Imm(2720)                                        -> -
-    v369 BinopI { op=add, lhs=v28, rhs_imm=2720 }         -> [spill 163]
+    v369 BinopI { op=add, lhs=v28, rhs_imm=2720 }         -> [spill 20]
     v370 Imm(2736)                                        -> -
-    v371 BinopI { op=add, lhs=v28, rhs_imm=2736 }         -> [spill 164]
+    v371 BinopI { op=add, lhs=v28, rhs_imm=2736 }         -> [spill 21]
     v372 Imm(2752)                                        -> -
-    v373 BinopI { op=add, lhs=v28, rhs_imm=2752 }         -> [spill 165]
+    v373 BinopI { op=add, lhs=v28, rhs_imm=2752 }         -> [spill 22]
     v374 Imm(2768)                                        -> -
-    v375 BinopI { op=add, lhs=v28, rhs_imm=2768 }         -> [spill 166]
+    v375 BinopI { op=add, lhs=v28, rhs_imm=2768 }         -> [spill 23]
     v376 Imm(2784)                                        -> -
-    v377 BinopI { op=add, lhs=v28, rhs_imm=2784 }         -> [spill 167]
+    v377 BinopI { op=add, lhs=v28, rhs_imm=2784 }         -> [spill 24]
     v378 Imm(2800)                                        -> -
-    v379 BinopI { op=add, lhs=v28, rhs_imm=2800 }         -> [spill 168]
+    v379 BinopI { op=add, lhs=v28, rhs_imm=2800 }         -> [spill 25]
     v380 Imm(2816)                                        -> -
-    v381 BinopI { op=add, lhs=v28, rhs_imm=2816 }         -> [spill 169]
+    v381 BinopI { op=add, lhs=v28, rhs_imm=2816 }         -> [spill 26]
     v382 Imm(2832)                                        -> -
-    v383 BinopI { op=add, lhs=v28, rhs_imm=2832 }         -> [spill 170]
+    v383 BinopI { op=add, lhs=v28, rhs_imm=2832 }         -> [spill 27]
     v384 Imm(2848)                                        -> -
-    v385 BinopI { op=add, lhs=v28, rhs_imm=2848 }         -> [spill 171]
+    v385 BinopI { op=add, lhs=v28, rhs_imm=2848 }         -> [spill 28]
     v386 Imm(2864)                                        -> -
-    v387 BinopI { op=add, lhs=v28, rhs_imm=2864 }         -> [spill 172]
+    v387 BinopI { op=add, lhs=v28, rhs_imm=2864 }         -> [spill 29]
     v388 Imm(2880)                                        -> -
-    v389 BinopI { op=add, lhs=v28, rhs_imm=2880 }         -> [spill 173]
+    v389 BinopI { op=add, lhs=v28, rhs_imm=2880 }         -> [spill 30]
     v390 Imm(2896)                                        -> -
-    v391 BinopI { op=add, lhs=v28, rhs_imm=2896 }         -> [spill 174]
+    v391 BinopI { op=add, lhs=v28, rhs_imm=2896 }         -> [spill 31]
     v392 Imm(2912)                                        -> -
-    v393 BinopI { op=add, lhs=v28, rhs_imm=2912 }         -> [spill 175]
+    v393 BinopI { op=add, lhs=v28, rhs_imm=2912 }         -> [spill 32]
     v394 Imm(2928)                                        -> -
-    v395 BinopI { op=add, lhs=v28, rhs_imm=2928 }         -> [spill 176]
+    v395 BinopI { op=add, lhs=v28, rhs_imm=2928 }         -> [spill 33]
     v396 Imm(2944)                                        -> -
-    v397 BinopI { op=add, lhs=v28, rhs_imm=2944 }         -> [spill 177]
+    v397 BinopI { op=add, lhs=v28, rhs_imm=2944 }         -> [spill 34]
     v398 Imm(2960)                                        -> -
-    v399 BinopI { op=add, lhs=v28, rhs_imm=2960 }         -> [spill 178]
+    v399 BinopI { op=add, lhs=v28, rhs_imm=2960 }         -> [spill 35]
     v400 Imm(2976)                                        -> -
-    v401 BinopI { op=add, lhs=v28, rhs_imm=2976 }         -> [spill 179]
+    v401 BinopI { op=add, lhs=v28, rhs_imm=2976 }         -> [spill 36]
     v402 Imm(2992)                                        -> -
-    v403 BinopI { op=add, lhs=v28, rhs_imm=2992 }         -> [spill 180]
+    v403 BinopI { op=add, lhs=v28, rhs_imm=2992 }         -> [spill 37]
     v404 Imm(3008)                                        -> -
-    v405 BinopI { op=add, lhs=v28, rhs_imm=3008 }         -> [spill 181]
+    v405 BinopI { op=add, lhs=v28, rhs_imm=3008 }         -> [spill 38]
     v406 Imm(3024)                                        -> -
-    v407 BinopI { op=add, lhs=v28, rhs_imm=3024 }         -> [spill 182]
+    v407 BinopI { op=add, lhs=v28, rhs_imm=3024 }         -> [spill 39]
     v408 Imm(3040)                                        -> -
-    v409 BinopI { op=add, lhs=v28, rhs_imm=3040 }         -> [spill 183]
+    v409 BinopI { op=add, lhs=v28, rhs_imm=3040 }         -> [spill 40]
     v410 Imm(3056)                                        -> -
-    v411 BinopI { op=add, lhs=v28, rhs_imm=3056 }         -> [spill 184]
+    v411 BinopI { op=add, lhs=v28, rhs_imm=3056 }         -> [spill 41]
     v412 Imm(3072)                                        -> -
-    v413 BinopI { op=add, lhs=v28, rhs_imm=3072 }         -> [spill 185]
+    v413 BinopI { op=add, lhs=v28, rhs_imm=3072 }         -> [spill 42]
     v414 Imm(3088)                                        -> -
-    v415 BinopI { op=add, lhs=v28, rhs_imm=3088 }         -> [spill 186]
+    v415 BinopI { op=add, lhs=v28, rhs_imm=3088 }         -> [spill 43]
     v416 Imm(3104)                                        -> -
-    v417 BinopI { op=add, lhs=v28, rhs_imm=3104 }         -> [spill 187]
+    v417 BinopI { op=add, lhs=v28, rhs_imm=3104 }         -> [spill 44]
     v418 Imm(3120)                                        -> -
-    v419 BinopI { op=add, lhs=v28, rhs_imm=3120 }         -> [spill 188]
+    v419 BinopI { op=add, lhs=v28, rhs_imm=3120 }         -> [spill 45]
     v420 Imm(3136)                                        -> -
-    v421 BinopI { op=add, lhs=v28, rhs_imm=3136 }         -> [spill 189]
+    v421 BinopI { op=add, lhs=v28, rhs_imm=3136 }         -> [spill 46]
     v422 Imm(3152)                                        -> -
-    v423 BinopI { op=add, lhs=v28, rhs_imm=3152 }         -> [spill 190]
+    v423 BinopI { op=add, lhs=v28, rhs_imm=3152 }         -> [spill 47]
     v424 Imm(3168)                                        -> -
-    v425 BinopI { op=add, lhs=v28, rhs_imm=3168 }         -> [spill 191]
+    v425 BinopI { op=add, lhs=v28, rhs_imm=3168 }         -> [spill 48]
     v426 Imm(3184)                                        -> -
-    v427 BinopI { op=add, lhs=v28, rhs_imm=3184 }         -> [spill 192]
+    v427 BinopI { op=add, lhs=v28, rhs_imm=3184 }         -> [spill 49]
     v428 Imm(3200)                                        -> -
-    v429 BinopI { op=add, lhs=v28, rhs_imm=3200 }         -> [spill 193]
+    v429 BinopI { op=add, lhs=v28, rhs_imm=3200 }         -> [spill 50]
     v430 Imm(3216)                                        -> -
-    v431 BinopI { op=add, lhs=v28, rhs_imm=3216 }         -> [spill 194]
+    v431 BinopI { op=add, lhs=v28, rhs_imm=3216 }         -> [spill 51]
     v432 Imm(3232)                                        -> -
-    v433 BinopI { op=add, lhs=v28, rhs_imm=3232 }         -> [spill 195]
+    v433 BinopI { op=add, lhs=v28, rhs_imm=3232 }         -> [spill 52]
     v434 Imm(3248)                                        -> -
-    v435 BinopI { op=add, lhs=v28, rhs_imm=3248 }         -> [spill 196]
+    v435 BinopI { op=add, lhs=v28, rhs_imm=3248 }         -> [spill 53]
     v436 Imm(3264)                                        -> -
-    v437 BinopI { op=add, lhs=v28, rhs_imm=3264 }         -> [spill 197]
+    v437 BinopI { op=add, lhs=v28, rhs_imm=3264 }         -> [spill 54]
     v438 Imm(3280)                                        -> -
-    v439 BinopI { op=add, lhs=v28, rhs_imm=3280 }         -> [spill 198]
+    v439 BinopI { op=add, lhs=v28, rhs_imm=3280 }         -> [spill 55]
     v440 Imm(3296)                                        -> -
-    v441 BinopI { op=add, lhs=v28, rhs_imm=3296 }         -> [spill 199]
+    v441 BinopI { op=add, lhs=v28, rhs_imm=3296 }         -> [spill 56]
     v442 Imm(3312)                                        -> -
-    v443 BinopI { op=add, lhs=v28, rhs_imm=3312 }         -> [spill 200]
+    v443 BinopI { op=add, lhs=v28, rhs_imm=3312 }         -> [spill 57]
     v444 Imm(3328)                                        -> -
-    v445 BinopI { op=add, lhs=v28, rhs_imm=3328 }         -> [spill 201]
+    v445 BinopI { op=add, lhs=v28, rhs_imm=3328 }         -> [spill 58]
     v446 Imm(3344)                                        -> -
-    v447 BinopI { op=add, lhs=v28, rhs_imm=3344 }         -> [spill 202]
+    v447 BinopI { op=add, lhs=v28, rhs_imm=3344 }         -> [spill 59]
     v448 Imm(3360)                                        -> -
-    v449 BinopI { op=add, lhs=v28, rhs_imm=3360 }         -> [spill 203]
+    v449 BinopI { op=add, lhs=v28, rhs_imm=3360 }         -> [spill 60]
     v450 Imm(3376)                                        -> -
-    v451 BinopI { op=add, lhs=v28, rhs_imm=3376 }         -> [spill 204]
+    v451 BinopI { op=add, lhs=v28, rhs_imm=3376 }         -> [spill 61]
     v452 Imm(3392)                                        -> -
-    v453 BinopI { op=add, lhs=v28, rhs_imm=3392 }         -> [spill 205]
+    v453 BinopI { op=add, lhs=v28, rhs_imm=3392 }         -> [spill 62]
     v454 Imm(3408)                                        -> -
-    v455 BinopI { op=add, lhs=v28, rhs_imm=3408 }         -> [spill 206]
+    v455 BinopI { op=add, lhs=v28, rhs_imm=3408 }         -> [spill 63]
     v456 Imm(3424)                                        -> -
-    v457 BinopI { op=add, lhs=v28, rhs_imm=3424 }         -> [spill 207]
+    v457 BinopI { op=add, lhs=v28, rhs_imm=3424 }         -> [spill 64]
     v458 Imm(3440)                                        -> -
-    v459 BinopI { op=add, lhs=v28, rhs_imm=3440 }         -> [spill 208]
+    v459 BinopI { op=add, lhs=v28, rhs_imm=3440 }         -> [spill 65]
     v460 Imm(3456)                                        -> -
-    v461 BinopI { op=add, lhs=v28, rhs_imm=3456 }         -> [spill 209]
+    v461 BinopI { op=add, lhs=v28, rhs_imm=3456 }         -> [spill 66]
     v462 Imm(3472)                                        -> -
-    v463 BinopI { op=add, lhs=v28, rhs_imm=3472 }         -> [spill 210]
+    v463 BinopI { op=add, lhs=v28, rhs_imm=3472 }         -> [spill 67]
     v464 Imm(3488)                                        -> -
-    v465 BinopI { op=add, lhs=v28, rhs_imm=3488 }         -> [spill 211]
+    v465 BinopI { op=add, lhs=v28, rhs_imm=3488 }         -> [spill 68]
     v466 Imm(3504)                                        -> -
-    v467 BinopI { op=add, lhs=v28, rhs_imm=3504 }         -> [spill 212]
+    v467 BinopI { op=add, lhs=v28, rhs_imm=3504 }         -> [spill 69]
     v468 Imm(3520)                                        -> -
-    v469 BinopI { op=add, lhs=v28, rhs_imm=3520 }         -> [spill 213]
+    v469 BinopI { op=add, lhs=v28, rhs_imm=3520 }         -> [spill 70]
     v470 Imm(3536)                                        -> -
-    v471 BinopI { op=add, lhs=v28, rhs_imm=3536 }         -> [spill 214]
+    v471 BinopI { op=add, lhs=v28, rhs_imm=3536 }         -> [spill 71]
     v472 Imm(3552)                                        -> -
-    v473 BinopI { op=add, lhs=v28, rhs_imm=3552 }         -> [spill 215]
+    v473 BinopI { op=add, lhs=v28, rhs_imm=3552 }         -> [spill 72]
     v474 Imm(3568)                                        -> -
-    v475 BinopI { op=add, lhs=v28, rhs_imm=3568 }         -> [spill 216]
+    v475 BinopI { op=add, lhs=v28, rhs_imm=3568 }         -> [spill 73]
     v476 Imm(3584)                                        -> -
-    v477 BinopI { op=add, lhs=v28, rhs_imm=3584 }         -> [spill 217]
+    v477 BinopI { op=add, lhs=v28, rhs_imm=3584 }         -> [spill 74]
     v478 Imm(3600)                                        -> -
-    v479 BinopI { op=add, lhs=v28, rhs_imm=3600 }         -> [spill 218]
+    v479 BinopI { op=add, lhs=v28, rhs_imm=3600 }         -> [spill 75]
     v480 Imm(3616)                                        -> -
-    v481 BinopI { op=add, lhs=v28, rhs_imm=3616 }         -> [spill 219]
+    v481 BinopI { op=add, lhs=v28, rhs_imm=3616 }         -> [spill 76]
     v482 Imm(3632)                                        -> -
-    v483 BinopI { op=add, lhs=v28, rhs_imm=3632 }         -> [spill 220]
+    v483 BinopI { op=add, lhs=v28, rhs_imm=3632 }         -> [spill 77]
     v484 Imm(3648)                                        -> -
-    v485 BinopI { op=add, lhs=v28, rhs_imm=3648 }         -> [spill 221]
+    v485 BinopI { op=add, lhs=v28, rhs_imm=3648 }         -> [spill 78]
     v486 Imm(3664)                                        -> -
-    v487 BinopI { op=add, lhs=v28, rhs_imm=3664 }         -> [spill 222]
+    v487 BinopI { op=add, lhs=v28, rhs_imm=3664 }         -> [spill 79]
     v488 Imm(3680)                                        -> -
-    v489 BinopI { op=add, lhs=v28, rhs_imm=3680 }         -> [spill 223]
+    v489 BinopI { op=add, lhs=v28, rhs_imm=3680 }         -> [spill 80]
     v490 Imm(3696)                                        -> -
-    v491 BinopI { op=add, lhs=v28, rhs_imm=3696 }         -> [spill 224]
+    v491 BinopI { op=add, lhs=v28, rhs_imm=3696 }         -> [spill 81]
     v492 Imm(3712)                                        -> -
-    v493 BinopI { op=add, lhs=v28, rhs_imm=3712 }         -> [spill 225]
+    v493 BinopI { op=add, lhs=v28, rhs_imm=3712 }         -> [spill 82]
     v494 Imm(3728)                                        -> -
-    v495 BinopI { op=add, lhs=v28, rhs_imm=3728 }         -> [spill 226]
+    v495 BinopI { op=add, lhs=v28, rhs_imm=3728 }         -> [spill 83]
     v496 Imm(3744)                                        -> -
-    v497 BinopI { op=add, lhs=v28, rhs_imm=3744 }         -> [spill 227]
+    v497 BinopI { op=add, lhs=v28, rhs_imm=3744 }         -> [spill 84]
     v498 Imm(3760)                                        -> -
-    v499 BinopI { op=add, lhs=v28, rhs_imm=3760 }         -> [spill 228]
+    v499 BinopI { op=add, lhs=v28, rhs_imm=3760 }         -> [spill 85]
     v500 Imm(3776)                                        -> -
-    v501 BinopI { op=add, lhs=v28, rhs_imm=3776 }         -> [spill 229]
+    v501 BinopI { op=add, lhs=v28, rhs_imm=3776 }         -> [spill 86]
     v502 Imm(3792)                                        -> -
-    v503 BinopI { op=add, lhs=v28, rhs_imm=3792 }         -> [spill 230]
+    v503 BinopI { op=add, lhs=v28, rhs_imm=3792 }         -> [spill 87]
     v504 Imm(3808)                                        -> -
-    v505 BinopI { op=add, lhs=v28, rhs_imm=3808 }         -> [spill 231]
+    v505 BinopI { op=add, lhs=v28, rhs_imm=3808 }         -> [spill 88]
     v506 Imm(3824)                                        -> -
-    v507 BinopI { op=add, lhs=v28, rhs_imm=3824 }         -> [spill 232]
+    v507 BinopI { op=add, lhs=v28, rhs_imm=3824 }         -> [spill 89]
     v508 Imm(3840)                                        -> -
-    v509 BinopI { op=add, lhs=v28, rhs_imm=3840 }         -> [spill 233]
+    v509 BinopI { op=add, lhs=v28, rhs_imm=3840 }         -> [spill 90]
     v510 Imm(3856)                                        -> -
-    v511 BinopI { op=add, lhs=v28, rhs_imm=3856 }         -> [spill 234]
+    v511 BinopI { op=add, lhs=v28, rhs_imm=3856 }         -> [spill 91]
     v512 Imm(3872)                                        -> -
-    v513 BinopI { op=add, lhs=v28, rhs_imm=3872 }         -> [spill 235]
+    v513 BinopI { op=add, lhs=v28, rhs_imm=3872 }         -> [spill 92]
     v514 Imm(3888)                                        -> -
-    v515 BinopI { op=add, lhs=v28, rhs_imm=3888 }         -> [spill 236]
+    v515 BinopI { op=add, lhs=v28, rhs_imm=3888 }         -> [spill 93]
     v516 Imm(3904)                                        -> -
-    v517 BinopI { op=add, lhs=v28, rhs_imm=3904 }         -> [spill 237]
+    v517 BinopI { op=add, lhs=v28, rhs_imm=3904 }         -> [spill 94]
     v518 Imm(3920)                                        -> -
-    v519 BinopI { op=add, lhs=v28, rhs_imm=3920 }         -> [spill 238]
+    v519 BinopI { op=add, lhs=v28, rhs_imm=3920 }         -> [spill 95]
     v520 Imm(3936)                                        -> -
-    v521 BinopI { op=add, lhs=v28, rhs_imm=3936 }         -> [spill 239]
+    v521 BinopI { op=add, lhs=v28, rhs_imm=3936 }         -> [spill 96]
     v522 Imm(3952)                                        -> -
-    v523 BinopI { op=add, lhs=v28, rhs_imm=3952 }         -> [spill 240]
+    v523 BinopI { op=add, lhs=v28, rhs_imm=3952 }         -> [spill 97]
     v524 Imm(3968)                                        -> -
-    v525 BinopI { op=add, lhs=v28, rhs_imm=3968 }         -> [spill 241]
+    v525 BinopI { op=add, lhs=v28, rhs_imm=3968 }         -> [spill 98]
     v526 Imm(3984)                                        -> -
-    v527 BinopI { op=add, lhs=v28, rhs_imm=3984 }         -> [spill 242]
+    v527 BinopI { op=add, lhs=v28, rhs_imm=3984 }         -> [spill 99]
     v528 Imm(4000)                                        -> -
-    v529 BinopI { op=add, lhs=v28, rhs_imm=4000 }         -> [spill 243]
+    v529 BinopI { op=add, lhs=v28, rhs_imm=4000 }         -> [spill 100]
     v530 Imm(4016)                                        -> -
-    v531 BinopI { op=add, lhs=v28, rhs_imm=4016 }         -> [spill 244]
+    v531 BinopI { op=add, lhs=v28, rhs_imm=4016 }         -> [spill 101]
     v532 Imm(4032)                                        -> -
-    v533 BinopI { op=add, lhs=v28, rhs_imm=4032 }         -> [spill 245]
+    v533 BinopI { op=add, lhs=v28, rhs_imm=4032 }         -> [spill 102]
     v534 Imm(4048)                                        -> -
-    v535 BinopI { op=add, lhs=v28, rhs_imm=4048 }         -> [spill 246]
+    v535 BinopI { op=add, lhs=v28, rhs_imm=4048 }         -> [spill 103]
     v536 Imm(4064)                                        -> -
-    v537 BinopI { op=add, lhs=v28, rhs_imm=4064 }         -> [spill 247]
+    v537 BinopI { op=add, lhs=v28, rhs_imm=4064 }         -> [spill 104]
     v538 Imm(4080)                                        -> -
-    v539 BinopI { op=add, lhs=v28, rhs_imm=4080 }         -> [spill 248]
+    v539 BinopI { op=add, lhs=v28, rhs_imm=4080 }         -> [spill 105]
     v540 Imm(4096)                                        -> -
-    v541 BinopI { op=add, lhs=v28, rhs_imm=4096 }         -> [spill 249]
+    v541 BinopI { op=add, lhs=v28, rhs_imm=4096 }         -> [spill 106]
     v542 Imm(4112)                                        -> -
-    v543 BinopI { op=add, lhs=v28, rhs_imm=4112 }         -> [spill 250]
+    v543 BinopI { op=add, lhs=v28, rhs_imm=4112 }         -> [spill 107]
     v544 Imm(4128)                                        -> -
-    v545 BinopI { op=add, lhs=v28, rhs_imm=4128 }         -> [spill 251]
+    v545 BinopI { op=add, lhs=v28, rhs_imm=4128 }         -> [spill 108]
     v546 Imm(4144)                                        -> -
-    v547 BinopI { op=add, lhs=v28, rhs_imm=4144 }         -> [spill 252]
+    v547 BinopI { op=add, lhs=v28, rhs_imm=4144 }         -> [spill 109]
     v548 Imm(4160)                                        -> -
-    v549 BinopI { op=add, lhs=v28, rhs_imm=4160 }         -> [spill 253]
+    v549 BinopI { op=add, lhs=v28, rhs_imm=4160 }         -> [spill 110]
     v550 Load { addr=v28, disp=0, kind=I64 pc_rel }       -> x7
     v551 Load { addr=v28, disp=8, kind=I64 pc_rel }       -> x6
     v552 Load { addr=v28, disp=16, kind=I64 pc_rel }      -> x2
@@ -4557,517 +4557,517 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v840 Imm(64)                                          -> -
     v841 BinopI { op=add, lhs=v832, rhs_imm=64 }          -> -
     v842 Imm(80)                                          -> -
-    v843 BinopI { op=add, lhs=v832, rhs_imm=80 }          -> x14
+    v843 BinopI { op=add, lhs=v832, rhs_imm=80 }          -> [spill 253]
     v844 Imm(96)                                          -> -
-    v845 BinopI { op=add, lhs=v832, rhs_imm=96 }          -> x15
+    v845 BinopI { op=add, lhs=v832, rhs_imm=96 }          -> [spill 252]
     v846 Imm(112)                                         -> -
-    v847 BinopI { op=add, lhs=v832, rhs_imm=112 }         -> [spill 0]
+    v847 BinopI { op=add, lhs=v832, rhs_imm=112 }         -> [spill 251]
     v848 Imm(128)                                         -> -
-    v849 BinopI { op=add, lhs=v832, rhs_imm=128 }         -> [spill 1]
+    v849 BinopI { op=add, lhs=v832, rhs_imm=128 }         -> [spill 250]
     v850 Imm(144)                                         -> -
-    v851 BinopI { op=add, lhs=v832, rhs_imm=144 }         -> [spill 2]
+    v851 BinopI { op=add, lhs=v832, rhs_imm=144 }         -> [spill 249]
     v852 Imm(160)                                         -> -
-    v853 BinopI { op=add, lhs=v832, rhs_imm=160 }         -> [spill 3]
+    v853 BinopI { op=add, lhs=v832, rhs_imm=160 }         -> [spill 248]
     v854 Imm(176)                                         -> -
-    v855 BinopI { op=add, lhs=v832, rhs_imm=176 }         -> [spill 4]
+    v855 BinopI { op=add, lhs=v832, rhs_imm=176 }         -> [spill 247]
     v856 Imm(192)                                         -> -
-    v857 BinopI { op=add, lhs=v832, rhs_imm=192 }         -> [spill 5]
+    v857 BinopI { op=add, lhs=v832, rhs_imm=192 }         -> [spill 246]
     v858 Imm(208)                                         -> -
-    v859 BinopI { op=add, lhs=v832, rhs_imm=208 }         -> [spill 6]
+    v859 BinopI { op=add, lhs=v832, rhs_imm=208 }         -> [spill 245]
     v860 Imm(224)                                         -> -
-    v861 BinopI { op=add, lhs=v832, rhs_imm=224 }         -> [spill 7]
+    v861 BinopI { op=add, lhs=v832, rhs_imm=224 }         -> [spill 244]
     v862 Imm(240)                                         -> -
-    v863 BinopI { op=add, lhs=v832, rhs_imm=240 }         -> [spill 8]
+    v863 BinopI { op=add, lhs=v832, rhs_imm=240 }         -> [spill 243]
     v864 Imm(256)                                         -> -
-    v865 BinopI { op=add, lhs=v832, rhs_imm=256 }         -> [spill 9]
+    v865 BinopI { op=add, lhs=v832, rhs_imm=256 }         -> [spill 242]
     v866 Imm(272)                                         -> -
-    v867 BinopI { op=add, lhs=v832, rhs_imm=272 }         -> [spill 10]
+    v867 BinopI { op=add, lhs=v832, rhs_imm=272 }         -> [spill 241]
     v868 Imm(288)                                         -> -
-    v869 BinopI { op=add, lhs=v832, rhs_imm=288 }         -> [spill 11]
+    v869 BinopI { op=add, lhs=v832, rhs_imm=288 }         -> [spill 240]
     v870 Imm(304)                                         -> -
-    v871 BinopI { op=add, lhs=v832, rhs_imm=304 }         -> [spill 12]
+    v871 BinopI { op=add, lhs=v832, rhs_imm=304 }         -> [spill 239]
     v872 Imm(320)                                         -> -
-    v873 BinopI { op=add, lhs=v832, rhs_imm=320 }         -> [spill 13]
+    v873 BinopI { op=add, lhs=v832, rhs_imm=320 }         -> [spill 238]
     v874 Imm(336)                                         -> -
-    v875 BinopI { op=add, lhs=v832, rhs_imm=336 }         -> [spill 14]
+    v875 BinopI { op=add, lhs=v832, rhs_imm=336 }         -> [spill 237]
     v876 Imm(352)                                         -> -
-    v877 BinopI { op=add, lhs=v832, rhs_imm=352 }         -> [spill 15]
+    v877 BinopI { op=add, lhs=v832, rhs_imm=352 }         -> [spill 236]
     v878 Imm(368)                                         -> -
-    v879 BinopI { op=add, lhs=v832, rhs_imm=368 }         -> [spill 16]
+    v879 BinopI { op=add, lhs=v832, rhs_imm=368 }         -> [spill 235]
     v880 Imm(384)                                         -> -
-    v881 BinopI { op=add, lhs=v832, rhs_imm=384 }         -> [spill 17]
+    v881 BinopI { op=add, lhs=v832, rhs_imm=384 }         -> [spill 234]
     v882 Imm(400)                                         -> -
-    v883 BinopI { op=add, lhs=v832, rhs_imm=400 }         -> [spill 18]
+    v883 BinopI { op=add, lhs=v832, rhs_imm=400 }         -> [spill 233]
     v884 Imm(416)                                         -> -
-    v885 BinopI { op=add, lhs=v832, rhs_imm=416 }         -> [spill 19]
+    v885 BinopI { op=add, lhs=v832, rhs_imm=416 }         -> [spill 232]
     v886 Imm(432)                                         -> -
-    v887 BinopI { op=add, lhs=v832, rhs_imm=432 }         -> [spill 20]
+    v887 BinopI { op=add, lhs=v832, rhs_imm=432 }         -> [spill 231]
     v888 Imm(448)                                         -> -
-    v889 BinopI { op=add, lhs=v832, rhs_imm=448 }         -> [spill 21]
+    v889 BinopI { op=add, lhs=v832, rhs_imm=448 }         -> [spill 230]
     v890 Imm(464)                                         -> -
-    v891 BinopI { op=add, lhs=v832, rhs_imm=464 }         -> [spill 22]
+    v891 BinopI { op=add, lhs=v832, rhs_imm=464 }         -> [spill 229]
     v892 Imm(480)                                         -> -
-    v893 BinopI { op=add, lhs=v832, rhs_imm=480 }         -> [spill 23]
+    v893 BinopI { op=add, lhs=v832, rhs_imm=480 }         -> [spill 228]
     v894 Imm(496)                                         -> -
-    v895 BinopI { op=add, lhs=v832, rhs_imm=496 }         -> [spill 24]
+    v895 BinopI { op=add, lhs=v832, rhs_imm=496 }         -> [spill 227]
     v896 Imm(512)                                         -> -
-    v897 BinopI { op=add, lhs=v832, rhs_imm=512 }         -> [spill 25]
+    v897 BinopI { op=add, lhs=v832, rhs_imm=512 }         -> [spill 226]
     v898 Imm(528)                                         -> -
-    v899 BinopI { op=add, lhs=v832, rhs_imm=528 }         -> [spill 26]
+    v899 BinopI { op=add, lhs=v832, rhs_imm=528 }         -> [spill 225]
     v900 Imm(544)                                         -> -
-    v901 BinopI { op=add, lhs=v832, rhs_imm=544 }         -> [spill 27]
+    v901 BinopI { op=add, lhs=v832, rhs_imm=544 }         -> [spill 224]
     v902 Imm(560)                                         -> -
-    v903 BinopI { op=add, lhs=v832, rhs_imm=560 }         -> [spill 28]
+    v903 BinopI { op=add, lhs=v832, rhs_imm=560 }         -> [spill 223]
     v904 Imm(576)                                         -> -
-    v905 BinopI { op=add, lhs=v832, rhs_imm=576 }         -> [spill 29]
+    v905 BinopI { op=add, lhs=v832, rhs_imm=576 }         -> [spill 222]
     v906 Imm(592)                                         -> -
-    v907 BinopI { op=add, lhs=v832, rhs_imm=592 }         -> [spill 30]
+    v907 BinopI { op=add, lhs=v832, rhs_imm=592 }         -> [spill 221]
     v908 Imm(608)                                         -> -
-    v909 BinopI { op=add, lhs=v832, rhs_imm=608 }         -> [spill 31]
+    v909 BinopI { op=add, lhs=v832, rhs_imm=608 }         -> [spill 220]
     v910 Imm(624)                                         -> -
-    v911 BinopI { op=add, lhs=v832, rhs_imm=624 }         -> [spill 32]
+    v911 BinopI { op=add, lhs=v832, rhs_imm=624 }         -> [spill 219]
     v912 Imm(640)                                         -> -
-    v913 BinopI { op=add, lhs=v832, rhs_imm=640 }         -> [spill 33]
+    v913 BinopI { op=add, lhs=v832, rhs_imm=640 }         -> [spill 218]
     v914 Imm(656)                                         -> -
-    v915 BinopI { op=add, lhs=v832, rhs_imm=656 }         -> [spill 34]
+    v915 BinopI { op=add, lhs=v832, rhs_imm=656 }         -> [spill 217]
     v916 Imm(672)                                         -> -
-    v917 BinopI { op=add, lhs=v832, rhs_imm=672 }         -> [spill 35]
+    v917 BinopI { op=add, lhs=v832, rhs_imm=672 }         -> [spill 216]
     v918 Imm(688)                                         -> -
-    v919 BinopI { op=add, lhs=v832, rhs_imm=688 }         -> [spill 36]
+    v919 BinopI { op=add, lhs=v832, rhs_imm=688 }         -> [spill 215]
     v920 Imm(704)                                         -> -
-    v921 BinopI { op=add, lhs=v832, rhs_imm=704 }         -> [spill 37]
+    v921 BinopI { op=add, lhs=v832, rhs_imm=704 }         -> [spill 214]
     v922 Imm(720)                                         -> -
-    v923 BinopI { op=add, lhs=v832, rhs_imm=720 }         -> [spill 38]
+    v923 BinopI { op=add, lhs=v832, rhs_imm=720 }         -> [spill 213]
     v924 Imm(736)                                         -> -
-    v925 BinopI { op=add, lhs=v832, rhs_imm=736 }         -> [spill 39]
+    v925 BinopI { op=add, lhs=v832, rhs_imm=736 }         -> [spill 212]
     v926 Imm(752)                                         -> -
-    v927 BinopI { op=add, lhs=v832, rhs_imm=752 }         -> [spill 40]
+    v927 BinopI { op=add, lhs=v832, rhs_imm=752 }         -> [spill 211]
     v928 Imm(768)                                         -> -
-    v929 BinopI { op=add, lhs=v832, rhs_imm=768 }         -> [spill 41]
+    v929 BinopI { op=add, lhs=v832, rhs_imm=768 }         -> [spill 210]
     v930 Imm(784)                                         -> -
-    v931 BinopI { op=add, lhs=v832, rhs_imm=784 }         -> [spill 42]
+    v931 BinopI { op=add, lhs=v832, rhs_imm=784 }         -> [spill 209]
     v932 Imm(800)                                         -> -
-    v933 BinopI { op=add, lhs=v832, rhs_imm=800 }         -> [spill 43]
+    v933 BinopI { op=add, lhs=v832, rhs_imm=800 }         -> [spill 208]
     v934 Imm(816)                                         -> -
-    v935 BinopI { op=add, lhs=v832, rhs_imm=816 }         -> [spill 44]
+    v935 BinopI { op=add, lhs=v832, rhs_imm=816 }         -> [spill 207]
     v936 Imm(832)                                         -> -
-    v937 BinopI { op=add, lhs=v832, rhs_imm=832 }         -> [spill 45]
+    v937 BinopI { op=add, lhs=v832, rhs_imm=832 }         -> [spill 206]
     v938 Imm(848)                                         -> -
-    v939 BinopI { op=add, lhs=v832, rhs_imm=848 }         -> [spill 46]
+    v939 BinopI { op=add, lhs=v832, rhs_imm=848 }         -> [spill 205]
     v940 Imm(864)                                         -> -
-    v941 BinopI { op=add, lhs=v832, rhs_imm=864 }         -> [spill 47]
+    v941 BinopI { op=add, lhs=v832, rhs_imm=864 }         -> [spill 204]
     v942 Imm(880)                                         -> -
-    v943 BinopI { op=add, lhs=v832, rhs_imm=880 }         -> [spill 48]
+    v943 BinopI { op=add, lhs=v832, rhs_imm=880 }         -> [spill 203]
     v944 Imm(896)                                         -> -
-    v945 BinopI { op=add, lhs=v832, rhs_imm=896 }         -> [spill 49]
+    v945 BinopI { op=add, lhs=v832, rhs_imm=896 }         -> [spill 202]
     v946 Imm(912)                                         -> -
-    v947 BinopI { op=add, lhs=v832, rhs_imm=912 }         -> [spill 50]
+    v947 BinopI { op=add, lhs=v832, rhs_imm=912 }         -> [spill 201]
     v948 Imm(928)                                         -> -
-    v949 BinopI { op=add, lhs=v832, rhs_imm=928 }         -> [spill 51]
+    v949 BinopI { op=add, lhs=v832, rhs_imm=928 }         -> [spill 200]
     v950 Imm(944)                                         -> -
-    v951 BinopI { op=add, lhs=v832, rhs_imm=944 }         -> [spill 52]
+    v951 BinopI { op=add, lhs=v832, rhs_imm=944 }         -> [spill 199]
     v952 Imm(960)                                         -> -
-    v953 BinopI { op=add, lhs=v832, rhs_imm=960 }         -> [spill 53]
+    v953 BinopI { op=add, lhs=v832, rhs_imm=960 }         -> [spill 198]
     v954 Imm(976)                                         -> -
-    v955 BinopI { op=add, lhs=v832, rhs_imm=976 }         -> [spill 54]
+    v955 BinopI { op=add, lhs=v832, rhs_imm=976 }         -> [spill 197]
     v956 Imm(992)                                         -> -
-    v957 BinopI { op=add, lhs=v832, rhs_imm=992 }         -> [spill 55]
+    v957 BinopI { op=add, lhs=v832, rhs_imm=992 }         -> [spill 196]
     v958 Imm(1008)                                        -> -
-    v959 BinopI { op=add, lhs=v832, rhs_imm=1008 }        -> [spill 56]
+    v959 BinopI { op=add, lhs=v832, rhs_imm=1008 }        -> [spill 195]
     v960 Imm(1024)                                        -> -
-    v961 BinopI { op=add, lhs=v832, rhs_imm=1024 }        -> [spill 57]
+    v961 BinopI { op=add, lhs=v832, rhs_imm=1024 }        -> [spill 194]
     v962 Imm(1040)                                        -> -
-    v963 BinopI { op=add, lhs=v832, rhs_imm=1040 }        -> [spill 58]
+    v963 BinopI { op=add, lhs=v832, rhs_imm=1040 }        -> [spill 193]
     v964 Imm(1056)                                        -> -
-    v965 BinopI { op=add, lhs=v832, rhs_imm=1056 }        -> [spill 59]
+    v965 BinopI { op=add, lhs=v832, rhs_imm=1056 }        -> [spill 192]
     v966 Imm(1072)                                        -> -
-    v967 BinopI { op=add, lhs=v832, rhs_imm=1072 }        -> [spill 60]
+    v967 BinopI { op=add, lhs=v832, rhs_imm=1072 }        -> [spill 191]
     v968 Imm(1088)                                        -> -
-    v969 BinopI { op=add, lhs=v832, rhs_imm=1088 }        -> [spill 61]
+    v969 BinopI { op=add, lhs=v832, rhs_imm=1088 }        -> [spill 190]
     v970 Imm(1104)                                        -> -
-    v971 BinopI { op=add, lhs=v832, rhs_imm=1104 }        -> [spill 62]
+    v971 BinopI { op=add, lhs=v832, rhs_imm=1104 }        -> [spill 189]
     v972 Imm(1120)                                        -> -
-    v973 BinopI { op=add, lhs=v832, rhs_imm=1120 }        -> [spill 63]
+    v973 BinopI { op=add, lhs=v832, rhs_imm=1120 }        -> [spill 188]
     v974 Imm(1136)                                        -> -
-    v975 BinopI { op=add, lhs=v832, rhs_imm=1136 }        -> [spill 64]
+    v975 BinopI { op=add, lhs=v832, rhs_imm=1136 }        -> [spill 187]
     v976 Imm(1152)                                        -> -
-    v977 BinopI { op=add, lhs=v832, rhs_imm=1152 }        -> [spill 65]
+    v977 BinopI { op=add, lhs=v832, rhs_imm=1152 }        -> [spill 186]
     v978 Imm(1168)                                        -> -
-    v979 BinopI { op=add, lhs=v832, rhs_imm=1168 }        -> [spill 66]
+    v979 BinopI { op=add, lhs=v832, rhs_imm=1168 }        -> [spill 185]
     v980 Imm(1184)                                        -> -
-    v981 BinopI { op=add, lhs=v832, rhs_imm=1184 }        -> [spill 67]
+    v981 BinopI { op=add, lhs=v832, rhs_imm=1184 }        -> [spill 184]
     v982 Imm(1200)                                        -> -
-    v983 BinopI { op=add, lhs=v832, rhs_imm=1200 }        -> [spill 68]
+    v983 BinopI { op=add, lhs=v832, rhs_imm=1200 }        -> [spill 183]
     v984 Imm(1216)                                        -> -
-    v985 BinopI { op=add, lhs=v832, rhs_imm=1216 }        -> [spill 69]
+    v985 BinopI { op=add, lhs=v832, rhs_imm=1216 }        -> [spill 182]
     v986 Imm(1232)                                        -> -
-    v987 BinopI { op=add, lhs=v832, rhs_imm=1232 }        -> [spill 70]
+    v987 BinopI { op=add, lhs=v832, rhs_imm=1232 }        -> [spill 181]
     v988 Imm(1248)                                        -> -
-    v989 BinopI { op=add, lhs=v832, rhs_imm=1248 }        -> [spill 71]
+    v989 BinopI { op=add, lhs=v832, rhs_imm=1248 }        -> [spill 180]
     v990 Imm(1264)                                        -> -
-    v991 BinopI { op=add, lhs=v832, rhs_imm=1264 }        -> [spill 72]
+    v991 BinopI { op=add, lhs=v832, rhs_imm=1264 }        -> [spill 179]
     v992 Imm(1280)                                        -> -
-    v993 BinopI { op=add, lhs=v832, rhs_imm=1280 }        -> [spill 73]
+    v993 BinopI { op=add, lhs=v832, rhs_imm=1280 }        -> [spill 178]
     v994 Imm(1296)                                        -> -
-    v995 BinopI { op=add, lhs=v832, rhs_imm=1296 }        -> [spill 74]
+    v995 BinopI { op=add, lhs=v832, rhs_imm=1296 }        -> [spill 177]
     v996 Imm(1312)                                        -> -
-    v997 BinopI { op=add, lhs=v832, rhs_imm=1312 }        -> [spill 75]
+    v997 BinopI { op=add, lhs=v832, rhs_imm=1312 }        -> [spill 176]
     v998 Imm(1328)                                        -> -
-    v999 BinopI { op=add, lhs=v832, rhs_imm=1328 }        -> [spill 76]
+    v999 BinopI { op=add, lhs=v832, rhs_imm=1328 }        -> [spill 175]
     v1000 Imm(1344)                                        -> -
-    v1001 BinopI { op=add, lhs=v832, rhs_imm=1344 }        -> [spill 77]
+    v1001 BinopI { op=add, lhs=v832, rhs_imm=1344 }        -> [spill 174]
     v1002 Imm(1360)                                        -> -
-    v1003 BinopI { op=add, lhs=v832, rhs_imm=1360 }        -> [spill 78]
+    v1003 BinopI { op=add, lhs=v832, rhs_imm=1360 }        -> [spill 173]
     v1004 Imm(1376)                                        -> -
-    v1005 BinopI { op=add, lhs=v832, rhs_imm=1376 }        -> [spill 79]
+    v1005 BinopI { op=add, lhs=v832, rhs_imm=1376 }        -> [spill 172]
     v1006 Imm(1392)                                        -> -
-    v1007 BinopI { op=add, lhs=v832, rhs_imm=1392 }        -> [spill 80]
+    v1007 BinopI { op=add, lhs=v832, rhs_imm=1392 }        -> [spill 171]
     v1008 Imm(1408)                                        -> -
-    v1009 BinopI { op=add, lhs=v832, rhs_imm=1408 }        -> [spill 81]
+    v1009 BinopI { op=add, lhs=v832, rhs_imm=1408 }        -> [spill 170]
     v1010 Imm(1424)                                        -> -
-    v1011 BinopI { op=add, lhs=v832, rhs_imm=1424 }        -> [spill 82]
+    v1011 BinopI { op=add, lhs=v832, rhs_imm=1424 }        -> [spill 169]
     v1012 Imm(1440)                                        -> -
-    v1013 BinopI { op=add, lhs=v832, rhs_imm=1440 }        -> [spill 83]
+    v1013 BinopI { op=add, lhs=v832, rhs_imm=1440 }        -> [spill 168]
     v1014 Imm(1456)                                        -> -
-    v1015 BinopI { op=add, lhs=v832, rhs_imm=1456 }        -> [spill 84]
+    v1015 BinopI { op=add, lhs=v832, rhs_imm=1456 }        -> [spill 167]
     v1016 Imm(1472)                                        -> -
-    v1017 BinopI { op=add, lhs=v832, rhs_imm=1472 }        -> [spill 85]
+    v1017 BinopI { op=add, lhs=v832, rhs_imm=1472 }        -> [spill 166]
     v1018 Imm(1488)                                        -> -
-    v1019 BinopI { op=add, lhs=v832, rhs_imm=1488 }        -> [spill 86]
+    v1019 BinopI { op=add, lhs=v832, rhs_imm=1488 }        -> [spill 165]
     v1020 Imm(1504)                                        -> -
-    v1021 BinopI { op=add, lhs=v832, rhs_imm=1504 }        -> [spill 87]
+    v1021 BinopI { op=add, lhs=v832, rhs_imm=1504 }        -> [spill 164]
     v1022 Imm(1520)                                        -> -
-    v1023 BinopI { op=add, lhs=v832, rhs_imm=1520 }        -> [spill 88]
+    v1023 BinopI { op=add, lhs=v832, rhs_imm=1520 }        -> [spill 163]
     v1024 Imm(1536)                                        -> -
-    v1025 BinopI { op=add, lhs=v832, rhs_imm=1536 }        -> [spill 89]
+    v1025 BinopI { op=add, lhs=v832, rhs_imm=1536 }        -> [spill 162]
     v1026 Imm(1552)                                        -> -
-    v1027 BinopI { op=add, lhs=v832, rhs_imm=1552 }        -> [spill 90]
+    v1027 BinopI { op=add, lhs=v832, rhs_imm=1552 }        -> [spill 161]
     v1028 Imm(1568)                                        -> -
-    v1029 BinopI { op=add, lhs=v832, rhs_imm=1568 }        -> [spill 91]
+    v1029 BinopI { op=add, lhs=v832, rhs_imm=1568 }        -> [spill 160]
     v1030 Imm(1584)                                        -> -
-    v1031 BinopI { op=add, lhs=v832, rhs_imm=1584 }        -> [spill 92]
+    v1031 BinopI { op=add, lhs=v832, rhs_imm=1584 }        -> [spill 159]
     v1032 Imm(1600)                                        -> -
-    v1033 BinopI { op=add, lhs=v832, rhs_imm=1600 }        -> [spill 93]
+    v1033 BinopI { op=add, lhs=v832, rhs_imm=1600 }        -> [spill 158]
     v1034 Imm(1616)                                        -> -
-    v1035 BinopI { op=add, lhs=v832, rhs_imm=1616 }        -> [spill 94]
+    v1035 BinopI { op=add, lhs=v832, rhs_imm=1616 }        -> [spill 157]
     v1036 Imm(1632)                                        -> -
-    v1037 BinopI { op=add, lhs=v832, rhs_imm=1632 }        -> [spill 95]
+    v1037 BinopI { op=add, lhs=v832, rhs_imm=1632 }        -> [spill 156]
     v1038 Imm(1648)                                        -> -
-    v1039 BinopI { op=add, lhs=v832, rhs_imm=1648 }        -> [spill 96]
+    v1039 BinopI { op=add, lhs=v832, rhs_imm=1648 }        -> [spill 155]
     v1040 Imm(1664)                                        -> -
-    v1041 BinopI { op=add, lhs=v832, rhs_imm=1664 }        -> [spill 97]
+    v1041 BinopI { op=add, lhs=v832, rhs_imm=1664 }        -> [spill 154]
     v1042 Imm(1680)                                        -> -
-    v1043 BinopI { op=add, lhs=v832, rhs_imm=1680 }        -> [spill 98]
+    v1043 BinopI { op=add, lhs=v832, rhs_imm=1680 }        -> [spill 153]
     v1044 Imm(1696)                                        -> -
-    v1045 BinopI { op=add, lhs=v832, rhs_imm=1696 }        -> [spill 99]
+    v1045 BinopI { op=add, lhs=v832, rhs_imm=1696 }        -> [spill 152]
     v1046 Imm(1712)                                        -> -
-    v1047 BinopI { op=add, lhs=v832, rhs_imm=1712 }        -> [spill 100]
+    v1047 BinopI { op=add, lhs=v832, rhs_imm=1712 }        -> [spill 151]
     v1048 Imm(1728)                                        -> -
-    v1049 BinopI { op=add, lhs=v832, rhs_imm=1728 }        -> [spill 101]
+    v1049 BinopI { op=add, lhs=v832, rhs_imm=1728 }        -> [spill 150]
     v1050 Imm(1744)                                        -> -
-    v1051 BinopI { op=add, lhs=v832, rhs_imm=1744 }        -> [spill 102]
+    v1051 BinopI { op=add, lhs=v832, rhs_imm=1744 }        -> [spill 149]
     v1052 Imm(1760)                                        -> -
-    v1053 BinopI { op=add, lhs=v832, rhs_imm=1760 }        -> [spill 103]
+    v1053 BinopI { op=add, lhs=v832, rhs_imm=1760 }        -> [spill 148]
     v1054 Imm(1776)                                        -> -
-    v1055 BinopI { op=add, lhs=v832, rhs_imm=1776 }        -> [spill 104]
+    v1055 BinopI { op=add, lhs=v832, rhs_imm=1776 }        -> [spill 147]
     v1056 Imm(1792)                                        -> -
-    v1057 BinopI { op=add, lhs=v832, rhs_imm=1792 }        -> [spill 105]
+    v1057 BinopI { op=add, lhs=v832, rhs_imm=1792 }        -> [spill 146]
     v1058 Imm(1808)                                        -> -
-    v1059 BinopI { op=add, lhs=v832, rhs_imm=1808 }        -> [spill 106]
+    v1059 BinopI { op=add, lhs=v832, rhs_imm=1808 }        -> [spill 145]
     v1060 Imm(1824)                                        -> -
-    v1061 BinopI { op=add, lhs=v832, rhs_imm=1824 }        -> [spill 107]
+    v1061 BinopI { op=add, lhs=v832, rhs_imm=1824 }        -> [spill 144]
     v1062 Imm(1840)                                        -> -
-    v1063 BinopI { op=add, lhs=v832, rhs_imm=1840 }        -> [spill 108]
+    v1063 BinopI { op=add, lhs=v832, rhs_imm=1840 }        -> [spill 143]
     v1064 Imm(1856)                                        -> -
-    v1065 BinopI { op=add, lhs=v832, rhs_imm=1856 }        -> [spill 109]
+    v1065 BinopI { op=add, lhs=v832, rhs_imm=1856 }        -> [spill 142]
     v1066 Imm(1872)                                        -> -
-    v1067 BinopI { op=add, lhs=v832, rhs_imm=1872 }        -> [spill 110]
+    v1067 BinopI { op=add, lhs=v832, rhs_imm=1872 }        -> [spill 141]
     v1068 Imm(1888)                                        -> -
-    v1069 BinopI { op=add, lhs=v832, rhs_imm=1888 }        -> [spill 111]
+    v1069 BinopI { op=add, lhs=v832, rhs_imm=1888 }        -> [spill 140]
     v1070 Imm(1904)                                        -> -
-    v1071 BinopI { op=add, lhs=v832, rhs_imm=1904 }        -> [spill 112]
+    v1071 BinopI { op=add, lhs=v832, rhs_imm=1904 }        -> [spill 139]
     v1072 Imm(1920)                                        -> -
-    v1073 BinopI { op=add, lhs=v832, rhs_imm=1920 }        -> [spill 113]
+    v1073 BinopI { op=add, lhs=v832, rhs_imm=1920 }        -> [spill 138]
     v1074 Imm(1936)                                        -> -
-    v1075 BinopI { op=add, lhs=v832, rhs_imm=1936 }        -> [spill 114]
+    v1075 BinopI { op=add, lhs=v832, rhs_imm=1936 }        -> [spill 137]
     v1076 Imm(1952)                                        -> -
-    v1077 BinopI { op=add, lhs=v832, rhs_imm=1952 }        -> [spill 115]
+    v1077 BinopI { op=add, lhs=v832, rhs_imm=1952 }        -> [spill 136]
     v1078 Imm(1968)                                        -> -
-    v1079 BinopI { op=add, lhs=v832, rhs_imm=1968 }        -> [spill 116]
+    v1079 BinopI { op=add, lhs=v832, rhs_imm=1968 }        -> [spill 135]
     v1080 Imm(1984)                                        -> -
-    v1081 BinopI { op=add, lhs=v832, rhs_imm=1984 }        -> [spill 117]
+    v1081 BinopI { op=add, lhs=v832, rhs_imm=1984 }        -> [spill 134]
     v1082 Imm(2000)                                        -> -
-    v1083 BinopI { op=add, lhs=v832, rhs_imm=2000 }        -> [spill 118]
+    v1083 BinopI { op=add, lhs=v832, rhs_imm=2000 }        -> [spill 133]
     v1084 Imm(2016)                                        -> -
-    v1085 BinopI { op=add, lhs=v832, rhs_imm=2016 }        -> [spill 119]
+    v1085 BinopI { op=add, lhs=v832, rhs_imm=2016 }        -> [spill 132]
     v1086 Imm(2032)                                        -> -
-    v1087 BinopI { op=add, lhs=v832, rhs_imm=2032 }        -> [spill 120]
+    v1087 BinopI { op=add, lhs=v832, rhs_imm=2032 }        -> [spill 131]
     v1088 Imm(2048)                                        -> -
-    v1089 BinopI { op=add, lhs=v832, rhs_imm=2048 }        -> [spill 121]
+    v1089 BinopI { op=add, lhs=v832, rhs_imm=2048 }        -> [spill 130]
     v1090 Imm(2064)                                        -> -
-    v1091 BinopI { op=add, lhs=v832, rhs_imm=2064 }        -> [spill 122]
+    v1091 BinopI { op=add, lhs=v832, rhs_imm=2064 }        -> [spill 129]
     v1092 Imm(2080)                                        -> -
-    v1093 BinopI { op=add, lhs=v832, rhs_imm=2080 }        -> [spill 123]
+    v1093 BinopI { op=add, lhs=v832, rhs_imm=2080 }        -> [spill 128]
     v1094 Imm(2096)                                        -> -
-    v1095 BinopI { op=add, lhs=v832, rhs_imm=2096 }        -> [spill 124]
+    v1095 BinopI { op=add, lhs=v832, rhs_imm=2096 }        -> [spill 127]
     v1096 Imm(2112)                                        -> -
-    v1097 BinopI { op=add, lhs=v832, rhs_imm=2112 }        -> [spill 125]
+    v1097 BinopI { op=add, lhs=v832, rhs_imm=2112 }        -> [spill 126]
     v1098 Imm(2128)                                        -> -
-    v1099 BinopI { op=add, lhs=v832, rhs_imm=2128 }        -> [spill 126]
+    v1099 BinopI { op=add, lhs=v832, rhs_imm=2128 }        -> [spill 125]
     v1100 Imm(2144)                                        -> -
-    v1101 BinopI { op=add, lhs=v832, rhs_imm=2144 }        -> [spill 127]
+    v1101 BinopI { op=add, lhs=v832, rhs_imm=2144 }        -> [spill 124]
     v1102 Imm(2160)                                        -> -
-    v1103 BinopI { op=add, lhs=v832, rhs_imm=2160 }        -> [spill 128]
+    v1103 BinopI { op=add, lhs=v832, rhs_imm=2160 }        -> [spill 123]
     v1104 Imm(2176)                                        -> -
-    v1105 BinopI { op=add, lhs=v832, rhs_imm=2176 }        -> [spill 129]
+    v1105 BinopI { op=add, lhs=v832, rhs_imm=2176 }        -> [spill 122]
     v1106 Imm(2192)                                        -> -
-    v1107 BinopI { op=add, lhs=v832, rhs_imm=2192 }        -> [spill 130]
+    v1107 BinopI { op=add, lhs=v832, rhs_imm=2192 }        -> [spill 121]
     v1108 Imm(2208)                                        -> -
-    v1109 BinopI { op=add, lhs=v832, rhs_imm=2208 }        -> [spill 131]
+    v1109 BinopI { op=add, lhs=v832, rhs_imm=2208 }        -> [spill 120]
     v1110 Imm(2224)                                        -> -
-    v1111 BinopI { op=add, lhs=v832, rhs_imm=2224 }        -> [spill 132]
+    v1111 BinopI { op=add, lhs=v832, rhs_imm=2224 }        -> [spill 119]
     v1112 Imm(2240)                                        -> -
-    v1113 BinopI { op=add, lhs=v832, rhs_imm=2240 }        -> [spill 133]
+    v1113 BinopI { op=add, lhs=v832, rhs_imm=2240 }        -> [spill 118]
     v1114 Imm(2256)                                        -> -
-    v1115 BinopI { op=add, lhs=v832, rhs_imm=2256 }        -> [spill 134]
+    v1115 BinopI { op=add, lhs=v832, rhs_imm=2256 }        -> [spill 117]
     v1116 Imm(2272)                                        -> -
-    v1117 BinopI { op=add, lhs=v832, rhs_imm=2272 }        -> [spill 135]
+    v1117 BinopI { op=add, lhs=v832, rhs_imm=2272 }        -> [spill 116]
     v1118 Imm(2288)                                        -> -
-    v1119 BinopI { op=add, lhs=v832, rhs_imm=2288 }        -> [spill 136]
+    v1119 BinopI { op=add, lhs=v832, rhs_imm=2288 }        -> [spill 115]
     v1120 Imm(2304)                                        -> -
-    v1121 BinopI { op=add, lhs=v832, rhs_imm=2304 }        -> [spill 137]
+    v1121 BinopI { op=add, lhs=v832, rhs_imm=2304 }        -> [spill 114]
     v1122 Imm(2320)                                        -> -
-    v1123 BinopI { op=add, lhs=v832, rhs_imm=2320 }        -> [spill 138]
+    v1123 BinopI { op=add, lhs=v832, rhs_imm=2320 }        -> [spill 113]
     v1124 Imm(2336)                                        -> -
-    v1125 BinopI { op=add, lhs=v832, rhs_imm=2336 }        -> [spill 139]
+    v1125 BinopI { op=add, lhs=v832, rhs_imm=2336 }        -> [spill 112]
     v1126 Imm(2352)                                        -> -
-    v1127 BinopI { op=add, lhs=v832, rhs_imm=2352 }        -> [spill 140]
+    v1127 BinopI { op=add, lhs=v832, rhs_imm=2352 }        -> [spill 111]
     v1128 Imm(2368)                                        -> -
-    v1129 BinopI { op=add, lhs=v832, rhs_imm=2368 }        -> [spill 141]
+    v1129 BinopI { op=add, lhs=v832, rhs_imm=2368 }        -> x14
     v1130 Imm(2384)                                        -> -
-    v1131 BinopI { op=add, lhs=v832, rhs_imm=2384 }        -> [spill 142]
+    v1131 BinopI { op=add, lhs=v832, rhs_imm=2384 }        -> x15
     v1132 Imm(2400)                                        -> -
-    v1133 BinopI { op=add, lhs=v832, rhs_imm=2400 }        -> [spill 143]
+    v1133 BinopI { op=add, lhs=v832, rhs_imm=2400 }        -> [spill 0]
     v1134 Imm(2416)                                        -> -
-    v1135 BinopI { op=add, lhs=v832, rhs_imm=2416 }        -> [spill 144]
+    v1135 BinopI { op=add, lhs=v832, rhs_imm=2416 }        -> [spill 1]
     v1136 Imm(2432)                                        -> -
-    v1137 BinopI { op=add, lhs=v832, rhs_imm=2432 }        -> [spill 145]
+    v1137 BinopI { op=add, lhs=v832, rhs_imm=2432 }        -> [spill 2]
     v1138 Imm(2448)                                        -> -
-    v1139 BinopI { op=add, lhs=v832, rhs_imm=2448 }        -> [spill 146]
+    v1139 BinopI { op=add, lhs=v832, rhs_imm=2448 }        -> [spill 3]
     v1140 Imm(2464)                                        -> -
-    v1141 BinopI { op=add, lhs=v832, rhs_imm=2464 }        -> [spill 147]
+    v1141 BinopI { op=add, lhs=v832, rhs_imm=2464 }        -> [spill 4]
     v1142 Imm(2480)                                        -> -
-    v1143 BinopI { op=add, lhs=v832, rhs_imm=2480 }        -> [spill 148]
+    v1143 BinopI { op=add, lhs=v832, rhs_imm=2480 }        -> [spill 5]
     v1144 Imm(2496)                                        -> -
-    v1145 BinopI { op=add, lhs=v832, rhs_imm=2496 }        -> [spill 149]
+    v1145 BinopI { op=add, lhs=v832, rhs_imm=2496 }        -> [spill 6]
     v1146 Imm(2512)                                        -> -
-    v1147 BinopI { op=add, lhs=v832, rhs_imm=2512 }        -> [spill 150]
+    v1147 BinopI { op=add, lhs=v832, rhs_imm=2512 }        -> [spill 7]
     v1148 Imm(2528)                                        -> -
-    v1149 BinopI { op=add, lhs=v832, rhs_imm=2528 }        -> [spill 151]
+    v1149 BinopI { op=add, lhs=v832, rhs_imm=2528 }        -> [spill 8]
     v1150 Imm(2544)                                        -> -
-    v1151 BinopI { op=add, lhs=v832, rhs_imm=2544 }        -> [spill 152]
+    v1151 BinopI { op=add, lhs=v832, rhs_imm=2544 }        -> [spill 9]
     v1152 Imm(2560)                                        -> -
-    v1153 BinopI { op=add, lhs=v832, rhs_imm=2560 }        -> [spill 153]
+    v1153 BinopI { op=add, lhs=v832, rhs_imm=2560 }        -> [spill 10]
     v1154 Imm(2576)                                        -> -
-    v1155 BinopI { op=add, lhs=v832, rhs_imm=2576 }        -> [spill 154]
+    v1155 BinopI { op=add, lhs=v832, rhs_imm=2576 }        -> [spill 11]
     v1156 Imm(2592)                                        -> -
-    v1157 BinopI { op=add, lhs=v832, rhs_imm=2592 }        -> [spill 155]
+    v1157 BinopI { op=add, lhs=v832, rhs_imm=2592 }        -> [spill 12]
     v1158 Imm(2608)                                        -> -
-    v1159 BinopI { op=add, lhs=v832, rhs_imm=2608 }        -> [spill 156]
+    v1159 BinopI { op=add, lhs=v832, rhs_imm=2608 }        -> [spill 13]
     v1160 Imm(2624)                                        -> -
-    v1161 BinopI { op=add, lhs=v832, rhs_imm=2624 }        -> [spill 157]
+    v1161 BinopI { op=add, lhs=v832, rhs_imm=2624 }        -> [spill 14]
     v1162 Imm(2640)                                        -> -
-    v1163 BinopI { op=add, lhs=v832, rhs_imm=2640 }        -> [spill 158]
+    v1163 BinopI { op=add, lhs=v832, rhs_imm=2640 }        -> [spill 15]
     v1164 Imm(2656)                                        -> -
-    v1165 BinopI { op=add, lhs=v832, rhs_imm=2656 }        -> [spill 159]
+    v1165 BinopI { op=add, lhs=v832, rhs_imm=2656 }        -> [spill 16]
     v1166 Imm(2672)                                        -> -
-    v1167 BinopI { op=add, lhs=v832, rhs_imm=2672 }        -> [spill 160]
+    v1167 BinopI { op=add, lhs=v832, rhs_imm=2672 }        -> [spill 17]
     v1168 Imm(2688)                                        -> -
-    v1169 BinopI { op=add, lhs=v832, rhs_imm=2688 }        -> [spill 161]
+    v1169 BinopI { op=add, lhs=v832, rhs_imm=2688 }        -> [spill 18]
     v1170 Imm(2704)                                        -> -
-    v1171 BinopI { op=add, lhs=v832, rhs_imm=2704 }        -> [spill 162]
+    v1171 BinopI { op=add, lhs=v832, rhs_imm=2704 }        -> [spill 19]
     v1172 Imm(2720)                                        -> -
-    v1173 BinopI { op=add, lhs=v832, rhs_imm=2720 }        -> [spill 163]
+    v1173 BinopI { op=add, lhs=v832, rhs_imm=2720 }        -> [spill 20]
     v1174 Imm(2736)                                        -> -
-    v1175 BinopI { op=add, lhs=v832, rhs_imm=2736 }        -> [spill 164]
+    v1175 BinopI { op=add, lhs=v832, rhs_imm=2736 }        -> [spill 21]
     v1176 Imm(2752)                                        -> -
-    v1177 BinopI { op=add, lhs=v832, rhs_imm=2752 }        -> [spill 165]
+    v1177 BinopI { op=add, lhs=v832, rhs_imm=2752 }        -> [spill 22]
     v1178 Imm(2768)                                        -> -
-    v1179 BinopI { op=add, lhs=v832, rhs_imm=2768 }        -> [spill 166]
+    v1179 BinopI { op=add, lhs=v832, rhs_imm=2768 }        -> [spill 23]
     v1180 Imm(2784)                                        -> -
-    v1181 BinopI { op=add, lhs=v832, rhs_imm=2784 }        -> [spill 167]
+    v1181 BinopI { op=add, lhs=v832, rhs_imm=2784 }        -> [spill 24]
     v1182 Imm(2800)                                        -> -
-    v1183 BinopI { op=add, lhs=v832, rhs_imm=2800 }        -> [spill 168]
+    v1183 BinopI { op=add, lhs=v832, rhs_imm=2800 }        -> [spill 25]
     v1184 Imm(2816)                                        -> -
-    v1185 BinopI { op=add, lhs=v832, rhs_imm=2816 }        -> [spill 169]
+    v1185 BinopI { op=add, lhs=v832, rhs_imm=2816 }        -> [spill 26]
     v1186 Imm(2832)                                        -> -
-    v1187 BinopI { op=add, lhs=v832, rhs_imm=2832 }        -> [spill 170]
+    v1187 BinopI { op=add, lhs=v832, rhs_imm=2832 }        -> [spill 27]
     v1188 Imm(2848)                                        -> -
-    v1189 BinopI { op=add, lhs=v832, rhs_imm=2848 }        -> [spill 171]
+    v1189 BinopI { op=add, lhs=v832, rhs_imm=2848 }        -> [spill 28]
     v1190 Imm(2864)                                        -> -
-    v1191 BinopI { op=add, lhs=v832, rhs_imm=2864 }        -> [spill 172]
+    v1191 BinopI { op=add, lhs=v832, rhs_imm=2864 }        -> [spill 29]
     v1192 Imm(2880)                                        -> -
-    v1193 BinopI { op=add, lhs=v832, rhs_imm=2880 }        -> [spill 173]
+    v1193 BinopI { op=add, lhs=v832, rhs_imm=2880 }        -> [spill 30]
     v1194 Imm(2896)                                        -> -
-    v1195 BinopI { op=add, lhs=v832, rhs_imm=2896 }        -> [spill 174]
+    v1195 BinopI { op=add, lhs=v832, rhs_imm=2896 }        -> [spill 31]
     v1196 Imm(2912)                                        -> -
-    v1197 BinopI { op=add, lhs=v832, rhs_imm=2912 }        -> [spill 175]
+    v1197 BinopI { op=add, lhs=v832, rhs_imm=2912 }        -> [spill 32]
     v1198 Imm(2928)                                        -> -
-    v1199 BinopI { op=add, lhs=v832, rhs_imm=2928 }        -> [spill 176]
+    v1199 BinopI { op=add, lhs=v832, rhs_imm=2928 }        -> [spill 33]
     v1200 Imm(2944)                                        -> -
-    v1201 BinopI { op=add, lhs=v832, rhs_imm=2944 }        -> [spill 177]
+    v1201 BinopI { op=add, lhs=v832, rhs_imm=2944 }        -> [spill 34]
     v1202 Imm(2960)                                        -> -
-    v1203 BinopI { op=add, lhs=v832, rhs_imm=2960 }        -> [spill 178]
+    v1203 BinopI { op=add, lhs=v832, rhs_imm=2960 }        -> [spill 35]
     v1204 Imm(2976)                                        -> -
-    v1205 BinopI { op=add, lhs=v832, rhs_imm=2976 }        -> [spill 179]
+    v1205 BinopI { op=add, lhs=v832, rhs_imm=2976 }        -> [spill 36]
     v1206 Imm(2992)                                        -> -
-    v1207 BinopI { op=add, lhs=v832, rhs_imm=2992 }        -> [spill 180]
+    v1207 BinopI { op=add, lhs=v832, rhs_imm=2992 }        -> [spill 37]
     v1208 Imm(3008)                                        -> -
-    v1209 BinopI { op=add, lhs=v832, rhs_imm=3008 }        -> [spill 181]
+    v1209 BinopI { op=add, lhs=v832, rhs_imm=3008 }        -> [spill 38]
     v1210 Imm(3024)                                        -> -
-    v1211 BinopI { op=add, lhs=v832, rhs_imm=3024 }        -> [spill 182]
+    v1211 BinopI { op=add, lhs=v832, rhs_imm=3024 }        -> [spill 39]
     v1212 Imm(3040)                                        -> -
-    v1213 BinopI { op=add, lhs=v832, rhs_imm=3040 }        -> [spill 183]
+    v1213 BinopI { op=add, lhs=v832, rhs_imm=3040 }        -> [spill 40]
     v1214 Imm(3056)                                        -> -
-    v1215 BinopI { op=add, lhs=v832, rhs_imm=3056 }        -> [spill 184]
+    v1215 BinopI { op=add, lhs=v832, rhs_imm=3056 }        -> [spill 41]
     v1216 Imm(3072)                                        -> -
-    v1217 BinopI { op=add, lhs=v832, rhs_imm=3072 }        -> [spill 185]
+    v1217 BinopI { op=add, lhs=v832, rhs_imm=3072 }        -> [spill 42]
     v1218 Imm(3088)                                        -> -
-    v1219 BinopI { op=add, lhs=v832, rhs_imm=3088 }        -> [spill 186]
+    v1219 BinopI { op=add, lhs=v832, rhs_imm=3088 }        -> [spill 43]
     v1220 Imm(3104)                                        -> -
-    v1221 BinopI { op=add, lhs=v832, rhs_imm=3104 }        -> [spill 187]
+    v1221 BinopI { op=add, lhs=v832, rhs_imm=3104 }        -> [spill 44]
     v1222 Imm(3120)                                        -> -
-    v1223 BinopI { op=add, lhs=v832, rhs_imm=3120 }        -> [spill 188]
+    v1223 BinopI { op=add, lhs=v832, rhs_imm=3120 }        -> [spill 45]
     v1224 Imm(3136)                                        -> -
-    v1225 BinopI { op=add, lhs=v832, rhs_imm=3136 }        -> [spill 189]
+    v1225 BinopI { op=add, lhs=v832, rhs_imm=3136 }        -> [spill 46]
     v1226 Imm(3152)                                        -> -
-    v1227 BinopI { op=add, lhs=v832, rhs_imm=3152 }        -> [spill 190]
+    v1227 BinopI { op=add, lhs=v832, rhs_imm=3152 }        -> [spill 47]
     v1228 Imm(3168)                                        -> -
-    v1229 BinopI { op=add, lhs=v832, rhs_imm=3168 }        -> [spill 191]
+    v1229 BinopI { op=add, lhs=v832, rhs_imm=3168 }        -> [spill 48]
     v1230 Imm(3184)                                        -> -
-    v1231 BinopI { op=add, lhs=v832, rhs_imm=3184 }        -> [spill 192]
+    v1231 BinopI { op=add, lhs=v832, rhs_imm=3184 }        -> [spill 49]
     v1232 Imm(3200)                                        -> -
-    v1233 BinopI { op=add, lhs=v832, rhs_imm=3200 }        -> [spill 193]
+    v1233 BinopI { op=add, lhs=v832, rhs_imm=3200 }        -> [spill 50]
     v1234 Imm(3216)                                        -> -
-    v1235 BinopI { op=add, lhs=v832, rhs_imm=3216 }        -> [spill 194]
+    v1235 BinopI { op=add, lhs=v832, rhs_imm=3216 }        -> [spill 51]
     v1236 Imm(3232)                                        -> -
-    v1237 BinopI { op=add, lhs=v832, rhs_imm=3232 }        -> [spill 195]
+    v1237 BinopI { op=add, lhs=v832, rhs_imm=3232 }        -> [spill 52]
     v1238 Imm(3248)                                        -> -
-    v1239 BinopI { op=add, lhs=v832, rhs_imm=3248 }        -> [spill 196]
+    v1239 BinopI { op=add, lhs=v832, rhs_imm=3248 }        -> [spill 53]
     v1240 Imm(3264)                                        -> -
-    v1241 BinopI { op=add, lhs=v832, rhs_imm=3264 }        -> [spill 197]
+    v1241 BinopI { op=add, lhs=v832, rhs_imm=3264 }        -> [spill 54]
     v1242 Imm(3280)                                        -> -
-    v1243 BinopI { op=add, lhs=v832, rhs_imm=3280 }        -> [spill 198]
+    v1243 BinopI { op=add, lhs=v832, rhs_imm=3280 }        -> [spill 55]
     v1244 Imm(3296)                                        -> -
-    v1245 BinopI { op=add, lhs=v832, rhs_imm=3296 }        -> [spill 199]
+    v1245 BinopI { op=add, lhs=v832, rhs_imm=3296 }        -> [spill 56]
     v1246 Imm(3312)                                        -> -
-    v1247 BinopI { op=add, lhs=v832, rhs_imm=3312 }        -> [spill 200]
+    v1247 BinopI { op=add, lhs=v832, rhs_imm=3312 }        -> [spill 57]
     v1248 Imm(3328)                                        -> -
-    v1249 BinopI { op=add, lhs=v832, rhs_imm=3328 }        -> [spill 201]
+    v1249 BinopI { op=add, lhs=v832, rhs_imm=3328 }        -> [spill 58]
     v1250 Imm(3344)                                        -> -
-    v1251 BinopI { op=add, lhs=v832, rhs_imm=3344 }        -> [spill 202]
+    v1251 BinopI { op=add, lhs=v832, rhs_imm=3344 }        -> [spill 59]
     v1252 Imm(3360)                                        -> -
-    v1253 BinopI { op=add, lhs=v832, rhs_imm=3360 }        -> [spill 203]
+    v1253 BinopI { op=add, lhs=v832, rhs_imm=3360 }        -> [spill 60]
     v1254 Imm(3376)                                        -> -
-    v1255 BinopI { op=add, lhs=v832, rhs_imm=3376 }        -> [spill 204]
+    v1255 BinopI { op=add, lhs=v832, rhs_imm=3376 }        -> [spill 61]
     v1256 Imm(3392)                                        -> -
-    v1257 BinopI { op=add, lhs=v832, rhs_imm=3392 }        -> [spill 205]
+    v1257 BinopI { op=add, lhs=v832, rhs_imm=3392 }        -> [spill 62]
     v1258 Imm(3408)                                        -> -
-    v1259 BinopI { op=add, lhs=v832, rhs_imm=3408 }        -> [spill 206]
+    v1259 BinopI { op=add, lhs=v832, rhs_imm=3408 }        -> [spill 63]
     v1260 Imm(3424)                                        -> -
-    v1261 BinopI { op=add, lhs=v832, rhs_imm=3424 }        -> [spill 207]
+    v1261 BinopI { op=add, lhs=v832, rhs_imm=3424 }        -> [spill 64]
     v1262 Imm(3440)                                        -> -
-    v1263 BinopI { op=add, lhs=v832, rhs_imm=3440 }        -> [spill 208]
+    v1263 BinopI { op=add, lhs=v832, rhs_imm=3440 }        -> [spill 65]
     v1264 Imm(3456)                                        -> -
-    v1265 BinopI { op=add, lhs=v832, rhs_imm=3456 }        -> [spill 209]
+    v1265 BinopI { op=add, lhs=v832, rhs_imm=3456 }        -> [spill 66]
     v1266 Imm(3472)                                        -> -
-    v1267 BinopI { op=add, lhs=v832, rhs_imm=3472 }        -> [spill 210]
+    v1267 BinopI { op=add, lhs=v832, rhs_imm=3472 }        -> [spill 67]
     v1268 Imm(3488)                                        -> -
-    v1269 BinopI { op=add, lhs=v832, rhs_imm=3488 }        -> [spill 211]
+    v1269 BinopI { op=add, lhs=v832, rhs_imm=3488 }        -> [spill 68]
     v1270 Imm(3504)                                        -> -
-    v1271 BinopI { op=add, lhs=v832, rhs_imm=3504 }        -> [spill 212]
+    v1271 BinopI { op=add, lhs=v832, rhs_imm=3504 }        -> [spill 69]
     v1272 Imm(3520)                                        -> -
-    v1273 BinopI { op=add, lhs=v832, rhs_imm=3520 }        -> [spill 213]
+    v1273 BinopI { op=add, lhs=v832, rhs_imm=3520 }        -> [spill 70]
     v1274 Imm(3536)                                        -> -
-    v1275 BinopI { op=add, lhs=v832, rhs_imm=3536 }        -> [spill 214]
+    v1275 BinopI { op=add, lhs=v832, rhs_imm=3536 }        -> [spill 71]
     v1276 Imm(3552)                                        -> -
-    v1277 BinopI { op=add, lhs=v832, rhs_imm=3552 }        -> [spill 215]
+    v1277 BinopI { op=add, lhs=v832, rhs_imm=3552 }        -> [spill 72]
     v1278 Imm(3568)                                        -> -
-    v1279 BinopI { op=add, lhs=v832, rhs_imm=3568 }        -> [spill 216]
+    v1279 BinopI { op=add, lhs=v832, rhs_imm=3568 }        -> [spill 73]
     v1280 Imm(3584)                                        -> -
-    v1281 BinopI { op=add, lhs=v832, rhs_imm=3584 }        -> [spill 217]
+    v1281 BinopI { op=add, lhs=v832, rhs_imm=3584 }        -> [spill 74]
     v1282 Imm(3600)                                        -> -
-    v1283 BinopI { op=add, lhs=v832, rhs_imm=3600 }        -> [spill 218]
+    v1283 BinopI { op=add, lhs=v832, rhs_imm=3600 }        -> [spill 75]
     v1284 Imm(3616)                                        -> -
-    v1285 BinopI { op=add, lhs=v832, rhs_imm=3616 }        -> [spill 219]
+    v1285 BinopI { op=add, lhs=v832, rhs_imm=3616 }        -> [spill 76]
     v1286 Imm(3632)                                        -> -
-    v1287 BinopI { op=add, lhs=v832, rhs_imm=3632 }        -> [spill 220]
+    v1287 BinopI { op=add, lhs=v832, rhs_imm=3632 }        -> [spill 77]
     v1288 Imm(3648)                                        -> -
-    v1289 BinopI { op=add, lhs=v832, rhs_imm=3648 }        -> [spill 221]
+    v1289 BinopI { op=add, lhs=v832, rhs_imm=3648 }        -> [spill 78]
     v1290 Imm(3664)                                        -> -
-    v1291 BinopI { op=add, lhs=v832, rhs_imm=3664 }        -> [spill 222]
+    v1291 BinopI { op=add, lhs=v832, rhs_imm=3664 }        -> [spill 79]
     v1292 Imm(3680)                                        -> -
-    v1293 BinopI { op=add, lhs=v832, rhs_imm=3680 }        -> [spill 223]
+    v1293 BinopI { op=add, lhs=v832, rhs_imm=3680 }        -> [spill 80]
     v1294 Imm(3696)                                        -> -
-    v1295 BinopI { op=add, lhs=v832, rhs_imm=3696 }        -> [spill 224]
+    v1295 BinopI { op=add, lhs=v832, rhs_imm=3696 }        -> [spill 81]
     v1296 Imm(3712)                                        -> -
-    v1297 BinopI { op=add, lhs=v832, rhs_imm=3712 }        -> [spill 225]
+    v1297 BinopI { op=add, lhs=v832, rhs_imm=3712 }        -> [spill 82]
     v1298 Imm(3728)                                        -> -
-    v1299 BinopI { op=add, lhs=v832, rhs_imm=3728 }        -> [spill 226]
+    v1299 BinopI { op=add, lhs=v832, rhs_imm=3728 }        -> [spill 83]
     v1300 Imm(3744)                                        -> -
-    v1301 BinopI { op=add, lhs=v832, rhs_imm=3744 }        -> [spill 227]
+    v1301 BinopI { op=add, lhs=v832, rhs_imm=3744 }        -> [spill 84]
     v1302 Imm(3760)                                        -> -
-    v1303 BinopI { op=add, lhs=v832, rhs_imm=3760 }        -> [spill 228]
+    v1303 BinopI { op=add, lhs=v832, rhs_imm=3760 }        -> [spill 85]
     v1304 Imm(3776)                                        -> -
-    v1305 BinopI { op=add, lhs=v832, rhs_imm=3776 }        -> [spill 229]
+    v1305 BinopI { op=add, lhs=v832, rhs_imm=3776 }        -> [spill 86]
     v1306 Imm(3792)                                        -> -
-    v1307 BinopI { op=add, lhs=v832, rhs_imm=3792 }        -> [spill 230]
+    v1307 BinopI { op=add, lhs=v832, rhs_imm=3792 }        -> [spill 87]
     v1308 Imm(3808)                                        -> -
-    v1309 BinopI { op=add, lhs=v832, rhs_imm=3808 }        -> [spill 231]
+    v1309 BinopI { op=add, lhs=v832, rhs_imm=3808 }        -> [spill 88]
     v1310 Imm(3824)                                        -> -
-    v1311 BinopI { op=add, lhs=v832, rhs_imm=3824 }        -> [spill 232]
+    v1311 BinopI { op=add, lhs=v832, rhs_imm=3824 }        -> [spill 89]
     v1312 Imm(3840)                                        -> -
-    v1313 BinopI { op=add, lhs=v832, rhs_imm=3840 }        -> [spill 233]
+    v1313 BinopI { op=add, lhs=v832, rhs_imm=3840 }        -> [spill 90]
     v1314 Imm(3856)                                        -> -
-    v1315 BinopI { op=add, lhs=v832, rhs_imm=3856 }        -> [spill 234]
+    v1315 BinopI { op=add, lhs=v832, rhs_imm=3856 }        -> [spill 91]
     v1316 Imm(3872)                                        -> -
-    v1317 BinopI { op=add, lhs=v832, rhs_imm=3872 }        -> [spill 235]
+    v1317 BinopI { op=add, lhs=v832, rhs_imm=3872 }        -> [spill 92]
     v1318 Imm(3888)                                        -> -
-    v1319 BinopI { op=add, lhs=v832, rhs_imm=3888 }        -> [spill 236]
+    v1319 BinopI { op=add, lhs=v832, rhs_imm=3888 }        -> [spill 93]
     v1320 Imm(3904)                                        -> -
-    v1321 BinopI { op=add, lhs=v832, rhs_imm=3904 }        -> [spill 237]
+    v1321 BinopI { op=add, lhs=v832, rhs_imm=3904 }        -> [spill 94]
     v1322 Imm(3920)                                        -> -
-    v1323 BinopI { op=add, lhs=v832, rhs_imm=3920 }        -> [spill 238]
+    v1323 BinopI { op=add, lhs=v832, rhs_imm=3920 }        -> [spill 95]
     v1324 Imm(3936)                                        -> -
-    v1325 BinopI { op=add, lhs=v832, rhs_imm=3936 }        -> [spill 239]
+    v1325 BinopI { op=add, lhs=v832, rhs_imm=3936 }        -> [spill 96]
     v1326 Imm(3952)                                        -> -
-    v1327 BinopI { op=add, lhs=v832, rhs_imm=3952 }        -> [spill 240]
+    v1327 BinopI { op=add, lhs=v832, rhs_imm=3952 }        -> [spill 97]
     v1328 Imm(3968)                                        -> -
-    v1329 BinopI { op=add, lhs=v832, rhs_imm=3968 }        -> [spill 241]
+    v1329 BinopI { op=add, lhs=v832, rhs_imm=3968 }        -> [spill 98]
     v1330 Imm(3984)                                        -> -
-    v1331 BinopI { op=add, lhs=v832, rhs_imm=3984 }        -> [spill 242]
+    v1331 BinopI { op=add, lhs=v832, rhs_imm=3984 }        -> [spill 99]
     v1332 Imm(4000)                                        -> -
-    v1333 BinopI { op=add, lhs=v832, rhs_imm=4000 }        -> [spill 243]
+    v1333 BinopI { op=add, lhs=v832, rhs_imm=4000 }        -> [spill 100]
     v1334 Imm(4016)                                        -> -
-    v1335 BinopI { op=add, lhs=v832, rhs_imm=4016 }        -> [spill 244]
+    v1335 BinopI { op=add, lhs=v832, rhs_imm=4016 }        -> [spill 101]
     v1336 Imm(4032)                                        -> -
-    v1337 BinopI { op=add, lhs=v832, rhs_imm=4032 }        -> [spill 245]
+    v1337 BinopI { op=add, lhs=v832, rhs_imm=4032 }        -> [spill 102]
     v1338 Imm(4048)                                        -> -
-    v1339 BinopI { op=add, lhs=v832, rhs_imm=4048 }        -> [spill 246]
+    v1339 BinopI { op=add, lhs=v832, rhs_imm=4048 }        -> [spill 103]
     v1340 Imm(4064)                                        -> -
-    v1341 BinopI { op=add, lhs=v832, rhs_imm=4064 }        -> [spill 247]
+    v1341 BinopI { op=add, lhs=v832, rhs_imm=4064 }        -> [spill 104]
     v1342 Imm(4080)                                        -> -
-    v1343 BinopI { op=add, lhs=v832, rhs_imm=4080 }        -> [spill 248]
+    v1343 BinopI { op=add, lhs=v832, rhs_imm=4080 }        -> [spill 105]
     v1344 Imm(4096)                                        -> -
-    v1345 BinopI { op=add, lhs=v832, rhs_imm=4096 }        -> [spill 249]
+    v1345 BinopI { op=add, lhs=v832, rhs_imm=4096 }        -> [spill 106]
     v1346 Imm(4112)                                        -> -
-    v1347 BinopI { op=add, lhs=v832, rhs_imm=4112 }        -> [spill 250]
+    v1347 BinopI { op=add, lhs=v832, rhs_imm=4112 }        -> [spill 107]
     v1348 Imm(4128)                                        -> -
-    v1349 BinopI { op=add, lhs=v832, rhs_imm=4128 }        -> [spill 251]
+    v1349 BinopI { op=add, lhs=v832, rhs_imm=4128 }        -> [spill 108]
     v1350 Imm(4144)                                        -> -
-    v1351 BinopI { op=add, lhs=v832, rhs_imm=4144 }        -> [spill 252]
+    v1351 BinopI { op=add, lhs=v832, rhs_imm=4144 }        -> [spill 109]
     v1352 Imm(4160)                                        -> -
-    v1353 BinopI { op=add, lhs=v832, rhs_imm=4160 }        -> [spill 253]
+    v1353 BinopI { op=add, lhs=v832, rhs_imm=4160 }        -> [spill 110]
     v1354 Imm(0)                                           -> -
     v1355 Load { addr=v832, disp=0, kind=I64 pc_rel }      -> x7
     v1356 Load { addr=v832, disp=8, kind=I64 pc_rel }      -> x6

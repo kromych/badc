@@ -2127,7 +2127,10 @@ fn allocate_keeping(
     // tests classes against. `node_of` is the identity here because no
     // class exists yet; the colourer's graph below is the same sweep over
     // the class roots this produces.
-    let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
+    let crowded = crowded_values(func, &liveness, &emitted);
+    let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
+        .map(|v| if crowded[v as usize] { NO_VALUE } else { v })
+        .collect();
     let value_interference = liveness.interference(func, &value_of);
     // x86-64: a two-address result joins the class of an operand dying at
     // it, the one the lowering writes the result over, when no member of
@@ -2156,6 +2159,7 @@ fn allocate_keeping(
                 };
                 Some((v as ValueId, o))
             })
+            .filter(|&(v, o)| !crowded[v as usize] && !crowded[o as usize])
             .collect()
     } else {
         Vec::new()
@@ -2232,7 +2236,7 @@ fn allocate_keeping(
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
         // An instruction the emitters skip writes no register and no slot.
-        if !produces_value(inst) || produces_pred_result(inst) || !emitted[v] {
+        if !produces_value(inst) || produces_pred_result(inst) || !emitted[v] || crowded[v] {
             continue;
         }
         let root = node_of[v] as usize;
@@ -2417,6 +2421,14 @@ fn allocate_keeping(
         places[v as usize] = Place::None;
     }
     let mut spill_count = coloring.spill_count;
+    place_crowded(
+        func,
+        &liveness,
+        &crowded,
+        &wide,
+        &mut places,
+        &mut spill_count,
+    );
     let store_in = save_store_blocks(func, (&crossings, &node_of), &coloring.saved, &freqs);
     let (saves_at, def_stores) = call_save_lists(
         (&crossings, &node_of),
@@ -2813,6 +2825,18 @@ fn allocate_keeping(
     // holds, or an x86-64 load compared with zero in memory, that only later
     // selects in its block read.
     let mut mask_tests: Vec<bool> = vec![false; func.insts.len()];
+    // Per value, the selects later in its block reading it as the condition.
+    let mut selects_of: alloc::collections::BTreeMap<ValueId, Vec<ValueId>> = Default::default();
+    for block in &func.blocks {
+        for p in block.inst_range.clone() {
+            if let Inst::Select { cond, .. } = func.insts[p as usize]
+                && block.inst_range.contains(&cond)
+                && cond < p
+            {
+                selects_of.entry(cond).or_default().push(p);
+            }
+        }
+    }
     for block in &func.blocks {
         for c in block.inst_range.clone() {
             let (fuses, tests) = match func.insts[c as usize] {
@@ -2858,17 +2882,14 @@ fn allocate_keeping(
                     ..
                 }
             );
-            let low_word_reader = (c..block.inst_range.end).any(|p| {
-                matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c)
-                    && super::super::passes::narrow::is_cmp32(&func.cmp32, p)
-            });
+            let selects = selects_of.get(&c).map_or(&[][..], |s| &s[..]);
+            let low_word_reader =
+                (selects.iter()).any(|&p| super::super::passes::narrow::is_cmp32(&func.cmp32, p));
             if quad && low_word_reader {
                 continue;
             }
             let reads = |p: ValueId| matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c);
-            let (n, last) = ((c + 1)..block.inst_range.end)
-                .filter(|&p| reads(p))
-                .fold((0, c), |(n, _), p| (n + 1, p));
+            let (n, last) = (selects.len() as u32, selects.last().copied().unwrap_or(c));
             if n == 0 || use_counts.get(c as usize).copied().unwrap_or(0) != n {
                 continue;
             }
@@ -5496,6 +5517,113 @@ fn call_plan<'f>(
         widths,
     );
     Some((args, fp_arg_mask, plan))
+}
+
+/// More values live at once than an interference graph is built over: a
+/// graph has an edge per pair of them, so its size grows with the square of
+/// the widest point. At 128 values live at once, building and coloring the
+/// graph costs as much per instruction as the rest of the allocation, and
+/// the point is four times the width of the largest register file.
+const CROWD_BOUND: usize = 128;
+
+/// The values spilled ahead of the coloring: where more than
+/// [`CROWD_BOUND`] values are live, the first-defined of them
+/// ([`super::liveness::Liveness::crowded`]). Taken out of the graph, they
+/// bound its width; phis and their incomes, which share a place with one
+/// another, scalable vectors and predicates stay in it.
+fn crowded_values(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    emitted: &[bool],
+) -> Vec<bool> {
+    let n = func.insts.len();
+    let mut phi_side = alloc::vec![false; n];
+    for (v, inst) in func.insts.iter().enumerate() {
+        if let Inst::Phi { incoming, .. } = inst {
+            phi_side[v] = true;
+            for &(_, u) in incoming {
+                if let Some(p) = phi_side.get_mut(u as usize) {
+                    *p = true;
+                }
+            }
+        }
+    }
+    let eligible = |v: ValueId| {
+        let (i, inst) = (v as usize, &func.insts[v as usize]);
+        emitted[i]
+            && !phi_side[i]
+            && produces_value(inst)
+            && !produces_pred_result(inst)
+            && func.value_sve_kind(v).is_none()
+            && !matches!(inst, Inst::AsmOut { .. } | Inst::InlineAsm { .. })
+    };
+    liveness.crowded(func, CROWD_BOUND, &eligible)
+}
+
+/// Slots past `spill_count` for the [`crowded_values`]. A value's span is
+/// the stretch of the tape from its first to its last point: its
+/// definition, its reads, and the ends of the blocks it is live across. A
+/// value takes the slot of one whose span ended before its own begins, so
+/// the frame grows with the crowded values live at once rather than with
+/// their count; a caller of a returns-twice function shares no slot, as
+/// in [`color_graph`].
+fn place_crowded(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    crowded: &[bool],
+    wide: &[VecWidth],
+    places: &mut [Place],
+    spill_count: &mut u32,
+) {
+    let n = func.insts.len();
+    let mut span = vec![(u32::MAX, 0u32); n];
+    let block_of = crate::c5::codegen::passes::constfold_branch::block_index(func);
+    for (b, blk) in func.blocks.iter().enumerate() {
+        let (start, end) = (blk.inst_range.start, blk.inst_range.end);
+        // A value defined elsewhere is live from the block's start.
+        let mut cover = |v: ValueId, at: u32| {
+            if (v as usize) < n && crowded[v as usize] {
+                let s = &mut span[v as usize];
+                let from = if block_of[v as usize] as usize == b {
+                    at
+                } else {
+                    start
+                };
+                *s = (s.0.min(from), s.1.max(at));
+            }
+        };
+        for idx in blk.inst_range.clone() {
+            cover(idx, idx);
+            for_each_operand(&func.insts[idx as usize], |op| cover(op, idx));
+        }
+        blk.terminator.for_each_operand(|op| cover(op, end));
+        cover(blk.exit_acc, end);
+        liveness
+            .block_liveness()
+            .for_each_live_out(b as crate::c5::ir::BlockId, |v| cover(v, end));
+    }
+    let mut order: Vec<usize> = (0..n).filter(|&v| crowded[v]).collect();
+    order.sort_by_key(|&v| (span[v].0, v));
+    let mut active: BinaryHeap<Reverse<(u32, u32, u32)>> = BinaryHeap::new();
+    let mut free: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for v in order {
+        while let Some(&Reverse((last, slot, units))) = active.peek()
+            && last < span[v].0
+        {
+            active.pop();
+            free.entry(units).or_default().push(slot);
+        }
+        let units = wide[v].units();
+        let reused = (!func.has_returns_twice_call)
+            .then(|| free.get_mut(&units).and_then(Vec::pop))
+            .flatten();
+        let slot = reused.unwrap_or_else(|| {
+            *spill_count += units;
+            *spill_count - units
+        });
+        places[v] = Place::Spill(slot);
+        active.push(Reverse((span[v].1, slot, units)));
+    }
 }
 
 /// The constants and the local, data and code addresses every reader of
@@ -8167,50 +8295,143 @@ int main(void) { return 0; }
         }
     }
 
-    /// A function of `n` conditional updates: a chain of `n` diamonds, each
-    /// arm a block, at -O0, as the allocator sees it.
-    fn conditional_updates(n: usize) -> FunctionSsa {
+    /// Function `f` of `src` lifted for `target`, its vector and scalar
+    /// locals promoted.
+    #[cfg(not(debug_assertions))]
+    fn promoted(src: &str, target: Target) -> FunctionSsa {
+        let program =
+            Compiler::with_target(format!("{src}int main(void) {{ return 0; }}\n"), target)
+                .compile()
+                .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("produce_ssa_funcs");
+        crate::c5::codegen::passes::simd_values::run(&mut funcs);
+        let mut f = funcs.into_iter().find(|f| f.name == "f").expect("f");
+        super::super::vector_slots::run(&mut f);
+        super::super::mem2reg::run(&mut f);
+        f
+    }
+
+    /// The thread's CPU time for `run` on `reps` copies of `f`, in one
+    /// interval: a thread clock that advances in scheduler ticks (15.6 ms
+    /// on Windows) reads a short run as zero or a whole tick.
+    #[cfg(not(debug_assertions))]
+    fn cpu_cost(
+        f: &FunctionSsa,
+        reps: u32,
+        run: &impl Fn(&mut FunctionSsa),
+    ) -> core::time::Duration {
+        let mut copies: Vec<FunctionSsa> = (0..reps).map(|_| f.clone()).collect();
+        let start = crate::c5::tests::thread_cpu_time();
+        for g in &mut copies {
+            with_pool_size_override(usize::MAX, usize::MAX, || run(g));
+        }
+        crate::c5::tests::thread_cpu_time() - start
+    }
+
+    /// A function of `n` conditional updates: a chain of `n` diamonds.
+    #[cfg(not(debug_assertions))]
+    fn conditional_updates(n: usize) -> String {
         let body: String = (0..n)
             .map(|i| format!("    if (p[{}] > x + {i}) s += {i};\n", i % 64))
             .collect();
-        let src = format!(
-            "long f(const long *p, long x) {{\n    long s = 0;\n{body}    return s;\n}}\n\
-             int main(void) {{ return 0; }}\n"
-        );
-        let program = Compiler::new(src).compile().expect("compile");
-        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false, true)
-            .expect("produce_ssa_funcs")
-            .into_iter()
-            .find(|f| f.name == "f")
-            .expect("f")
+        format!("long f(const long *p, long x) {{\n    long s = 0;\n{body}    return s;\n}}\n")
     }
 
-    /// Allocation time grows with the function, not with its square: four
-    /// times the conditional updates allocate in under eight times the
-    /// time (the fastest of three runs each), where a walk per block up the
-    /// dominator chain took sixteen.
-    #[test]
-    fn allocation_time_grows_with_the_blocks_not_their_square() {
-        let time = |f: &FunctionSsa| {
-            (0..3)
-                .map(|_| {
-                    let start = std::time::Instant::now();
-                    let a = with_pool_size_override(usize::MAX, usize::MAX, || {
-                        allocate(f, Target::LinuxX64)
-                    });
-                    core::hint::black_box(a);
-                    start.elapsed()
-                })
-                .min()
-                .unwrap()
-        };
-        let (small, large) = (conditional_updates(1500), conditional_updates(6000));
-        let (t1, t4) = (time(&small), time(&large));
+    /// One block of `n` values live at once: loads, then products each
+    /// reading two of them, then stores, as scalars or as vectors.
+    #[cfg(not(debug_assertions))]
+    fn values_live_at_once(n: usize, vector: bool) -> String {
+        let ty = if vector { "v4u" } else { "long" };
+        let mut s = String::from("typedef unsigned v4u __attribute__((vector_size(16)));\n");
+        s += &format!("void f(const {ty} *p, {ty} *q) {{\n");
+        for k in 0..n {
+            s += &format!("    {ty} a{k} = p[{k}];\n");
+        }
+        for k in 0..n {
+            s += &format!("    {ty} b{k} = a{k} * a{};\n", (k * 7 + 1) % n);
+        }
+        for k in 0..n {
+            s += &format!("    q[{k}] = b{k};\n");
+        }
+        s + "}\n"
+    }
+
+    /// `large`, `times` the input of `small`, allocates in under `bound`
+    /// times its time: the thread's CPU time, which waiting for a core does
+    /// not advance, over four rounds that alternate `times` runs of `small`
+    /// with one of `large` and are summed, so a change of core speed falls
+    /// on both and each side spans many clock ticks.
+    #[cfg(not(debug_assertions))]
+    fn assert_scales(
+        what: &str,
+        (small, large, times): (&FunctionSsa, &FunctionSsa, u32),
+        bound: f64,
+        run: impl Fn(&mut FunctionSsa),
+    ) {
+        let (mut t1, mut tn) = (core::time::Duration::ZERO, core::time::Duration::ZERO);
+        for _ in 0..4 {
+            t1 += cpu_cost(small, times, &run);
+            tn += cpu_cost(large, 1, &run);
+        }
+        let growth = tn.as_secs_f64() * f64::from(times) / t1.as_secs_f64();
         assert!(
-            t4 < t1 * 8,
-            "1500 updates: {t1:?}, 6000: {t4:?} ({:.1}x)",
-            t4.as_secs_f64() / t1.as_secs_f64()
+            growth < bound,
+            "{what}: {t1:?}, {times} times the input {tn:?} ({growth:.1}x)"
         );
+    }
+
+    /// Allocation time grows with the blocks, not their square: sixteen
+    /// times the conditional updates take under forty-eight times as long
+    /// (27-29), where a walk per block up the dominator chain took a hundred.
+    /// Release-only: the debug assertions' cost is not the allocator's.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn allocation_time_grows_with_the_blocks_not_their_square() {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let (small, large) = (
+                promoted(&conditional_updates(1000), target),
+                promoted(&conditional_updates(16000), target),
+            );
+            let what = format!("{target:?} updates");
+            assert_scales(&what, (&small, &large, 16), 48.0, |f| {
+                core::hint::black_box(super::allocate(f, target, FixedRegs::NONE));
+            });
+        }
+    }
+
+    /// Allocation time grows with the values live at once, not their
+    /// square, through the -O0 allocation and the -O one with its hoisting
+    /// and range-splitting retries, on both targets, for scalars and
+    /// vectors: eight times the values take under twenty-four times as
+    /// long (7-10), where an edge per pair of them took fifty-eight. Past
+    /// [`CROWD_BOUND`] values the graph has no edge per pair. Release-only:
+    /// the debug assertions' cost is not the allocator's.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn allocation_time_grows_with_the_values_live_at_once_not_their_square() {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            for vector in [false, true] {
+                let (small, large) = (
+                    promoted(&values_live_at_once(250, vector), target),
+                    promoted(&values_live_at_once(2000, vector), target),
+                );
+                let what = format!("{target:?} vector={vector}");
+                let pair = (&small, &large, 8);
+                assert_scales(&format!("{what} -O0"), pair, 24.0, |f| {
+                    core::hint::black_box(super::allocate(f, target, FixedRegs::NONE));
+                });
+                assert_scales(&format!("{what} -O"), pair, 24.0, |f| {
+                    core::hint::black_box(super::super::licm::allocate_hoisted(
+                        f,
+                        target,
+                        FixedRegs::NONE,
+                        0,
+                    ));
+                });
+            }
+        }
     }
 
     /// Allocate every function in c4.c. Exercises the cross-block

@@ -444,6 +444,17 @@ fn far_stack_arguments_reach_their_slots() {
     );
 }
 
+/// Values past the allocator's graph bound share slots only with values
+/// not live beside them, at -O0 and -O. Release-only: the function is
+/// large and its cost is in the allocation.
+#[cfg(not(debug_assertions))]
+#[test]
+fn crowded_values_keep_their_slots() {
+    let src = super::crowded_values_source();
+    assert_eq!(jit_exit(&src, &["jit-crowded"]), 0);
+    assert_eq!(jit_exit_native_optimized(&src, &["jit-crowded-O"]), 0);
+}
+
 #[test]
 fn return_42() {
     assert_eq!(jit_exit("int main() { return 42; }", &["jit-ret42"]), 42);

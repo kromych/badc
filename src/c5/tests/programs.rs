@@ -8396,50 +8396,6 @@ fn local_label_unit(n: usize) -> String {
     s
 }
 
-/// CPU time the calling thread has consumed, which waiting for a core does not advance.
-#[cfg(not(debug_assertions))]
-fn thread_cpu_time() -> core::time::Duration {
-    #[cfg(unix)]
-    {
-        #[repr(C)]
-        struct Timespec {
-            sec: core::ffi::c_long,
-            nsec: core::ffi::c_long,
-        }
-        #[cfg(target_vendor = "apple")]
-        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 16;
-        #[cfg(not(target_vendor = "apple"))]
-        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 3;
-        unsafe extern "C" {
-            fn clock_gettime(id: core::ffi::c_int, ts: *mut Timespec) -> core::ffi::c_int;
-        }
-        let mut ts = Timespec { sec: 0, nsec: 0 };
-        assert_eq!(
-            unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &mut ts) },
-            0
-        );
-        core::time::Duration::new(ts.sec as u64, ts.nsec as u32)
-    }
-    #[cfg(windows)]
-    {
-        unsafe extern "system" {
-            fn GetCurrentThread() -> *mut core::ffi::c_void;
-            fn GetThreadTimes(
-                thread: *mut core::ffi::c_void,
-                creation: *mut [u32; 2],
-                exit: *mut [u32; 2],
-                kernel: *mut [u32; 2],
-                user: *mut [u32; 2],
-            ) -> core::ffi::c_int;
-        }
-        let mut t = [[0u32; 2]; 4];
-        let [c, e, k, u] = &mut t;
-        assert_ne!(unsafe { GetThreadTimes(GetCurrentThread(), c, e, k, u) }, 0);
-        let hundred_ns = |f: [u32; 2]| (u64::from(f[1]) << 32) | u64::from(f[0]);
-        core::time::Duration::from_nanos((hundred_ns(t[2]) + hundred_ns(t[3])) * 100)
-    }
-}
-
 #[test]
 #[cfg(not(debug_assertions))]
 fn local_label_parse_cost_is_linear_in_declaration_count() {
@@ -8453,11 +8409,11 @@ fn local_label_parse_cost_is_linear_in_declaration_count() {
     const BATCH: u32 = 8;
     let units = [local_label_unit(800), local_label_unit(12800)];
     let cost = |src: &str, reps: u32| {
-        let start = thread_cpu_time();
+        let start = super::thread_cpu_time();
         for _ in 0..reps {
             let _ = compile_str(src);
         }
-        thread_cpu_time() - start
+        super::thread_cpu_time() - start
     };
     let (mut small, mut large) = (Duration::ZERO, Duration::ZERO);
     for _ in 0..ROUNDS {

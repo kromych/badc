@@ -4596,7 +4596,7 @@ pub(crate) fn cost_weights(func: &FunctionSsa) -> Vec<u64> {
 /// that reaches no exit is not halved, nor one in the loop of a dominator
 /// that leaves it: the loop's iterations take that arm.
 pub(crate) fn block_frequencies(func: &FunctionSsa) -> Vec<u64> {
-    use super::mem2reg::{EXIT, dominators, post_dominators, successors};
+    use super::mem2reg::{dominators, post_dominators, successors};
     use crate::c5::ir::BlockId;
     let weights = block_weights(func);
     let depths = crate::c5::codegen::passes::layout::loop_depths(func);
@@ -4613,30 +4613,76 @@ pub(crate) fn block_frequencies(func: &FunctionSsa) -> Vec<u64> {
         .collect();
     let idom = dominators(func);
     let ipdom = post_dominators(func);
-    let post_dominates = |a: BlockId, mut b: BlockId| loop {
-        match ipdom.get(b as usize).copied() {
-            Some(p) if p == a => return true,
-            Some(EXIT) | None => return false,
-            Some(p) if p == BlockId::MAX => return true,
-            Some(p) => b = p,
+    let n = func.blocks.len();
+    // The post-dominator forest by DFS intervals: `a` post-dominates `b`
+    // when it is a proper ancestor of `b`, or when `b`'s root reaches no
+    // exit (no block post-dominates it, every one is taken to).
+    let parent = |b: usize| ipdom.get(b).copied().filter(|&p| (p as usize) < n);
+    let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
+    for b in 0..n {
+        if let Some(p) = parent(b) {
+            children[p as usize].push(b as BlockId);
         }
-    };
-    (0..func.blocks.len())
-        .map(|b| {
-            let mut halvings = 0u32;
-            let mut x = b as BlockId;
-            while let Some(&d) = idom.get(x as usize) {
-                if d == x || d == BlockId::MAX {
-                    break;
-                }
-                let continues = leaves_loop[d as usize] && depths[x as usize] >= depths[d as usize];
-                if !post_dominates(x, d) && !continues {
-                    halvings += 1;
-                }
-                x = d;
+    }
+    let (mut enter, mut leave) = (alloc::vec![0u32; n], alloc::vec![0u32; n]);
+    let mut endless = alloc::vec![false; n];
+    let mut clock = 0u32;
+    for root in (0..n).filter(|&b| parent(b).is_none()) {
+        let open = ipdom.get(root) == Some(&BlockId::MAX);
+        let mut stack: Vec<(usize, usize)> = alloc::vec![(root, 0)];
+        enter[root] = clock;
+        clock += 1;
+        while let Some(&mut (b, ref mut next)) = stack.last_mut() {
+            endless[b] = open;
+            if let Some(&c) = children[b].get(*next) {
+                *next += 1;
+                enter[c as usize] = clock;
+                clock += 1;
+                stack.push((c as usize, 0));
+            } else {
+                leave[b] = clock;
+                stack.pop();
             }
-            weights[b].saturating_mul(FREQ_ONE) >> halvings.min(8)
-        })
+        }
+    }
+    let post_dominates = |a: BlockId, b: BlockId| {
+        let (a, b) = (a as usize, b as usize);
+        endless[b] || a != b && enter[a] < enter[b] && leave[b] <= leave[a]
+    };
+    // A block's halvings are its dominator's plus one for its own step to
+    // it, unless that dominator is post-dominated by the block or leaves a
+    // loop the block continues; filled down each dominator chain once.
+    let step = |x: usize, d: usize| {
+        let continues = leaves_loop[d] && depths[x] >= depths[d];
+        u32::from(!post_dominates(x as BlockId, d as BlockId) && !continues)
+    };
+    let mut halvings: Vec<Option<u32>> = alloc::vec![None; n];
+    let mut path: Vec<usize> = Vec::new();
+    for b in 0..n {
+        let mut x = b;
+        let base = loop {
+            if let Some(h) = halvings[x] {
+                break h;
+            }
+            match idom.get(x).copied() {
+                Some(d) if d as usize != x && d != BlockId::MAX && (d as usize) < n => {
+                    path.push(x);
+                    x = d as usize;
+                }
+                _ => {
+                    halvings[x] = Some(0);
+                    break 0;
+                }
+            }
+        };
+        let mut h = base;
+        while let Some(x) = path.pop() {
+            h = h.saturating_add(step(x, idom[x] as usize));
+            halvings[x] = Some(h);
+        }
+    }
+    (0..n)
+        .map(|b| weights[b].saturating_mul(FREQ_ONE) >> halvings[b].unwrap_or(0).min(8))
         .collect()
 }
 
@@ -8054,6 +8100,117 @@ int main(void) { return 0; }
                 f.ent_pc
             );
         }
+    }
+
+    /// The per-block walk up the dominator tree the frequencies were once
+    /// computed by, each step testing post-dominance by walking the
+    /// post-dominator chain: the reference the linear form must match.
+    fn frequencies_by_walking(func: &FunctionSsa) -> Vec<u64> {
+        use super::super::mem2reg::{EXIT, dominators, post_dominators, successors};
+        use crate::c5::ir::BlockId;
+        let weights = block_weights(func);
+        let depths = crate::c5::codegen::passes::layout::loop_depths(func);
+        let leaves_loop: Vec<bool> = (func.blocks.iter().enumerate())
+            .map(|(b, block)| {
+                successors(
+                    &block.terminator,
+                    &func.computed_goto_targets,
+                    &func.jump_tables,
+                )
+                .iter()
+                .any(|&s| depths[s as usize] < depths[b])
+            })
+            .collect();
+        let idom = dominators(func);
+        let ipdom = post_dominators(func);
+        let post_dominates = |a: BlockId, mut b: BlockId| loop {
+            match ipdom.get(b as usize).copied() {
+                Some(p) if p == a => return true,
+                Some(EXIT) | None => return false,
+                Some(p) if p == BlockId::MAX => return true,
+                Some(p) => b = p,
+            }
+        };
+        (0..func.blocks.len())
+            .map(|b| {
+                let mut halvings = 0u32;
+                let mut x = b as BlockId;
+                while let Some(&d) = idom.get(x as usize) {
+                    if d == x || d == BlockId::MAX {
+                        break;
+                    }
+                    let continues =
+                        leaves_loop[d as usize] && depths[x as usize] >= depths[d as usize];
+                    if !post_dominates(x, d) && !continues {
+                        halvings += 1;
+                    }
+                    x = d;
+                }
+                weights[b].saturating_mul(FREQ_ONE) >> halvings.min(8)
+            })
+            .collect()
+    }
+
+    /// The frequencies filled down the dominator tree equal the per-block
+    /// walk on every function of the self-host and quicksort fixtures.
+    #[test]
+    fn block_frequencies_match_the_dominator_walk() {
+        for path in ["tests/fixtures/c/c4.c", "tests/fixtures/c/quicksort.c"] {
+            for f in lift(path) {
+                assert_eq!(
+                    block_frequencies(&f),
+                    frequencies_by_walking(&f),
+                    "{path}: {}",
+                    f.name
+                );
+            }
+        }
+    }
+
+    /// A function of `n` conditional updates: a chain of `n` diamonds, each
+    /// arm a block, at -O0, as the allocator sees it.
+    fn conditional_updates(n: usize) -> FunctionSsa {
+        let body: String = (0..n)
+            .map(|i| format!("    if (p[{}] > x + {i}) s += {i};\n", i % 64))
+            .collect();
+        let src = format!(
+            "long f(const long *p, long x) {{\n    long s = 0;\n{body}    return s;\n}}\n\
+             int main(void) {{ return 0; }}\n"
+        );
+        let program = Compiler::new(src).compile().expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false, true)
+            .expect("produce_ssa_funcs")
+            .into_iter()
+            .find(|f| f.name == "f")
+            .expect("f")
+    }
+
+    /// Allocation time grows with the function, not with its square: four
+    /// times the conditional updates allocate in under eight times the
+    /// time (the fastest of three runs each), where a walk per block up the
+    /// dominator chain took sixteen.
+    #[test]
+    fn allocation_time_grows_with_the_blocks_not_their_square() {
+        let time = |f: &FunctionSsa| {
+            (0..3)
+                .map(|_| {
+                    let start = std::time::Instant::now();
+                    let a = with_pool_size_override(usize::MAX, usize::MAX, || {
+                        allocate(f, Target::LinuxX64)
+                    });
+                    core::hint::black_box(a);
+                    start.elapsed()
+                })
+                .min()
+                .unwrap()
+        };
+        let (small, large) = (conditional_updates(1500), conditional_updates(6000));
+        let (t1, t4) = (time(&small), time(&large));
+        assert!(
+            t4 < t1 * 8,
+            "1500 updates: {t1:?}, 6000: {t4:?} ({:.1}x)",
+            t4.as_secs_f64() / t1.as_secs_f64()
+        );
     }
 
     /// Allocate every function in c4.c. Exercises the cross-block

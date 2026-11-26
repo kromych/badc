@@ -7352,11 +7352,14 @@ pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
 /// reference compiler derives them. GNU C requires each `asm` statement to
 /// leave sp as it found it; badc's frames follow one that leaves it moved
 /// (`Frame::dynamic_sp`), a stack switch spanning statements or a statement
-/// that lists sp as clobbered. Every backend runs these at -O0 and -O.
+/// that lists sp as clobbered. badc's `math_errhandling` is `MATH_ERREXCEPT`
+/// on every target, where glibc's adds `MATH_ERRNO`. Every backend runs
+/// these at -O0 and -O.
 pub(super) const BADC_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_stack_switch_spill.c", 0),
     ("inline_asm_declared_sp_clobber.c", 0),
     ("inline_asm_leaf_sp_clobber.c", 0),
+    ("math_errhandling_is_floating_exceptions.c", 0),
 ];
 
 /// Every table above, named so a failure points at the stale entry's table.

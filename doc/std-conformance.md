@@ -220,6 +220,11 @@ atomic ([`_Atomic` objects](#_atomic-objects)). Under `--msvc` it and
 - `aligned_alloc` (7.22.3.1) on every target. On Windows it takes the
   alignments up to 16, those msvcrt's `malloc` provides and `free` releases;
   a wider one fails with `EINVAL`, as 7.22.3.1p3 allows.
+- `math_errhandling` (7.12p9) is `MATH_ERREXCEPT` on every target: a math
+  function reports a domain, pole or range error by raising the
+  floating-point exception. `sqrt`, `fabs`, `floor`, `ceil` and `trunc`
+  lower to one instruction and leave `errno` alone; the platform library's
+  other functions may also set it, as 7.5p3 permits.
 
 ## Divergences
 

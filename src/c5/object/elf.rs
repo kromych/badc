@@ -511,7 +511,7 @@ fn pad_with_traps(machine: Machine, code: &mut Vec<u8>, len: usize) {
         Machine::X86_64 => code.resize(len, 0xCC),
         Machine::Aarch64 => {
             while code.len() + 4 <= len {
-                aarch64::emit(code, 0xd420_0020);
+                aarch64::put(code, aarch64::enc_brk(1));
             }
             code.resize(len, 0);
         }
@@ -554,13 +554,13 @@ fn emit_entry_adapter(
             use aarch64::Reg;
             let arg0 = Reg(abi.int_arg_regs[0]);
             let arg1 = Reg(abi.int_arg_regs[1]);
-            aarch64::emit(code, aarch64::enc_movz(Reg(29), 0, 0));
-            aarch64::emit(code, aarch64::enc_add_imm(arg0, Reg::SP, 0));
-            aarch64::emit(
+            aarch64::put(code, aarch64::enc_movz(Reg(29), 0, 0));
+            aarch64::put(code, aarch64::enc_add_imm(arg0, Reg::SP, 0));
+            aarch64::put(
                 code,
                 aarch64::enc_movz(arg1, (image_off & 0xffff) as u16, 0),
             );
-            aarch64::emit(
+            aarch64::put(
                 code,
                 aarch64::enc_movk(arg1, ((image_off >> 16) & 0xffff) as u16, 1),
             );
@@ -570,8 +570,8 @@ fn emit_entry_adapter(
             let b_pc = code.len() as u64;
             let target = stub_len + entry_off;
             let rel_insns = ((target as i64 - b_pc as i64) / 4) as i32;
-            aarch64::emit(code, aarch64::enc_b(rel_insns));
-            aarch64::emit(code, 0xd420_0020);
+            aarch64::put(code, aarch64::enc_b(rel_insns));
+            aarch64::put(code, aarch64::enc_brk(1));
         }
     }
     debug_assert_eq!(code.len() as u64, stub_len);
@@ -641,21 +641,21 @@ fn emit_start_stub(
             use aarch64::Reg;
             let code = &mut *out;
             let (argc, argv) = (Reg(abi.int_arg_regs[0]), Reg(abi.int_arg_regs[1]));
-            aarch64::emit(code, aarch64::enc_ldr_imm(argc, Reg::SP, 0));
-            aarch64::emit(code, aarch64::enc_add_imm(argv, Reg::SP, 8));
+            aarch64::put(code, aarch64::enc_ldr_imm(argc, Reg::SP, 0));
+            aarch64::put(code, aarch64::enc_add_imm(argv, Reg::SP, 8));
             let bl_pc = code.len() as i64;
             let target = stub_len as i64 + entry_off as i64;
-            aarch64::emit(code, aarch64::enc_bl(((target - bl_pc) / 4) as i32));
+            aarch64::put(code, aarch64::enc_bl(((target - bl_pc) / 4) as i32));
             if libc_exit {
                 let at = code.len();
-                aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
-                aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
-                aarch64::emit(code, aarch64::enc_blr(Reg::X16));
+                aarch64::put(code, aarch64::enc_adrp(Reg::X16, 0));
+                aarch64::put(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
+                aarch64::put(code, aarch64::enc_blr(Reg::X16));
                 Some(at)
             } else {
                 // sys_exit_group, with the status already in x0.
-                aarch64::emit(code, aarch64::enc_movz(Reg::X8, 94, 0));
-                aarch64::emit(code, aarch64::enc_svc(0));
+                aarch64::put(code, aarch64::enc_movz(Reg::X8, 94, 0));
+                aarch64::put(code, aarch64::enc_svc(0));
                 None
             }
         }
@@ -4587,7 +4587,10 @@ mod tests {
         // opcode and gets imm12 = low-12 offset scaled by the 2-byte
         // access.
         let ldrh: u32 = 0x7940_0000; // ldrh w0, [x0]
-        let mut out = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
+        let mut out = aarch64::enc_adrp(aarch64::Reg(0), 0)
+            .word
+            .to_le_bytes()
+            .to_vec();
         out.extend_from_slice(&ldrh.to_le_bytes());
         patch_adrp_add(&mut out, PLACE_1000, 0, 0x2008, AddrPart::Whole, "test").unwrap();
         let ldst = u32::from_le_bytes([out[4], out[5], out[6], out[7]]);
@@ -4598,8 +4601,11 @@ mod tests {
         );
         assert_eq!((ldst >> 10) & 0xFFF, 4, "imm12 = 8 / 2");
 
-        let addi = aarch64::enc_add_imm(aarch64::Reg(0), aarch64::Reg(0), 0);
-        let mut out2 = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
+        let addi = aarch64::enc_add_imm(aarch64::Reg(0), aarch64::Reg(0), 0).word;
+        let mut out2 = aarch64::enc_adrp(aarch64::Reg(0), 0)
+            .word
+            .to_le_bytes()
+            .to_vec();
         out2.extend_from_slice(&addi.to_le_bytes());
         patch_adrp_add(&mut out2, PLACE_1000, 0, 0x2008, AddrPart::Whole, "test").unwrap();
         let add = u32::from_le_bytes([out2[4], out2[5], out2[6], out2[7]]);
@@ -4920,9 +4926,11 @@ mod tests {
         // patching.
         for rd in [0u8, 5, 16] {
             let mut out = Vec::new();
-            out.extend_from_slice(&aarch64::enc_adrp(aarch64::Reg(rd), 0).to_le_bytes());
+            out.extend_from_slice(&aarch64::enc_adrp(aarch64::Reg(rd), 0).word.to_le_bytes());
             out.extend_from_slice(
-                &aarch64::enc_ldr_imm(aarch64::Reg(rd), aarch64::Reg(rd), 0).to_le_bytes(),
+                &aarch64::enc_ldr_imm(aarch64::Reg(rd), aarch64::Reg(rd), 0)
+                    .word
+                    .to_le_bytes(),
             );
             patch_adrp_ldr(&mut out, PLACE_1000, 0, 0x5008, AddrPart::Whole, "test").unwrap();
             let adrp = u32::from_le_bytes(out[0..4].try_into().unwrap());

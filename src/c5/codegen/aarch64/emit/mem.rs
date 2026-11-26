@@ -15,10 +15,10 @@ pub(super) fn v128_spill_off(frame: Frame, slot: u32) -> u32 {
 }
 
 /// An `ADD` / `SUB` (immediate) encoder: `(rd, rn, imm)`.
-type AddSubImm = fn(Reg, Reg, u32) -> u32;
+type AddSubImm = fn(Reg, Reg, u32) -> Insn;
 
 /// `dst = base + disp`; past 24 bits `dst` must differ from `base`.
-pub(crate) fn emit_reg_disp(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i64) {
+pub(crate) fn emit_reg_disp(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i64) {
     let (off, sub) = (disp.unsigned_abs(), disp < 0);
     if off >= 1 << 24 {
         assert_ne!(dst, base, "address scratch aliases its base");
@@ -49,17 +49,17 @@ pub(crate) fn emit_reg_disp(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i64) 
 }
 
 /// Materialize `sp + off` into `dst`.
-pub(super) fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
+pub(super) fn emit_sp_plus_off(code: &mut CodeBuf, dst: Reg, off: u32) {
     emit_reg_disp(code, dst, Reg(31), off.into());
 }
 
 /// Materialize `fp + off` into `dst`.
-pub(super) fn emit_fp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
+pub(super) fn emit_fp_plus_off(code: &mut CodeBuf, dst: Reg, off: u32) {
     emit_reg_disp(code, dst, Reg(29), off.into());
 }
 
 /// Materialize `fp - delta` into `dst`.
-pub(super) fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
+pub(super) fn emit_fp_minus_off(code: &mut CodeBuf, dst: Reg, delta: u32) {
     emit_reg_disp(code, dst, Reg(29), -i64::from(delta));
 }
 
@@ -98,7 +98,7 @@ fn base_len(disp: i64, fits: impl Fn(i64) -> bool) -> u32 {
 }
 
 /// Base and offset of an `op` access at `[base + disp]`; `t` differs from `base`.
-fn mem_base(code: &mut Vec<u8>, op: MemOp, base: Reg, disp: i64, t: Reg) -> (Reg, MemOff) {
+fn mem_base(code: &mut CodeBuf, op: MemOp, base: Reg, disp: i64, t: Reg) -> (Reg, MemOff) {
     if let Some(off) = op.offset(disp) {
         return (base, off);
     }
@@ -113,7 +113,7 @@ fn mem_base(code: &mut Vec<u8>, op: MemOp, base: Reg, disp: i64, t: Reg) -> (Reg
 }
 
 /// `op` between `rt` and `[base + disp]`; a store's `t` also differs from `rt`.
-pub(crate) fn emit_mem(code: &mut Vec<u8>, op: MemOp, rt: u8, base: Reg, disp: i64, t: Reg) {
+pub(crate) fn emit_mem(code: &mut CodeBuf, op: MemOp, rt: u8, base: Reg, disp: i64, t: Reg) {
     let (base, off) = mem_base(code, op, base, disp, t);
     emit(code, enc_mem(op, rt, base, off));
 }
@@ -121,7 +121,7 @@ pub(crate) fn emit_mem(code: &mut Vec<u8>, op: MemOp, rt: u8, base: Reg, disp: i
 /// Base and offset of a strict-alignment transfer at `[base + disp]`: a
 /// rebase moves by a multiple of `align`, which keeps each piece's width.
 pub(crate) fn bound_base(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     base: Reg,
     disp: i64,
     width: u32,
@@ -149,12 +149,12 @@ pub(super) fn other_ip(r: Reg) -> Reg {
 }
 
 /// SP-relative 8-byte load, addressing through `rt` past the offset forms.
-pub(super) fn emit_sp_ldr_x(code: &mut Vec<u8>, rt: Reg, off: u32) {
+pub(super) fn emit_sp_ldr_x(code: &mut CodeBuf, rt: Reg, off: u32) {
     emit_mem(code, LDR_X, rt.0, Reg(31), off.into(), rt);
 }
 
 /// SP-relative 8-byte store where neither IP scratch is live.
-pub(super) fn emit_sp_str_x_auto(code: &mut Vec<u8>, rt: Reg, off: u32) {
+pub(super) fn emit_sp_str_x_auto(code: &mut CodeBuf, rt: Reg, off: u32) {
     emit_mem(code, STR_X, rt.0, Reg(31), off.into(), other_ip(rt));
 }
 
@@ -169,14 +169,14 @@ fn spill_base(frame: Frame, sp_off: u32) -> (Reg, i64) {
     }
 }
 
-pub(super) fn emit_spill_ldr_x(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
+pub(super) fn emit_spill_ldr_x(code: &mut CodeBuf, frame: Frame, rt: Reg, sp_off: u32) {
     let (base, disp) = spill_base(frame, sp_off);
     emit_mem(code, LDR_X, rt.0, base, disp, rt);
 }
 
 /// Spill-slot 8-byte store of `rt`; `addr_scratch` differs from `rt`.
 pub(super) fn emit_spill_str_x(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     rt: Reg,
     sp_off: u32,
@@ -187,14 +187,14 @@ pub(super) fn emit_spill_str_x(
 }
 
 /// `emit_spill_str_x` with the IP-pool scratch that differs from `rt`.
-pub(super) fn emit_spill_str_x_auto(code: &mut Vec<u8>, frame: Frame, rt: Reg, sp_off: u32) {
+pub(super) fn emit_spill_str_x_auto(code: &mut CodeBuf, frame: Frame, rt: Reg, sp_off: u32) {
     emit_spill_str_x(code, frame, rt, sp_off, other_ip(rt));
 }
 
 /// Spill-slot 8-byte store where only `borrow`, a live register pushed around
 /// the store, can carry the address (both IP scratches hold cycle values).
 pub(super) fn emit_spill_str_x_borrow(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     rt: Reg,
     sp_off: u32,
@@ -213,23 +213,23 @@ pub(super) fn emit_spill_str_x_borrow(
 }
 
 /// Spill-slot 8-byte FP load into d-reg `dt`; `addr_scratch` is a GPR.
-fn emit_spill_ldr_d(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32, addr_scratch: Reg) {
+fn emit_spill_ldr_d(code: &mut CodeBuf, frame: Frame, dt: u8, sp_off: u32, addr_scratch: Reg) {
     let (base, disp) = spill_base(frame, sp_off);
     emit_mem(code, LDR_D, dt, base, disp, addr_scratch);
 }
 
 /// Spill-slot FP store / load with x16 as the address scratch.
-pub(super) fn emit_spill_str_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32) {
+pub(super) fn emit_spill_str_d_auto(code: &mut CodeBuf, frame: Frame, dt: u8, sp_off: u32) {
     let (base, disp) = spill_base(frame, sp_off);
     emit_mem(code, STR_D, dt, base, disp, Reg(16));
 }
 
-pub(super) fn emit_spill_ldr_d_auto(code: &mut Vec<u8>, frame: Frame, dt: u8, sp_off: u32) {
+pub(super) fn emit_spill_ldr_d_auto(code: &mut CodeBuf, frame: Frame, dt: u8, sp_off: u32) {
     emit_spill_ldr_d(code, frame, dt, sp_off, Reg(16));
 }
 
 pub(super) fn emit_spill_ldr_q(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     qt: u8,
     sp_off: u32,
@@ -240,7 +240,7 @@ pub(super) fn emit_spill_ldr_q(
 }
 
 pub(super) fn emit_spill_str_q(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     qt: u8,
     sp_off: u32,
@@ -469,7 +469,7 @@ pub(super) fn int_unit_ops(width: u32) -> (MemOp, MemOp) {
 /// checked reaches it.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_copy_unit(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     width: u32,
     temp: Reg,
     sbase: Reg,
@@ -507,7 +507,7 @@ pub(super) fn copy_widest(unit: u32, temps: usize) -> u32 {
 /// the tail through halving widths. Past one window the bases advance,
 /// which the result reports.
 pub(super) fn emit_block_copy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     unit: u32,
     temps: &[Reg],
     sbase: Reg,
@@ -587,7 +587,7 @@ impl SiteRegs {
 
     /// The next free register, else one saved on the stack; none once the
     /// candidates are exhausted.
-    pub(super) fn take(&mut self, code: &mut Vec<u8>) -> Option<Reg> {
+    pub(super) fn take(&mut self, code: &mut CodeBuf) -> Option<Reg> {
         if let Some(r) = self.free() {
             return Some(r);
         }
@@ -598,7 +598,7 @@ impl SiteRegs {
     }
 
     /// Restore the saved registers, the last saved first.
-    pub(super) fn restore(&self, code: &mut Vec<u8>) {
+    pub(super) fn restore(&self, code: &mut CodeBuf) {
         for &r in self.saved.iter().rev() {
             emit(code, enc_ldr_post(r, Reg(31), 16));
         }
@@ -615,7 +615,7 @@ impl SiteRegs {
     }
 }
 
-pub(super) fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
+pub(super) fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> Insn {
     let (ld, _) = int_unit_ops(width);
     enc_mem(ld, rt.0, base, ld.scaled(off))
 }
@@ -627,7 +627,7 @@ pub(super) fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
 /// alias `base`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_agg_load_int(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: Reg,
     base: Reg,
     off: u32,
@@ -659,7 +659,7 @@ pub(crate) fn emit_agg_load_int(
 /// only extra register.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_fp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dst: u8,
     base: Reg,
     off: u32,
@@ -702,7 +702,7 @@ pub(super) fn emit_agg_load_fp(
 /// the destination's alignment does not admit the whole access.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_store_fp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     src: u8,
     base: Reg,
     off: u32,
@@ -738,7 +738,7 @@ pub(super) fn narrow_bound(align: u8, abi: super::Abi) -> Option<u32> {
 
 /// Zero-extending store of the low `width` bytes (8, 4, 2 or 1) of
 /// `rt` to `[base + off]`.
-pub(crate) fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
+pub(crate) fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> Insn {
     let (_, st) = int_unit_ops(width);
     enc_mem(st, rt.0, base, st.scaled(off))
 }
@@ -797,7 +797,7 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
 /// `align`-aligned into accesses no wider than that, into `rd`. The
 /// pieces compose zero-extended; a signed kind is sign-extended after.
 fn emit_narrow_load(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     rd: Reg,
     rn: Reg,
     disp: u32,
@@ -825,7 +825,7 @@ fn emit_narrow_load(
 /// bytes of `rs` to `[rn + disp]` in `align`-wide pieces, most
 /// significant last.
 fn emit_narrow_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     rs: Reg,
     rn: Reg,
     disp: u32,
@@ -891,7 +891,7 @@ pub(super) fn fp_store_op(width: u32) -> MemOp {
 /// Base and displacement of the object at `base + disp`: `t` loaded with its
 /// address unless every `(op, offset)` access encodes in one instruction.
 pub(crate) fn object_base(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     base: Reg,
     disp: i64,
     accesses: impl Iterator<Item = (MemOp, u32)> + Clone,
@@ -912,7 +912,7 @@ pub(crate) fn object_base(
 
 /// [`emit_agg_store_fp`] into the object at `base + disp`.
 pub(super) fn emit_agg_store_fp_at(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     src: u8,
     (base, disp): (Reg, i64),
     off: u32,
@@ -1003,14 +1003,14 @@ impl FrameLoc {
 }
 
 /// `op` between `rt` and the frame byte `loc`; `t` as for [`emit_mem`].
-pub(super) fn emit_frame_mem(code: &mut Vec<u8>, op: MemOp, rt: u8, loc: FrameLoc, t: Reg) {
+pub(super) fn emit_frame_mem(code: &mut CodeBuf, op: MemOp, rt: u8, loc: FrameLoc, t: Reg) {
     let (base, disp) = loc.pick(|d| op.offset(d).is_some());
     emit_mem(code, op, rt, base, disp, t);
 }
 
 /// [`object_base`] of the object at `loc`.
 pub(super) fn frame_object_base(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     loc: FrameLoc,
     accesses: impl Iterator<Item = (MemOp, u32)> + Clone,
     t: Reg,
@@ -1171,7 +1171,7 @@ pub(super) fn materialize_v128(
 }
 
 pub(super) fn propagate_v128(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     dst: Place,
     src: u8,
@@ -1281,7 +1281,7 @@ fn int_store_source(
 /// pieces under `bound`.
 #[allow(clippy::too_many_arguments)]
 fn emit_int_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: MemOp,
     rs: Reg,
     rn: Reg,
@@ -1666,7 +1666,7 @@ fn emit_store_local_f32(
 
 /// Propagate a stored integer value, the c5 accumulator, to `dst` when the
 /// allocator parked it elsewhere; `Err` for an FP destination.
-pub(super) fn propagate_int(code: &mut Vec<u8>, frame: Frame, dst: Place, rv: Reg) -> Emit {
+pub(super) fn propagate_int(code: &mut CodeBuf, frame: Frame, dst: Place, rv: Reg) -> Emit {
     match dst {
         Place::IntReg(r) if r != rv.0 => emit_mov_reg(code, Reg(r), rv),
         Place::IntReg(_) | Place::None => {}
@@ -1678,7 +1678,7 @@ pub(super) fn propagate_int(code: &mut Vec<u8>, frame: Frame, dst: Place, rv: Re
 
 /// Propagate a stored d-register value to `dst` when the allocator parked
 /// the accumulator elsewhere.
-fn propagate_fp(code: &mut Vec<u8>, frame: Frame, dst: Place, dn: u8) {
+fn propagate_fp(code: &mut CodeBuf, frame: Frame, dst: Place, dn: u8) {
     match dst {
         Place::FpReg(r) if r != dn => emit(code, super::encode::enc_fmov_d_d(r, dn)),
         Place::Spill(slot) => emit_spill_str_d_auto(code, frame, dn, spill_off(frame, slot)),
@@ -2120,7 +2120,7 @@ fn int_store_value(
 /// Store FP register `vt`; under `bound` its bit pattern goes in GPR pieces.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     op: MemOp,
     vt: u8,
     rn: Reg,

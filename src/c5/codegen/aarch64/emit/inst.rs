@@ -691,7 +691,7 @@ fn note_in_page(
     Ok(())
 }
 
-pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
+pub(super) fn emit_adrp_add(code: &mut CodeBuf, rd: Reg) {
     emit(code, enc_adrp(rd, 0));
     emit(code, enc_add_imm(rd, rd, 0));
 }
@@ -701,7 +701,7 @@ pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
 /// converted from the low `kind` bytes per C99 6.3.1.3.
 #[allow(clippy::too_many_arguments)]
 fn emit_incoming(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -758,7 +758,7 @@ fn emit_incoming(
         return fail(alloc::format!("{name}: integer value from an FP register"));
     }
     let ext = param_entry_ext(*kind, v, alloc);
-    let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
+    let sign_extend = |code: &mut CodeBuf, rd: Reg| {
         emit_sign_extend(code, rd, Reg(src), ext.unwrap_or(LoadKind::I64));
     };
     match dst {
@@ -797,13 +797,13 @@ fn emit_vec_binop(
         else {
             return fail("VecBinop: rhs not fp reg / spill");
         };
-        let Some(word) = super::encode::enc_vec_binop(op, lane, qd, dn, u32::from(dm)) else {
+        let Some(word) = super::encode::enc_vec_binop(op, lane, qd, dn, u32::from(dm), false)
+        else {
             return fail(alloc::format!(
                 "VecBinop: no instruction for {op:?} on {lane:?}"
             ));
         };
-        // The 64-bit form: Q clear.
-        emit(code, word & !0x4000_0000);
+        emit(code, word);
         store_spilled_fp(code, frame, dst, qd);
         return Ok(());
     }
@@ -825,7 +825,7 @@ fn emit_vec_binop(
     ) else {
         return fail("VecBinop: rhs not fp reg / spill");
     };
-    let Some(word) = super::encode::enc_vec_binop(op, lane, qd, qn, u32::from(qm)) else {
+    let Some(word) = super::encode::enc_vec_binop(op, lane, qd, qn, u32::from(qm), true) else {
         return fail(alloc::format!(
             "VecBinop: no instruction for {op:?} on {lane:?}"
         ));
@@ -1092,7 +1092,7 @@ pub(super) fn post_indexed(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option
 /// The post-indexed access [`post_indexed`] paired with the step ahead of
 /// it; `None` for any other instruction.
 pub(super) fn emit_post_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     paired: &[Option<PostIndex>],
     fcx: &FnCtx,
@@ -1201,7 +1201,7 @@ pub(super) fn flag_steps(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<F
 /// The step or comparison [`flag_steps`] marked; `None` for any other
 /// instruction.
 pub(super) fn emit_flag_step(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     steps: &[Option<FlagStep>],
     fcx: &FnCtx,
@@ -1530,7 +1530,7 @@ fn emit_vec_const(
     (imm, kind, bytes): (i64, StoreKind, u8),
     (dst, frame, scratch): (Place, Frame, &ScratchPool),
 ) -> Emit {
-    use super::table::{self, Opnd};
+    use super::table::Opnd;
     if bytes != 16 && bytes != 8 {
         return fail("VecConst: only 8- and 16-byte vectors");
     }
@@ -1557,7 +1557,7 @@ fn emit_vec_const(
     let modified = |m: &str, v: u64, shift: u32| {
         (v >> 8 == 0)
             .then(|| {
-                table::encode(
+                super::encode::enc_table(
                     m,
                     &[
                         vreg(esize.trailing_zeros()),
@@ -1570,9 +1570,9 @@ fn emit_vec_const(
     };
     let bytewise = pattern.to_le_bytes().iter().all(|&b| b == 0 || b == 0xFF);
     let word = if bytewise {
-        table::encode("movi", &[vreg(3), Opnd::Imm(pattern as i64)]).ok()
+        super::encode::enc_table("movi", &[vreg(3), Opnd::Imm(pattern as i64)]).ok()
     } else if esize == 1 {
-        table::encode("movi", &[vreg(0), Opnd::Imm(lane as i64)]).ok()
+        super::encode::enc_table("movi", &[vreg(0), Opnd::Imm(lane as i64)]).ok()
     } else if esize <= 4 {
         (0..bits).step_by(8).find_map(|s| {
             let (v, n) = (lane >> s, !lane & mask);

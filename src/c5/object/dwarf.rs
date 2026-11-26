@@ -485,14 +485,14 @@ fn paciasp_offset(build: &Build, low_pc: usize, frame: Option<u32>) -> Option<u3
     if let Some(frame) = frame {
         at += frame as usize;
     } else {
-        if word(at) == Some(encode::BTI_C) {
+        if word(at) == Some(encode::BTI_C.word) {
             at += 4;
         }
-        while word(at) == Some(encode::NOP) {
+        while word(at) == Some(encode::NOP.word) {
             at += 4;
         }
     }
-    (word(at).is_some_and(|w| w == encode::PACIASP || w == encode::PACIBSP))
+    (word(at).is_some_and(|w| w == encode::PACIASP.word || w == encode::PACIBSP.word))
         .then(|| (at - low_pc) as u32)
 }
 
@@ -3020,8 +3020,8 @@ mod tests {
         let (lo, frame) = (fib.low_pc as usize, early.frame as usize);
         assert_eq!(early.exit as u64, fib.high_pc - fib.low_pc);
         assert_eq!(fib.early_return, None);
-        assert_eq!(word(lo + frame - 4), encode::enc_ret(encode::Reg(30)));
-        assert_eq!(word(lo + frame), encode::PACIASP);
+        assert_eq!(word(lo + frame - 4), encode::enc_ret(encode::Reg(30)).word);
+        assert_eq!(word(lo + frame), encode::PACIASP.word);
         assert_eq!(fib.ra_signed_at, Some(frame as u32));
     }
 
@@ -3066,16 +3066,16 @@ mod tests {
         let (frame, exit) = (early.frame as usize, early.exit as usize);
         assert_eq!(
             word(lo),
-            encode::BTI_C,
+            encode::BTI_C.word,
             "the landing pad opens the function"
         );
         assert_eq!(
             word(lo + frame),
-            encode::PACIASP,
+            encode::PACIASP.word,
             "the frame path signs first"
         );
         assert_eq!(fib.ra_signed_at, Some(frame as u32));
-        let ret = encode::enc_ret(encode::Reg(30));
+        let ret = encode::enc_ret(encode::Reg(30)).word;
         assert_eq!(
             word(fib.high_pc as usize - 4),
             ret,

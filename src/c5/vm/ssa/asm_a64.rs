@@ -275,8 +275,9 @@ pub(super) fn run(
         frame,
         args,
     };
-    // Instructions written as bytes or data, collected up to the next
-    // mnemonic: only hints and barriers, which change no register, run.
+    // Instructions written as bytes or data, or encoded by the parser,
+    // collected up to the next mnemonic: only hints and barriers, which
+    // change no register, run.
     let mut words: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
     for insn in &insns {
         let m = insn.mnemonic.as_str();
@@ -291,7 +292,7 @@ pub(super) fn run(
             continue;
         }
         words.extend_from_slice(&insn.bytes);
-        if m.is_empty() {
+        if m.is_empty() || !insn.bytes.is_empty() {
             continue;
         }
         check_words(&mut words)?;

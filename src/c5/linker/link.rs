@@ -7124,7 +7124,7 @@ mod tests {
         use crate::c5::codegen::aarch64::encode::{Reg, enc_adr};
         for disp in [0x10i32, -0x24, (1 << 20) - 1, -(1 << 20)] {
             let mut text = alloc::vec![0u8; 4];
-            text[..4].copy_from_slice(&enc_adr(Reg(7), 0).to_le_bytes());
+            text[..4].copy_from_slice(&enc_adr(Reg(7), 0).word.to_le_bytes());
             apply_reloc(
                 &mut text,
                 0,
@@ -7133,10 +7133,10 @@ mod tests {
             )
             .expect("an in-range displacement patches");
             let got = u32::from_le_bytes(text[..4].try_into().unwrap());
-            assert_eq!(got, enc_adr(Reg(7), disp), "disp {disp:#x}");
+            assert_eq!(got, enc_adr(Reg(7), disp).word, "disp {disp:#x}");
         }
         let mut text = alloc::vec![0u8; 4];
-        text[..4].copy_from_slice(&enc_adr(Reg(7), 0).to_le_bytes());
+        text[..4].copy_from_slice(&enc_adr(Reg(7), 0).word.to_le_bytes());
         apply_reloc(
             &mut text,
             0,

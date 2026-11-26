@@ -5016,7 +5016,7 @@ fn atomic128_emits_ldp_stp_ldxp_stxp_aarch64() {
     };
     let any_ldxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_0000);
     let any_stxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_0000);
-    // enc_ldp_off(x10,x11,x9,0) and enc_stp_off(x12,x13,x9,0).
+    // enc_ldp_off(x10,x11,x9,0).word and enc_stp_off(x12,x13,x9,0).word.
     let any_ldp = words().any(|w| w == 0xA940_2D2A);
     let any_stp = words().any(|w| w == 0xA900_352C);
     assert!(
@@ -5054,7 +5054,7 @@ fn atomic128_positional_ldp_load_pair_aarch64() {
     );
     let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
         .expect("emit MacOSAarch64");
-    // enc_ldp_off(x10, x11, x9, 0).
+    // enc_ldp_off(x10, x11, x9, 0).word.
     let any_ldp = bytes
         .windows(4)
         .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
@@ -6407,31 +6407,34 @@ fn windows_arm64_variadic_imports_pass_named_arguments_in_the_integer_bank() {
     expect_words(
         &function_words(&obj, "call_f"),
         &[
-            enc_fmov_d_to_x(x(0), 0),
-            enc_movz(x(1), 1, 0),
-            enc_fmov_d_to_x(x(2), 1),
+            enc_fmov_d_to_x(x(0), 0).word,
+            enc_movz(x(1), 1, 0).word,
+            enc_fmov_d_to_x(x(2), 1).word,
         ],
         "call_f",
     );
     // 1.5f and 2.5 as their bit patterns.
     expect_words(
         &function_words(&obj, "call_k"),
-        &[enc_movz(x(0), 0x3fc0, 1), enc_movz(x(1), 0x4004, 3)],
+        &[
+            enc_movz(x(0), 0x3fc0, 1).word,
+            enc_movz(x(1), 0x4004, 3).word,
+        ],
         "call_k",
     );
     expect_words(
         &function_words(&obj, "call_h"),
-        &[enc_fmov_d_to_x(x(1), 2)],
+        &[enc_fmov_d_to_x(x(1), 2).word],
         "call_h",
     );
     // `x` in the first stack slot, 9 in the second.
     let ws = function_words(&obj, "call_s");
     assert!(
-        ws.contains(&enc_str_d_imm(0, x(31), 0)),
+        ws.contains(&enc_str_d_imm(0, x(31), 0).word),
         "call_s: x is not at [sp]"
     );
     assert!(
-        (0..31).any(|r| ws.contains(&enc_str_imm(x(r), x(31), 8))),
+        (0..31).any(|r| ws.contains(&enc_str_imm(x(r), x(31), 8).word)),
         "call_s: 9 is not at [sp, #8]"
     );
 }
@@ -18044,7 +18047,7 @@ fn a64_logical_imm_of(
 ) -> bool {
     use crate::c5::codegen::aarch64::encode::{Reg, enc_logical_imm};
     let (rd, rn) = (Reg((w & 0x1F) as u8), Reg(((w >> 5) & 0x1F) as u8));
-    enc_logical_imm(op, is64, rd, rn, value) == Some(w)
+    enc_logical_imm(op, is64, rd, rn, value).map(|i| i.word) == Some(w)
 }
 
 #[test]
@@ -18613,8 +18616,8 @@ fn stores_pair(ws: &[u32], rt: u8) -> bool {
 /// Whether `ws` adds registers `a` and `b` into x0, in either order.
 fn adds_regs(ws: &[u32], a: u8, b: u8) -> bool {
     use crate::c5::codegen::aarch64::encode::{Reg, enc_add_reg};
-    ws.contains(&enc_add_reg(Reg(0), Reg(a), Reg(b)))
-        || ws.contains(&enc_add_reg(Reg(0), Reg(b), Reg(a)))
+    ws.contains(&enc_add_reg(Reg(0), Reg(a), Reg(b)).word)
+        || ws.contains(&enc_add_reg(Reg(0), Reg(b), Reg(a)).word)
 }
 
 fn expect_words(ws: &[u32], want: &[u32], what: &str) {
@@ -18753,27 +18756,27 @@ fn aarch64_narrow_float_vector_crosses_as_clang_places_it() {
         let obj = relocatable_object(SRC, target);
         let ws = |name: &str| function_words(&obj, name);
         assert!(
-            ws("give").contains(&enc_ldr_s_imm(0, x(0), 0)),
+            ws("give").contains(&enc_ldr_s_imm(0, x(0), 0).word),
             "{target:?} give: the vector is not returned in s0"
         );
         assert!(
-            any_base(&ws("give_s"), &|b| enc_ldr32_imm(x(0), b, 0)),
+            any_base(&ws("give_s"), &|b| enc_ldr32_imm(x(0), b, 0).word),
             "{target:?} give_s: the struct is not returned in w0"
         );
         assert!(
-            any_base(&ws("keep"), &|b| enc_str_s_imm(0, b, 0)),
+            any_base(&ws("keep"), &|b| enc_str_s_imm(0, b, 0).word),
             "{target:?} keep: the result is not read from s0"
         );
         assert!(
-            any_base(&ws("pass"), &|b| enc_ldr32_imm(x(1), b, 0)),
+            any_base(&ws("pass"), &|b| enc_ldr32_imm(x(1), b, 0).word),
             "{target:?} pass: the vector is not passed in w1"
         );
         // `j` stored at [sp, #slot] as a word, or as a doubleword in an 8-byte slot.
         let pass_s = ws("pass_s");
         assert!(
             (0..31).any(|r| {
-                pass_s.contains(&enc_str32_imm(x(r), x(31), slot))
-                    || (slot == 8 && pass_s.contains(&enc_str_imm(x(r), x(31), slot)))
+                pass_s.contains(&enc_str32_imm(x(r), x(31), slot).word)
+                    || (slot == 8 && pass_s.contains(&enc_str_imm(x(r), x(31), slot).word))
             }),
             "{target:?} pass_s: j is not at [sp, #{slot}]"
         );
@@ -18822,9 +18825,9 @@ fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
             let give = function_words(&obj, &alloc::format!("give{i}"));
             let load_v0 = |b: Reg| {
                 if size == 4 {
-                    enc_ldr_s_imm(0, b, 0)
+                    enc_ldr_s_imm(0, b, 0).word
                 } else {
-                    enc_ldr_bh_imm(size, 0, b, 0)
+                    enc_ldr_bh_imm(size, 0, b, 0).word
                 }
             };
             assert!(
@@ -18836,7 +18839,7 @@ fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
             let mut w = elem;
             while w < lane {
                 assert!(
-                    give.contains(&enc_uxtl(0, 0, w)),
+                    give.contains(&enc_uxtl(0, 0, w).word),
                     "{target:?} give{i}: no widening from {w}-byte lanes"
                 );
                 w *= 2;
@@ -18846,7 +18849,7 @@ fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
             while w > elem {
                 w /= 2;
                 assert!(
-                    first.contains(&enc_xtn(0, 0, w)),
+                    first.contains(&enc_xtn(0, 0, w).word),
                     "{target:?} first{i}: no narrowing to {w}-byte lanes"
                 );
             }
@@ -18895,13 +18898,14 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
     let sp = Reg(31);
     let stores_at = |ws: &[u32], off: u32| {
         ws.iter()
-            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, off) & !0x1f)
+            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, off).word & !0x1f)
     };
     let rounds = |ws: &[u32]| {
         ws.windows(2)
             .filter(|p| {
                 (0..31).any(|r| {
-                    p[0] == enc_add_imm(x(r), x(r), 15) && p[1] == enc_and_align_down(x(r), x(r), 4)
+                    p[0] == enc_add_imm(x(r), x(r), 15).word
+                        && p[1] == enc_and_align_down(x(r), x(r), 4).word
                 })
             })
             .count()
@@ -18925,11 +18929,11 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
         // Windows; Windows loads it from the parameter's object.
         let call_take = function_words(&obj, "call_take");
         let what_take = alloc::format!("{target:?} call_take");
-        expect_words(&call_take, &[enc_movz(x(next), 3, 0)], &what_take);
+        expect_words(&call_take, &[enc_movz(x(next), 3, 0).word], &what_take);
         if matches!(target, Target::WindowsAarch64) {
             let loads = [
-                enc_ldr_imm(x(pair + 1), x(pair), 8),
-                enc_ldr_imm(x(pair), x(pair), 0),
+                enc_ldr_imm(x(pair + 1), x(pair), 8).word,
+                enc_ldr_imm(x(pair), x(pair), 0).word,
             ];
             expect_words(&call_take, &loads, &what_take);
         } else {
@@ -18951,15 +18955,18 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
             if matches!(target, Target::MacOSAarch64) {
                 expect_words(
                     &call,
-                    &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+                    &[
+                        enc_str_imm(x(17), sp, 0).word,
+                        enc_str_imm(x(17), sp, 8).word,
+                    ],
                     &what,
                 );
                 assert!(stores_at(&call, 16), "{what}: c not at [sp, #16]");
             } else {
                 let caller = [
-                    enc_ldr_imm(x(3), x(2), 8),
-                    enc_ldr_imm(x(2), x(2), 0),
-                    enc_movz(x(4), 3, 0),
+                    enc_ldr_imm(x(3), x(2), 8).word,
+                    enc_ldr_imm(x(2), x(2), 0).word,
+                    enc_movz(x(4), 3, 0).word,
                 ];
                 expect_words(&call, &caller, &what);
             }
@@ -18972,15 +18979,15 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
     let after_five = function_words(&obj, "after_five");
     let reads_c = after_five
         .iter()
-        .any(|&w| w & !0x1f == enc_ldr_imm(x(0), x(29), 16) & !0x1f);
+        .any(|&w| w & !0x1f == enc_ldr_imm(x(0), x(29), 16).word & !0x1f);
     assert!(
         reads_c && (0..31).any(|r| adds_regs(&after_five, 6, r)),
         "after_five: the pair is not x6: {after_five:08x?}"
     );
     let seven = [
-        enc_ldr_imm(x(17), x(29), 16),
-        enc_ldr_imm(x(17), x(29), 24),
-        enc_ldr_imm(x(0), x(29), 32),
+        enc_ldr_imm(x(17), x(29), 16).word,
+        enc_ldr_imm(x(17), x(29), 24).word,
+        enc_ldr_imm(x(0), x(29), 32).word,
     ];
     expect_words(&function_words(&obj, "after_seven"), &seven, "after_seven");
     // The pair moves from its parameter registers into x6:x7 as its parts:
@@ -18995,7 +19002,10 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
     let call_seven = function_words(&obj, "call_seven");
     expect_words(
         &call_seven,
-        &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+        &[
+            enc_str_imm(x(17), sp, 0).word,
+            enc_str_imm(x(17), sp, 8).word,
+        ],
         "call_seven",
     );
     assert!(stores_at(&call_seven, 16), "call_seven: c not at [sp, #16]");
@@ -19048,20 +19058,20 @@ fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
             0
         };
         let caller = [
-            enc_ldr_imm(x(pair + 1), x(base), 8),
-            enc_ldr_imm(x(pair), x(base), 0),
-            enc_movz(x(pair + 2), 3, 0),
+            enc_ldr_imm(x(pair + 1), x(base), 8).word,
+            enc_ldr_imm(x(pair), x(base), 0).word,
+            enc_movz(x(pair + 2), 3, 0).word,
         ];
         expect_words(&call_reg, &caller, &what("call_reg"));
         let stack = function_words(&obj, "call_stack");
         let copy = [
-            enc_str_imm(x(17), sp, slot),
-            enc_str_imm(x(17), sp, slot + 8),
+            enc_str_imm(x(17), sp, slot).word,
+            enc_str_imm(x(17), sp, slot + 8).word,
         ];
         expect_words(&stack, &copy, &what("call_stack"));
         let other = if slot == 8 { 24 } else { 8 };
         assert!(
-            !stack.contains(&enc_str_imm(x(17), sp, other)),
+            !stack.contains(&enc_str_imm(x(17), sp, other).word),
             "{}: a struct half at [sp, #{other}]",
             what("call_stack")
         );
@@ -19233,9 +19243,9 @@ fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
         ws.windows(3).any(|w| {
             (0..31).any(|r| {
                 (0..31).any(|a| {
-                    w[0] == enc_add_imm(x(a), x(r), stride)
-                        && (0..31).any(|p| w[1] == enc_str_imm(x(a), x(p), 0))
-                        && (w[2] == enc_ldr_imm(x(r), x(r), 0)) == by_ref
+                    w[0] == enc_add_imm(x(a), x(r), stride).word
+                        && (0..31).any(|p| w[1] == enc_str_imm(x(a), x(p), 0).word)
+                        && (w[2] == enc_ldr_imm(x(r), x(r), 0).word) == by_ref
                 })
             })
         })
@@ -19253,9 +19263,9 @@ fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
     expect_words(
         &ws,
         &[
-            enc_add_imm(x(16), x(16), 8),
-            enc_add_imm(x(9), x(16), 8),
-            enc_ldr_imm(x(16), x(16), 0),
+            enc_add_imm(x(16), x(16), 8).word,
+            enc_add_imm(x(9), x(16), 8).word,
+            enc_ldr_imm(x(16), x(16), 0).word,
         ],
         "LinuxAarch64 va_big",
     );
@@ -19307,13 +19317,13 @@ fn variadic_hfa_elements_come_from_the_vector_save_area() {
         expect_words(
             &ws,
             &[
-                enc_ldrsw_imm(x(16), x(17), 28),
-                enc_add_imm(x(16), x(16), 16 * n),
+                enc_ldrsw_imm(x(16), x(17), 28).word,
+                enc_add_imm(x(16), x(16), 16 * n).word,
             ],
             name,
         );
         assert!(
-            !ws.contains(&enc_ldrsw_imm(x(16), x(17), 24)),
+            !ws.contains(&enc_ldrsw_imm(x(16), x(17), 24).word),
             "{name}: reads __gr_offs"
         );
         // `ldr x17, [src, #16k + p] ; str x17, [dst, #wk + p]` for each part.
@@ -19327,13 +19337,13 @@ fn variadic_hfa_elements_come_from_the_vector_save_area() {
         let copy = |src: u8, dst: u8, (from, to): (u32, u32)| {
             if width == 4 {
                 [
-                    enc_ldr32_imm(x(17), x(src), from),
-                    enc_str32_imm(x(17), x(dst), to),
+                    enc_ldr32_imm(x(17), x(src), from).word,
+                    enc_str32_imm(x(17), x(dst), to).word,
                 ]
             } else {
                 [
-                    enc_ldr_imm(x(17), x(src), from),
-                    enc_str_imm(x(17), x(dst), to),
+                    enc_ldr_imm(x(17), x(src), from).word,
+                    enc_str_imm(x(17), x(dst), to).word,
                 ]
             }
         };
@@ -19480,25 +19490,28 @@ fn windows_arm64_variadic_composite_at_x7_is_split_with_the_stack() {
     expect_words(
         &ws,
         &[
-            enc_ldr_imm(x(7), x(7), 0),
-            enc_ldr_imm(x(17), x(16), 8),
-            enc_str_imm(x(17), sp, 0),
+            enc_ldr_imm(x(7), x(7), 0).word,
+            enc_ldr_imm(x(17), x(16), 8).word,
+            enc_str_imm(x(17), sp, 0).word,
         ],
         "WindowsAarch64 call7",
     );
     assert!(
-        !ws.contains(&enc_str_imm(x(17), sp, 8)),
+        !ws.contains(&enc_str_imm(x(17), sp, 8).word),
         "WindowsAarch64 call7"
     );
     assert!(
         ws.iter()
-            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, 8) & !0x1f),
+            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, 8).word & !0x1f),
         "WindowsAarch64 call7: the argument after the composite is not at [sp, #8]"
     );
     let ws = function_words(&relocatable_object(SRC, Target::LinuxAarch64), "call7");
     expect_words(
         &ws,
-        &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+        &[
+            enc_str_imm(x(17), sp, 0).word,
+            enc_str_imm(x(17), sp, 8).word,
+        ],
         "LinuxAarch64 call7",
     );
 }
@@ -19533,7 +19546,10 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
         ll ext_w8(struct s8 s, ...);\n\
         ll call_w8(struct s8 *p) { return ext_w8(*p, 3LL); }\n";
     let x = Reg;
-    let pair = [enc_ldr_imm(x(1), x(0), 8), enc_ldr_imm(x(0), x(0), 0)];
+    let pair = [
+        enc_ldr_imm(x(1), x(0), 8).word,
+        enc_ldr_imm(x(0), x(0), 0).word,
+    ];
     for (target, nva_start, w8_start) in [
         (Target::LinuxAarch64, 0, 0),
         (Target::MacOSAarch64, 16, 16),
@@ -19543,14 +19559,14 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
         let what = |f: &str| alloc::format!("{target:?} {f}");
         let mut nva = alloc::vec::Vec::new();
         if nva_start > 0 {
-            nva.push(enc_add_imm(x(17), x(29), nva_start));
+            nva.push(enc_add_imm(x(17), x(29), nva_start).word);
             expect_words(
                 &function_words(&obj, "w8"),
-                &[enc_add_imm(x(17), x(29), w8_start)],
+                &[enc_add_imm(x(17), x(29), w8_start).word],
                 &what("w8"),
             );
         } else {
-            nva.push(enc_movn(x(17), 0x2f, 0));
+            nva.push(enc_movn(x(17), 0x2f, 0).word);
         }
         let nva_words = function_words(&obj, "nva");
         assert!(
@@ -19562,7 +19578,7 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
         expect_words(&function_words(&obj, "call_nva"), &pair, &what("call_nva"));
         let ws = function_words(&obj, "call_w8");
         assert!(
-            ws.contains(&enc_ldr_imm(x(0), x(0), 0)),
+            ws.contains(&enc_ldr_imm(x(0), x(0), 0).word),
             "{}",
             what("call_w8")
         );

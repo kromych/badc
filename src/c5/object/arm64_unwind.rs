@@ -122,8 +122,8 @@ fn classify(w: u32) -> Insn {
         _ => Insn::Other,
     };
     match w {
-        BTI_C | NOP_INSN => return Insn::Hint,
-        PACIASP | PACIBSP => return Insn::Pac,
+        w if w == BTI_C.word || w == NOP_INSN.word => return Insn::Hint,
+        w if w == PACIASP.word || w == PACIBSP.word => return Insn::Pac,
         _ => {}
     }
     if rn != 31 {
@@ -336,7 +336,7 @@ pub(crate) fn epilogue_codes(text: &[u8], start: u32) -> Option<(Vec<u8>, u32)> 
         let pair = u32::try_from(simm((w >> 15) & 0x7F, 7) * 8).ok();
         let code = match w {
             0xD65F_03C0 => return Some((out, at)),
-            AUTIASP | AUTIBSP => alloc::vec![0xFC],
+            _ if w == AUTIASP.word || w == AUTIBSP.word => alloc::vec![0xFC],
             _ if w & 0xFF80_03FF == 0x9100_03FF => {
                 alloc(((w >> 10) & 0xFFF) << (12 * ((w >> 22) & 1)))?
             }

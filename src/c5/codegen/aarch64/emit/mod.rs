@@ -30,11 +30,11 @@ use super::super::ir::{
 };
 use super::Target;
 use super::encode::{
-    BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
-    Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
-    enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
-    enc_br, enc_cas, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
-    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzs_x_s,
+    BranchKind, Cond, Fixup, Insn, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF,
+    PltCallFixup, Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm,
+    enc_add_imm, enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl,
+    enc_blr, enc_br, enc_cas, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg,
+    enc_fadd_d, enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzs_x_s,
     enc_fcvtzu_x_d, enc_fcvtzu_x_s, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d,
     enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldapr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off,
     enc_ldp_post, enc_ldp_unit_off, enc_ldp_unit_post, enc_ldr_d_imm, enc_ldr_d_post, enc_ldr_imm,
@@ -44,7 +44,7 @@ use super::encode::{
     enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_stp_unit_off, enc_stp_unit_post, enc_str_d_imm,
     enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str_w_post, enc_str32_imm, enc_strb_imm,
     enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv,
-    load_imm64,
+    load_imm64, patch,
 };
 use super::ssa::code_buf::{CodeBuf, SpillWidth};
 use super::ssa::emit_common::{

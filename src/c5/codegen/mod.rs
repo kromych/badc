@@ -5563,13 +5563,6 @@ pub(crate) fn lower_arch(
             "this build of badc writes no assembly listing (the `listing` feature)",
         ));
     }
-    // TODO(#2): the aarch64 emitters describe their instructions.
-    if options.listing && !target.is_x86_64() {
-        return Err(C5Error::hard(
-            Code::UNSUPPORTED,
-            "`-S` writes the assembly listing of an x86-64 object only",
-        ));
-    }
     match target {
         #[cfg(any(feature = "target-aarch64", target_arch = "aarch64"))]
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {

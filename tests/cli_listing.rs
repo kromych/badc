@@ -2,11 +2,12 @@
 //! same source. Over the snapshot fixtures each listed instruction starts
 //! where llvm-objdump decodes one, holds the bytes the object holds, and
 //! reads as the instruction llvm-objdump names, with the same operands
-//! where neither side names a symbol. The passes that change bytes after
-//! an instruction is formed each leave the listing describing the object:
-//! branch relaxation, a forward branch patched in place, the re-emission
-//! over truncated bytes, alignment fill, and the writer's rewrite of an
-//! address load into a load from the GOT.
+//! where neither side names a symbol; an A64 field a relocation fills names
+//! the relocation's symbol. The passes that change bytes after an
+//! instruction is formed each leave the listing describing the object:
+//! branch relaxation, a branch patched in place, the re-emission over
+//! truncated bytes, alignment fill, and the writer's rewrite of an address
+//! load into a load from the GOT.
 //!
 //! The disassembler is `llvm-objdump`, or an `objdump` that is LLVM's; a
 //! host with neither skips the corpus check.
@@ -26,11 +27,17 @@ fn badc() -> Command {
 
 /// The listing `badc -S` writes for `src` under `flags`.
 fn listing(dir: &Path, name: &str, src: &str, flags: &[&str]) -> String {
+    listing_for("linux-x64", dir, name, src, flags)
+}
+
+/// [`listing`] for `target`.
+fn listing_for(target: &str, dir: &Path, name: &str, src: &str, flags: &[&str]) -> String {
     let c = dir.join(format!("{name}.c"));
     std::fs::write(&c, src).unwrap();
     let s = dir.join(format!("{name}.s"));
     let out = badc()
-        .args(["--target=linux-x64", "-q", "-S"])
+        .arg(format!("--target={target}"))
+        .args(["-q", "-S"])
         .args(flags)
         .arg(&c)
         .arg("-o")
@@ -55,9 +62,21 @@ struct Row {
 /// A listing's rows by (section, offset), and its labels by offset.
 type Rows = BTreeMap<(String, u64), Row>;
 
-/// `xx ` byte tokens ahead of the text of a row.
+/// `xx ` byte tokens, or one `xxxxxxxx` A64 word, ahead of the text of a
+/// row.
 fn split_bytes(mut rest: &str) -> (Vec<u8>, &str) {
     let mut bytes = Vec::new();
+    let r = rest.trim_start_matches([' ', '\t']);
+    if let Some(w) = r
+        .get(..8)
+        .filter(|w| w.bytes().all(|b| b.is_ascii_hexdigit()))
+        && r.as_bytes()
+            .get(8)
+            .is_some_and(|b| *b == b' ' || *b == b'\t')
+    {
+        let word = u32::from_str_radix(w, 16).unwrap();
+        return (word.to_le_bytes().to_vec(), r[9..].trim());
+    }
     loop {
         let r = rest.trim_start_matches([' ', '\t']);
         let token = r
@@ -110,13 +129,20 @@ const PREFIXES: [&str; 13] = [
     "lock", "rep", "repne", "repe", "data16", "addr32", "rex64", "cs", "ds", "es", "fs", "gs", "ss",
 ];
 
+/// The relocation symbols llvm-objdump names by (section, offset).
+type Relocs = BTreeMap<(String, u64), Vec<String>>;
+
 /// llvm-objdump's rows by (section, offset), a section met again numbered
 /// `name#n`; a prefix it prints on a line of its own joins the instruction.
-fn parse_objdump(text: &str) -> Rows {
+/// Its comment starts at `//` on A64 and at `#` otherwise. The relocations
+/// of each row follow it.
+fn parse_objdump(text: &str, a64: bool) -> (Rows, Relocs) {
     let mut rows = Rows::new();
+    let mut relocs = Relocs::new();
     let mut seen: BTreeMap<String, u32> = BTreeMap::new();
     let mut section = None;
     let mut held: Option<((String, u64), Row)> = None;
+    let mut last: Option<(String, u64)> = None;
     for line in text.lines() {
         if let Some(name) = line
             .strip_prefix("Disassembly of section ")
@@ -135,12 +161,27 @@ fn parse_objdump(text: &str) -> Rows {
             continue;
         };
         let (bytes, text) = split_bytes(rest);
+        // An A64 relocation's symbol and addend, which the listing names.
+        if let Some(r) = text.strip_prefix("R_AARCH64_") {
+            let sym = r.split_whitespace().nth(1).unwrap_or_default();
+            if let Some(k) = &last {
+                relocs
+                    .entry(k.clone())
+                    .or_default()
+                    .push(sym.replace('\u{1}', ""));
+            }
+            continue;
+        }
         if bytes.is_empty() || text.contains("R_X86_64") {
             continue;
         }
-        let text = text.split(" #").next().unwrap().split('#').next().unwrap();
+        let text = match a64 {
+            true => text.split("//").next().unwrap(),
+            false => text.split(" #").next().unwrap().split('#').next().unwrap(),
+        };
         let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
         let key = (s.clone(), off);
+        last = Some(key.clone());
         if let Some((k, mut row)) = held.take() {
             if k.0 == key.0 && k.1 + row.bytes.len() as u64 == off {
                 row.bytes.extend(bytes);
@@ -156,7 +197,7 @@ fn parse_objdump(text: &str) -> Rows {
         }
         rows.insert(key, Row { bytes, text });
     }
-    rows
+    (rows, relocs)
 }
 
 /// The mnemonic, the prefixes ahead of it included, and the operands, split
@@ -175,8 +216,8 @@ fn split_insn(text: &str) -> (String, Vec<String>) {
     let (mut depth, mut cur) = (0, String::new());
     for ch in rest.chars() {
         match ch {
-            '(' | '{' => depth += 1,
-            ')' | '}' => depth -= 1,
+            '(' | '{' | '[' => depth += 1,
+            ')' | '}' | ']' => depth -= 1,
             ',' if depth == 0 => {
                 ops.push(cur.trim().to_string());
                 cur.clear();
@@ -247,6 +288,33 @@ fn same_operand(l: &str, o: &str, bits: u32) -> bool {
     !l.starts_with(['%', '$']) && number(&l).is_none() && (o.contains('<') || number(&o).is_some())
 }
 
+/// Whether A64 listing operand `l` names what llvm-objdump's `o` does:
+/// equal, the address llvm-objdump also names by a symbol, or a symbol the
+/// listing names where the object holds a field a relocation (`reloc`) or
+/// the layout fills.
+fn same_operand_a64(l: &str, o: &str, reloc: bool) -> bool {
+    let bare = o.split(" <").next().unwrap();
+    if l == o || l == bare {
+        return true;
+    }
+    let symbolic = |s: &str| {
+        let s = s.trim_start_matches('[').trim_end_matches([']', '!']);
+        let s = s.rsplit(", ").next().unwrap_or(s);
+        s.starts_with(':')
+            || (s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_' || c == '.')
+                && !s.contains(' '))
+    };
+    if symbolic(l) && (o.contains(" <") || reloc || bare.trim_start_matches('#').starts_with("0x"))
+    {
+        return true;
+    }
+    // A zero offset a relocation fills, which llvm-objdump leaves out.
+    match l.strip_prefix('[').and_then(|l| l.split_once(", ")) {
+        Some((base, field)) if reloc && symbolic(field) => o == format!("[{base}]"),
+        _ => false,
+    }
+}
+
 /// Spellings GNU as reads as the instruction llvm-objdump names otherwise:
 /// a template's mnemonic without the suffix its operands imply, a string
 /// or port operation without its implicit operands.
@@ -270,9 +338,9 @@ fn alias(lm: &str, lops: &[String], om: &str, oops: &[String]) -> bool {
 
 /// The first difference between a listing and llvm-objdump's decoding of
 /// the object, `None` when they agree.
-fn compare(listing: &str, objdump: &str) -> Vec<String> {
+fn compare(listing: &str, objdump: &str, a64: bool) -> Vec<String> {
     let (lrows, _) = parse_listing(listing);
-    let orows = parse_objdump(objdump);
+    let (orows, relocs) = parse_objdump(objdump, a64);
     let mut issues = Vec::new();
     let mut after_data = false;
     for ((section, off), row) in &lrows {
@@ -303,6 +371,21 @@ fn compare(listing: &str, objdump: &str) -> Vec<String> {
         }
         let (lm, lops) = split_insn(&row.text);
         let (om, oops) = split_insn(&o.text);
+        if a64 {
+            let rel = relocs.get(&(section.clone(), *off));
+            for sym in rel.into_iter().flatten() {
+                if !row.text.contains(sym.as_str()) {
+                    issues.push(format!("{at}: `{}` does not name `{sym}`", row.text));
+                }
+            }
+            let same = lm == om
+                && lops.len() == oops.len()
+                && (lops.iter().zip(&oops)).all(|(l, o)| same_operand_a64(l, o, rel.is_some()));
+            if !same {
+                issues.push(format!("{at}: `{}`, llvm-objdump `{}`", row.text, o.text));
+            }
+            continue;
+        }
         let bits = match om.chars().last() {
             Some('b') => 8,
             Some('w') => 16,
@@ -406,6 +489,7 @@ fn corpus(tool: &str, target: &str, extra: &[&str]) -> (usize, Vec<String>) {
                         compare(
                             &std::fs::read_to_string(&asm).unwrap(),
                             &String::from_utf8_lossy(&dis.stdout),
+                            target.ends_with("arm64") || target.ends_with("aarch64"),
                         )
                     } else {
                         vec![format!(
@@ -433,6 +517,8 @@ fn every_listed_instruction_is_the_one_the_object_holds() {
         ("linux-x64", &[][..]),
         ("linux-x64", &["-O"][..]),
         ("windows-x64", &[][..]),
+        ("linux-aarch64", &[][..]),
+        ("windows-arm64", &[][..]),
     ] {
         let (compared, issues) = corpus(tool, target, extra);
         assert!(
@@ -608,4 +694,120 @@ fn dash_o_dash_writes_standard_output() {
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("\nsq:\n") && text.contains("retq"), "{text}");
     assert!(!dir.join("-").exists());
+}
+
+/// The target of the A64 branch whose word `word` sits at `off`, from its
+/// offset field; `None` for another instruction.
+fn a64_branch_target(word: u32, off: u64) -> Option<u64> {
+    let sext = |v: u32, bits: u32| i64::from(((v << (32 - bits)) as i32) >> (32 - bits));
+    let words = match word {
+        // b / bl, b.cond, cbz / cbnz, tbz / tbnz.
+        w if w & 0x7C00_0000 == 0x1400_0000 => sext(w & 0x03FF_FFFF, 26),
+        w if w & 0xFF00_0010 == 0x5400_0000 => sext((w >> 5) & 0x7_FFFF, 19),
+        w if w & 0x7E00_0000 == 0x3400_0000 => sext((w >> 5) & 0x7_FFFF, 19),
+        w if w & 0x7E00_0000 == 0x3600_0000 => sext((w >> 5) & 0x3FFF, 14),
+        _ => return None,
+    };
+    Some((off as i64 + 4 * words) as u64)
+}
+
+/// Every A64 branch to a label within the text names the label its patched
+/// field reaches, in a block's branch fixed up after layout, the `va_arg`
+/// overflow test patched in place, an inline-asm branch to a local label
+/// that replaces its placeholder word, and the binary128 helper's calls
+/// and internal branches; no placeholder survives.
+#[test]
+fn a64_patched_branches_name_their_targets() {
+    let dir = TempDir::new("badc-listing-a64-branch");
+    let src = "#include <stdarg.h>\n\
+        int h(int *p, int n) { int s = 0; for (int i = 0; i < n; i++) {\n\
+        if (p[i] > 3) s += p[i]; else s -= 2; } return s; }\n\
+        int va(int n, ...) { va_list ap; va_start(ap, n); int x = va_arg(ap, int);\n\
+        va_end(ap); return x; }\n\
+        int as(int x) { int r; __asm__(\"cbz %w1, 1f\\n\\tmov %w0, #1\\n\\tb 2f\\n1:\\n\\t\"\n\
+        \"mov %w0, #2\\n2:\" : \"=r\"(r) : \"r\"(x)); return r; }\n\
+        double nl(long double x) { return x; }\n";
+    for (target, flags) in [("linux-aarch64", &[][..]), ("windows-arm64", &["-O"][..])] {
+        let l = listing_for(target, &dir, "branch", src, flags);
+        assert_tiled(&l);
+        assert!(!l.contains("udf"), "{l}");
+        let (rows, _) = parse_listing(&l);
+        let mut named = 0;
+        for ((_, off), row) in &rows {
+            let word = u32::from_le_bytes(row.bytes[..].try_into().unwrap());
+            let Some(want) = a64_branch_target(word, *off) else {
+                continue;
+            };
+            let (m, ops) = split_insn(&row.text);
+            let target = ops.last().unwrap();
+            assert_eq!(label(&l, target), want, "{target}: `{m}` at {off:#x}\n{l}");
+            named += 1;
+        }
+        assert!(named >= 4, "{target}: {named} branches\n{l}");
+    }
+}
+
+/// Under `-fPIC` an extern object's address on A64 is an `adrp` and `add`
+/// pair the writer turns into a load from the GOT; the listing reads the
+/// load the object holds, its offset the GOT slot's.
+#[test]
+fn a64_the_writer_s_got_load_reads_as_a_load() {
+    let dir = TempDir::new("badc-listing-a64-got");
+    let src = "extern int counter;\nint *f(void) { return &counter; }\n";
+    let l = listing_for("linux-aarch64", &dir, "got", src, &["-fPIC"]);
+    assert_tiled(&l);
+    assert!(l.contains("adrp x0, :got:counter"), "{l}");
+    assert!(l.contains("ldr x0, [x0, :got_lo12:counter]"), "{l}");
+}
+
+/// The system instructions an inline-asm template's parser encodes itself
+/// read as instructions, not as the words they encode to.
+#[test]
+fn a64_parser_encoded_template_instructions_read_as_instructions() {
+    let dir = TempDir::new("badc-listing-a64-sys");
+    let src = "void f(void) { __asm__ volatile(\"msr daifset, #2\\n\\tdmb ish\\n\\t\"\n\
+        \"dsb #0\\n\\tisb\\n\\tbti c\\n\\tclrex #3\"); }\n";
+    let l = listing_for("linux-aarch64", &dir, "sys", src, &[]);
+    assert_tiled(&l);
+    for text in [
+        "msr DAIFSet, #0x2",
+        "dmb ish",
+        "ssbb",
+        "isb",
+        "bti c",
+        "clrex #0x3",
+    ] {
+        assert!(l.contains(&format!(" {text}\n")), "{text}\n{l}");
+    }
+    assert!(!l.contains(".inst"), "{l}");
+}
+
+/// Functions aligned to 64 bytes on A64 are padded with 4-byte `nop`s, as
+/// is an inline-asm `.balign`; an `.org` gap reads as the zeros it places.
+#[test]
+fn a64_alignment_fill_reads_as_no_ops() {
+    let dir = TempDir::new("badc-listing-a64-align");
+    let src = "int a(int x) { return x + 1; }\nint b(int x) { return x * 3; }\n";
+    let l = listing_for(
+        "linux-aarch64",
+        &dir,
+        "align",
+        src,
+        &["-falign-functions=64"],
+    );
+    assert_tiled(&l);
+    assert_eq!(label(&l, "b") % 64, 0, "{l}");
+    let fill: Vec<_> = rows(&l)
+        .into_iter()
+        .filter(|r| r.0 < label(&l, "b") && r.2 == "nop")
+        .collect();
+    assert!(!fill.is_empty() && fill.iter().all(|r| r.1 == 4), "{l}");
+    let src = "int f(int x) { __asm__ volatile(\"add %w0, %w0, #1\\n\\t.balign 32\\n\\t\"\n\
+        \"add %w0, %w0, #2\\n\\t.org . + 8\\n\\tnop\" : \"+r\"(x)); return x; }\n";
+    let l = listing_for("linux-aarch64", &dir, "asm-align", src, &[]);
+    assert_tiled(&l);
+    let rows = rows(&l);
+    let add2 = rows.iter().find(|r| r.2 == "add w0, w0, #0x2").expect(&l);
+    assert_eq!(add2.0 % 32, 0, "{l}");
+    assert!(rows.iter().any(|r| r.2 == ".zero 8" && r.1 == 8), "{l}");
 }

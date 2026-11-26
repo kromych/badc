@@ -3051,8 +3051,8 @@ fn build_dllmain_stub(machine: Machine) -> EntryStub {
             let mov = aarch64::enc_movz(aarch64::Reg::X0, 1, 0);
             let ret_word = aarch64::enc_ret(aarch64::Reg::X30);
             let mut b = Vec::with_capacity(8);
-            b.extend_from_slice(&mov.to_le_bytes());
-            b.extend_from_slice(&ret_word.to_le_bytes());
+            b.extend_from_slice(&mov.word.to_le_bytes());
+            b.extend_from_slice(&ret_word.word.to_le_bytes());
             b
         }
     };
@@ -3095,13 +3095,16 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
             use super::aarch64 as a;
             use crate::c5::codegen::A64Step;
             let mut bytes: Vec<u8> = Vec::with_capacity(24);
-            a::emit(&mut bytes, 0xA9BF_7BFD); // stp x29, x30, [sp, #-16]!
-            a::emit(&mut bytes, 0x9100_03FD); // mov x29, sp
-            a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 16));
-            a::emit(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
+            a::put(
+                &mut bytes,
+                a::enc_stp_pre(a::Reg::X29, a::Reg::X30, a::Reg::SP, -16),
+            );
+            a::put(&mut bytes, a::enc_add_imm(a::Reg::X29, a::Reg::SP, 0));
+            a::put(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 16));
+            a::put(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
             let bl_off = bytes.len() as u32;
-            a::emit(&mut bytes, a::enc_bl(0)); // patched to __c5_entry
-            a::emit(&mut bytes, 0xD420_0020); // brk #1
+            a::put(&mut bytes, a::enc_bl(0)); // patched to __c5_entry
+            a::put(&mut bytes, a::enc_brk(1));
             EntryStub {
                 bytes,
                 direct_call_runtime: vec![(bl_off, RT_ENTRY)],
@@ -3661,7 +3664,7 @@ fn patch_direct_call(
             }
             let word = aarch64::enc_bl(delta_insns as i32);
             let off = call_offset_in_text as usize;
-            text[off..off + 4].copy_from_slice(&word.to_le_bytes());
+            text[off..off + 4].copy_from_slice(&word.word.to_le_bytes());
             Ok(())
         }
     }

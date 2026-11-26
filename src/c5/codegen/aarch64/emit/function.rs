@@ -51,7 +51,7 @@ impl LocalBranchKind {
 
     /// The branch word for the word displacement `imm`, or `None` when the
     /// displacement is outside the form's immediate field.
-    fn word(self, imm: i32) -> Option<u32> {
+    fn word(self, imm: i32) -> Option<Insn> {
         let bits = match self {
             LocalBranchKind::B => 26,
             LocalBranchKind::Tbz(..) | LocalBranchKind::Tbnz(..) => 14,
@@ -307,8 +307,8 @@ pub(crate) fn emit_function(
     // more temporaries than it has.
     let early_exit = if repeat_tests && !is_full_leaf(frame, alloc) {
         super::ssa::early_exit::early_exit(func, &param_plan).filter(|exit| {
-            emit_early_test(&mut Vec::new(), exit, false, frame.fixed_regs).is_some()
-                && emit_early_return(&mut Vec::new(), exit, frame.fixed_regs)
+            emit_early_test(&mut CodeBuf::default(), exit, false, frame.fixed_regs).is_some()
+                && emit_early_return(&mut CodeBuf::default(), exit, frame.fixed_regs)
         })
     } else {
         None
@@ -581,8 +581,8 @@ impl FunctionEmitter<'_, '_> {
         a64_align_asm_stream(self.cx.code, self.cx.text_data_ranges, self.text_map_state);
     }
 
-    fn patch_word(&mut self, site: usize, word: u32) {
-        self.cx.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+    fn patch_word(&mut self, site: usize, insn: Insn) {
+        patch(self.cx.code, site, insn);
     }
 
     /// Queue a branch of `block_idx`'s terminator and emit its placeholder.
@@ -958,6 +958,7 @@ impl FunctionEmitter<'_, '_> {
             }
             self.block_offsets[block_idx] = self.cx.code.len();
             self.cx.code.begin_block();
+            self.cx.code.label_block(block_idx as u32);
             if func.has_seh() {
                 self.seh_placed
                     .push((block_idx as BlockId, self.cx.code.len()));
@@ -1363,7 +1364,7 @@ impl FunctionEmitter<'_, '_> {
             // next block.
             Terminator::Unreachable => {
                 if !super::ssa::emit_common::block_ends_in_trap(func, block) {
-                    emit(self.cx.code, 0xD420_0020); // brk #1
+                    emit(self.cx.code, super::encode::enc_brk(1));
                 }
             }
         }
@@ -1546,15 +1547,15 @@ impl FunctionEmitter<'_, '_> {
     /// of it.
     fn append_deferred_regions(&mut self) -> Emit {
         let name2entpc = self.fcx.name2entpc;
-        let regions = core::mem::take(&mut self.deferred_regions);
+        let mut regions = core::mem::take(&mut self.deferred_regions);
         let mut deferred_bases: Vec<usize> = Vec::with_capacity(regions.len());
         if !regions.is_empty() {
             self.align_stream();
         }
-        for region in &regions {
+        for region in &mut regions {
             let base = self.cx.code.len();
             deferred_bases.push(base);
-            self.cx.code.extend_from_slice(&region.bytes);
+            self.cx.code.append(core::mem::take(&mut region.bytes));
             self.cx
                 .text_data_ranges
                 .extend(region.data_ranges.iter().map(|&(o, n)| (base + o, n)));
@@ -1701,7 +1702,7 @@ impl FunctionEmitter<'_, '_> {
 /// Store through sp so the page the allocation just entered faults if
 /// the stack ends there; `xzr` is always readable and the store sets no
 /// flags.
-pub(super) fn emit_stack_probe(code: &mut Vec<u8>) {
+pub(super) fn emit_stack_probe(code: &mut CodeBuf) {
     emit(code, super::encode::enc_str_imm(Reg(31), Reg::SP, 0));
 }
 
@@ -1711,7 +1712,7 @@ pub(super) fn emit_stack_probe(code: &mut Vec<u8>) {
 /// unprobed margin a probe on each side of it keeps every step within a
 /// page of a touched address. x16 stages the alignment, since
 /// AND-immediate cannot read sp.
-fn emit_realign_sp(code: &mut Vec<u8>, frame: Frame) {
+fn emit_realign_sp(code: &mut CodeBuf, frame: Frame) {
     let slack = frame.realign_align - 1;
     let probe = frame.realign_region_bytes.saturating_add(slack) > MAX_UNPROBED_STACK_STEP;
     emit_stack_alloc(code, frame.realign_region_bytes, Some(Reg(16)));
@@ -1738,7 +1739,7 @@ fn emit_realign_sp(code: &mut Vec<u8>, frame: Frame) {
 /// time with a store through sp after each step, as a counted loop
 /// through `scratch` when there are more than `STACK_PROBE_UNROLL_MAX`
 /// steps and a register is available.
-pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<Reg>) {
+pub(super) fn emit_stack_alloc(code: &mut CodeBuf, bytes: u32, scratch: Option<Reg>) {
     if bytes <= MAX_UNPROBED_STACK_STEP {
         emit_sub_sp_imm(code, bytes);
         return;
@@ -1850,7 +1851,7 @@ fn emit_prologue(
 /// vector half stays reserved but unwritten (the store would fault) and
 /// `va_start` marks it exhausted.
 fn emit_register_save_area(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     abi: super::Abi,
     vector: bool,
@@ -1883,7 +1884,7 @@ fn emit_register_save_area(
 /// x16. A stack-passed parameter is read where the caller left it and a
 /// register-passed aggregate keeps its registers for
 /// `emit_struct_param_scatter`, so neither is stored.
-fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, frame: Frame) {
+fn emit_param_homes(code: &mut CodeBuf, func: &FunctionSsa, alloc: &Allocation, frame: Frame) {
     let abi = frame.abi;
     let dead = param_home_store_dead(func, alloc, abi);
     for (i, placement) in param_placements(func, abi).iter().enumerate() {
@@ -2023,7 +2024,7 @@ fn emit_struct_param_scatter(
 /// prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`. `rec` takes each
 /// store's description.
 fn emit_prologue_saved_regs(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     alloc: &Allocation,
     frame: Frame,
     pre: u32,
@@ -2081,7 +2082,7 @@ enum SaveRecord<'a> {
 /// block at sp, else sp plus the outgoing area, carried in x16 once a save
 /// offset could leave the pair forms' reach (the fold caps the frame at
 /// 480, well inside it).
-fn save_base(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, pre: u32) -> (Reg, u32) {
+fn save_base(code: &mut CodeBuf, alloc: &Allocation, frame: Frame, pre: u32) -> (Reg, u32) {
     let out = frame.outgoing_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
@@ -2105,7 +2106,7 @@ const CANARY_SCRATCH2: Reg = Reg(17);
 /// it at an offset from a system register; the `global` form reads the
 /// object the C library exports, resolved directly or through the GOT.
 fn emit_load_stack_guard(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     rd: Reg,
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
@@ -2134,7 +2135,7 @@ fn emit_load_stack_guard(
 }
 
 /// `ldr rd, [rn, #off]`, through `CANARY_SCRATCH2` past the offset forms.
-fn emit_guard_load_at_offset(code: &mut Vec<u8>, rd: Reg, rn: Reg, off: i32) {
+fn emit_guard_load_at_offset(code: &mut CodeBuf, rd: Reg, rn: Reg, off: i32) {
     emit_mem(
         code,
         super::encode::LDR_X,
@@ -2149,7 +2150,7 @@ fn emit_guard_load_at_offset(code: &mut Vec<u8>, rd: Reg, rn: Reg, off: i32) {
 /// slot at `[fp - 8]`, above every local and below the saved fp/lr, then
 /// clear the scratch so the guard value does not outlive the store.
 fn emit_canary_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
@@ -2169,7 +2170,7 @@ fn emit_canary_store(
 /// `__stack_chk_fail` when they differ. Emitted on every path that leaves
 /// the frame, ahead of the teardown, while fp still addresses the slot.
 fn emit_canary_check(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
@@ -2205,7 +2206,7 @@ fn emit_canary_check(
 /// sp-relative restores: from the locals base where x19 holds it, else
 /// `fp - frame_bytes`. One write, so sp never rests above unrestored
 /// frame bytes (a signal delivered mid-sequence pushes its frame below sp).
-fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
+fn restore_dynamic_sp(code: &mut CodeBuf, frame: Frame) {
     if frame.local_base {
         emit(code, enc_add_imm(Reg(31), Reg(19), 0));
         return;
@@ -2230,7 +2231,7 @@ fn restores_regs(alloc: &Allocation, frame: Frame) -> bool {
 /// with a locals base addresses from x19, which then loads last. With
 /// `uw`, each load's unwind step is pushed to it.
 fn emit_epilogue_restore_regs(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     alloc: &Allocation,
     frame: Frame,
     post: u32,
@@ -2315,7 +2316,7 @@ pub(super) fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
 /// fp is set, which ends the steps pushed to `uw`: the unwinder recovers
 /// sp from fp, so what follows is not described.
 fn emit_frame_and_saves(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     alloc: &Allocation,
     frame: Frame,
     uw: &mut Vec<super::A64Step>,
@@ -2489,7 +2490,7 @@ pub(super) fn emit_return(
 /// part the unwind steps describe starts.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_frame_exit(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     alloc: &Allocation,
     frame: Frame,
     func: &FunctionSsa,
@@ -2752,7 +2753,7 @@ fn emit_scalar_return(
 
 /// Store a register a call clobbers to its slot ahead of the call, or load
 /// it back after ([`super::ssa::reg_alloc::Allocation::call_saves`]).
-fn call_save(code: &mut Vec<u8>, frame: Frame, s: &super::ssa::reg_alloc::CallSave, store: bool) {
+fn call_save(code: &mut CodeBuf, frame: Frame, s: &super::ssa::reg_alloc::CallSave, store: bool) {
     use super::ssa::reg_alloc::VecWidth;
     // A scalar save takes one slot, which may be the frame's last: only a
     // 128-bit save has the slot below it.

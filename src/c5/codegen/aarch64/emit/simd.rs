@@ -51,8 +51,8 @@ fn accumulates(row: &SimdOp) -> bool {
 /// by-element row names its last register's lane `imm`, or without one
 /// is the vector form over that register, which holds the lane in every
 /// lane.
-fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::string::String> {
-    use super::table::{self, Opnd};
+fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<Insn, alloc::string::String> {
+    use super::table::Opnd;
     // A table lookup names its table as a one-register list.
     if let crate::c5::simd::Sem::Tbl(bytes) | crate::c5::simd::Sem::Tbx(bytes) = row.sem {
         let (rd, rt, rm) = match regs {
@@ -70,7 +70,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
             size: 0,
             q: true,
         };
-        return table::encode(row.mnem, &[index(rd), table, index(rm)]);
+        return super::encode::enc_table(row.mnem, &[index(rd), table, index(rm)]);
     }
     // A 64-bit polynomial product names its 128-bit lane `.1q` and its
     // sources' 64-bit lanes as vectors, the `2` form the upper ones.
@@ -80,7 +80,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
     ) = (row.sem, regs)
     {
         let v = |num, size, q| Opnd::VecReg { num, size, q };
-        return table::encode(
+        return super::encode::enc_table(
             row.mnem,
             &[v(*rd, 4, true), v(*rn, 3, high), v(*rm, 3, high)],
         );
@@ -96,7 +96,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
             num: *rn,
             is_d: false,
         };
-        return table::encode(row.mnem, &[Opnd::QReg(*rd), e, w]);
+        return super::encode::enc_table(row.mnem, &[Opnd::QReg(*rd), e, w]);
     }
     // The SHA-256 and SHA-512 hashes name their state halves as q registers.
     if let (
@@ -109,7 +109,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
             size: row.ret.lane_bytes().trailing_zeros() as u8,
             q: true,
         };
-        return table::encode(row.mnem, &[Opnd::QReg(*rd), Opnd::QReg(*rn), w]);
+        return super::encode::enc_table(row.mnem, &[Opnd::QReg(*rd), Opnd::QReg(*rn), w]);
     }
     // `dup` names its source lane in the operand: `vN.T[index]`.
     if let (crate::c5::simd::Sem::DupLane(w), [rd, rn], Some(index)) = (row.sem, regs, imm) {
@@ -126,7 +126,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
                 index,
             },
         ];
-        return table::encode(row.mnem, &ops);
+        return super::encode::enc_table(row.mnem, &ops);
     }
     let skip = usize::from(accumulates(row));
     let mut ops: Vec<Opnd> = regs
@@ -177,13 +177,13 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
             (None, Opnd::VReg { is_d, .. }) => Opnd::VReg { num, is_d },
             (None, _) => return Err(alloc::format!("{}: no vector form", row.name)),
         };
-        return table::encode(row.mnem, &ops);
+        return super::encode::enc_table(row.mnem, &ops);
     }
     ops.extend(imm.map(|n| Opnd::Imm(i64::from(n))));
     if row.compares_with_zero() {
         ops.push(Opnd::Imm(0));
     }
-    table::encode(row.mnem, &ops)
+    super::encode::enc_table(row.mnem, &ops)
 }
 
 /// A halfword element's register is four bits wide: one from v16 up has
@@ -191,13 +191,13 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
 /// its vector form over it (`encode` without an index). Returns the
 /// register and index to encode.
 fn halfword_element(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     row: &SimdOp,
     reg: u8,
     imm: Option<u8>,
     scratch: u8,
 ) -> Result<(u8, Option<u8>), alloc::string::String> {
-    use super::table::{self, Opnd};
+    use super::table::Opnd;
     match (row.sem, imm) {
         (simd::Sem::ByElement(_, 2), Some(index)) if reg > 15 => {
             let ops = [
@@ -212,7 +212,7 @@ fn halfword_element(
                     index,
                 },
             ];
-            emit(code, table::encode("dup", &ops)?);
+            emit(code, super::encode::enc_table("dup", &ops)?);
             Ok((scratch, None))
         }
         _ => Ok((reg, imm)),

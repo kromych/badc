@@ -192,7 +192,7 @@ pub(super) fn emit_va_arg_cursor(
 }
 
 /// Deliver the address `va_arg` computed in `src` to its result `dst`.
-fn va_arg_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) -> Emit {
+fn va_arg_result(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) -> Emit {
     match dst {
         Place::IntReg(r) if r != src.0 => emit_mov_reg(code, Reg(r), src),
         Place::IntReg(_) | Place::None => {}
@@ -409,10 +409,9 @@ pub(super) fn emit_va_arg_aapcs64(
     // --- overflow-stack path ---
     let stack_lbl = code.len();
     let delta = ((stack_lbl - to_stack) / 4) as i32;
-    code[to_stack..to_stack + 4].copy_from_slice(&enc_b_cond(Cond::Ge, delta).to_le_bytes());
+    patch(code, to_stack, enc_b_cond(Cond::Ge, delta));
     let delta = ((stack_lbl - to_stack_straddle) / 4) as i32;
-    code[to_stack_straddle..to_stack_straddle + 4]
-        .copy_from_slice(&enc_b_cond(Cond::Gt, delta).to_le_bytes());
+    patch(code, to_stack_straddle, enc_b_cond(Cond::Gt, delta));
     // x16 = __stack, rounded up to the argument's alignment ; borrow =
     // that + advance (the next cursor) ; write both back.
     emit(code, enc_ldr_imm(scratch.primary, ap, 0));
@@ -431,7 +430,7 @@ pub(super) fn emit_va_arg_aapcs64(
     // --- done: x16 holds the argument address. ---
     let done_lbl = code.len();
     let delta = ((done_lbl - to_done) / 4) as i32;
-    code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
+    patch(code, to_done, enc_b(delta));
     if desc.by_ref {
         emit(code, enc_ldr_imm(scratch.primary, scratch.primary, 0));
     }
@@ -575,19 +574,19 @@ pub(super) fn emit_call_ext(
 
 /// The sub-word sign / zero extension of a call result in x0;
 /// `ReturnExt::None` is a no-op.
-fn emit_extend_x0_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
+fn emit_extend_x0_for_return(code: &mut CodeBuf, ext: super::ReturnExt) {
     use super::ReturnExt;
-    // sxtb / sxth / sxtw x0, w0; uxtb / uxth / mov w0, w0.
-    let word = match ext {
+    let x0 = Reg::X0;
+    let insn = match ext {
         ReturnExt::None => return,
-        ReturnExt::Sign8 => 0x93401C00,
-        ReturnExt::Sign16 => 0x93403C00,
-        ReturnExt::Sign32 => 0x93407C00,
-        ReturnExt::Zero8 => 0x53001C00,
-        ReturnExt::Zero16 => 0x53003C00,
-        ReturnExt::Zero32 => 0x2A0003E0,
+        ReturnExt::Sign8 => super::encode::enc_sxtb(x0, x0),
+        ReturnExt::Sign16 => super::encode::enc_sxth(x0, x0),
+        ReturnExt::Sign32 => super::encode::enc_sxtw(x0, x0),
+        ReturnExt::Zero8 => super::encode::enc_uxt_w(x0, x0, 8),
+        ReturnExt::Zero16 => super::encode::enc_uxt_w(x0, x0, 16),
+        ReturnExt::Zero32 => super::encode::enc_mov_w_w(x0, x0),
     };
-    emit(code, word);
+    emit(code, insn);
 }
 
 /// A direct call to a c5 function at `target_pc`: marshal through the
@@ -889,7 +888,7 @@ fn setup_indirect_result(
 /// return uses the standard register bridge.
 #[allow(clippy::too_many_arguments)]
 fn finish_call_result(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     ret_agg: Option<u32>,
     ret_slot_off: i64,
     agg_descs: &[super::super::ir::AggDesc],
@@ -965,7 +964,7 @@ fn finish_call_result(
 /// x0 (AAPCS64 6.4.1), a floating-point one from d0 (6.4.2; an f32 is
 /// its s0 half), copied or reinterpreted into the destination's
 /// register file.
-fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: bool) {
+fn move_call_result(code: &mut CodeBuf, dst: Place, frame: Frame, fp_return: bool) {
     if fp_return {
         match dst {
             Place::FpReg(r) => {
@@ -1626,7 +1625,7 @@ impl CallArgs<'_> {
     /// `regs[0]`. The high eightbytes load first; `regs[0]` (the base) is
     /// read last, overwritten by its own eightbyte -- a composed one
     /// accumulates in scratch first.
-    fn load_struct_eightbytes(&self, code: &mut Vec<u8>) -> Emit {
+    fn load_struct_eightbytes(&self, code: &mut CodeBuf) -> Emit {
         let strict = self.abi.strict_align;
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             match placement.register_part() {

@@ -1184,7 +1184,7 @@ struct RelocWriter<'a> {
 }
 
 #[cfg(feature = "listing")]
-use crate::c5::codegen::listing::Listing;
+use crate::c5::codegen::listing::{Listing, Reloc};
 /// Without the `listing` feature no listing reaches the writer.
 #[cfg(not(feature = "listing"))]
 pub(super) enum Listing {}
@@ -4581,6 +4581,7 @@ impl<'a> RelocWriter<'a> {
     /// their sections.
     #[cfg(feature = "listing")]
     fn list_text(&mut self, text: &[u8], got_sites: &[usize], abs_sites: &[usize]) {
+        use crate::c5::codegen::aarch64::Reg;
         use crate::c5::codegen::x86_64::text::gpr;
         let Some(listing) = self.listing.as_deref_mut() else {
             return;
@@ -4601,6 +4602,17 @@ impl<'a> RelocWriter<'a> {
                     listing.retext(at, format!("movq $, {reg}"), Some(6));
                 }
             }
+        } else {
+            // The in-page `add` of each GOT reference became a load of the
+            // slot (`rewrite_extern_addr_loads_to_got`).
+            for &at in got_sites {
+                if let Some(&[a, b, c, d]) = text.get(at + 4..at + 8) {
+                    let word = u32::from_le_bytes([a, b, c, d]);
+                    let (rt, rn) = (word as u8 & 31, (word >> 5) as u8 & 31);
+                    let ldr = super::aarch64::enc_ldr_imm(Reg(rt), Reg(rn), 0);
+                    listing.replace(at + 4, ldr.text());
+                }
+            }
         }
         let carve = &self.layout.carve;
         let sections = (carve.text_ranges.iter())
@@ -4616,69 +4628,66 @@ impl<'a> RelocWriter<'a> {
             .collect();
         // Each relocated field of the text, at its offset ahead of the carve.
         // The symbols carry their final section numbers by now.
-        let (syms, strtab, shndx) = (&self.syms.symbols, &self.names.strtab, self.out.shndx);
-        let fixed = [
-            (SHIDX_TEXT, ".text"),
-            (SHIDX_DATA, ".data"),
-            (SHIDX_BSS, ".bss"),
-            (SHIDX_TDATA, ".tdata"),
-            (SHIDX_TBSS, ".tbss"),
-        ]
-        .map(|(n, name)| (shndx.map(n), name));
+        let (syms, strtab) = (&self.syms.symbols, &self.names.strtab);
+        let (shstrtab, shstrtab_offs) = (&self.out.shstrtab, &self.out.shstrtab_offs);
+        let c_str = |table: &[u8], at: usize| {
+            let tail = table.get(at..).unwrap_or_default();
+            let len = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
+            String::from_utf8_lossy(&tail[..len]).into_owned()
+        };
+        // A section symbol is named by its section, the name of section `n`
+        // at `shstrtab_offs[n - 1]`.
         let name_of = |idx: u64| -> String {
             let Some(s) = syms.get(idx as usize) else {
                 return String::new();
             };
             if s.st_name != 0 {
-                let tail = strtab.get(s.st_name as usize..).unwrap_or_default();
-                let len = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
-                return String::from_utf8_lossy(&tail[..len]).into_owned();
+                return c_str(strtab, s.st_name as usize);
             }
-            let n = s.st_shndx;
-            if let Some((_, name)) = fixed.iter().find(|(m, _)| *m == n) {
-                return String::from(*name);
-            }
-            match carve.shndx.iter().position(|&s| s == n) {
-                Some(k) => carve.table.entries[k].name.clone(),
+            let n = usize::from(s.st_shndx);
+            match n.checked_sub(1).and_then(|k| shstrtab_offs.get(k)) {
+                Some(&off) => c_str(shstrtab, off as usize),
                 None => format!("<section {n}>"),
             }
         };
+        let a64 = self.machine == Machine::Aarch64;
         let pcrel = |rtype: u32| {
-            self.machine == Machine::X86_64
-                && matches!(
-                    rtype,
-                    R_X86_64_PC32
-                        | R_X86_64_PLT32
-                        | R_X86_64_GOTPCREL
-                        | R_X86_64_GOTPCRELX
-                        | R_X86_64_REX_GOTPCRELX
-                        | R_X86_64_GOTTPOFF
-                        | R_X86_64_GOTPC32_TLSDESC
-                        | R_X86_64_TLSGD
-                        | R_X86_64_TLSLD
-                )
+            !a64 && matches!(
+                rtype,
+                R_X86_64_PC32
+                    | R_X86_64_PLT32
+                    | R_X86_64_GOTPCREL
+                    | R_X86_64_GOTPCRELX
+                    | R_X86_64_REX_GOTPCRELX
+                    | R_X86_64_GOTTPOFF
+                    | R_X86_64_GOTPC32_TLSDESC
+                    | R_X86_64_TLSGD
+                    | R_X86_64_TLSLD
+            )
+        };
+        let reloc = |symbol: String, addend: i64, rtype: u32| Reloc {
+            symbol,
+            addend,
+            pcrel: pcrel(rtype),
+            spec: if a64 { a64_reloc_spec(rtype) } else { "" },
         };
         let mut relocs = Vec::new();
         for rec in self.relocs.text.as_chunks::<ELF64_RELA_SIZE>().0 {
             let word = |at: usize| u64::from_le_bytes(rec[at..at + 8].try_into().unwrap());
             let (off, info) = (word(0), word(8));
-            relocs.push((
-                off as usize,
-                name_of(info >> 32),
-                word(16) as i64,
-                pcrel(info as u32),
-            ));
+            let r = reloc(name_of(info >> 32), word(16) as i64, info as u32);
+            relocs.push((off as usize, r));
         }
         for r in &carve.text_ranges {
             let len = r.old_hi - r.old_lo;
             for x in &carve.table.entries[r.entry].relas {
                 if (r.new_base..r.new_base + len).contains(&x.offset) {
                     let off = (x.offset - r.new_base + r.old_lo) as usize;
-                    relocs.push((off, name_of(x.sym), x.addend, pcrel(x.rtype)));
+                    relocs.push((off, reloc(name_of(x.sym), x.addend, x.rtype)));
                 }
             }
         }
-        listing.set_final(text.to_vec(), sections, relocs);
+        listing.set_final(text.to_vec(), a64, sections, relocs);
     }
 
     /// `.text`, with the extern materializations rewritten to match the
@@ -5837,6 +5846,38 @@ fn emit_abs32_ref_reloc(out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64, adde
 /// (paired with the relocs from [`emit_got_ref_relocs`]): the `add` half of
 /// an aarch64 `adrp + add` becomes `ldr`, and an x86_64 rip-relative `lea`
 /// becomes `mov` (opcode 0x8d -> 0x8b, same REX/modrm/disp32).
+/// The operator GNU as spells an AArch64 relocation of an instruction field
+/// with, ahead of the symbol.
+#[cfg(feature = "listing")]
+fn a64_reloc_spec(rtype: u32) -> &'static str {
+    match rtype {
+        R_AARCH64_ADD_ABS_LO12_NC
+        | R_AARCH64_LDST8_ABS_LO12_NC
+        | R_AARCH64_LDST16_ABS_LO12_NC
+        | R_AARCH64_LDST32_ABS_LO12_NC
+        | R_AARCH64_LDST64_ABS_LO12_NC
+        | R_AARCH64_LDST128_ABS_LO12_NC => ":lo12:",
+        R_AARCH64_ADR_GOT_PAGE => ":got:",
+        R_AARCH64_LD64_GOT_LO12_NC => ":got_lo12:",
+        R_AARCH64_TLSLE_ADD_TPREL_HI12 => ":tprel_hi12:",
+        R_AARCH64_TLSLE_ADD_TPREL_LO12_NC => ":tprel_lo12_nc:",
+        R_AARCH64_TLSLD_ADD_DTPREL_HI12 => ":dtprel_hi12:",
+        R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC => ":dtprel_lo12_nc:",
+        R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21 => ":gottprel:",
+        R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC => ":gottprel_lo12:",
+        R_AARCH64_TLSDESC_ADR_PAGE21 => ":tlsdesc:",
+        R_AARCH64_TLSDESC_LD64_LO12 | R_AARCH64_TLSDESC_ADD_LO12 => ":tlsdesc_lo12:",
+        R_AARCH64_MOVW_UABS_G0 | R_AARCH64_MOVW_SABS_G0 => ":abs_g0:",
+        R_AARCH64_MOVW_UABS_G0_NC => ":abs_g0_nc:",
+        R_AARCH64_MOVW_UABS_G1 | R_AARCH64_MOVW_SABS_G1 => ":abs_g1:",
+        R_AARCH64_MOVW_UABS_G1_NC => ":abs_g1_nc:",
+        R_AARCH64_MOVW_UABS_G2 | R_AARCH64_MOVW_SABS_G2 => ":abs_g2:",
+        R_AARCH64_MOVW_UABS_G2_NC => ":abs_g2_nc:",
+        R_AARCH64_MOVW_UABS_G3 => ":abs_g3:",
+        _ => "",
+    }
+}
+
 fn rewrite_extern_addr_loads_to_got(
     machine: Machine,
     text: &[u8],

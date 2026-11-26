@@ -5,7 +5,8 @@
 //! A pc-relative operand is read from its field in the final bytes, so a
 //! pass that patches a displacement needs no listing update. A pass that
 //! drops bytes drops their rows ([`Listing::truncate`]); one that rewrites an
-//! instruction into another re-describes it ([`Listing::retext`]).
+//! instruction into another re-describes it ([`Listing::retext`],
+//! [`Listing::replace`]).
 
 use alloc::string::String;
 
@@ -26,6 +27,38 @@ pub(crate) enum Operand {
     Data(i64),
     /// A symbol by name.
     Name(String),
+    /// A field of the A64 instruction word.
+    #[cfg_attr(not(feature = "listing"), allow(dead_code))]
+    A64(A64Field),
+}
+
+/// A field of an A64 instruction word a relocation or a later pass may fill.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum A64Field {
+    /// A branch target: the signed word offset `bits` wide at bit `lo`.
+    Branch { lo: u8, bits: u8 },
+    /// `adr`: the signed byte offset in `immhi:immlo`.
+    Adr,
+    /// `adrp`: the signed page offset in `immhi:immlo`.
+    Adrp,
+    /// The unsigned 12-bit immediate at bit 10, scaled by `1 << scale`: an
+    /// `add`'s or, inside a memory operand (`mem`), a load's or a store's
+    /// offset, where zero reads as no offset.
+    Lo12 { scale: u8, mem: bool },
+    /// The 16-bit immediate of a move-wide at bit 5.
+    Imm16,
+}
+
+/// A relocation of a field of the text, as the listing names it.
+#[cfg(feature = "listing")]
+#[derive(Clone, Debug)]
+pub(crate) struct Reloc {
+    pub(crate) symbol: String,
+    pub(crate) addend: i64,
+    /// The field is measured from the instruction's end (x86-64).
+    pub(crate) pcrel: bool,
+    /// The operator ahead of the symbol, as `:lo12:`.
+    pub(crate) spec: &'static str,
 }
 
 /// An instruction's text; its operand, when it has one, is inserted at byte
@@ -84,7 +117,7 @@ mod rows {
     use alloc::vec::Vec;
     use core::fmt::Write;
 
-    use super::{Amend, Operand, Text};
+    use super::{A64Field, Amend, Operand, Reloc, Text};
     use crate::c5::codegen::Build;
     use crate::c5::program::Program;
 
@@ -112,9 +145,10 @@ mod rows {
         /// A prefix the next instruction absorbs: where it begins, and how it
         /// amends the instruction's text.
         pending: Option<(usize, Amend, u8)>,
-        /// The object's relocations by field offset: symbol, addend, and
-        /// whether the field is measured from the instruction's end.
-        relocs: BTreeMap<usize, (String, i64, bool)>,
+        /// The object's relocations by field offset.
+        relocs: BTreeMap<usize, Reloc>,
+        /// The text is A64 words, which print as words.
+        words: bool,
     }
 
     impl Listing {
@@ -207,21 +241,29 @@ mod rows {
             };
         }
 
-        /// The object holds `text`, `sections` move ranges of it into
-        /// sections of their own, and `relocs` name the symbol each field
-        /// at an offset resolves against: `(offset, symbol, addend, pcrel)`.
+        /// The instruction at `at` was rewritten into one reading `text`.
+        pub(crate) fn replace(&mut self, at: usize, text: Text) {
+            match self.rows.binary_search_by_key(&at, |r| r.at) {
+                Ok(i) => self.rows[i].text = text,
+                Err(_) => debug_assert!(false, "no listing row at {at:#x} to rewrite"),
+            }
+        }
+
+        /// The object holds `text`, A64 words when `words` is set,
+        /// `sections` move ranges of it into sections of their own, and
+        /// `relocs` name the symbol each field at an offset resolves
+        /// against.
         pub(crate) fn set_final(
             &mut self,
             text: Vec<u8>,
+            words: bool,
             sections: Vec<(usize, usize, String, usize)>,
-            relocs: Vec<(usize, String, i64, bool)>,
+            relocs: Vec<(usize, Reloc)>,
         ) {
             self.text = Some(text);
+            self.words = words;
             self.sections = sections;
-            self.relocs = relocs
-                .into_iter()
-                .map(|(at, s, a, p)| (at, (s, a, p)))
-                .collect();
+            self.relocs = relocs.into_iter().collect();
         }
     }
 
@@ -235,7 +277,7 @@ mod rows {
         data: BTreeMap<u64, (&'a str, u64)>,
         /// Labels by text offset: blocks and the synthesized ones.
         labels: BTreeMap<usize, String>,
-        relocs: &'a BTreeMap<usize, (String, i64, bool)>,
+        relocs: &'a BTreeMap<usize, Reloc>,
         build: &'a Build,
     }
 
@@ -275,13 +317,13 @@ mod rows {
             // A relocated field names the relocation's symbol.
             if let Operand::PcRel { field, .. } | Operand::Field { field, .. } = o {
                 let at = row.at + usize::from(*field);
-                if let Some((name, addend, pcrel)) = self.relocs.get(&at) {
-                    let a = if *pcrel {
-                        addend + (row.end - at) as i64
+                if let Some(r) = self.relocs.get(&at) {
+                    let a = if r.pcrel {
+                        r.addend + (row.end - at) as i64
                     } else {
-                        *addend
+                        r.addend
                     };
-                    return with_addend(name, a);
+                    return with_addend(plain(&r.symbol), a);
                 }
             }
             match o {
@@ -299,13 +341,65 @@ mod rows {
                     None => format!("<pc {pc}>"),
                 },
                 Operand::Import(i) => match self.build.imports.imports.get(*i) {
-                    Some(imp) => imp.local_name.clone(),
+                    Some(imp) => String::from(plain(&imp.local_name)),
                     None => format!("<import {i}>"),
                 },
                 Operand::Data(off) => self.data(*off),
-                Operand::Name(name) => name.clone(),
+                Operand::Name(name) => String::from(plain(name)),
+                Operand::A64(f) => self.a64(row, bytes, *f),
             }
         }
+
+        /// An A64 field: the relocation's symbol, else the value the word
+        /// holds.
+        fn a64(&self, row: &Row, bytes: &[u8], f: A64Field) -> String {
+            let lead = match f {
+                A64Field::Lo12 { mem: true, .. } => ", ",
+                _ => "",
+            };
+            if let Some(r) = self.relocs.get(&row.at) {
+                return format!(
+                    "{lead}{}{}",
+                    r.spec,
+                    with_addend(plain(&r.symbol), r.addend)
+                );
+            }
+            let Some(word) = a64_word(row, bytes) else {
+                return String::from("?");
+            };
+            match (a64_target(row.at, word, f), f) {
+                (Some(at), A64Field::Adrp) => format!("{at:#x}"),
+                (Some(at), _) => self.target(at),
+                (None, A64Field::Lo12 { scale, .. }) => match ((word >> 10) & 0xfff) << scale {
+                    0 if !lead.is_empty() => String::new(),
+                    v => format!("{lead}#{v:#x}"),
+                },
+                (None, _) => format!("#{:#x}", (word >> 5) & 0xffff),
+            }
+        }
+    }
+
+    /// The A64 word of `row`.
+    fn a64_word(row: &Row, bytes: &[u8]) -> Option<u32> {
+        let w = bytes.get(row.at..row.at + 4)?;
+        Some(u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    }
+
+    /// The offset the pc-relative field `f` of `word` at `at` reaches; `None`
+    /// for an immediate.
+    fn a64_target(at: usize, word: u32, f: A64Field) -> Option<usize> {
+        let sext = |v: u32, bits: u32| i64::from(((v << (32 - bits)) as i32) >> (32 - bits));
+        let imm21 = sext((((word >> 5) & 0x7_FFFF) << 2) | ((word >> 29) & 3), 21);
+        let off = match f {
+            A64Field::Branch { lo, bits } => {
+                let (lo, bits) = (u32::from(lo), u32::from(bits));
+                sext((word >> lo) & ((1 << bits) - 1), bits) * 4
+            }
+            A64Field::Adr => imm21,
+            A64Field::Adrp => return Some(((at as i64 & !0xfff) + (imm21 << 12)) as usize),
+            A64Field::Lo12 { .. } | A64Field::Imm16 => return None,
+        };
+        Some((at as i64 + off) as usize)
     }
 
     /// The signed value of the `width`-byte field `field` bytes into `row`.
@@ -316,6 +410,13 @@ mod rows {
             (4, f) => Some(i64::from(i32::from_le_bytes([f[0], f[1], f[2], f[3]]))),
             _ => None,
         }
+    }
+
+    /// A symbol's name as an assembler spells it: a leading `\x01`, which
+    /// marks a name the object format takes without its prefix, is not
+    /// part of it.
+    fn plain(name: &str) -> &str {
+        name.strip_prefix('\u{1}').unwrap_or(name)
     }
 
     fn with_addend(name: &str, addend: i64) -> String {
@@ -336,19 +437,17 @@ mod rows {
         let entries: BTreeMap<usize, &str> = (build.func_ent_pcs.iter().zip(&build.func_names))
             .filter_map(|(&pc, name)| {
                 let at = *build.pc_to_native.get(pc)?;
-                (at != usize::MAX && !name.is_empty()).then_some((at, name.as_str()))
+                (at != usize::MAX && !name.is_empty()).then_some((at, plain(name)))
             })
             .collect();
         let mut by_pc: BTreeMap<usize, &str> = (program.symbols.iter())
             .filter(|s| s.is_fun_entity() && !s.name.is_empty())
-            .map(|s| (s.val as usize, s.link_name()))
+            .map(|s| (s.val as usize, plain(s.link_name())))
             .collect();
-        by_pc.extend(
-            (program.extern_function_imports.iter()).map(|(pc, name)| (*pc, name.as_str())),
-        );
+        by_pc.extend((program.extern_function_imports.iter()).map(|(pc, name)| (*pc, plain(name))));
         // Funclets carry names no symbol does.
         for (&pc, name) in build.func_ent_pcs.iter().zip(&build.func_names) {
-            by_pc.entry(pc).or_insert(name.as_str());
+            by_pc.entry(pc).or_insert(plain(name));
         }
         let data: BTreeMap<u64, (&str, u64)> = (program.symbols.iter())
             .filter(|s| {
@@ -360,7 +459,7 @@ mod rows {
             })
             .map(|s| {
                 let size = s.data_byte_size.max(0) as u64;
-                (s.val.max(0) as u64, (s.link_name(), size))
+                (s.val.max(0) as u64, (plain(s.link_name()), size))
             })
             .collect();
         let func_at: Vec<usize> = entries.keys().copied().collect();
@@ -384,16 +483,27 @@ mod rows {
         // A pc-relative target no block names takes a label of its own.
         let mut tmp = 0;
         for row in &listing.rows {
-            let Some((_, Operand::PcRel { field, width })) = &row.text.operand else {
-                continue;
+            let target = match &row.text.operand {
+                Some((_, Operand::PcRel { field, width })) => {
+                    if listing.relocs.contains_key(&(row.at + usize::from(*field))) {
+                        continue;
+                    }
+                    let Some(disp) = field_value(row, bytes, *field, *width) else {
+                        continue;
+                    };
+                    (row.end as i64 + disp) as usize
+                }
+                Some((_, Operand::A64(f @ (A64Field::Branch { .. } | A64Field::Adr)))) => {
+                    if listing.relocs.contains_key(&row.at) {
+                        continue;
+                    }
+                    match a64_word(row, bytes).and_then(|w| a64_target(row.at, w, *f)) {
+                        Some(at) => at,
+                        None => continue,
+                    }
+                }
+                _ => continue,
             };
-            if listing.relocs.contains_key(&(row.at + usize::from(*field))) {
-                continue;
-            }
-            let Some(disp) = field_value(row, bytes, *field, *width) else {
-                continue;
-            };
-            let target = (row.end as i64 + disp) as usize;
             if target <= bytes.len()
                 && !names.entries.contains_key(&target)
                 && !names.labels.contains_key(&target)
@@ -461,9 +571,16 @@ mod rows {
             };
             let _ = write!(out, "{offset:>8x}:  ");
             let mut col = 0;
-            for b in &bytes[at..to] {
-                let _ = write!(out, "{b:02x} ");
-                col += 3;
+            if listing.words && to - at == 4 && !text.starts_with('.') {
+                let w =
+                    u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+                let _ = write!(out, "{w:08x} ");
+                col = 9;
+            } else {
+                for b in &bytes[at..to] {
+                    let _ = write!(out, "{b:02x} ");
+                    col += 3;
+                }
             }
             for _ in col..30 {
                 out.push(' ');

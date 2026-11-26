@@ -115,7 +115,6 @@ Multi-TU knobs:
                            Each function's instructions with
                            their offsets, bytes and text, block
                            labels and the symbols operands name.
-                           x86-64 targets.
   --ar -o <lib>.a <inputs> Compile the sources and archive them with
                            the objects, with a symbol index.
   --ar <key> <lib>.a [file...]

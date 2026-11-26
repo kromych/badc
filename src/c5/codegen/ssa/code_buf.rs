@@ -240,6 +240,31 @@ impl CodeBuf {
         let _ = (at, operand);
     }
 
+    /// The instruction whose bytes run from `at` to `end` reads `text`.
+    #[inline(always)]
+    pub(crate) fn describe_range<T: Into<Text>>(
+        &mut self,
+        at: usize,
+        end: usize,
+        text: impl FnOnce() -> T,
+    ) {
+        #[cfg(feature = "listing")]
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.push(at, end, text().into());
+        }
+        #[cfg(not(feature = "listing"))]
+        let _ = (at, end, text);
+    }
+
+    /// The instruction at `at` was rewritten into one reading `text`.
+    #[cfg(feature = "listing")]
+    #[inline(always)]
+    pub(crate) fn redescribe<T: Into<Text>>(&mut self, at: usize, text: impl FnOnce() -> T) {
+        if let Some(l) = self.listing.as_deref_mut() {
+            l.replace(at, text().into());
+        }
+    }
+
     /// Block `block` begins here.
     #[inline(always)]
     pub(crate) fn label_block(&mut self, block: u32) {

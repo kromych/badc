@@ -351,6 +351,49 @@ fn sys_op_base(op1: &str, crn: &str, crm: &str, op2: &str) -> Option<u32> {
 
 /// The 4-bit CRm value of a `dmb` / `dsb` barrier option, or None if the
 /// name is not one. `isb` takes only `sy`; `clrex` only a numeric imm.
+/// The spelling of PSTATE field `(op1, op2)` in `msr <field>, #imm`.
+fn pstate_name(op1: u16, op2: u16) -> &'static str {
+    match (op1, op2) {
+        (0, 5) => "SPSel",
+        (3, 6) => "DAIFSet",
+        (3, 7) => "DAIFClr",
+        (0, 3) => "UAO",
+        (0, 4) => "PAN",
+        (3, 2) => "DIT",
+        (3, 1) => "SSBS",
+        (3, 4) => "TCO",
+        _ => "ALLINT",
+    }
+}
+
+/// The text of barrier `mnem` with option `crm`: a named domain, the
+/// speculation barriers `dsb #0` / `dsb #4` are, or the bare number.
+fn barrier_text(mnem: &str, crm: u32) -> String {
+    const NAMES: [(u32, &str); 12] = [
+        (15, "sy"),
+        (14, "st"),
+        (13, "ld"),
+        (11, "ish"),
+        (10, "ishst"),
+        (9, "ishld"),
+        (7, "nsh"),
+        (6, "nshst"),
+        (5, "nshld"),
+        (3, "osh"),
+        (2, "oshst"),
+        (1, "oshld"),
+    ];
+    let name = NAMES.iter().find(|(v, _)| *v == crm).map(|(_, n)| *n);
+    match (mnem, crm, name) {
+        ("dsb", 0, _) => String::from("ssbb"),
+        ("dsb", 4, _) => String::from("pssbb"),
+        ("dmb" | "dsb", _, Some(n)) => format!("{mnem} {n}"),
+        ("isb" | "clrex", 15, _) => String::from(mnem),
+        ("clrex", _, _) => format!("clrex #{crm:#x}"),
+        _ => format!("{mnem} #{crm}"),
+    }
+}
+
 fn barrier_option(name: &str) -> Option<u32> {
     Some(match name.to_ascii_lowercase().as_str() {
         "sy" => 15,
@@ -401,7 +444,8 @@ fn prfop_code(name: &str) -> Option<u32> {
 #[derive(Debug, Clone)]
 pub(crate) struct AsmInsnA64 {
     /// Empty for a raw-byte piece (`bytes` carries the payload) and for a
-    /// local-label definition (`label_def` carries the number).
+    /// local-label definition (`label_def` carries the number); the whole
+    /// text of an instruction the parser encodes itself.
     pub mnemonic: String,
     pub operands: Vec<AsmOpndA64>,
     /// Literal bytes for a raw-byte piece; empty for a mnemonic.
@@ -1863,7 +1907,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 let word =
                     0xD500_401F | ((op1 as u32) << 16) | ((v as u32) << 8) | ((op2 as u32) << 5);
                 insns.push(AsmInsnA64 {
-                    mnemonic: String::new(),
+                    mnemonic: format!("msr {}, #{v:#x}", pstate_name(op1, op2)),
                     operands: Vec::new(),
                     bytes: word.to_le_bytes().to_vec(),
                     label_def: None,
@@ -1900,7 +1944,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             };
             let word = 0xD503_301F | (crm << 8) | (opc << 5);
             insns.push(AsmInsnA64 {
-                mnemonic: String::new(),
+                mnemonic: barrier_text(mnem, crm),
                 operands: Vec::new(),
                 bytes: word.to_le_bytes().to_vec(),
                 label_def: None,
@@ -1924,8 +1968,15 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 },
                 _ => return Err(format!("inline asm: bad `{mnem}` operands")),
             };
+            let text = match op {
+                7 => "xpaclri",
+                34 => "bti c",
+                36 => "bti j",
+                38 => "bti jc",
+                _ => "bti r",
+            };
             insns.push(AsmInsnA64 {
-                mnemonic: String::new(),
+                mnemonic: String::from(text),
                 operands: Vec::new(),
                 bytes: (0xD503_201F | (op << 5)).to_le_bytes().to_vec(),
                 label_def: None,

@@ -40,7 +40,7 @@ library.
 >   for `--target`.
 > * `-S` writes the listing of the object `-c` would write: each function's
 >   instructions with their offsets, bytes and text, the block labels, and the
->   symbols the operands name (x86-64 targets).
+>   symbols the operands name.
 
 ## Contents
 

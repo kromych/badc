@@ -5,45 +5,71 @@
 //! from the static frame's bottom (`fp - frame_bytes`, or x19).
 
 use super::super::ssa::sve_alloc::{PRED_HOLD, PRED_STAGE, PredPlace, reaches_other_pcs};
+use super::super::table::Opnd;
 use super::*;
 
 /// `ldr` / `str` of a whole Z (`vector`) or P register at
 /// `[n, #imm, mul vl]`.
-pub(super) fn enc_sve_mem(load: bool, vector: bool, t: u8, n: Reg, imm: i32) -> u32 {
+pub(super) fn enc_sve_mem(load: bool, vector: bool, t: u8, n: Reg, imm: i32) -> Insn {
     let base = match (load, vector) {
         (true, true) => 0x8580_4000,
         (false, true) => 0xE580_4000,
         (true, false) => 0x8580_0000,
         (false, false) => 0xE580_0000,
     };
-    let imm = (imm as u32) & 0x1FF;
-    base | (imm >> 3) << 16 | (imm & 7) << 10 | u32::from(n.0) << 5 | u32::from(t)
+    let field = (imm as u32) & 0x1FF;
+    let word = base | (field >> 3) << 16 | (field & 7) << 10 | u32::from(n.0) << 5 | u32::from(t);
+    let reg = match vector {
+        true => Opnd::ZReg { num: t, size: None },
+        false => Opnd::PReg { num: t, size: None },
+    };
+    let mem = Opnd::MemVl {
+        base: n.0,
+        off: imm.into(),
+    };
+    Insn::new(
+        word,
+        if load { "ldr" } else { "str" },
+        [text::Op::T(reg), text::Op::T(mem)],
+    )
 }
 
 /// `mov zd.d, zn.d`, the unpredicated ORR of `zn` with itself.
-pub(super) fn enc_mov_z(d: u8, n: u8) -> u32 {
-    0x0460_3000 | u32::from(n) << 16 | u32::from(n) << 5 | u32::from(d)
+pub(super) fn enc_mov_z(d: u8, n: u8) -> Insn {
+    let word = 0x0460_3000 | u32::from(n) << 16 | u32::from(n) << 5 | u32::from(d);
+    let z = |num| text::Op::T(Opnd::ZReg { num, size: Some(3) });
+    Insn::new(word, "mov", [z(d), z(n)])
 }
 
 /// `mov pd.b, pn.b`, the ORR of `pn` with itself under `pn`.
-pub(super) fn enc_mov_p(d: u8, n: u8) -> u32 {
+pub(super) fn enc_mov_p(d: u8, n: u8) -> Insn {
+    let p = |num| text::Op::T(Opnd::PReg { num, size: Some(0) });
+    let ops = [p(d), p(n)];
     let n = u32::from(n);
-    0x2580_4000 | n << 16 | n << 10 | n << 5 | u32::from(d)
+    Insn::new(
+        0x2580_4000 | n << 16 | n << 10 | n << 5 | u32::from(d),
+        "mov",
+        ops,
+    )
 }
 
-/// `addvl xd|sp, xn|sp, #imm`.
-fn enc_addvl(d: Reg, n: Reg, imm: i32) -> u32 {
-    0x0420_5000 | u32::from(n.0) << 16 | ((imm as u32) & 0x3F) << 5 | u32::from(d.0)
+/// `addvl xd|sp, xn|sp, #imm`, or `addpl` in predicate lengths.
+fn enc_addvl(d: Reg, n: Reg, imm: i32, pl: bool) -> Insn {
+    // ADDPL differs from ADDVL in bit 22.
+    let base = if pl { 0x0460_5000 } else { 0x0420_5000 };
+    let word = base | u32::from(n.0) << 16 | ((imm as u32) & 0x3F) << 5 | u32::from(d.0);
+    let ops = [text::xsp(d), text::xsp(n), text::dec(imm.into())];
+    Insn::new(word, if pl { "addpl" } else { "addvl" }, ops)
 }
 
 /// Reserve the VL-scaled region in steps of at most 3840 bytes (15 vector
 /// lengths of 2048 bits), each probed when the region can pass the margin.
-pub(super) fn emit_vl_region(code: &mut Vec<u8>, frame: Frame) {
+pub(super) fn emit_vl_region(code: &mut CodeBuf, frame: Frame) {
     let mut left = frame.sve_region_vls();
     let probe = left * MAX_VL_BYTES > MAX_UNPROBED_STACK_STEP;
     while left > 0 {
         let step = left.min(MAX_UNPROBED_STACK_STEP / MAX_VL_BYTES);
-        emit(code, enc_addvl(Reg::SP, Reg::SP, -(step as i32)));
+        emit(code, enc_addvl(Reg::SP, Reg::SP, -(step as i32), false));
         if probe {
             emit_stack_probe(code);
         }
@@ -54,7 +80,7 @@ pub(super) fn emit_vl_region(code: &mut Vec<u8>, frame: Frame) {
 const MAX_VL_BYTES: u32 = 256;
 
 /// The region's base: x19 where it holds it, else `t`.
-fn region_base(code: &mut Vec<u8>, frame: Frame, t: Reg) -> Reg {
+fn region_base(code: &mut CodeBuf, frame: Frame, t: Reg) -> Reg {
     if frame.local_base {
         return Reg(19);
     }
@@ -63,14 +89,14 @@ fn region_base(code: &mut Vec<u8>, frame: Frame, t: Reg) -> Reg {
 }
 
 /// Load or store Z register `z` at vector slot `slot`; `t` takes the base.
-pub(super) fn z_slot(code: &mut Vec<u8>, frame: Frame, load: bool, z: u8, slot: u32, t: Reg) {
+pub(super) fn z_slot(code: &mut CodeBuf, frame: Frame, load: bool, z: u8, slot: u32, t: Reg) {
     let lengths = frame.sve_p_slots.div_ceil(8) + slot + 1;
     let (base, imm) = slot_base(code, frame, t, true, lengths);
     emit(code, enc_sve_mem(load, true, z, base, imm));
 }
 
 /// [`z_slot`] for P register `p` and predicate slot `slot`.
-pub(super) fn p_slot(code: &mut Vec<u8>, frame: Frame, load: bool, p: u8, slot: u32, t: Reg) {
+pub(super) fn p_slot(code: &mut CodeBuf, frame: Frame, load: bool, p: u8, slot: u32, t: Reg) {
     let (base, imm) = slot_base(code, frame, t, false, slot + 1);
     emit(code, enc_sve_mem(load, false, p, base, imm));
 }
@@ -78,21 +104,19 @@ pub(super) fn p_slot(code: &mut Vec<u8>, frame: Frame, load: bool, p: u8, slot: 
 /// The base and offset of the slot `lengths` vector (or predicate) lengths
 /// below the region's base: past the 9-bit offset's reach, `t` steps down
 /// 32 lengths at a time with `addvl` (`addpl`).
-fn slot_base(code: &mut Vec<u8>, frame: Frame, t: Reg, vector: bool, lengths: u32) -> (Reg, i32) {
+fn slot_base(code: &mut CodeBuf, frame: Frame, t: Reg, vector: bool, lengths: u32) -> (Reg, i32) {
     let mut base = region_base(code, frame, t);
     let mut left = lengths;
     while left > 256 {
         let step = (left - 256).min(32);
-        // ADDPL differs from ADDVL in bit 22.
-        let pl = if vector { 0 } else { 0x0040_0000 };
-        emit(code, enc_addvl(t, base, -(step as i32)) | pl);
+        emit(code, enc_addvl(t, base, -(step as i32), !vector));
         (base, left) = (t, left - step);
     }
     (base, -(left as i32))
 }
 
 /// An SVE vector's copy between FP-file places; x16 takes the base.
-pub(super) fn emit_z_copy(code: &mut Vec<u8>, src: Place, dst: Place, frame: Frame) -> Emit {
+pub(super) fn emit_z_copy(code: &mut CodeBuf, src: Place, dst: Place, frame: Frame) -> Emit {
     match (src, dst) {
         (Place::FpReg(s), Place::FpReg(d)) if s == d => {}
         (Place::FpReg(s), Place::FpReg(d)) => emit(code, enc_mov_z(d, s)),
@@ -180,7 +204,7 @@ pub(super) fn emit_sve_access(
 
 /// Sequentialize a phi edge's parallel predicate moves ([`sequence_pred_moves`]).
 pub(super) fn schedule_pred_moves(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     moves: &mut Vec<(PredPlace, PredPlace)>,
 ) {
@@ -230,7 +254,7 @@ fn pred_move_stages(moves: Vec<(PredPlace, PredPlace)>) -> u16 {
         })
 }
 
-pub(super) fn pred_move(code: &mut Vec<u8>, frame: Frame, src: PredPlace, dst: PredPlace) {
+pub(super) fn pred_move(code: &mut CodeBuf, frame: Frame, src: PredPlace, dst: PredPlace) {
     let t = Reg(16);
     match (src, dst) {
         _ if src == dst => {}
@@ -523,7 +547,7 @@ pub(super) fn sve_frame(
 
 /// Store (`store`) or reload the registers the SVE PCS has the function
 /// preserve; x16 takes the base.
-pub(super) fn emit_pcs_saves(code: &mut Vec<u8>, frame: Frame, store: bool) {
+pub(super) fn emit_pcs_saves(code: &mut CodeBuf, frame: Frame, store: bool) {
     let s = frame.sve;
     if s.saved_z == 0 && s.saved_p == 0 {
         return;
@@ -560,7 +584,7 @@ pub(super) fn emit_pcs_saves(code: &mut Vec<u8>, frame: Frame, store: bool) {
 }
 
 /// `dst` = the address of vector (or predicate) slot `slot`.
-pub(super) fn slot_address(code: &mut Vec<u8>, frame: Frame, vector: bool, slot: u32, dst: Reg) {
+pub(super) fn slot_address(code: &mut CodeBuf, frame: Frame, vector: bool, slot: u32, dst: Reg) {
     let lengths = if vector {
         frame.sve_p_slots.div_ceil(8) + slot + 1
     } else {
@@ -569,11 +593,9 @@ pub(super) fn slot_address(code: &mut Vec<u8>, frame: Frame, vector: bool, slot:
     let (base, imm) = slot_base(code, frame, dst, vector, lengths);
     let mut left = -imm;
     let mut base = base;
-    // ADDPL differs from ADDVL in bit 22.
-    let pl = if vector { 0 } else { 0x0040_0000 };
     loop {
         let step = left.min(32);
-        emit(code, enc_addvl(dst, base, -step) | pl);
+        emit(code, enc_addvl(dst, base, -step, !vector));
         (base, left) = (dst, left - step);
         if left == 0 {
             break;
@@ -584,7 +606,7 @@ pub(super) fn slot_address(code: &mut Vec<u8>, frame: Frame, vector: bool, slot:
 /// An SVE parameter's or call result's register into the value's place:
 /// z_n or p_n of the plan, or z0 / p0 of a call.
 pub(super) fn emit_incoming(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     (v, dst): (u32, Place),
     alloc: &Allocation,
@@ -619,7 +641,7 @@ pub(super) fn emit_incoming(
 /// which emit nothing, as the coloring of the P file gives an unread value
 /// a register another holds.
 pub(super) fn place_pred_params(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -653,7 +675,7 @@ pub(super) fn place_pred_params(
 
 /// An SVE return value into z0 or p0.
 pub(super) fn emit_return(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     func: &FunctionSsa,
     value: u32,
     alloc: &Allocation,
@@ -673,7 +695,7 @@ pub(super) fn emit_return(
 
 /// Store SVE value `value` into slot `slot`, a predicate's when `pred`.
 pub(super) fn store_copy(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     frame: Frame,
     alloc: &Allocation,
     value: u32,

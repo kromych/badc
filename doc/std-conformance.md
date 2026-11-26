@@ -263,9 +263,8 @@ PE targets use MSVC's inline linkage instead ([MSVC](#msvc)).
 badc implements a subset of gcc's options and has no list of options it
 accepts and ignores. Any other option is an error. Options that fail this way
 include `-static`, `-nostdlib`, `-fno-common`, and `-pipe`. `-S` writes a
-listing of the object rather than assembler source, and only for the x86-64
-targets. A build that passes another compiler's full flag set has
-to filter it. [Command-line compatibility](#command-line-compatibility) lists
+listing of the object rather than assembler source. A build that passes
+another compiler's full flag set has to filter it. [Command-line compatibility](#command-line-compatibility) lists
 the options badc accepts with a narrower meaning than gcc's.
 
 ### ELF imports take their versions from a pinned manifest

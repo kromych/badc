@@ -353,6 +353,13 @@ pub(crate) struct Budget {
     pub caller: usize,
 }
 
+// Entries the search for objects nothing reads examines on this thread, so
+// a test can bound it by count rather than by wall clock.
+#[cfg(test)]
+std::thread_local! {
+    pub(crate) static UNREAD_SCAN: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+}
+
 /// Split local aggregates into per-field scalar slots and re-run mem2reg
 /// to promote them. Returns the base slots of objects that were fully
 /// promoted (every field lifted to a register), for the debug-info
@@ -1109,14 +1116,18 @@ fn split_objects(
 
     // A copy out reads every field in its span, `gap_fields` included, and
     // must decompose as a block initializer does.
+    let mut inits_of: BTreeMap<i64, Vec<&BlockInit>> = BTreeMap::new();
+    for w in &inits {
+        inits_of.entry(w.base).or_default().push(w);
+    }
     for c in copies.iter().filter(|c| !c.nop) {
         if declined.contains(&c.base) {
             continue;
         }
-        let writes: Vec<&BlockInit> = inits.iter().filter(|w| w.base == c.base).collect();
+        let writes: &[&BlockInit] = inits_of.get(&c.base).map_or(&[], Vec::as_slice);
         let empty = BTreeMap::new();
         let known = fields_of.get(&c.base).unwrap_or(&empty);
-        let Some(gaps) = gap_fields(known, &writes, c, budget) else {
+        let Some(gaps) = gap_fields(known, writes, c, budget) else {
             declined.insert(c.base);
             continue;
         };
@@ -1251,12 +1262,16 @@ fn split_objects(
     let more = (waits.iter()).any(|(_, to)| order.binary_search(to).is_ok());
     // An object no access, copy or call reads gives up its storage, with its
     // address expressions and the block writes to it.
+    let copied: BTreeSet<i64> = copies.iter().map(|c| c.base).collect();
+    let named: BTreeSet<i64> = resolved.iter().flatten().map(|&(b, _)| b).collect();
+    #[cfg(test)]
+    UNREAD_SCAN.with(|n| n.set(n.get() + (copies.len() + resolved.len() + cells_of.len()) as u64));
     for &base in cells_of.keys() {
         if !declined.contains(&base)
             && !fields_of.contains_key(&base)
             && !address_live.contains(&base)
-            && !copies.iter().any(|c| c.base == base)
-            && resolved.iter().flatten().any(|&(b, _)| b == base)
+            && !copied.contains(&base)
+            && named.contains(&base)
         {
             order.push(base);
         }

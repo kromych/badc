@@ -5811,6 +5811,44 @@ fn a_call_drops_only_the_cached_operand_free_values() {
     );
 }
 
+/// One block of `n` vector loads, `n` products of two of them and `n`
+/// stores: `n` vectors live at once.
+fn wide_vectors(n: usize) -> String {
+    use core::fmt::Write;
+    let mut s = String::from(
+        "typedef unsigned v4u __attribute__((vector_size(16)));\n\
+         void wide(const v4u *p, v4u *q) {\n",
+    );
+    for k in 0..n {
+        let _ = writeln!(s, "    v4u a{k} = p[{k}];");
+    }
+    for k in 0..n {
+        let _ = writeln!(s, "    v4u b{k} = a{k} * a{};", (k * 7 + 1) % n);
+    }
+    for k in 0..n {
+        let _ = writeln!(s, "    q[{k}] = b{k};");
+    }
+    s.push_str("}\n");
+    s
+}
+
+/// Splitting a block's objects finds the ones nothing reads through sets
+/// built once, not by scanning every value and copy per object: over a
+/// block of 300 vectors live at once the search examines about 19000
+/// entries, where a scan per object examined 16 million. Counted in
+/// entries examined, which no host load moves.
+#[test]
+fn splitting_a_wide_block_examines_each_value_once() {
+    use crate::c5::codegen::passes::sroa::UNREAD_SCAN;
+    let before = UNREAD_SCAN.with(|n| n.get());
+    object_at(&wide_vectors(300), Target::LinuxX64, true);
+    let examined = UNREAD_SCAN.with(|n| n.get()) - before;
+    assert!(
+        examined < 200 * 300,
+        "300 vectors took {examined} entries: the objects are scanned for one by one"
+    );
+}
+
 /// Each threaded edge settles what stays reachable from the head's
 /// strongly connected component rather than by a walk of the function:
 /// over a thousand rethreaded merges and a thousand retired loops, the

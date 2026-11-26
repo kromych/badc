@@ -1806,6 +1806,13 @@ pub(super) fn emit_store_indexed(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
+    // A floating zero the allocator left to the store (`Allocation::imm_store`)
+    // comes out of xzr / wzr, the general store of its width writing it.
+    let kind = match kind {
+        StoreKind::F64 if alloc.imm_store.get(v as usize) == Some(&true) => StoreKind::I64,
+        StoreKind::F32 if alloc.imm_store.get(v as usize) == Some(&true) => StoreKind::I32,
+        kind => kind,
+    };
     let base_place = place_of(alloc, base);
     let index_place = place_of(alloc, index);
     let value_place = place_of(alloc, value);

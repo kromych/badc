@@ -118,7 +118,7 @@ mod rows {
     use core::fmt::Write;
 
     use super::{A64Field, Amend, Operand, Reloc, Text};
-    use crate::c5::codegen::Build;
+    use crate::c5::codegen::{Build, ElfTpoffTarget};
     use crate::c5::program::Program;
 
     /// One instruction: its bytes are `at..end` of the unit's text.
@@ -147,6 +147,9 @@ mod rows {
         pending: Option<(usize, Amend, u8)>,
         /// The object's relocations by field offset.
         relocs: BTreeMap<usize, Reloc>,
+        /// The object and function symbols of each section of the object:
+        /// value, size, name, by value.
+        objects: BTreeMap<String, Vec<(u64, u64, String)>>,
         /// The text is A64 words, which print as words.
         words: bool,
     }
@@ -250,20 +253,23 @@ mod rows {
         }
 
         /// The object holds `text`, A64 words when `words` is set,
-        /// `sections` move ranges of it into sections of their own, and
+        /// `sections` move ranges of it into sections of their own,
         /// `relocs` name the symbol each field at an offset resolves
-        /// against.
+        /// against, and `objects` the objects and functions a section's
+        /// own symbol plus an addend reaches.
         pub(crate) fn set_final(
             &mut self,
             text: Vec<u8>,
             words: bool,
             sections: Vec<(usize, usize, String, usize)>,
             relocs: Vec<(usize, Reloc)>,
+            objects: BTreeMap<String, Vec<(u64, u64, String)>>,
         ) {
             self.text = Some(text);
             self.words = words;
             self.sections = sections;
             self.relocs = relocs.into_iter().collect();
+            self.objects = objects;
         }
     }
 
@@ -278,10 +284,74 @@ mod rows {
         /// Labels by text offset: blocks and the synthesized ones.
         labels: BTreeMap<usize, String>,
         relocs: &'a BTreeMap<usize, Reloc>,
+        /// The object and function symbols of each section, by section
+        /// name: value, size, name.
+        objects: &'a BTreeMap<String, Vec<(u64, u64, String)>>,
+        /// The A64 fields the object records in a note of badc's own
+        /// rather than a relocation, by instruction offset: what a
+        /// Windows TLS access reads, the `_tls_index` slot and the
+        /// variable's offset in the `.tls` section.
+        noted: BTreeMap<usize, String>,
         build: &'a Build,
     }
 
     impl Names<'_> {
+        /// Relocation symbol `symbol` plus `addend`: a section's own symbol
+        /// reads as the object or function the object holds there.
+        fn reloc(&self, symbol: &str, addend: i64) -> String {
+            let symbol = plain(symbol);
+            let covers = |&&(value, size, _): &&(u64, u64, String)| {
+                (value as i64..value as i64 + size.max(1) as i64).contains(&addend)
+            };
+            match self
+                .objects
+                .get(symbol)
+                .and_then(|v| v.iter().rev().find(covers))
+            {
+                Some((value, _, name)) => with_addend(plain(name), addend - *value as i64),
+                None => with_addend(symbol, addend),
+            }
+        }
+
+        /// The operands of [`Names::noted`]. A Windows TLS access records a
+        /// `_tls_index` fixup and, for its `add` pair, the variable.
+        fn noted_fields(&self) -> BTreeMap<usize, String> {
+            let build = self.build;
+            let mut noted = BTreeMap::new();
+            if build.tls_index_fixups.is_empty() {
+                return noted;
+            }
+            for f in &build.tls_index_fixups {
+                noted.insert(f.instr_offset, String::from("_tls_index"));
+                noted.insert(f.instr_offset + 4, String::from(":lo12:_tls_index"));
+            }
+            let init = build.tls_init_size.min(build.tls_data.len()) as u64;
+            for f in &build.elf_tpoff_fixups {
+                let name = match &f.target {
+                    ElfTpoffTarget::Local(off) if *off >= init => {
+                        self.reloc(".tbss", (off - init) as i64)
+                    }
+                    ElfTpoffTarget::Local(off) => self.reloc(".tdata", *off as i64),
+                    ElfTpoffTarget::Extern(name) => name.clone(),
+                    _ => continue,
+                };
+                noted.insert(f.imm_offset, format!(":secrel_hi12:{name}"));
+                noted.insert(f.imm_offset + 4, format!(":secrel_lo12:{name}"));
+            }
+            noted
+        }
+
+        /// The relocation of a field of `row`, with the addend it reads as.
+        fn reloc_in(&self, row: &Row) -> Option<(&Reloc, i64)> {
+            let (&at, r) = self.relocs.range(row.at..row.end).next()?;
+            let addend = if r.pcrel {
+                r.addend + (row.end - at) as i64
+            } else {
+                r.addend
+            };
+            Some((r, addend))
+        }
+
         fn target(&self, at: usize) -> String {
             if let Some(name) = self.entries.get(&at) {
                 return String::from(*name);
@@ -323,7 +393,7 @@ mod rows {
                     } else {
                         r.addend
                     };
-                    return with_addend(plain(&r.symbol), a);
+                    return self.reloc(&r.symbol, a);
                 }
             }
             match o {
@@ -336,6 +406,15 @@ mod rows {
                     Some(v) => format!("{v:#x}"),
                     None => String::from("?"),
                 },
+                // A function, an import or data names the symbol the
+                // object relocates its field against: the name the link
+                // binds, which an asm label or a header's redirect sets.
+                // The lowering's own name stands where no relocation does.
+                Operand::Func(_) | Operand::Import(_) | Operand::Data(_)
+                    if let Some((r, addend)) = self.reloc_in(row) =>
+                {
+                    self.reloc(&r.symbol, addend)
+                }
                 Operand::Func(pc) => match self.by_pc.get(pc) {
                     Some(name) => String::from(*name),
                     None => format!("<pc {pc}>"),
@@ -358,11 +437,10 @@ mod rows {
                 _ => "",
             };
             if let Some(r) = self.relocs.get(&row.at) {
-                return format!(
-                    "{lead}{}{}",
-                    r.spec,
-                    with_addend(plain(&r.symbol), r.addend)
-                );
+                return format!("{lead}{}{}", r.spec, self.reloc(&r.symbol, r.addend));
+            }
+            if let Some(text) = self.noted.get(&row.at) {
+                return format!("{lead}{text}");
             }
             let Some(word) = a64_word(row, bytes) else {
                 return String::from("?");
@@ -505,8 +583,13 @@ mod rows {
             data,
             labels,
             relocs: &listing.relocs,
+            objects: &listing.objects,
+            noted: BTreeMap::new(),
             build,
         };
+        if listing.words {
+            names.noted = names.noted_fields();
+        }
         // A pc-relative target no block names takes a label of its own.
         let mut tmp = 0;
         for row in &listing.rows {

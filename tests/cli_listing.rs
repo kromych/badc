@@ -129,8 +129,9 @@ const PREFIXES: [&str; 13] = [
     "lock", "rep", "repne", "repe", "data16", "addr32", "rex64", "cs", "ds", "es", "fs", "gs", "ss",
 ];
 
-/// The relocation symbols llvm-objdump names by (section, offset).
-type Relocs = BTreeMap<(String, u64), Vec<String>>;
+/// The relocations llvm-objdump lists after each row, by the row's
+/// (section, offset): the field's offset, the type, the symbol and addend.
+type Relocs = BTreeMap<(String, u64), Vec<(u64, String, String)>>;
 
 /// llvm-objdump's rows by (section, offset), a section met again numbered
 /// `name#n`; a prefix it prints on a line of its own joins the instruction.
@@ -161,18 +162,20 @@ fn parse_objdump(text: &str, a64: bool) -> (Rows, Relocs) {
             continue;
         };
         let (bytes, text) = split_bytes(rest);
-        // An A64 relocation's symbol and addend, which the listing names.
-        if let Some(r) = text.strip_prefix("R_AARCH64_") {
-            let sym = r.split_whitespace().nth(1).unwrap_or_default();
+        // A relocation of the last row's field, whose symbol the listing names.
+        if let Some(r) = text
+            .strip_prefix("R_AARCH64_")
+            .or(text.strip_prefix("R_X86_64_"))
+        {
+            let mut t = r.split_whitespace();
+            let (kind, sym) = (t.next().unwrap_or_default(), t.next().unwrap_or_default());
             if let Some(k) = &last {
-                relocs
-                    .entry(k.clone())
-                    .or_default()
-                    .push(sym.replace('\u{1}', ""));
+                let entry = (off, kind.to_string(), sym.replace('\u{1}', ""));
+                relocs.entry(k.clone()).or_default().push(entry);
             }
             continue;
         }
-        if bytes.is_empty() || text.contains("R_X86_64") {
+        if bytes.is_empty() {
             continue;
         }
         let text = match a64 {
@@ -308,11 +311,113 @@ fn same_operand_a64(l: &str, o: &str, reloc: bool) -> bool {
     {
         return true;
     }
-    // A zero offset a relocation fills, which llvm-objdump leaves out.
+    // A zero offset a relocation, or a fixup badc records in a note of its
+    // own, fills, which llvm-objdump leaves out.
     match l.strip_prefix('[').and_then(|l| l.split_once(", ")) {
-        Some((base, field)) if reloc && symbolic(field) => o == format!("[{base}]"),
+        Some((base, field)) if field.starts_with(':') => o == format!("[{base}]"),
         _ => false,
     }
+}
+
+/// The object and function symbols of llvm-objdump's symbol table by
+/// section: (value, size, name).
+type Symbols = BTreeMap<String, Vec<(u64, u64, String)>>;
+
+fn parse_symbols(text: &str) -> Symbols {
+    let mut syms = Symbols::new();
+    let table = text.split("SYMBOL TABLE:").nth(1).unwrap_or_default();
+    for line in table.lines().skip(1).take_while(|l| !l.is_empty()) {
+        let t: Vec<&str> = line.split_whitespace().collect();
+        let kind = t.len() >= 5
+            && (t[1..t.len() - 3].iter().any(|f| *f == "O" || *f == "F")
+                || t[t.len() - 3].starts_with(".tbss")
+                || t[t.len() - 3].starts_with(".tdata"));
+        if !kind {
+            continue;
+        }
+        let (Ok(value), Ok(size)) = (
+            u64::from_str_radix(t[0], 16),
+            u64::from_str_radix(t[t.len() - 2], 16),
+        ) else {
+            continue;
+        };
+        let name = t[t.len() - 1].replace('\u{1}', "");
+        syms.entry(t[t.len() - 3].to_string())
+            .or_default()
+            .push((value, size, name));
+    }
+    syms
+}
+
+/// The x86-64 relocation types whose field counts from its own end.
+fn pc_relative(kind: &str) -> bool {
+    matches!(
+        kind,
+        "PC32"
+            | "PLT32"
+            | "GOTPCREL"
+            | "GOTPCRELX"
+            | "REX_GOTPCRELX"
+            | "GOTTPOFF"
+            | "GOTPC32_TLSDESC"
+            | "TLSGD"
+            | "TLSLD"
+    )
+}
+
+/// `sym` (`name`, `name+0x..` or `name-0x..`) with `by` added to its addend.
+fn shift_addend(sym: &str, by: i128) -> String {
+    let (base, addend) = match sym.find(['+', '-']).filter(|&i| i > 0) {
+        Some(i) => {
+            let v = number(&sym[i + 1..]).unwrap_or(0);
+            (&sym[..i], if sym.as_bytes()[i] == b'-' { -v } else { v })
+        }
+        None => (sym, 0),
+    };
+    match addend + by {
+        0 => base.to_string(),
+        a if a > 0 => format!("{base}+{a:#x}"),
+        a => format!("{base}-{:#x}", -a),
+    }
+}
+
+/// The spellings a listing may name relocation symbol `sym` by: itself, or
+/// for a section's symbol plus an addend, an object or function the section
+/// holds there.
+fn reloc_names(sym: &str, syms: &Symbols) -> Vec<String> {
+    let mut names = vec![sym.to_string()];
+    let (base, addend) = match sym.find(['+', '-']).filter(|&i| i > 0) {
+        Some(i) => (
+            &sym[..i],
+            number(&sym[i + 1..]).map(|v| if sym.as_bytes()[i] == b'-' { -v } else { v }),
+        ),
+        None => (sym, Some(0)),
+    };
+    let Some(a) = addend else { return names };
+    // llvm-objdump leaves a thread-local section's own symbol unnamed.
+    let sections: Vec<&str> = match base.is_empty() || base.starts_with(['+', '-']) {
+        true => syms
+            .keys()
+            .map(String::as_str)
+            .filter(|s| s.starts_with(".t"))
+            .collect(),
+        false => vec![base],
+    };
+    let a = if base.starts_with(['+', '-']) {
+        number(&base[1..]).map_or(a, |v| if base.starts_with('-') { -v } else { v })
+    } else {
+        a
+    };
+    for (value, size, name) in sections.iter().filter_map(|s| syms.get(*s)).flatten() {
+        let (value, size) = (*value as i128, (*size).max(1) as i128);
+        if (value..value + size).contains(&a) {
+            names.push(match a - value {
+                0 => name.clone(),
+                d => format!("{name}+{d:#x}"),
+            });
+        }
+    }
+    names
 }
 
 /// Spellings GNU as reads as the instruction llvm-objdump names otherwise:
@@ -341,6 +446,7 @@ fn alias(lm: &str, lops: &[String], om: &str, oops: &[String]) -> bool {
 fn compare(listing: &str, objdump: &str, a64: bool) -> Vec<String> {
     let (lrows, _) = parse_listing(listing);
     let (orows, relocs) = parse_objdump(objdump, a64);
+    let syms = parse_symbols(objdump);
     let mut issues = Vec::new();
     let mut after_data = false;
     for ((section, off), row) in &lrows {
@@ -371,13 +477,30 @@ fn compare(listing: &str, objdump: &str, a64: bool) -> Vec<String> {
         }
         let (lm, lops) = split_insn(&row.text);
         let (om, oops) = split_insn(&o.text);
-        if a64 {
-            let rel = relocs.get(&(section.clone(), *off));
-            for sym in rel.into_iter().flatten() {
-                if !row.text.contains(sym.as_str()) {
-                    issues.push(format!("{at}: `{}` does not name `{sym}`", row.text));
-                }
+        let rel = relocs.get(&(section.clone(), *off));
+        // An x86-64 row that names a symbol names the one the object
+        // relocates its field against; one whose field reads as the value
+        // it holds names none.
+        let names_symbol = lops.iter().any(|o| {
+            let o = o.trim_start_matches(['*', '$']);
+            let o = o.split(['(', '@']).next().unwrap_or_default();
+            !o.is_empty() && !o.starts_with(['%', '-']) && number(o).is_none()
+        });
+        for (field, kind, sym) in rel.into_iter().flatten().filter(|_| a64 || names_symbol) {
+            // An x86-64 pc-relative field counts from the instruction's end.
+            let end = *off + row.bytes.len() as u64;
+            let sym = match pc_relative(kind) {
+                true => shift_addend(sym, (end - field) as i128),
+                false => sym.clone(),
+            };
+            if !reloc_names(&sym, &syms)
+                .iter()
+                .any(|n| row.text.contains(n.as_str()))
+            {
+                issues.push(format!("{at}: `{}` does not name `{sym}`", row.text));
             }
+        }
+        if a64 {
             let same = lm == om
                 && lops.len() == oops.len()
                 && (lops.iter().zip(&oops)).all(|(l, o)| same_operand_a64(l, o, rel.is_some()));
@@ -485,7 +608,11 @@ fn corpus(tool: &str, target: &str, extra: &[&str]) -> (usize, Vec<String>) {
                     let name = fx.file_name().unwrap().to_string_lossy().into_owned();
                     let out = run("-S", &asm);
                     let issues = if out.status.success() {
-                        let dis = Command::new(tool).arg("-dr").arg(&obj).output().unwrap();
+                        let dis = Command::new(tool)
+                            .args(["-dr", "-t"])
+                            .arg(&obj)
+                            .output()
+                            .unwrap();
                         compare(
                             &std::fs::read_to_string(&asm).unwrap(),
                             &String::from_utf8_lossy(&dis.stdout),
@@ -851,4 +978,50 @@ fn a_tab_starts_the_operands() {
     for text in [" ldaddal\tw1, w0, [x0]\n", " ret\n"] {
         assert!(l.contains(text), "{text:?}\n{l}");
     }
+}
+
+/// A field relocated against a section's own symbol names the object the
+/// object file places there: a static array and a thread-local on A64.
+/// What a Windows TLS access reads, which badc records in a note of its
+/// own rather than a relocation, reads by name: the `_tls_index` slot and
+/// the variable's offset in the `.tls` section, of this unit's variable or
+/// another's.
+#[test]
+fn a64_address_references_name_their_objects() {
+    let dir = TempDir::new("badc-listing-a64-objects");
+    let src = "static int s[4];\nint f(int i) { return s[i & 3]; }\n\
+        _Thread_local int t;\nint g(void) { return t; }\n\
+        extern _Thread_local int e;\nint h(void) { return e; }\n";
+    let l = listing_for("linux-aarch64", &dir, "objects", src, &[]);
+    assert_tiled(&l);
+    for text in [
+        ", s\n",
+        ", :lo12:s\n",
+        ", :tprel_hi12:t, lsl #12\n",
+        ", :tprel_lo12_nc:t\n",
+    ] {
+        assert!(l.contains(text), "{text}\n{l}");
+    }
+    let l = listing_for("windows-arm64", &dir, "objects", src, &[]);
+    assert_tiled(&l);
+    for text in [
+        "adrp\tx17, _tls_index\n",
+        "ldr\tw17, [x17, :lo12:_tls_index]\n",
+        ", :secrel_hi12:t, lsl #12\n",
+        ", :secrel_lo12:t\n",
+        ", :secrel_hi12:e, lsl #12\n",
+        ", :secrel_lo12:e\n",
+    ] {
+        assert!(l.contains(text), "{text}\n{l}");
+    }
+}
+
+/// A call or an address names the symbol the object binds, which a header
+/// may redirect from the name the source spells.
+#[test]
+fn a_call_names_the_symbol_the_object_binds() {
+    let dir = TempDir::new("badc-listing-binds");
+    let src = "#include <errno.h>\nint e(void) { return errno; }\n";
+    let l = listing(&dir, "binds", src, &[]);
+    assert!(l.contains("callq\t__errno_location\n"), "{l}");
 }

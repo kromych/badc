@@ -4687,7 +4687,32 @@ impl<'a> RelocWriter<'a> {
                 }
             }
         }
-        listing.set_final(text.to_vec(), a64, sections, relocs);
+        // The objects and functions each section holds, which name a field
+        // relocated against the section's own symbol.
+        let section_of = |n: u16| {
+            let off = usize::from(n)
+                .checked_sub(1)
+                .and_then(|k| shstrtab_offs.get(k))?;
+            Some(c_str(shstrtab, *off as usize))
+        };
+        let mut objects: BTreeMap<String, Vec<(u64, u64, String)>> = BTreeMap::new();
+        for s in syms {
+            let kind = s.st_info & 0xf;
+            if !matches!(kind, STT_OBJECT | STT_FUNC | STT_TLS)
+                || s.st_name == 0
+                || s.st_shndx >= SHN_LORESERVE
+            {
+                continue;
+            }
+            if let Some(section) = section_of(s.st_shndx) {
+                let entry = (s.st_value, s.st_size, c_str(strtab, s.st_name as usize));
+                objects.entry(section).or_default().push(entry);
+            }
+        }
+        for v in objects.values_mut() {
+            v.sort();
+        }
+        listing.set_final(text.to_vec(), a64, sections, relocs, objects);
     }
 
     /// `.text`, with the extern materializations rewritten to match the

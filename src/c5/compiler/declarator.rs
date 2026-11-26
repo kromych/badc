@@ -1050,7 +1050,7 @@ impl Compiler {
                         sym: idx,
                         base: outer_ty_before_inner,
                         dims,
-                        more: sizes.iter().map(|s| s.at).collect(),
+                        more: sizes.iter().map(|s| s.at.clone()).collect(),
                         levels: inner_ptr_levels,
                     });
                     self.param_sizes.push(size);
@@ -1346,7 +1346,7 @@ impl Compiler {
                     sym: idx,
                     base: ty,
                     dims,
-                    more: sizes.iter().map(|s| s.at).collect(),
+                    more: sizes.iter().map(|s| s.at.clone()).collect(),
                     levels: 1,
                 });
                 self.param_sizes.push(size);

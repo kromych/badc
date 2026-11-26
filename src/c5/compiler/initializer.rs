@@ -2624,7 +2624,7 @@ impl Compiler {
         {
             let cp = self.init_checkpoint();
             let data_before = self.data.len();
-            self.restore_lex(snap);
+            self.restore_lex(snap.clone());
             let whole = self.parse_const_expr_cond_val();
             let ends = self.lex.tk == ','
                 || self.lex.tk == '}'
@@ -3272,7 +3272,7 @@ impl Compiler {
         let value = self.lex.snapshot();
         for k in 0..=d.extra {
             if k > 0 {
-                self.restore_lex(value);
+                self.restore_lex(value.clone());
             }
             // A pointer final member stores the address of a compound literal,
             // so keep the cast for the scalar leaf; a value member drops it.
@@ -3347,7 +3347,7 @@ impl Compiler {
         let value = self.lex.snapshot();
         for k in 0..=d.extra {
             if k > 0 {
-                self.restore_lex(value);
+                self.restore_lex(value.clone());
             }
             let off = (d.offset + k * d.stride) as usize;
             // A pointer final member stores the address of a compound literal,

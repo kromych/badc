@@ -1730,7 +1730,7 @@ impl Compiler {
                     ),
                 ));
             }
-            self.restore_lex(size.at);
+            self.restore_lex(size.at.clone());
             self.expr(Token::Assign as i64)?;
             let Some(vm) = size.vm.clone() else {
                 items.extend(self.ast_emit_expr_stmt());
@@ -1740,8 +1740,8 @@ impl Compiler {
             // counts these evaluations store.
             let mut dims = Vec::with_capacity(vm.more.len() + 1);
             for at in core::iter::once(None).chain(vm.more.iter().map(Some)) {
-                if let Some(&at) = at {
-                    self.restore_lex(at);
+                if let Some(at) = at {
+                    self.restore_lex(at.clone());
                     self.expr(Token::Assign as i64)?;
                 }
                 if self.is_int128_ty(self.ty) {

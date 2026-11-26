@@ -440,9 +440,6 @@ fn parse_pragma_fenv_access_line(body: &[u8]) -> Option<bool> {
     }
 }
 
-/// Snapshot of the lexer's positional state plus every attribute
-/// `next()` produces for the current token. See [`Lexer::snapshot`] /
-/// [`Lexer::restore`].
 /// Where output text the preprocessor did not copy verbatim stands in its
 /// source: from output offset `at`, the source line `line_delta` below the
 /// one the output line counts and the 1-based `column`, which advances
@@ -464,27 +461,6 @@ impl ColumnPlace {
             ..self
         }
     }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct LexerSnapshot {
-    pos: usize,
-    tok_start: usize,
-    line: usize,
-    tk: Tok,
-    ival: i64,
-    curr_id_idx: usize,
-    int_suffix_long: u8,
-    int_suffix_unsigned: bool,
-    int_suffix_width: u8,
-    int_is_decimal: bool,
-    float_suffix_f32: bool,
-    float_suffix_long: bool,
-    num_is_char: bool,
-    char_prefix: StrPrefix,
-    str_is_wide: bool,
-    str_elem_bytes: usize,
-    str_prefix: StrPrefix,
 }
 
 /// A run of consecutive lines between two preprocessor line markers:
@@ -573,162 +549,204 @@ fn note_line_lookup() {
 #[cfg(not(test))]
 fn note_line_lookup() {}
 
-pub(crate) struct Lexer {
-    src: Vec<u8>,
-    /// Lazily built (file, line) -> byte-span index for diagnostics.
-    /// See [`LineIndex`].
-    line_index: core::cell::OnceCell<LineIndex>,
-    /// The offset of every newline of `src`, built on the first
-    /// [`Self::position_at`], so a position costs the same on any line.
-    newlines: core::cell::OnceCell<Vec<u32>>,
-    pos: usize,
-    /// Byte offset in `src` where the current token begins.
-    tok_start: usize,
-    pub line: usize,
-    /// Name of the file `self.line` is counting within. Updated
-    /// when the lexer crosses a GNU-style line marker (`# N "file"
-    /// [flags]`) or a C99 `#line N "file"` directive emitted by
-    /// the preprocessor on `#include` entry/exit. Starts as
-    /// `"<source>"` for the top-level translation unit and gets
-    /// rewritten by the first marker the preprocessor emits.
-    pub file: String,
+/// Declares [`Lexer`] from its fields in two groups: `state`, what lexing
+/// a token may change -- position, token attributes, the file a line marker
+/// names, the pack, visibility, floating-point and segment pragmas -- and
+/// `config`, what the caller sets once. [`LexerSnapshot`] carries every
+/// `state` field, so a field added there is saved and restored without
+/// being named again.
+macro_rules! lexer {
+    (
+        state { $( $(#[$sa:meta])* $sv:vis $s:ident : $st:ty, )* }
+        config { $( $(#[$ca:meta])* $cv:vis $c:ident : $ct:ty, )* }
+    ) => {
+        pub(crate) struct Lexer {
+            $( $(#[$sa])* $sv $s: $st, )*
+            $( $(#[$ca])* $cv $c: $ct, )*
+        }
 
-    // Output of the most recent next() call.
-    pub tk: Tok,
-    pub ival: i64,
-    pub curr_id_idx: usize,
+        /// The lexer's `state` fields, which a speculative scan restores.
+        #[derive(Clone)]
+        pub(crate) struct LexerSnapshot {
+            $( $s: $st, )*
+        }
 
-    /// Integer-literal suffix shape from the most recent `Token::Num`
-    /// produced by `next()`. C99 6.4.4.1 lists the canonical six
-    /// suffix combinations; c5 collapses them to a (longness,
-    /// unsigned) pair the expression parser consumes to type the
-    /// literal. `int_suffix_long`: 0 = no L (default int), 1 = one
-    /// L (`long`), 2 = two L (`long long`). `int_suffix_unsigned`:
-    /// true if any `u`/`U` appeared in the suffix.
-    pub int_suffix_long: u8,
-    pub int_suffix_unsigned: bool,
-    /// The bit width a Microsoft sized suffix (`i8`, `ui16`, `i32`, `i64`)
-    /// gives the most recent `Token::Num`; 0 without one.
-    pub int_suffix_width: u8,
-    /// Whether the Microsoft sized integer suffixes are taken (the PE
-    /// targets). Set from the target after construction.
-    pub ms_int_suffixes: bool,
-    /// `true` when the most recent `Token::Num` was written in decimal.
-    /// C99 6.4.4.1 lets a hexadecimal, octal, or binary constant take
-    /// an unsigned type when no signed type at its rank fits, while a
-    /// decimal constant with no `u` suffix stays signed.
-    pub int_is_decimal: bool,
+        impl Lexer {
+            /// Everything lexing may change, for [`Self::restore`]: the
+            /// token's attributes type it (C99 6.4.4.1), and a pragma or a
+            /// line marker the scan passed must not stay applied.
+            pub fn snapshot(&self) -> LexerSnapshot {
+                LexerSnapshot { $( $s: self.$s.clone(), )* }
+            }
 
-    /// `true` when the most recent `Token::FloatNum` carried an `f`/`F`
-    /// suffix (C99 6.4.4.2p4: the constant has type `float`). `ival`
-    /// then holds the value already rounded to single precision,
-    /// re-widened to f64 bits.
-    pub float_suffix_f32: bool,
+            /// Return to the state a [`Self::snapshot`] took.
+            pub fn restore(&mut self, s: LexerSnapshot) {
+                $( self.$s = s.$s; )*
+            }
+        }
+    };
+}
 
-    /// `true` when it carried an `l`/`L` suffix: the constant has type
-    /// `long double`, its value in `ival` at binary64.
-    pub float_suffix_long: bool,
+lexer! {
+    state {
+        pos: usize,
+        /// Byte offset in `src` where the current token begins.
+        tok_start: usize,
+        pub line: usize,
+        /// Name of the file `self.line` is counting within. Updated
+        /// when the lexer crosses a GNU-style line marker (`# N "file"
+        /// [flags]`) or a C99 `#line N "file"` directive emitted by
+        /// the preprocessor on `#include` entry/exit. Starts as
+        /// `"<source>"` for the top-level translation unit and gets
+        /// rewritten by the first marker the preprocessor emits.
+        pub file: String,
 
-    /// `true` when the most recent `'"'` string-literal token came from
-    /// a wide (`L"..."`, `u"..."`, `U"..."`) literal. The element width is
-    /// in `str_elem_bytes`; the initializer and expression parsers read
-    /// this to size the element stride (C99 6.4.5 / C11 6.4.5).
-    pub str_is_wide: bool,
+        // Output of the most recent next() call.
+        pub tk: Tok,
+        pub ival: i64,
+        pub curr_id_idx: usize,
 
-    /// Byte width of one element of the most recent wide string literal:
-    /// `wchar_bytes` for `L"..."`, 2 for `u"..."` (char16_t), 4 for
-    /// `U"..."` (char32_t). Only meaningful when `str_is_wide` is set.
-    pub str_elem_bytes: usize,
+        /// Integer-literal suffix shape from the most recent `Token::Num`
+        /// produced by `next()`. C99 6.4.4.1 lists the canonical six
+        /// suffix combinations; c5 collapses them to a (longness,
+        /// unsigned) pair the expression parser consumes to type the
+        /// literal. `int_suffix_long`: 0 = no L (default int), 1 = one
+        /// L (`long`), 2 = two L (`long long`). `int_suffix_unsigned`:
+        /// true if any `u`/`U` appeared in the suffix.
+        pub int_suffix_long: u8,
+        pub int_suffix_unsigned: bool,
+        /// The bit width a Microsoft sized suffix (`i8`, `ui16`, `i32`, `i64`)
+        /// gives the most recent `Token::Num`; 0 without one.
+        pub int_suffix_width: u8,
+        /// `true` when the most recent `Token::Num` was written in decimal.
+        /// C99 6.4.4.1 lets a hexadecimal, octal, or binary constant take
+        /// an unsigned type when no signed type at its rank fits, while a
+        /// decimal constant with no `u` suffix stays signed.
+        pub int_is_decimal: bool,
 
-    /// Encoding prefix of the most recent wide string literal, which fixes
-    /// its element type (C11 6.4.5p6). Only meaningful when `str_is_wide`
-    /// is set.
-    pub str_prefix: StrPrefix,
+        /// `true` when the most recent `Token::FloatNum` carried an `f`/`F`
+        /// suffix (C99 6.4.4.2p4: the constant has type `float`). `ival`
+        /// then holds the value already rounded to single precision,
+        /// re-widened to f64 bits.
+        pub float_suffix_f32: bool,
 
-    /// Encoding prefix of the most recent `Token::Num` character
-    /// constant. C11 6.4.4.4p2-p4 types each prefix separately -- `L'x'`
-    /// is `wchar_t`, `u'x'` is `char16_t`, `U'x'` is `char32_t` -- so the
-    /// width alone does not identify the type. Only meaningful when
-    /// `num_is_char` is set. Reset per token in `next`; set in both
-    /// character branches of the literal lexer.
-    pub char_prefix: StrPrefix,
+        /// `true` when it carried an `l`/`L` suffix: the constant has type
+        /// `long double`, its value in `ival` at binary64.
+        pub float_suffix_long: bool,
 
-    /// `true` when the most recent `Token::Num` came from a character
-    /// constant rather than an integer constant. C99 6.4.4.4p10 gives
-    /// every character constant a fixed type, so the expression parser
-    /// must not apply the value-driven rank selection of 6.4.4.1p5.
-    /// Reset per token in `next`; set in both literal-lexer character
-    /// branches.
-    pub num_is_char: bool,
+        /// `true` when the most recent `'"'` string-literal token came from
+        /// a wide (`L"..."`, `u"..."`, `U"..."`) literal. The element width is
+        /// in `str_elem_bytes`; the initializer and expression parsers read
+        /// this to size the element stride (C99 6.4.5 / C11 6.4.5).
+        pub str_is_wide: bool,
 
-    /// Byte width of a `wchar_t` element. 4 on the Unix targets and 2 on
-    /// Windows (UTF-16). The compiler sets it from the target after
-    /// construction; wide string and character literals store this many
-    /// bytes per element.
-    pub wchar_bytes: usize,
+        /// Byte width of one element of the most recent wide string literal:
+        /// `wchar_bytes` for `L"..."`, 2 for `u"..."` (char16_t), 4 for
+        /// `U"..."` (char32_t). Only meaningful when `str_is_wide` is set.
+        pub str_elem_bytes: usize,
 
-    /// Whether `wchar_t` is signed for the target. Set from the target
-    /// alongside `wchar_bytes`; the two together are the type, and the
-    /// expression parser reads them to give `L'...'` its type
-    /// (C11 6.4.4.4p2).
-    pub wchar_signed: bool,
+        /// Encoding prefix of the most recent wide string literal, which fixes
+        /// its element type (C11 6.4.5p6). Only meaningful when `str_is_wide`
+        /// is set.
+        pub str_prefix: StrPrefix,
 
-    /// Whether plain `char` is signed for the target (C99 6.2.5p15
-    /// leaves it implementation-defined). Set from the target after
-    /// construction, like `wchar_bytes`. A single-character constant is
-    /// sign-extended when true so `'\x80'` is -128, matching a `char`
-    /// lvalue load and a `switch` over `char`-valued case labels.
-    pub char_signed: bool,
+        /// Encoding prefix of the most recent `Token::Num` character
+        /// constant. C11 6.4.4.4p2-p4 types each prefix separately -- `L'x'`
+        /// is `wchar_t`, `u'x'` is `char16_t`, `U'x'` is `char32_t` -- so the
+        /// width alone does not identify the type. Only meaningful when
+        /// `num_is_char` is set. Reset per token in `next`; set in both
+        /// character branches of the literal lexer.
+        pub char_prefix: StrPrefix,
 
-    /// `#pragma pack(N)` stack. Top of stack is the active pack value
-    /// at the current source position; struct layout (`aggregate.rs`)
-    /// reads it via [`Self::current_pack`] and clamps each field's
-    /// natural alignment by it.
-    ///
-    /// State machine:
-    ///   * `pragma pack(N)`         -- replace top of stack with N.
-    ///   * `pragma pack()`          -- replace top with the default
-    ///                                 (8 -- c5's existing layout cap).
-    ///   * `pragma pack(push, N)`   -- push N.
-    ///   * `pragma pack(pop)`       -- pop one frame; stack always
-    ///                                 keeps at least the bottom default.
-    ///
-    /// Values are clamped to `[1, 8]` because c5's IR slots at 8
-    /// and there's no use for stricter alignment than that. Updates
-    /// happen inline as the lexer scans `#pragma pack(...)` lines
-    /// (the preprocessor passes them through verbatim instead of
-    /// stripping like other pragmas, since pack is position-
-    /// dependent within the source and can't be batched up the way
-    /// `#pragma binding(...)` is).
-    pack: usize,
-    /// The values `#pragma pack(push)` saved, each under its label,
-    /// innermost last.
-    pack_saved: Vec<(Option<alloc::string::String>, usize)>,
-    /// Stack of `#pragma GCC visibility push(...)` frames; the top holds
-    /// whether the visibility currently in effect is non-preemptible.
-    /// Scanned inline like `pack`, and read by the declaration
-    /// paths as the default for a declaration that carries no explicit
-    /// `visibility` attribute.
-    visibility_stack: Vec<Option<crate::c5::program::SymVisibility>>,
-    /// Whether `#pragma STDC FP_CONTRACT` is on at the current position
-    /// (C99 7.12.2): a product may be contracted with the add or subtract
-    /// of the same expression that uses it. Scanned inline like `pack`.
-    pub(crate) fp_contract: bool,
-    /// The state `FP_CONTRACT DEFAULT` sets, from `-ffp-contract`.
-    pub(crate) fp_contract_default: bool,
-    /// Whether `#pragma STDC FENV_ACCESS` is on at the current position
-    /// (C17 7.6.1): code may test the floating-point status flags or run
-    /// under non-default control modes. Scanned inline like `pack`.
-    pub(crate) fenv_access: bool,
-    /// Set whenever `fenv_access` turns on; the compiler clears it to the
-    /// current state at each function body, so it tells whether any of the
-    /// body was translated with the pragma on.
-    pub(crate) fenv_access_seen: bool,
-    /// The sections MSVC's segment pragmas name here. Scanned inline like
-    /// `pack`.
-    pub(crate) segments: crate::c5::segment_pragma::Segments,
-    /// The preprocessor's [`ColumnPlace`]s for the text, by offset.
-    pub(crate) column_places: Vec<ColumnPlace>,
+        /// `true` when the most recent `Token::Num` came from a character
+        /// constant rather than an integer constant. C99 6.4.4.4p10 gives
+        /// every character constant a fixed type, so the expression parser
+        /// must not apply the value-driven rank selection of 6.4.4.1p5.
+        /// Reset per token in `next`; set in both literal-lexer character
+        /// branches.
+        pub num_is_char: bool,
+
+        /// `#pragma pack(N)` stack. Top of stack is the active pack value
+        /// at the current source position; struct layout (`aggregate.rs`)
+        /// reads it via [`Self::current_pack`] and clamps each field's
+        /// natural alignment by it.
+        ///
+        /// State machine:
+        ///   * `pragma pack(N)`         -- replace top of stack with N.
+        ///   * `pragma pack()`          -- replace top with the default
+        ///                                 (8 -- c5's existing layout cap).
+        ///   * `pragma pack(push, N)`   -- push N.
+        ///   * `pragma pack(pop)`       -- pop one frame; stack always
+        ///                                 keeps at least the bottom default.
+        ///
+        /// Values are clamped to `[1, 8]` because c5's IR slots at 8
+        /// and there's no use for stricter alignment than that. Updates
+        /// happen inline as the lexer scans `#pragma pack(...)` lines
+        /// (the preprocessor passes them through verbatim instead of
+        /// stripping like other pragmas, since pack is position-
+        /// dependent within the source and can't be batched up the way
+        /// `#pragma binding(...)` is).
+        pack: usize,
+        /// The values `#pragma pack(push)` saved, each under its label,
+        /// innermost last.
+        pack_saved: Vec<(Option<alloc::string::String>, usize)>,
+        /// Stack of `#pragma GCC visibility push(...)` frames; the top holds
+        /// whether the visibility currently in effect is non-preemptible.
+        /// Scanned inline like `pack`, and read by the declaration
+        /// paths as the default for a declaration that carries no explicit
+        /// `visibility` attribute.
+        visibility_stack: Vec<Option<crate::c5::program::SymVisibility>>,
+        /// Whether `#pragma STDC FP_CONTRACT` is on at the current position
+        /// (C99 7.12.2): a product may be contracted with the add or subtract
+        /// of the same expression that uses it. Scanned inline like `pack`.
+        pub(crate) fp_contract: bool,
+        /// Whether `#pragma STDC FENV_ACCESS` is on at the current position
+        /// (C17 7.6.1): code may test the floating-point status flags or run
+        /// under non-default control modes. Scanned inline like `pack`.
+        pub(crate) fenv_access: bool,
+        /// Set whenever `fenv_access` turns on; the compiler clears it to the
+        /// current state at each function body, so it tells whether any of the
+        /// body was translated with the pragma on.
+        pub(crate) fenv_access_seen: bool,
+        /// The sections MSVC's segment pragmas name here. Scanned inline like
+        /// `pack`.
+        pub(crate) segments: crate::c5::segment_pragma::Segments,
+    }
+    config {
+        src: Vec<u8>,
+        /// Lazily built (file, line) -> byte-span index for diagnostics.
+        /// See [`LineIndex`].
+        line_index: core::cell::OnceCell<LineIndex>,
+        /// The offset of every newline of `src`, built on the first
+        /// [`Self::position_at`], so a position costs the same on any line.
+        newlines: core::cell::OnceCell<Vec<u32>>,
+        /// Whether the Microsoft sized integer suffixes are taken (the PE
+        /// targets). Set from the target after construction.
+        pub ms_int_suffixes: bool,
+
+        /// Byte width of a `wchar_t` element. 4 on the Unix targets and 2 on
+        /// Windows (UTF-16). The compiler sets it from the target after
+        /// construction; wide string and character literals store this many
+        /// bytes per element.
+        pub wchar_bytes: usize,
+
+        /// Whether `wchar_t` is signed for the target. Set from the target
+        /// alongside `wchar_bytes`; the two together are the type, and the
+        /// expression parser reads them to give `L'...'` its type
+        /// (C11 6.4.4.4p2).
+        pub wchar_signed: bool,
+
+        /// Whether plain `char` is signed for the target (C99 6.2.5p15
+        /// leaves it implementation-defined). Set from the target after
+        /// construction, like `wchar_bytes`. A single-character constant is
+        /// sign-extended when true so `'\x80'` is -128, matching a `char`
+        /// lvalue load and a `switch` over `char`-valued case labels.
+        pub char_signed: bool,
+        /// The state `FP_CONTRACT DEFAULT` sets, from `-ffp-contract`.
+        pub(crate) fp_contract_default: bool,
+        /// The preprocessor's [`ColumnPlace`]s for the text, by offset.
+        pub(crate) column_places: Vec<ColumnPlace>,
+    }
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -1716,57 +1734,6 @@ impl Lexer {
             p += 1;
         }
         false
-    }
-
-    /// Lightweight snapshot of the lexer's positional state so a
-    /// caller can speculatively advance and then rewind. Captures
-    /// just the fields the lexer mutates inside `next()`; identifier
-    /// table and pack stack don't change on read, so they're omitted.
-    pub fn snapshot(&self) -> LexerSnapshot {
-        LexerSnapshot {
-            pos: self.pos,
-            tok_start: self.tok_start,
-            line: self.line,
-            tk: self.tk,
-            ival: self.ival,
-            curr_id_idx: self.curr_id_idx,
-            int_suffix_long: self.int_suffix_long,
-            int_suffix_unsigned: self.int_suffix_unsigned,
-            int_suffix_width: self.int_suffix_width,
-            int_is_decimal: self.int_is_decimal,
-            float_suffix_f32: self.float_suffix_f32,
-            float_suffix_long: self.float_suffix_long,
-            num_is_char: self.num_is_char,
-            char_prefix: self.char_prefix,
-            str_is_wide: self.str_is_wide,
-            str_elem_bytes: self.str_elem_bytes,
-            str_prefix: self.str_prefix,
-        }
-    }
-
-    /// Restore a previously taken [`Self::snapshot`]. The lexer
-    /// returns to the exact state it had at the snapshot point.
-    /// The attributes travel with `tk`/`ival` because they type the
-    /// token (C99 6.4.4.1); leaving them behind would retype the
-    /// restored token from whatever the abandoned parse lexed last.
-    pub fn restore(&mut self, s: LexerSnapshot) {
-        self.pos = s.pos;
-        self.tok_start = s.tok_start;
-        self.line = s.line;
-        self.tk = s.tk;
-        self.ival = s.ival;
-        self.curr_id_idx = s.curr_id_idx;
-        self.int_suffix_long = s.int_suffix_long;
-        self.int_suffix_unsigned = s.int_suffix_unsigned;
-        self.int_suffix_width = s.int_suffix_width;
-        self.int_is_decimal = s.int_is_decimal;
-        self.float_suffix_f32 = s.float_suffix_f32;
-        self.float_suffix_long = s.float_suffix_long;
-        self.num_is_char = s.num_is_char;
-        self.char_prefix = s.char_prefix;
-        self.str_is_wide = s.str_is_wide;
-        self.str_elem_bytes = s.str_elem_bytes;
-        self.str_prefix = s.str_prefix;
     }
 
     /// True if the next non-whitespace byte is the start of a

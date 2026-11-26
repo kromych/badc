@@ -3210,7 +3210,7 @@ impl Compiler {
                 let value = self.lex.snapshot();
                 for e in cursor..end {
                     if e > cursor {
-                        self.restore_lex(value);
+                        self.restore_lex(value.clone());
                     }
                     let here = base + e * elem_size;
                     self.fill_element_field_designator_t(

@@ -4246,6 +4246,59 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
 
+/// A statement expression the parser scans ahead over and then parses
+/// applies the pragmas inside it once: the matching pop after it leaves
+/// the state as before the push, for `#pragma`, `_Pragma` and `GCC
+/// visibility` alike.
+#[test]
+fn a_rescanned_statement_expression_applies_its_pragmas_once() {
+    let packed = Compiler::new(
+        "#define PUSH1 _Pragma(\"pack(push, 1)\")\n\
+         #define POP _Pragma(\"pack(pop)\")\n\
+         int main(void) {\n\
+             __auto_type n = ({\n\
+         #pragma pack(push, 1)\n\
+                 struct T { char c; int i; }; (int)sizeof(struct T); });\n\
+         #pragma pack(pop)\n\
+             struct S { char c; int i; };\n\
+             int a[] = { 1, ({\n\
+         #pragma pack(push, 1)\n\
+                 struct U { char c; int i; }; (int)sizeof(struct U); }) };\n\
+         #pragma pack(pop)\n\
+             struct V { char c; int i; };\n\
+             __auto_type m = ({ PUSH1 struct W { char c; int i; }; (int)sizeof(struct W); });\n\
+             POP\n\
+             struct X { char c; int i; };\n\
+             return (n != 5) + 2 * (sizeof(struct S) != 8) + 4 * (a[1] != 5)\n\
+                 + 8 * (sizeof(struct V) != 8) + 16 * (m != 5) + 32 * (sizeof(struct X) != 8);\n\
+         }\n"
+        .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(crate::c5::Vm::new(packed).run().unwrap(), 0);
+    let hidden = Compiler::new(
+        "int f(void) {\n\
+             __auto_type n = ({\n\
+         #pragma GCC visibility push(hidden)\n\
+                 1; });\n\
+         #pragma GCC visibility pop\n\
+             return n;\n\
+         }\n\
+         int after(void) { return 2; }\n\
+         int main(void) { return f() + after(); }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let after = hidden
+        .symbols
+        .iter()
+        .find(|s| s.name == "after")
+        .expect("after");
+    assert_eq!(after.visibility, None, "the pop restored the default");
+}
+
 #[test]
 fn visibility_takes_gccs_four_operands() {
     // The `visibility` attribute and `#pragma GCC visibility push`:

@@ -211,13 +211,13 @@ Disassembly of section .text:
                	stur	q1, [x29, #-0x50]
                	sub	x5, x29, #0x40
                	stur	q1, [x29, #-0x40]
-               	sub	x10, x29, #0x30
+               	sub	x11, x29, #0x30
                	stur	q1, [x29, #-0x30]
-               	sub	x9, x29, #0x20
+               	sub	x10, x29, #0x20
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x9]
+               	stp	x16, x17, [x10]
                	sub	x4, x29, #0x10
                	stur	q1, [x29, #-0x10]
                	ldr	q3, [x2]
@@ -230,49 +230,49 @@ Disassembly of section .text:
                	stur	q7, [x29, #-0xc0]
                	mov	v7.16b, v0.16b
                	ursra	v7.8h, v1.8h, #0x10
-               	sub	x11, x29, #0xb0
+               	sub	x12, x29, #0xb0
                	stur	q7, [x29, #-0xb0]
                	mov	v16.16b, v4.16b
                	ssra	d16, d5, #0x40
                	mov	v5.16b, v16.16b
                	mov	v7.16b, v3.16b
                	ursra	v7.2d, v1.2d, #0x1
-               	sub	x12, x29, #0xa0
+               	sub	x13, x29, #0xa0
                	stur	q7, [x29, #-0xa0]
+               	sub	x7, x29, #0x90
+               	sub	x14, x29, #0x70
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.ge	<addr>
                	ldrsb	x2, [x6, x0]
-               	sub	x7, x29, #0x90
-               	ldrsb	x7, [x7, x0]
-               	ldrsb	x8, [x3, x0]
-               	add	x7, x7, x8, asr #3
-               	sxtb	x7, w7
-               	cmp	w2, w7
+               	ldrsb	x8, [x7, x0]
+               	ldrsb	x9, [x3, x0]
+               	add	x8, x8, x9, asr #3
+               	sxtb	x8, w8
+               	cmp	w2, w8
                	cset	x2, ne
                	orr	x1, x1, x2, lsl #7
                	cmp	w0, #0x8
                	b.ge	<addr>
-               	ldrh	w2, [x11, x0, lsl #1]
-               	sub	x7, x29, #0x70
-               	ldrh	w7, [x7, x0, lsl #1]
-               	ldrh	w8, [x10, x0, lsl #1]
-               	add	x8, x8, #0x8, lsl #12   // =0x8000
-               	add	x7, x7, x8, lsr #16
-               	and	x7, x7, #0xffff
-               	cmp	w2, w7
+               	ldrh	w2, [x12, x0, lsl #1]
+               	ldrh	w8, [x14, x0, lsl #1]
+               	ldrh	w9, [x11, x0, lsl #1]
+               	add	x9, x9, #0x8, lsl #12   // =0x8000
+               	add	x8, x8, x9, lsr #16
+               	and	x8, x8, #0xffff
+               	cmp	w2, w8
                	cset	x2, ne
                	orr	x1, x1, x2, lsl #8
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	ldr	x7, [x12, x0, lsl #3]
-               	ldr	x8, [x9, x0, lsl #3]
+               	ldr	x8, [x13, x0, lsl #3]
+               	ldr	x9, [x10, x0, lsl #3]
                	ldr	x2, [x4, x0, lsl #3]
-               	add	x8, x8, x2, lsr #1
+               	add	x9, x9, x2, lsr #1
                	and	x2, x2, #0x1
-               	add	x2, x8, x2
-               	cmp	x7, x2
+               	add	x2, x9, x2
+               	cmp	x8, x2
                	cset	x2, ne
                	orr	x1, x1, x2, lsl #9
                	b	<addr>
@@ -295,49 +295,49 @@ Disassembly of section .text:
                	stur	q2, [x29, #-0xc0]
                	mov	v2.16b, v4.16b
                	sri	v2.8b, v6.8b, #0x3
-               	sub	x9, x29, #0x18
+               	sub	x10, x29, #0x18
                	stur	d2, [x29, #-0x18]
                	sri	v0.4s, v1.4s, #0x20
-               	sub	x10, x29, #0xb0
+               	sub	x11, x29, #0xb0
                	stur	q0, [x29, #-0xb0]
                	mov	v0.16b, v3.16b
                	sli	v0.2d, v1.2d, #0x0
-               	sub	x11, x29, #0xa0
+               	sub	x12, x29, #0xa0
                	stur	q0, [x29, #-0xa0]
                	mov	x1, #0x0                // =0
+               	sub	x7, x29, #0x80
+               	sub	x13, x29, #0x60
                	b	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x10
                	b.ge	<addr>
-               	ldrb	w7, [x6, x1]
+               	ldrb	w8, [x6, x1]
                	ldrb	w2, [x5, x1]
-               	sub	x3, x29, #0x80
-               	ldrb	w3, [x3, x1]
-               	and	x8, x3, #0x7
-               	orr	x8, x8, x2, lsl #3
-               	and	x8, x8, #0xff
-               	cmp	w7, w8
-               	cset	x7, ne
-               	orr	x0, x0, x7, lsl #10
+               	ldrb	w3, [x7, x1]
+               	and	x9, x3, #0x7
+               	orr	x9, x9, x2, lsl #3
+               	and	x9, x9, #0xff
+               	cmp	w8, w9
+               	cset	x8, ne
+               	orr	x0, x0, x8, lsl #10
                	cmp	w1, #0x8
                	b.ge	<addr>
-               	ldrb	w7, [x9, x1]
+               	ldrb	w8, [x10, x1]
                	and	x3, x3, #0xe0
                	orr	x2, x3, x2, lsr #3
-               	cmp	w7, w2
+               	cmp	w8, w2
                	cset	x2, ne
                	orr	x0, x0, x2, lsl #10
                	cmp	w1, #0x4
                	b.ge	<addr>
-               	ldr	w2, [x10, x1, lsl #2]
-               	sub	x3, x29, #0x60
-               	ldr	w3, [x3, x1, lsl #2]
+               	ldr	w2, [x11, x1, lsl #2]
+               	ldr	w3, [x13, x1, lsl #2]
                	cmp	w2, w3
                	cset	x2, ne
                	orr	x0, x0, x2, lsl #11
                	cmp	w1, #0x2
                	b.ge	<addr>
-               	ldr	x2, [x11, x1, lsl #3]
+               	ldr	x2, [x12, x1, lsl #3]
                	ldr	x3, [x4, x1, lsl #3]
                	cmp	x2, x3
                	cset	x2, ne

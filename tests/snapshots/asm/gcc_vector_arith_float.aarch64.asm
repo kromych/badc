@@ -611,31 +611,30 @@ Disassembly of section .text:
                	sub	x4, x29, #0x90
                	ldur	q0, [x29, #-0xa0]
                	ldur	q1, [x29, #-0x90]
-               	fadd	v0.4s, v0.4s, v1.4s
-               	fmov	s1, #2.00000000
-               	mov	s2, v0.s[0]
-               	fmul	s2, s2, s1
-               	mov	s3, v0.s[1]
-               	fmul	s3, s3, s1
+               	fadd	v1.4s, v0.4s, v1.4s
+               	fmov	s0, #2.00000000
+               	mov	s2, v1.s[0]
+               	fmul	s2, s2, s0
+               	mov	s3, v1.s[1]
+               	fmul	s3, s3, s0
                	mov	v2.s[1], v3.s[0]
-               	mov	s3, v0.s[2]
-               	fmul	s3, s3, s1
+               	mov	s3, v1.s[2]
+               	fmul	s3, s3, s0
                	mov	v2.s[2], v3.s[0]
-               	mov	s0, v0.s[3]
-               	fmul	s0, s0, s1
+               	mov	s1, v1.s[3]
+               	fmul	s1, s1, s0
                	mov	v16.16b, v2.16b
-               	mov	v16.s[3], v0.s[0]
-               	mov	v0.16b, v16.16b
-               	ldur	q1, [x29, #-0xa0]
-               	fsub	v0.4s, v0.4s, v1.4s
-               	stur	q0, [x29, #-0x40]
+               	mov	v16.s[3], v1.s[0]
+               	mov	v1.16b, v16.16b
+               	ldur	q2, [x29, #-0xa0]
+               	fsub	v1.4s, v1.4s, v2.4s
+               	stur	q1, [x29, #-0x40]
                	mov	x0, #0x0                // =0
-               	ldr	s0, [x3, x0, lsl #2]
-               	ldr	s1, [x4, x0, lsl #2]
-               	fadd	s1, s0, s1
-               	fmov	s2, #2.00000000
-               	fnmsub	s0, s1, s2, s0
-               	str	s0, [x1, x0, lsl #2]
+               	ldr	s1, [x3, x0, lsl #2]
+               	ldr	s2, [x4, x0, lsl #2]
+               	fadd	s2, s1, s2
+               	fnmsub	s1, s2, s0, s1
+               	str	s1, [x1, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>

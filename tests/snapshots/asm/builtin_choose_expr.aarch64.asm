@@ -23,11 +23,11 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x20]
                	str	xzr, [x0, #0x30]
                	strb	wzr, [x0, #0x38]
-               	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x80
-               	add	x1, x1, x0, lsl #3
-               	mov	x2, #-0x1               // =-1
-               	str	x2, [x1]
+               	mov	x0, #0x0                // =0
+               	add	x2, x1, x0, lsl #3
+               	mov	x3, #-0x1               // =-1
+               	str	x3, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

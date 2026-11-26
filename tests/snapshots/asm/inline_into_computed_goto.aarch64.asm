@@ -27,25 +27,24 @@ Disassembly of section .text:
                	adr	x2, <addr>
                	stur	x2, [x29, #-0x8]
                	mov	x2, #0x1                // =1
-               	ldrsw	x5, [x4]
-               	ldr	x3, [x3, x5, lsl #3]
+               	ldrsw	x6, [x4]
+               	sub	x5, x29, #0x18
+               	ldr	x3, [x3, x6, lsl #3]
                	br	x3
                	add	x3, x2, #0x1
                	ldrsw	x2, [x4, x2, lsl #2]
                	ldr	x2, [x1, x2, lsl #3]
                	and	x2, x2, #0xfffffffffffffffc
                	add	x0, x0, x2
-               	sub	x5, x29, #0x18
                	add	x2, x3, #0x1
                	ldrsw	x3, [x4, x3, lsl #2]
                	ldr	x3, [x5, x3, lsl #3]
                	br	x3
                	add	x0, x0, x0
-               	sub	x3, x29, #0x18
-               	add	x5, x2, #0x1
+               	add	x6, x2, #0x1
                	ldrsw	x2, [x4, x2, lsl #2]
-               	ldr	x3, [x3, x2, lsl #3]
-               	mov	x2, x5
+               	ldr	x3, [x5, x2, lsl #3]
+               	mov	x2, x6
                	br	x3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

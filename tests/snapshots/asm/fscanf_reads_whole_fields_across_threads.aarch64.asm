@@ -212,8 +212,8 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xc0
                	ret
                	mov	x20, #0x0               // =0
-               	sub	x0, x29, #0xa0
-               	ldr	x0, [x0, x20, lsl #3]
+               	sub	x21, x29, #0xa0
+               	ldr	x0, [x21, x20, lsl #3]
                	bl	<addr>
                	add	x20, x20, #0x1
                	cmp	w20, #0x14

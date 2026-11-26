@@ -196,9 +196,10 @@ Disassembly of section .text:
                	str	w17, [x16, #0x18]
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
+               	sub	x2, x29, #0x20
                	movi	d0, #0000000000000000
-               	ldrsw	x2, [x29, #0x10]
-               	cmp	w0, w2
+               	ldrsw	x3, [x29, #0x10]
+               	cmp	w0, w3
                	b.ge	<addr>
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
@@ -217,8 +218,8 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x2, x16
-               	ldrsw	x2, [x2]
+               	mov	x3, x16
+               	ldrsw	x3, [x3]
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
@@ -236,10 +237,9 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x3, x16
-               	ldr	d1, [x3]
-               	sub	x3, x29, #0x20
-               	mov	x17, x3
+               	mov	x4, x16
+               	ldr	d1, [x4]
+               	mov	x17, x2
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
                	cmp	x16, #0x0
@@ -258,17 +258,17 @@ Disassembly of section .text:
                	add	x9, x16, #0x10
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x3, x16
-               	ldr	q2, [x3]
-               	scvtf	d3, x2
+               	mov	x4, x16
+               	ldr	q2, [x4]
+               	scvtf	d3, x3
                	fadd	d1, d3, d1
-               	umov	w2, v2.b[3]
-               	scvtf	d2, x2
+               	umov	w3, v2.b[3]
+               	scvtf	d2, x3
                	fadd	d1, d1, d2
                	fadd	d0, d0, d1
                	add	x0, x0, #0x1
-               	ldrsw	x2, [x29, #0x10]
-               	cmp	w0, w2
+               	ldrsw	x3, [x29, #0x10]
+               	cmp	w0, w3
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	add	sp, sp, #0x20

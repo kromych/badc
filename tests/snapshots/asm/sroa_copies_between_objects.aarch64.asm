@@ -116,12 +116,12 @@ Disassembly of section .text:
                	fmov	x3, d0
                	mov	x2, #0x3fe0000000000000 // =4602678819172646912
                	mov	x1, #0x0                // =0
+               	fmov	d0, #1.00000000
                	cmp	x1, x0
                	b.ge	<addr>
-               	fmov	d0, x3
-               	fmov	d1, #1.00000000
-               	fadd	d0, d0, d1
-               	fmov	x3, d0
+               	fmov	d1, x3
+               	fadd	d1, d1, d0
+               	fmov	x3, d1
                	add	x1, x1, #0x1
                	mov	x16, x3
                	mov	x3, x2

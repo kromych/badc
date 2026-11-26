@@ -91,9 +91,9 @@ Disassembly of section .text:
                	mov	x16, #0x14              // =20
                	csel	x1, x16, xzr, gt
                	mov	x0, #0x0                // =0
+               	sub	x2, x29, #0xa0
                	cmp	w0, w1
                	b.ge	<addr>
-               	sub	x2, x29, #0xa0
                	add	x3, x0, x0, lsl #1
                	add	x3, x3, #0x1
                	sxtw	x3, w3

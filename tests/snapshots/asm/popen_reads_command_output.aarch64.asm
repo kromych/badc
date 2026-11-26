@@ -42,6 +42,7 @@ Disassembly of section .text:
                	mov	x0, x1
                	bl	<addr>
                	ldr	x1, [sp, #0x18]
+               	sub	x5, x29, #0x40
                	b	<addr>
                	sub	x0, x0, #0x1
                	strb	wzr, [x1, x0]
@@ -52,8 +53,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	cmp	w2, #0xd
                	b.eq	<addr>
-               	sub	x2, x29, #0x40
-               	ldrb	w2, [x2, x3]
+               	ldrb	w2, [x5, x3]
                	cmp	w2, #0x20
                	b.eq	<addr>
                	sub	x0, x29, #0x40

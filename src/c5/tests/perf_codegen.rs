@@ -8588,6 +8588,41 @@ long s = 0; for (long i = 0; i < n; i++) s += a[i] * (x * y + 3); return s; }\n"
     );
 }
 
+/// On AArch64 a frame object's address and a floating constant a loop
+/// reads are set once before it: the `sub xN, x29, #imm` of each local
+/// array and the `fmov dN, #4.0` the compare takes, which the loop would
+/// otherwise form every iteration.
+#[test]
+fn a64_frame_addresses_and_float_constants_are_set_before_the_loop() {
+    const SRC: &str = "extern void use(int *, int *);\n\
+void copy(int n) {\n\
+    int a[16], b[16];\n\
+    use(a, b);\n\
+    for (int i = 0; i < n; i++) a[i & 15] = b[i & 15];\n\
+    use(a, b);\n}\n\
+int outside(const double *x, const double *y, int n) {\n\
+    int c = 0;\n\
+    for (int i = 0; i < n; i++) if (x[i] * x[i] + y[i] * y[i] > 4.0) c++;\n\
+    return c;\n}\n";
+    // The words of the loop that closes with the first backward branch.
+    let body = |ws: &[u32]| {
+        (ws.iter().enumerate())
+            .find_map(|(i, &w)| match a64_branch(w, i) {
+                Some((t, _)) if t < i as i64 => Some(ws[t as usize..i].to_vec()),
+                _ => None,
+            })
+            .expect("a loop")
+    };
+    // `add` / `sub xd, x29, #imm`.
+    let frame_addr = |w: u32| matches!(w & 0xFF00_03E0, 0x9100_03A0 | 0xD100_03A0);
+    // `fmov dd, #imm`, `fmov sd, #imm`.
+    let fmov_imm = |w: u32| w & 0xFF20_1FE0 == 0x1E20_1000;
+    let ws = a64(SRC, "copy");
+    assert!(!body(&ws).iter().any(|&w| frame_addr(w)), "{ws:08x?}");
+    let ws = a64(SRC, "outside");
+    assert!(!body(&ws).iter().any(|&w| fmov_imm(w)), "{ws:08x?}");
+}
+
 #[test]
 fn a_loop_carried_unsigned_is_zero_extended_ahead_of_the_loop() {
     const SRC: &str = "unsigned table[256];\n\

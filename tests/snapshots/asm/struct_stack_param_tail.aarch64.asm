@@ -64,25 +64,25 @@ Disassembly of section .text:
                	ldr	w16, [x1, #0x10]
                	str	w16, [x0, #0x10]
                	mov	x0, #0x0                // =0
+               	sub	x3, x29, #0xa8
+               	sub	x1, x29, #0x90
+               	sub	x4, x29, #0x78
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x17
                	b.ge	<addr>
                	cmp	w0, #0x16
                	b.ge	<addr>
-               	sub	x1, x29, #0xa8
                	add	x2, x0, #0x1
-               	strb	w2, [x1, x0]
-               	sub	x1, x29, #0x90
+               	strb	w2, [x3, x0]
                	lsl	x2, x0, #1
                	add	x2, x2, #0x1
                	strb	w2, [x1, x0]
                	cmp	w0, #0x11
                	b.ge	<addr>
-               	sub	x1, x29, #0x78
                	mov	x2, #0x28               // =40
                	sub	x2, x2, x0
-               	strb	w2, [x1, x0]
+               	strb	w2, [x4, x0]
                	b	<addr>
                	sub	x1, x29, #0xc0
                	sub	x0, x29, #0x60

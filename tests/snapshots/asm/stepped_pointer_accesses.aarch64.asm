@@ -353,6 +353,10 @@ Disassembly of section .text:
                	add	x11, x11, <lo12>
                	adrp	x12, <page>
                	add	x12, x12, <lo12>
+               	fmov	d1, #0.25000000
+               	fmov	d2, #1.50000000
+               	fmov	d3, #3.00000000
+               	fmov	d4, #20.00000000
                	mul	x1, x0, x3
                	add	x1, x1, #0xc8
                	and	x1, x1, #0xff
@@ -368,13 +372,9 @@ Disassembly of section .text:
                	mul	x13, x13, x2
                	str	x13, [x10, x0, lsl #3]
                	scvtf	d0, x0
-               	fmov	d1, #0.25000000
-               	fmov	d2, #3.00000000
-               	fnmsub	d1, d0, d1, d2
-               	str	d1, [x11, x0, lsl #3]
-               	fmov	d1, #1.50000000
-               	fmov	d2, #20.00000000
-               	fnmsub	d0, d0, d1, d2
+               	fnmsub	d5, d0, d1, d3
+               	str	d5, [x11, x0, lsl #3]
+               	fnmsub	d0, d0, d2, d4
                	fcvt	s0, d0
                	str	s0, [x12, x0, lsl #2]
                	mov	x0, x1

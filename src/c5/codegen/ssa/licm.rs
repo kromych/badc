@@ -1,8 +1,9 @@
 //! Hoisting loop-invariant materializations out of loop bodies.
 //!
 //! An operand-free instruction -- a file-scope object's address, a
-//! function address, a TLS base, a wide integer constant -- yields a
-//! link-time or compile-time constant, so a copy of it inside a loop
+//! function address, a TLS base, a wide integer constant, on AArch64 a
+//! frame object's address or a floating constant -- yields a link-time,
+//! compile-time or per-call constant, so a copy of it inside a loop
 //! recomputes the same value every iteration. This pass places one copy
 //! in a block outside the loop that dominates the body and points the
 //! body's uses at it. No memory analysis is involved: the instructions
@@ -87,6 +88,7 @@ enum Key {
     Code(usize, u32),
     ExtCode(i64),
     Tls(i64, u32),
+    Local(i64),
 }
 
 impl Key {
@@ -97,6 +99,7 @@ impl Key {
             Key::Code(t, _) => Inst::ImmCode(t),
             Key::ExtCode(b) => Inst::ImmExtCode(b),
             Key::Tls(o, _) => Inst::TlsAddr(o),
+            Key::Local(o) => Inst::LocalAddr(o),
         }
     }
 
@@ -275,6 +278,14 @@ pub(super) fn sym_of(refs: &[(u32, u32)]) -> HashMap<u32, u32> {
 
 /// Materializations worth hoisting, one entry per destination and key.
 fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
+    plan_of(func, target, fixed, false)
+}
+
+/// [`plan`] over the materializations it leaves out (`frame`), or over the
+/// rest: on AArch64 a frame address, which takes an instruction at each
+/// site where x86-64 folds it into the address that reads it, and a
+/// one-instruction constant the allocation places in the FP file.
+fn plan_of(func: &FunctionSsa, target: Target, fixed: FixedRegs, frame: bool) -> Vec<Hoist> {
     // A longjmp restores the callee-saved registers and the stack
     // pointer only, so a value the allocator leaves in a caller-saved
     // register does not survive the second return from a setjmp
@@ -290,6 +301,12 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
     }
     let weights = super::reg_alloc::block_weights(func);
     let uses = super::reg_alloc::compute_use_counts(func);
+    let fp_imm = if frame {
+        let reads = super::reg_alloc::operands_read(func, &uses);
+        super::reg_alloc::fp_constants(func, target, &reads)
+    } else {
+        Vec::new()
+    };
     let data_sym = sym_of(&func.extern_imm_data_refs);
     let code_sym = sym_of(&func.extern_imm_code_refs);
     let tls_sym = sym_of(&func.extern_tls_refs);
@@ -347,16 +364,21 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
                 continue;
             }
             let sym = |m: &HashMap<u32, u32>| m.get(&v).copied().unwrap_or(NO_SYM);
+            let f32 = || func.f32_values.get(v as usize).copied().unwrap_or(false);
             let (key, cost, unfold) = match func.insts[v as usize] {
+                Inst::LocalAddr(o) if frame => (Key::Local(o), 1, false),
+                Inst::Imm(k) if frame && fp_imm.get(v as usize).copied().unwrap_or(false) => {
+                    (Key::Imm(k, f32()), imm_cost(target, k), false)
+                }
+                _ if frame => continue,
                 Inst::ImmData(k) => (Key::Data(k, sym(&data_sym)), addr_cost(target), false),
                 Inst::ImmCode(t) => (Key::Code(t, sym(&code_sym)), addr_cost(target), false),
                 Inst::ImmExtCode(import) => (Key::ExtCode(import), addr_cost(target), false),
                 Inst::TlsAddr(o) => (Key::Tls(o, sym(&tls_sym)), addr_cost(target), false),
-                // A one-instruction constant costs no more at the site
-                // than the register it would occupy across the loop.
+                // A one-instruction integer constant costs no more at the
+                // site than the register it would occupy across the loop.
                 Inst::Imm(k) if imm_cost(target, k) > 1 => {
-                    let f32 = func.f32_values.get(v as usize).copied().unwrap_or(false);
-                    (Key::Imm(k, f32), imm_cost(target, k), false)
+                    (Key::Imm(k, f32()), imm_cost(target, k), false)
                 }
                 Inst::BinopI { op, rhs_imm, .. } if materializes(v, op, rhs_imm) => {
                     (Key::Imm(rhs_imm, false), imm_cost(target, rhs_imm), true)
@@ -1162,11 +1184,13 @@ pub(crate) fn allocate_hoisted(
         Vec::new()
     };
     if hoists.is_empty() && early.is_empty() {
-        if plan_pure(func).is_empty() {
+        let frame = target.is_aarch64() && !plan_of(func, target, fixed, true).is_empty();
+        if !frame && plan_pure(func).is_empty() {
             return super::split_ranges::allocate_split(func, target, fixed);
         }
         let base = super::reg_alloc::allocate(func, target, fixed);
-        let picked = hoist_pure(func, target, fixed, base);
+        let picked = hoist_frame_values(func, target, fixed, base);
+        let picked = hoist_pure(func, target, fixed, picked);
         return super::split_ranges::allocate_split_with(func, target, fixed, picked);
     }
     let base = super::reg_alloc::allocate(func, target, fixed);
@@ -1211,8 +1235,37 @@ pub(crate) fn allocate_hoisted(
             }
         }
     };
+    let picked = hoist_frame_values(func, target, fixed, picked);
     let picked = hoist_pure(func, target, fixed, picked);
     super::split_ranges::allocate_split_with(func, target, fixed, picked)
+}
+
+/// On AArch64, the copies [`plan_of`] places for frame addresses and
+/// floating constants, past the plans above and kept when the allocation
+/// costs no more than `alloc`: a plan of their own, so they never cost the
+/// others their place, and one the operands of the arithmetic
+/// [`hoist_pure`] moves may then be defined ahead of.
+fn hoist_frame_values(
+    func: &mut FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    alloc: Allocation,
+) -> Allocation {
+    if !target.is_aarch64() {
+        return alloc;
+    }
+    let hoists = plan_of(func, target, fixed, true);
+    if hoists.is_empty() {
+        return alloc;
+    }
+    let cost = placement_cost(func, &alloc, target);
+    let undo = apply(func, &hoists);
+    let alt = super::reg_alloc::allocate(func, target, fixed);
+    if placement_cost(func, &alt, target) <= cost {
+        return alt;
+    }
+    undo.restore(func);
+    alloc
 }
 
 /// With the whole plan rejected, the copies for loops without a call: a

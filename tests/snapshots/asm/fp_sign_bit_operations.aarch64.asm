@@ -130,35 +130,34 @@ Disassembly of section .text:
                	cmp	w20, #0x8
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x200
                	fmov	d0, #-0.50000000
                	fmov	d1, #0.25000000
+               	sub	x1, x29, #0x200
                	tst	x0, #0x1
-               	fcsel	d0, d0, d1, ne
-               	scvtf	d1, x0
-               	fmul	d0, d0, d1
-               	str	d0, [x1, x0, lsl #3]
+               	fcsel	d2, d0, d1, ne
+               	scvtf	d3, x0
+               	fmul	d2, d2, d3
+               	str	d2, [x1, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
+               	fmov	d3, #-0.50000000
+               	fmov	d2, #0.25000000
+               	fmov	d6, #0.50000000
                	movi	d1, #0000000000000000
                	and	x1, x0, #0x1
                	cbz	x1, <addr>
-               	fmov	d0, #0.50000000
-               	scvtf	d2, x0
-               	fmul	d0, d0, d2
-               	fmov	d2, #-0.50000000
-               	fmov	d3, #0.25000000
+               	scvtf	d0, x0
+               	fmul	d0, d6, d0
                	cmp	x1, #0x0
-               	fcsel	d2, d2, d3, ne
+               	fcsel	d4, d3, d2, ne
                	b	<addr>
-               	fmov	d0, #0.25000000
-               	scvtf	d2, x0
-               	fmul	d0, d0, d2
+               	scvtf	d0, x0
+               	fmul	d0, d2, d0
                	b	<addr>
-               	scvtf	d3, x0
-               	fmadd	d0, d2, d3, d0
+               	scvtf	d5, x0
+               	fmadd	d0, d4, d5, d0
                	fadd	d1, d1, d0
                	add	x0, x0, #0x1
                	cmp	w0, #0x40

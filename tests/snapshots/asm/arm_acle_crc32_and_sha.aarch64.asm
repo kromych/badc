@@ -128,7 +128,7 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
                	stp	x16, x17, [x0, #0x10]
-               	sub	x5, x29, #0x40
+               	sub	x7, x29, #0x40
                	mov	x0, #0x0                // =0
                	mov	x1, #0x6380             // =25472
                	movk	x1, #0x6162, lsl #16
@@ -143,14 +143,17 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x8]
                	ldur	q1, [x29, #-0x80]
                	ldur	q0, [x29, #-0x70]
-               	adrp	x3, <addr>
-               	add	x3, x3, <lo12>
+               	adrp	x4, <addr>
+               	add	x4, x4, <lo12>
+               	sub	x5, x29, #0x90
+               	sub	x3, x29, #0xa0
+               	sub	x1, x29, #0x1a0
                	b	<addr>
-               	ldp	x16, x17, [x1]
+               	ldp	x16, x17, [x6]
                	stp	x16, x17, [x2]
-               	lsl	x1, x0, #2
-               	add	x1, x3, x1, lsl #2
-               	ldr	q2, [x1]
+               	lsl	x6, x0, #2
+               	add	x6, x4, x6, lsl #2
+               	ldr	q2, [x6]
                	ldr	q3, [x2]
                	add	v2.4s, v3.4s, v2.4s
                	mov	v3.16b, v1.16b
@@ -160,32 +163,31 @@ Disassembly of section .text:
                	mov	v1.16b, v3.16b
                	cmp	w0, #0x10
                	b.ge	<addr>
-               	sub	x1, x29, #0x1a0
                	add	x2, x1, x0, lsl #4
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	lsl	x1, x0, #2
-               	add	x4, x5, x1, lsl #2
-               	sub	x1, x29, #0xa0
-               	ldp	x16, x17, [x4]
-               	stp	x16, x17, [x1]
+               	lsl	x6, x0, #2
+               	add	x6, x7, x6, lsl #2
+               	ldp	x16, x17, [x6]
+               	stp	x16, x17, [x3]
+               	mov	x6, x3
                	b	<addr>
-               	sub	x4, x0, #0x4
-               	add	x4, x1, x4, lsl #4
-               	sub	x6, x0, #0x3
+               	sub	x6, x0, #0x4
                	add	x6, x1, x6, lsl #4
-               	ldr	q2, [x4]
-               	ldr	q3, [x6]
+               	sub	x8, x0, #0x3
+               	add	x8, x1, x8, lsl #4
+               	ldr	q2, [x6]
+               	ldr	q3, [x8]
                	sha256su0	v2.4s, v3.4s
-               	sub	x4, x0, #0x2
-               	add	x4, x1, x4, lsl #4
-               	sub	x6, x0, #0x1
+               	sub	x6, x0, #0x2
                	add	x6, x1, x6, lsl #4
-               	sub	x1, x29, #0x90
-               	ldr	q3, [x4]
-               	ldr	q4, [x6]
+               	sub	x8, x0, #0x1
+               	add	x8, x1, x8, lsl #4
+               	ldr	q3, [x6]
+               	ldr	q4, [x8]
                	sha256su1	v2.4s, v3.4s, v4.4s
                	stur	q2, [x29, #-0x90]
+               	mov	x6, x5
                	b	<addr>
                	ldur	q2, [x29, #-0x80]
                	add	v1.4s, v1.4s, v2.4s
@@ -306,7 +308,7 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	ldr	w16, [x1, #0x10]
                	str	w16, [x0, #0x10]
-               	sub	x8, x29, #0x40
+               	sub	x11, x29, #0x40
                	mov	x3, #0x0                // =0
                	mov	x0, #0x6380             // =25472
                	movk	x0, #0x6162, lsl #16
@@ -322,73 +324,78 @@ Disassembly of section .text:
                	ldur	q0, [x29, #-0xb0]
                	mov	x2, #0xe1f0             // =57840
                	movk	x2, #0xc3d2, lsl #16
-               	mov	x5, #0x3334             // =13108
-               	movk	x5, #0x3333, lsl #16
-               	adrp	x6, <addr>
-               	add	x6, x6, <lo12>
+               	mov	x6, #0x3334             // =13108
+               	movk	x6, #0x3333, lsl #16
+               	adrp	x7, <addr>
+               	add	x7, x7, <lo12>
+               	sub	x12, x29, #0xd0
+               	sub	x13, x29, #0xe0
+               	sub	x8, x29, #0xc0
+               	sub	x9, x29, #0xd0
+               	sub	x5, x29, #0xe0
+               	sub	x1, x29, #0x220
                	mov	x0, x3
                	b	<addr>
-               	ldr	q0, [x1]
+               	ldr	q0, [x2]
                	add	x0, x0, #0x1
                	mov	x2, x4
                	cmp	w0, #0x14
                	b.ge	<addr>
-               	sub	x1, x29, #0x220
                	add	x4, x1, x0, lsl #4
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	lsl	x1, x0, #2
-               	add	x7, x8, x1, lsl #2
-               	sub	x1, x29, #0xe0
-               	ldp	x16, x17, [x7]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
+               	lsl	x10, x0, #2
+               	add	x10, x11, x10, lsl #2
+               	ldp	x16, x17, [x10]
+               	stp	x16, x17, [x5]
+               	mov	x10, x5
+               	ldp	x16, x17, [x10]
                	stp	x16, x17, [x4]
-               	mul	x1, x0, x5
-               	lsr	x1, x1, #32
-               	ldr	w1, [x6, x1, lsl #2]
-               	dup	v1.4s, w1
+               	mul	x10, x0, x6
+               	lsr	x10, x10, #32
+               	ldr	w10, [x7, x10, lsl #2]
+               	dup	v1.4s, w10
                	ldr	q2, [x4]
                	add	v1.4s, v2.4s, v1.4s
-               	mov	w1, v0.s[0]
-               	ror	w4, w1, #0x2
+               	mov	w4, v0.s[0]
+               	ror	w4, w4, #0x2
                	cmp	w0, #0x5
                	b.ge	<addr>
                	fmov	s2, w2
-               	sub	x1, x29, #0xc0
                	sha1c	q0, s2, v1.4s
                	stur	q0, [x29, #-0xc0]
+               	mov	x2, x8
                	b	<addr>
                	cmp	w0, #0xa
                	b.lt	<addr>
                	cmp	w0, #0xf
                	b.ge	<addr>
                	fmov	s2, w2
-               	sub	x1, x29, #0xe0
                	sha1m	q0, s2, v1.4s
                	stur	q0, [x29, #-0xe0]
+               	mov	x2, x13
                	b	<addr>
                	fmov	s2, w2
-               	sub	x1, x29, #0xd0
                	sha1p	q0, s2, v1.4s
                	stur	q0, [x29, #-0xd0]
+               	mov	x2, x12
                	b	<addr>
-               	sub	x7, x0, #0x4
-               	add	x7, x1, x7, lsl #4
-               	sub	x9, x0, #0x3
-               	add	x9, x1, x9, lsl #4
-               	sub	x10, x0, #0x2
+               	sub	x10, x0, #0x4
                	add	x10, x1, x10, lsl #4
-               	ldr	q1, [x7]
-               	ldr	q2, [x9]
-               	ldr	q3, [x10]
+               	sub	x14, x0, #0x3
+               	add	x14, x1, x14, lsl #4
+               	sub	x15, x0, #0x2
+               	add	x15, x1, x15, lsl #4
+               	ldr	q1, [x10]
+               	ldr	q2, [x14]
+               	ldr	q3, [x15]
                	sha1su0	v1.4s, v2.4s, v3.4s
-               	sub	x7, x0, #0x1
-               	add	x7, x1, x7, lsl #4
-               	sub	x1, x29, #0xd0
-               	ldr	q2, [x7]
+               	sub	x10, x0, #0x1
+               	add	x10, x1, x10, lsl #4
+               	ldr	q2, [x10]
                	sha1su1	v1.4s, v2.4s
                	stur	q1, [x29, #-0xd0]
+               	mov	x10, x9
                	b	<addr>
                	ldur	q1, [x29, #-0xb0]
                	add	v0.4s, v0.4s, v1.4s

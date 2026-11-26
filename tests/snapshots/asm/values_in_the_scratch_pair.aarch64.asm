@@ -155,10 +155,10 @@ Disassembly of section .text:
                	mov	x3, #0x0                // =0
                	sub	x0, x29, #0x80
                	lsl	x4, x3, #3
-               	add	x0, x0, x4
-               	add	x2, x1, x4
-               	ldr	x2, [x2]
-               	str	x2, [x0]
+               	add	x2, x0, x4
+               	add	x4, x1, x4
+               	ldr	x4, [x4]
+               	str	x4, [x2]
                	add	x3, x3, #0x1
                	cmp	w3, #0x10
                	b.lt	<addr>
@@ -283,11 +283,11 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x40]
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
                	sub	x2, x29, #0x80
-               	add	x2, x2, x0, lsl #3
-               	ldr	x2, [x2]
-               	eor	x1, x1, x2
+               	mov	x1, x0
+               	add	x3, x2, x0, lsl #3
+               	ldr	x3, [x3]
+               	eor	x1, x1, x3
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

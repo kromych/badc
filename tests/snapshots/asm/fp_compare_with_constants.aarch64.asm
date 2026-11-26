@@ -316,18 +316,18 @@ Disassembly of section .text:
 <escapes>:
                	fmov	d4, d0
                	mov	x0, #0x0                // =0
+               	fmov	d5, #2.00000000
+               	fmov	d6, #4.00000000
                	movi	d0, #0000000000000000
                	movi	d2, #0000000000000000
                	fmul	d3, d0, d0
                	fnmsub	d3, d2, d2, d3
                	fadd	d3, d3, d4
-               	fmov	d5, #2.00000000
                	fmul	d2, d5, d2
                	fmadd	d0, d2, d0, d1
                	fmul	d2, d0, d0
                	fmadd	d2, d3, d3, d2
-               	fmov	d5, #4.00000000
-               	fcmpe	d2, d5
+               	fcmpe	d2, d6
                	b.gt	<addr>
                	add	x0, x0, #0x1
                	fmov	d2, d3

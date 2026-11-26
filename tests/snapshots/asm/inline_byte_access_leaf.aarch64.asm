@@ -21,15 +21,15 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	mov	x2, #0xd                // =13
                	sub	x3, x29, #0x80
-               	mul	x4, x0, x1
-               	add	x4, x4, #0x1
-               	and	x4, x4, #0xff
-               	strb	w4, [x3, x0]
-               	sub	x3, x29, #0x40
-               	mul	x4, x0, x2
-               	add	x4, x4, #0x5
-               	and	x4, x4, #0xff
-               	strb	w4, [x3, x0]
+               	sub	x4, x29, #0x40
+               	mul	x5, x0, x1
+               	add	x5, x5, #0x1
+               	and	x5, x5, #0xff
+               	strb	w5, [x3, x0]
+               	mul	x5, x0, x2
+               	add	x5, x5, #0x5
+               	and	x5, x5, #0xff
+               	strb	w5, [x4, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lo	<addr>

@@ -109,20 +109,20 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	add	x2, x22, #0x8
-               	ldrsb	x3, [x22, x0]
+               	sub	x2, x29, #0x150
+               	add	x3, x22, #0x8
+               	ldrsb	x4, [x22, x0]
                	ldrsb	x1, [x20, x0]
-               	ldrsb	x4, [x21, x0]
-               	add	x4, x1, x4
-               	sxtb	x4, w4
-               	cmp	w3, w4
+               	ldrsb	x5, [x21, x0]
+               	add	x5, x1, x5
+               	sxtb	x5, w5
+               	cmp	w4, w5
                	b.ne	<addr>
-               	ldrsb	x3, [x2, x0]
-               	sub	x4, x29, #0x150
-               	ldrsb	x4, [x4, x0]
-               	sub	x1, x1, x4
+               	ldrsb	x4, [x3, x0]
+               	ldrsb	x5, [x2, x0]
+               	sub	x1, x1, x5
                	sxtb	x1, w1
-               	cmp	w3, w1
+               	cmp	w4, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x8

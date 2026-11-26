@@ -20,6 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
+               	sub	x4, x29, #0x10
                	mov	x2, x0
                	cmp	w0, #0x4
                	cset	x3, eq
@@ -28,7 +29,6 @@ Disassembly of section .text:
                	ldrb	w1, [x6, x1]
                	add	x0, x0, #0x1
                	cbnz	w3, <addr>
-               	sub	x4, x29, #0x10
                	add	x3, x2, #0x1
                	and	x5, x1, #0xff
                	strb	w5, [x4, x2]

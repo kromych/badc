@@ -77,13 +77,13 @@ Disassembly of section .text:
                	str	q1, [x16]
                	mov	x0, #0x0                // =0
                	mov	x3, #0xa5               // =165
-               	ldrb	w4, [x2, x0]
-               	ldrb	w5, [x1, x0]
-               	sub	x6, x29, #0x20
-               	ldrb	w6, [x6, x0]
-               	eor	x5, x5, x6
-               	eor	x5, x5, x3
-               	cmp	w4, w5
+               	sub	x4, x29, #0x20
+               	ldrb	w5, [x2, x0]
+               	ldrb	w6, [x1, x0]
+               	ldrb	w7, [x4, x0]
+               	eor	x6, x6, x7
+               	eor	x6, x6, x3
+               	cmp	w5, w6
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -112,11 +112,11 @@ Disassembly of section .text:
                	sub	x16, x29, #0x10
                	str	q1, [x16]
                	mov	x0, #0x0                // =0
-               	ldrb	w3, [x1, x0]
-               	sub	x4, x29, #0x30
+               	sub	x3, x29, #0x30
+               	ldrb	w4, [x1, x0]
                	sub	x5, x2, x0
-               	ldrb	w4, [x4, x5]
-               	cmp	w3, w4
+               	ldrb	w5, [x3, x5]
+               	cmp	w4, w5
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -146,15 +146,15 @@ Disassembly of section .text:
                	sub	x16, x29, #0x10
                	str	q0, [x16]
                	mov	x1, #0x0                // =0
+               	sub	x5, x29, #0x30
                	mov	x0, x1
-               	sub	x2, x29, #0x30
-               	ldrb	w2, [x2, x0]
+               	ldrb	w2, [x5, x0]
                	tst	x2, #0x80
-               	csel	x5, x4, x1, ne
-               	eor	x2, x5, x2, lsl #1
+               	csel	x6, x4, x1, ne
+               	eor	x2, x6, x2, lsl #1
                	and	x2, x2, #0xff
-               	ldrb	w5, [x3, x0]
-               	cmp	w5, w2
+               	ldrb	w6, [x3, x0]
+               	cmp	w6, w2
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

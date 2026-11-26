@@ -70,9 +70,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x200
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x200
-               	add	x1, x1, x0, lsl #3
-               	mov	x2, #-0x1               // =-1
-               	str	x2, [x1]
+               	add	x2, x1, x0, lsl #3
+               	mov	x3, #-0x1               // =-1
+               	str	x3, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

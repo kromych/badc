@@ -276,12 +276,12 @@ Disassembly of section .text:
                	movk	x6, #0x9ba5, lsl #32
                	movk	x6, #0x20c4, lsl #48
                	adrp	x2, <page>
+               	sub	x3, x29, #0x10
                	b	<addr>
                	str	w1, [x3, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.ge	<addr>
-               	sub	x3, x29, #0x10
                	ldr	x1, [x2, #0x10]
                	eor	x1, x1, x1, lsl #13
                	eor	x1, x1, x1, lsr #7
@@ -322,12 +322,12 @@ Disassembly of section .text:
                	movk	x7, #0x5ac4, lsl #32
                	movk	x7, #0xa7c, lsl #48
                	adrp	x2, <page>
+               	sub	x3, x29, #0x10
                	b	<addr>
                	str	x1, [x3, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.ge	<addr>
-               	sub	x3, x29, #0x10
                	ldr	x1, [x2, #0x10]
                	eor	x1, x1, x1, lsl #13
                	eor	x1, x1, x1, lsr #7

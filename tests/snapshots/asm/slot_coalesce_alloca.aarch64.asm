@@ -45,20 +45,20 @@ Disassembly of section .text:
                	str	x0, [x2, #0x30]
                	mov	x0, #0x7b               // =123
                	str	x0, [x2, #0x38]
+               	sub	x4, x29, #0xc0
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	sub	x4, x29, #0xc0
-               	add	x4, x4, x0, lsl #3
+               	add	x5, x4, x0, lsl #3
                	add	x0, x0, #0x1
-               	mul	x5, x0, x3
-               	str	x5, [x4]
+               	mul	x6, x0, x3
+               	str	x6, [x5]
                	cmp	w0, #0x18
                	b.lt	<addr>
-               	mov	x0, #0x0                // =0
                	sub	x3, x29, #0xc0
-               	add	x3, x3, x0, lsl #3
-               	ldr	x3, [x3]
-               	add	x1, x1, x3
+               	mov	x0, #0x0                // =0
+               	add	x4, x3, x0, lsl #3
+               	ldr	x4, [x4]
+               	add	x1, x1, x4
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>

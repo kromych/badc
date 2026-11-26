@@ -23,6 +23,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	mov	x2, #0x0                // =0
+               	sub	x3, x29, #0x10
                	mov	x4, x2
                	mov	x5, x2
                	mov	x6, x2
@@ -34,7 +35,6 @@ Disassembly of section .text:
                	b.hs	<addr>
                	add	x5, x5, #0x1
                	add	x6, x6, x2
-               	sub	x3, x29, #0x10
                	add	x1, x2, #0x1
                	mov	x2, #0x64               // =100
                	cmp	w1, #0x64

@@ -47,48 +47,48 @@ Disassembly of section .text:
                	sub	x8, x29, #0xb0
                	stur	q0, [x29, #-0xb0]
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	ldrsb	x9, [x4, x0]
-               	ldrsb	x10, [x3, x0]
-               	ldrsb	x11, [x2, x0]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, lt
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsb	x9, [x5, x0]
-               	ldrsb	x10, [x3, x0]
-               	ldrsb	x11, [x2, x0]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, le
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsb	x9, [x6, x0]
-               	ldrsb	x10, [x3, x0]
-               	ldrsb	x11, [x2, x0]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, gt
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsb	x9, [x7, x0]
-               	ldrsb	x10, [x3, x0]
-               	ldrsb	x11, [x2, x0]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, ge
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsb	x9, [x8, x0]
+               	sub	x9, x29, #0x100
                	sub	x10, x29, #0x110
-               	sub	x11, x29, #0x100
-               	ldrsb	x11, [x11, x0]
-               	ldrsb	x10, [x10, x0]
-               	cmp	w10, w11
+               	mov	x0, x1
+               	ldrsb	x11, [x4, x0]
+               	ldrsb	x12, [x3, x0]
+               	ldrsb	x13, [x2, x0]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, xzr, eq
-               	cmp	w9, w10
+               	csel	x12, x16, x1, lt
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsb	x11, [x5, x0]
+               	ldrsb	x12, [x3, x0]
+               	ldrsb	x13, [x2, x0]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, le
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsb	x11, [x6, x0]
+               	ldrsb	x12, [x3, x0]
+               	ldrsb	x13, [x2, x0]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, gt
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsb	x11, [x7, x0]
+               	ldrsb	x12, [x3, x0]
+               	ldrsb	x13, [x2, x0]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, ge
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsb	x11, [x8, x0]
+               	ldrsb	x12, [x9, x0]
+               	ldrsb	x13, [x10, x0]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, xzr, eq
+               	cmp	w11, w12
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -121,48 +121,48 @@ Disassembly of section .text:
                	sub	x8, x29, #0xb0
                	stur	q0, [x29, #-0xb0]
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	ldrsb	x9, [x4, x0]
-               	ldrb	w10, [x3, x0]
-               	ldrb	w11, [x2, x0]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, lt
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsb	x9, [x5, x0]
-               	ldrb	w10, [x3, x0]
-               	ldrb	w11, [x2, x0]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, le
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsb	x9, [x6, x0]
-               	ldrb	w10, [x3, x0]
-               	ldrb	w11, [x2, x0]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, gt
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsb	x9, [x7, x0]
-               	ldrb	w10, [x3, x0]
-               	ldrb	w11, [x2, x0]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, ge
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsb	x9, [x8, x0]
+               	sub	x9, x29, #0x90
                	sub	x10, x29, #0xa0
-               	sub	x11, x29, #0x90
-               	ldrb	w11, [x11, x0]
-               	ldrb	w10, [x10, x0]
-               	cmp	w10, w11
+               	mov	x0, x1
+               	ldrsb	x11, [x4, x0]
+               	ldrb	w12, [x3, x0]
+               	ldrb	w13, [x2, x0]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, xzr, eq
-               	cmp	w9, w10
+               	csel	x12, x16, x1, lt
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsb	x11, [x5, x0]
+               	ldrb	w12, [x3, x0]
+               	ldrb	w13, [x2, x0]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, le
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsb	x11, [x6, x0]
+               	ldrb	w12, [x3, x0]
+               	ldrb	w13, [x2, x0]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, gt
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsb	x11, [x7, x0]
+               	ldrb	w12, [x3, x0]
+               	ldrb	w13, [x2, x0]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, ge
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsb	x11, [x8, x0]
+               	ldrb	w12, [x9, x0]
+               	ldrb	w13, [x10, x0]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, xzr, eq
+               	cmp	w11, w12
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -197,48 +197,48 @@ Disassembly of section .text:
                	sub	x8, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	mov	x1, #0x0                // =0
+               	sub	x9, x29, #0x48
+               	sub	x10, x29, #0x40
                	mov	x0, x1
-               	ldrsh	x9, [x4, x0, lsl #1]
-               	ldrsh	x10, [x3, x0, lsl #1]
-               	ldrsh	x11, [x2, x0, lsl #1]
-               	cmp	w11, w10
+               	ldrsh	x11, [x4, x0, lsl #1]
+               	ldrsh	x12, [x3, x0, lsl #1]
+               	ldrsh	x13, [x2, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, lt
-               	cmp	w9, w10
+               	csel	x12, x16, x1, lt
+               	cmp	w11, w12
                	b.ne	<addr>
-               	ldrsh	x9, [x5, x0, lsl #1]
-               	ldrsh	x10, [x3, x0, lsl #1]
-               	ldrsh	x11, [x2, x0, lsl #1]
-               	cmp	w11, w10
+               	ldrsh	x11, [x5, x0, lsl #1]
+               	ldrsh	x12, [x3, x0, lsl #1]
+               	ldrsh	x13, [x2, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, le
-               	cmp	w9, w10
+               	csel	x12, x16, x1, le
+               	cmp	w11, w12
                	b.ne	<addr>
-               	ldrsh	x9, [x6, x0, lsl #1]
-               	ldrsh	x10, [x3, x0, lsl #1]
-               	ldrsh	x11, [x2, x0, lsl #1]
-               	cmp	w11, w10
+               	ldrsh	x11, [x6, x0, lsl #1]
+               	ldrsh	x12, [x3, x0, lsl #1]
+               	ldrsh	x13, [x2, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, gt
-               	cmp	w9, w10
+               	csel	x12, x16, x1, gt
+               	cmp	w11, w12
                	b.ne	<addr>
-               	ldrsh	x9, [x7, x0, lsl #1]
-               	ldrsh	x10, [x3, x0, lsl #1]
-               	ldrsh	x11, [x2, x0, lsl #1]
-               	cmp	w11, w10
+               	ldrsh	x11, [x7, x0, lsl #1]
+               	ldrsh	x12, [x3, x0, lsl #1]
+               	ldrsh	x13, [x2, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, ge
-               	cmp	w9, w10
+               	csel	x12, x16, x1, ge
+               	cmp	w11, w12
                	b.ne	<addr>
-               	ldrsh	x9, [x8, x0, lsl #1]
-               	sub	x10, x29, #0x48
-               	sub	x11, x29, #0x40
-               	ldrsh	x11, [x11, x0, lsl #1]
-               	ldrsh	x10, [x10, x0, lsl #1]
-               	cmp	w10, w11
+               	ldrsh	x11, [x8, x0, lsl #1]
+               	ldrsh	x12, [x10, x0, lsl #1]
+               	ldrsh	x13, [x9, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, xzr, eq
-               	cmp	w9, w10
+               	csel	x12, x16, xzr, eq
+               	cmp	w11, w12
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -271,48 +271,48 @@ Disassembly of section .text:
                	sub	x8, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	mov	x1, #0x0                // =0
+               	sub	x9, x29, #0x38
+               	sub	x10, x29, #0x30
                	mov	x0, x1
-               	ldrsh	x9, [x4, x0, lsl #1]
-               	ldrh	w10, [x3, x0, lsl #1]
-               	ldrh	w11, [x2, x0, lsl #1]
-               	cmp	w11, w10
+               	ldrsh	x11, [x4, x0, lsl #1]
+               	ldrh	w12, [x3, x0, lsl #1]
+               	ldrh	w13, [x2, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, lt
-               	cmp	w9, w10
+               	csel	x12, x16, x1, lt
+               	cmp	w11, w12
                	b.ne	<addr>
-               	ldrsh	x9, [x5, x0, lsl #1]
-               	ldrh	w10, [x3, x0, lsl #1]
-               	ldrh	w11, [x2, x0, lsl #1]
-               	cmp	w11, w10
+               	ldrsh	x11, [x5, x0, lsl #1]
+               	ldrh	w12, [x3, x0, lsl #1]
+               	ldrh	w13, [x2, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, le
-               	cmp	w9, w10
+               	csel	x12, x16, x1, le
+               	cmp	w11, w12
                	b.ne	<addr>
-               	ldrsh	x9, [x6, x0, lsl #1]
-               	ldrh	w10, [x3, x0, lsl #1]
-               	ldrh	w11, [x2, x0, lsl #1]
-               	cmp	w11, w10
+               	ldrsh	x11, [x6, x0, lsl #1]
+               	ldrh	w12, [x3, x0, lsl #1]
+               	ldrh	w13, [x2, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, gt
-               	cmp	w9, w10
+               	csel	x12, x16, x1, gt
+               	cmp	w11, w12
                	b.ne	<addr>
-               	ldrsh	x9, [x7, x0, lsl #1]
-               	ldrh	w10, [x3, x0, lsl #1]
-               	ldrh	w11, [x2, x0, lsl #1]
-               	cmp	w11, w10
+               	ldrsh	x11, [x7, x0, lsl #1]
+               	ldrh	w12, [x3, x0, lsl #1]
+               	ldrh	w13, [x2, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, ge
-               	cmp	w9, w10
+               	csel	x12, x16, x1, ge
+               	cmp	w11, w12
                	b.ne	<addr>
-               	ldrsh	x9, [x8, x0, lsl #1]
-               	sub	x10, x29, #0x38
-               	sub	x11, x29, #0x30
-               	ldrh	w11, [x11, x0, lsl #1]
-               	ldrh	w10, [x10, x0, lsl #1]
-               	cmp	w10, w11
+               	ldrsh	x11, [x8, x0, lsl #1]
+               	ldrh	w12, [x10, x0, lsl #1]
+               	ldrh	w13, [x9, x0, lsl #1]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, xzr, eq
-               	cmp	w9, w10
+               	csel	x12, x16, xzr, eq
+               	cmp	w11, w12
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -347,48 +347,48 @@ Disassembly of section .text:
                	sub	x8, x29, #0xb0
                	stur	q0, [x29, #-0xb0]
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	ldrsw	x9, [x4, x0, lsl #2]
-               	ldrsw	x10, [x3, x0, lsl #2]
-               	ldrsw	x11, [x2, x0, lsl #2]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, lt
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsw	x9, [x5, x0, lsl #2]
-               	ldrsw	x10, [x3, x0, lsl #2]
-               	ldrsw	x11, [x2, x0, lsl #2]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, le
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsw	x9, [x6, x0, lsl #2]
-               	ldrsw	x10, [x3, x0, lsl #2]
-               	ldrsw	x11, [x2, x0, lsl #2]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, gt
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsw	x9, [x7, x0, lsl #2]
-               	ldrsw	x10, [x3, x0, lsl #2]
-               	ldrsw	x11, [x2, x0, lsl #2]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, ge
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsw	x9, [x8, x0, lsl #2]
+               	sub	x9, x29, #0x70
                	sub	x10, x29, #0x80
-               	sub	x11, x29, #0x70
-               	ldrsw	x11, [x11, x0, lsl #2]
-               	ldrsw	x10, [x10, x0, lsl #2]
-               	cmp	w10, w11
+               	mov	x0, x1
+               	ldrsw	x11, [x4, x0, lsl #2]
+               	ldrsw	x12, [x3, x0, lsl #2]
+               	ldrsw	x13, [x2, x0, lsl #2]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, xzr, eq
-               	cmp	w9, w10
+               	csel	x12, x16, x1, lt
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsw	x11, [x5, x0, lsl #2]
+               	ldrsw	x12, [x3, x0, lsl #2]
+               	ldrsw	x13, [x2, x0, lsl #2]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, le
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsw	x11, [x6, x0, lsl #2]
+               	ldrsw	x12, [x3, x0, lsl #2]
+               	ldrsw	x13, [x2, x0, lsl #2]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, gt
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsw	x11, [x7, x0, lsl #2]
+               	ldrsw	x12, [x3, x0, lsl #2]
+               	ldrsw	x13, [x2, x0, lsl #2]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, ge
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsw	x11, [x8, x0, lsl #2]
+               	ldrsw	x12, [x9, x0, lsl #2]
+               	ldrsw	x13, [x10, x0, lsl #2]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, xzr, eq
+               	cmp	w11, w12
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -421,48 +421,48 @@ Disassembly of section .text:
                	sub	x8, x29, #0xb0
                	stur	q0, [x29, #-0xb0]
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	ldrsw	x9, [x4, x0, lsl #2]
-               	ldr	w10, [x3, x0, lsl #2]
-               	ldr	w11, [x2, x0, lsl #2]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, lo
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsw	x9, [x5, x0, lsl #2]
-               	ldr	w10, [x3, x0, lsl #2]
-               	ldr	w11, [x2, x0, lsl #2]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, ls
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsw	x9, [x6, x0, lsl #2]
-               	ldr	w10, [x3, x0, lsl #2]
-               	ldr	w11, [x2, x0, lsl #2]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, hi
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsw	x9, [x7, x0, lsl #2]
-               	ldr	w10, [x3, x0, lsl #2]
-               	ldr	w11, [x2, x0, lsl #2]
-               	cmp	w11, w10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, hs
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldrsw	x9, [x8, x0, lsl #2]
+               	sub	x9, x29, #0x90
                	sub	x10, x29, #0x100
-               	sub	x11, x29, #0x90
-               	ldr	w11, [x11, x0, lsl #2]
-               	ldr	w10, [x10, x0, lsl #2]
-               	cmp	w10, w11
+               	mov	x0, x1
+               	ldrsw	x11, [x4, x0, lsl #2]
+               	ldr	w12, [x3, x0, lsl #2]
+               	ldr	w13, [x2, x0, lsl #2]
+               	cmp	w13, w12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, xzr, eq
-               	cmp	w9, w10
+               	csel	x12, x16, x1, lo
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsw	x11, [x5, x0, lsl #2]
+               	ldr	w12, [x3, x0, lsl #2]
+               	ldr	w13, [x2, x0, lsl #2]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, ls
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsw	x11, [x6, x0, lsl #2]
+               	ldr	w12, [x3, x0, lsl #2]
+               	ldr	w13, [x2, x0, lsl #2]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, hi
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsw	x11, [x7, x0, lsl #2]
+               	ldr	w12, [x3, x0, lsl #2]
+               	ldr	w13, [x2, x0, lsl #2]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, hs
+               	cmp	w11, w12
+               	b.ne	<addr>
+               	ldrsw	x11, [x8, x0, lsl #2]
+               	ldr	w12, [x9, x0, lsl #2]
+               	ldr	w13, [x10, x0, lsl #2]
+               	cmp	w13, w12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, xzr, eq
+               	cmp	w11, w12
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -497,48 +497,48 @@ Disassembly of section .text:
                	sub	x8, x29, #0xb0
                	stur	q0, [x29, #-0xb0]
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	ldr	x9, [x4, x0, lsl #3]
-               	ldr	x10, [x3, x0, lsl #3]
-               	ldr	x11, [x2, x0, lsl #3]
-               	cmp	x11, x10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, lt
-               	cmp	x9, x10
-               	b.ne	<addr>
-               	ldr	x9, [x5, x0, lsl #3]
-               	ldr	x10, [x3, x0, lsl #3]
-               	ldr	x11, [x2, x0, lsl #3]
-               	cmp	x11, x10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, le
-               	cmp	x9, x10
-               	b.ne	<addr>
-               	ldr	x9, [x6, x0, lsl #3]
-               	ldr	x10, [x3, x0, lsl #3]
-               	ldr	x11, [x2, x0, lsl #3]
-               	cmp	x11, x10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, gt
-               	cmp	x9, x10
-               	b.ne	<addr>
-               	ldr	x9, [x7, x0, lsl #3]
-               	ldr	x10, [x3, x0, lsl #3]
-               	ldr	x11, [x2, x0, lsl #3]
-               	cmp	x11, x10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, ge
-               	cmp	x9, x10
-               	b.ne	<addr>
-               	ldr	x9, [x8, x0, lsl #3]
+               	sub	x9, x29, #0x70
                	sub	x10, x29, #0x60
-               	sub	x11, x29, #0x70
-               	ldr	x11, [x11, x0, lsl #3]
-               	ldr	x10, [x10, x0, lsl #3]
-               	cmp	x10, x11
+               	mov	x0, x1
+               	ldr	x11, [x4, x0, lsl #3]
+               	ldr	x12, [x3, x0, lsl #3]
+               	ldr	x13, [x2, x0, lsl #3]
+               	cmp	x13, x12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, xzr, eq
-               	cmp	x9, x10
+               	csel	x12, x16, x1, lt
+               	cmp	x11, x12
+               	b.ne	<addr>
+               	ldr	x11, [x5, x0, lsl #3]
+               	ldr	x12, [x3, x0, lsl #3]
+               	ldr	x13, [x2, x0, lsl #3]
+               	cmp	x13, x12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, le
+               	cmp	x11, x12
+               	b.ne	<addr>
+               	ldr	x11, [x6, x0, lsl #3]
+               	ldr	x12, [x3, x0, lsl #3]
+               	ldr	x13, [x2, x0, lsl #3]
+               	cmp	x13, x12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, gt
+               	cmp	x11, x12
+               	b.ne	<addr>
+               	ldr	x11, [x7, x0, lsl #3]
+               	ldr	x12, [x3, x0, lsl #3]
+               	ldr	x13, [x2, x0, lsl #3]
+               	cmp	x13, x12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, ge
+               	cmp	x11, x12
+               	b.ne	<addr>
+               	ldr	x11, [x8, x0, lsl #3]
+               	ldr	x12, [x9, x0, lsl #3]
+               	ldr	x13, [x10, x0, lsl #3]
+               	cmp	x13, x12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, xzr, eq
+               	cmp	x11, x12
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
@@ -571,48 +571,48 @@ Disassembly of section .text:
                	sub	x8, x29, #0xb0
                	stur	q0, [x29, #-0xb0]
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	ldr	x9, [x4, x0, lsl #3]
-               	ldr	x10, [x3, x0, lsl #3]
-               	ldr	x11, [x2, x0, lsl #3]
-               	cmp	x11, x10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, lo
-               	cmp	x9, x10
-               	b.ne	<addr>
-               	ldr	x9, [x5, x0, lsl #3]
-               	ldr	x10, [x3, x0, lsl #3]
-               	ldr	x11, [x2, x0, lsl #3]
-               	cmp	x11, x10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, ls
-               	cmp	x9, x10
-               	b.ne	<addr>
-               	ldr	x9, [x6, x0, lsl #3]
-               	ldr	x10, [x3, x0, lsl #3]
-               	ldr	x11, [x2, x0, lsl #3]
-               	cmp	x11, x10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, hi
-               	cmp	x9, x10
-               	b.ne	<addr>
-               	ldr	x9, [x7, x0, lsl #3]
-               	ldr	x10, [x3, x0, lsl #3]
-               	ldr	x11, [x2, x0, lsl #3]
-               	cmp	x11, x10
-               	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, x1, hs
-               	cmp	x9, x10
-               	b.ne	<addr>
-               	ldr	x9, [x8, x0, lsl #3]
+               	sub	x9, x29, #0x90
                	sub	x10, x29, #0x100
-               	sub	x11, x29, #0x90
-               	ldr	x11, [x11, x0, lsl #3]
-               	ldr	x10, [x10, x0, lsl #3]
-               	cmp	x10, x11
+               	mov	x0, x1
+               	ldr	x11, [x4, x0, lsl #3]
+               	ldr	x12, [x3, x0, lsl #3]
+               	ldr	x13, [x2, x0, lsl #3]
+               	cmp	x13, x12
                	mov	x16, #-0x1              // =-1
-               	csel	x10, x16, xzr, eq
-               	cmp	x9, x10
+               	csel	x12, x16, x1, lo
+               	cmp	x11, x12
+               	b.ne	<addr>
+               	ldr	x11, [x5, x0, lsl #3]
+               	ldr	x12, [x3, x0, lsl #3]
+               	ldr	x13, [x2, x0, lsl #3]
+               	cmp	x13, x12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, ls
+               	cmp	x11, x12
+               	b.ne	<addr>
+               	ldr	x11, [x6, x0, lsl #3]
+               	ldr	x12, [x3, x0, lsl #3]
+               	ldr	x13, [x2, x0, lsl #3]
+               	cmp	x13, x12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, hi
+               	cmp	x11, x12
+               	b.ne	<addr>
+               	ldr	x11, [x7, x0, lsl #3]
+               	ldr	x12, [x3, x0, lsl #3]
+               	ldr	x13, [x2, x0, lsl #3]
+               	cmp	x13, x12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, x1, hs
+               	cmp	x11, x12
+               	b.ne	<addr>
+               	ldr	x11, [x8, x0, lsl #3]
+               	ldr	x12, [x9, x0, lsl #3]
+               	ldr	x13, [x10, x0, lsl #3]
+               	cmp	x13, x12
+               	mov	x16, #-0x1              // =-1
+               	csel	x12, x16, xzr, eq
+               	cmp	x11, x12
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2

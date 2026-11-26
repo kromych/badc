@@ -138,13 +138,13 @@ Disassembly of section .text:
                	mov	x3, #0x3039             // =12345
                	mov	x4, #0x4e6d             // =20077
                	movk	x4, #0x41c6, lsl #16
+               	sub	x5, x29, #0x140
                	mul	x1, x1, x4
                	add	x1, x1, x3
-               	sub	x2, x29, #0x140
-               	add	x2, x2, x0, lsl #3
-               	mov	w5, w1
-               	ubfx	x5, x5, #16, #2
-               	str	w5, [x2]
+               	add	x2, x5, x0, lsl #3
+               	mov	w6, w1
+               	ubfx	x6, x6, #16, #2
+               	str	w6, [x2]
                	str	w0, [x2, #0x4]
                	add	x0, x0, #0x1
                	cmp	w0, #0x28

@@ -61,15 +61,15 @@ Disassembly of section .text:
                	mov	x1, #0x25               // =37
                	mov	x2, #0x79b9             // =31161
                	movk	x2, #0x9e37, lsl #16
-               	mov	x0, x20
                	sub	x3, x29, #0x310
-               	mul	x4, x0, x1
-               	sub	x4, x4, #0x384
-               	str	w4, [x3, x0, lsl #2]
-               	sub	x3, x29, #0x210
-               	mul	x4, x0, x2
-               	add	x4, x4, #0x5
-               	str	x4, [x3, x0, lsl #3]
+               	sub	x4, x29, #0x210
+               	mov	x0, x20
+               	mul	x5, x0, x1
+               	sub	x5, x5, #0x384
+               	str	w5, [x3, x0, lsl #2]
+               	mul	x5, x0, x2
+               	add	x5, x5, #0x5
+               	str	x5, [x4, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
@@ -83,29 +83,29 @@ Disassembly of section .text:
                	movk	x3, #0xc4ec, lsl #16
                	movk	x3, #0xec4e, lsl #32
                	movk	x3, #0x4ec4, lsl #48
-               	sub	x1, x29, #0x310
-               	ldrsw	x1, [x1, x0, lsl #2]
+               	sub	x8, x29, #0x310
+               	sub	x9, x29, #0x210
+               	ldrsw	x1, [x8, x0, lsl #2]
                	mul	x4, x1, x2
                	asr	x4, x4, #34
-               	add	x8, x4, x4, lsr #63
+               	add	x10, x4, x4, lsr #63
                	mul	x4, x1, x2
                	asr	x4, x4, #34
                	add	x4, x4, x4, lsr #63
                	mul	x4, x4, x5
                	sub	x1, x1, x4
-               	add	x1, x8, x1
+               	add	x1, x10, x1
                	add	x20, x20, x1
                	mul	x4, x21, x7
-               	sub	x1, x29, #0x210
-               	ldr	x1, [x1, x0, lsl #3]
-               	umulh	x8, x1, x3
-               	lsr	x8, x8, #2
-               	umulh	x9, x1, x3
-               	lsr	x9, x9, #2
-               	mul	x9, x9, x6
-               	sub	x1, x1, x9
+               	ldr	x1, [x9, x0, lsl #3]
+               	umulh	x10, x1, x3
+               	lsr	x10, x10, #2
+               	umulh	x11, x1, x3
+               	lsr	x11, x11, #2
+               	mul	x11, x11, x6
+               	sub	x1, x1, x11
                	add	x1, x1, #0x1
-               	udiv	x1, x8, x1
+               	udiv	x1, x10, x1
                	add	x21, x4, x1
                	add	x0, x0, #0x1
                	cmp	w0, #0x40

@@ -178,8 +178,8 @@ Disassembly of section .text:
                	cmeq	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x50]
                	mov	x3, #0x0                // =0
-               	mov	x0, x3
                	sub	x4, x29, #0x10
+               	mov	x0, x3
                	ldrb	w5, [x2, x0]
                	ldrb	w6, [x1, x0]
                	cmp	w6, w5
@@ -1139,20 +1139,20 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x5, x29, #0x28
-               	sub	x6, x29, #0x20
+               	sub	x4, x29, #0x28
+               	sub	x5, x29, #0x20
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x28]
                	cmhi	v0.8b, v0.8b, v1.8b
                	stur	d0, [x29, #-0x18]
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x8
-               	ldrb	w3, [x6, x0]
-               	ldrb	w4, [x5, x0]
-               	cmp	w4, w3
+               	sub	x6, x29, #0x8
+               	ldrb	w2, [x5, x0]
+               	ldrb	w3, [x4, x0]
+               	cmp	w3, w2
                	mov	x16, #-0x1              // =-1
-               	csel	x3, x16, xzr, lt
-               	strb	w3, [x2, x0]
+               	csel	x2, x16, xzr, lt
+               	strb	w2, [x6, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
@@ -1480,7 +1480,6 @@ Disassembly of section .text:
                	stur	w4, [x29, #-0x4c]
                	stur	w5, [x29, #-0x48]
                	stur	w6, [x29, #-0x44]
-               	fmov	s0, #2.00000000
                	ldr	s1, [x3, x0, lsl #2]
                	fcmpe	s1, s0
                	mov	x16, #-0x1              // =-1

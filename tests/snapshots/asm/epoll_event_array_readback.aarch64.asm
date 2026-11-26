@@ -97,6 +97,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	b	<addr>
+               	sub	x3, x29, #0x20
                	mov	x0, #0x0                // =0
                	mov	x21, x0
                	b	<addr>
@@ -104,11 +105,10 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.ge	<addr>
                	lsl	x1, x0, #4
-               	add	x3, x2, x1
-               	ldr	w3, [x3]
-               	cmp	w3, #0x1
+               	add	x4, x2, x1
+               	ldr	w4, [x4]
+               	cmp	w4, #0x1
                	b.ne	<addr>
-               	sub	x3, x29, #0x20
                	add	x1, x3, x1
                	ldr	x1, [x1, #0x8]
                	ldr	x17, [sp, #0x20]

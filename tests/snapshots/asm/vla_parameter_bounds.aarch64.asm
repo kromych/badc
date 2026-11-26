@@ -130,90 +130,87 @@ Disassembly of section .text:
                	mov	x1, #0x16               // =22
                	movk	x1, #0x17, lsl #32
                	stur	x1, [x29, #-0xe0]
-               	mov	x3, #0x30               // =48
-               	mov	x4, #0x64               // =100
-               	sub	x1, x29, #0xd8
-               	mul	x5, x0, x3
-               	add	x1, x1, x5
-               	mul	x2, x0, x4
+               	mov	x4, #0x30               // =48
+               	mov	x5, #0x64               // =100
+               	sub	x3, x29, #0xd8
+               	mul	x6, x0, x4
+               	add	x1, x3, x6
+               	mul	x2, x0, x5
                	str	w2, [x1]
-               	add	x6, x2, #0x1
-               	str	w6, [x1, #0x4]
-               	add	x6, x2, #0x2
-               	str	w6, [x1, #0x8]
-               	add	x6, x2, #0x3
-               	str	w6, [x1, #0xc]
+               	add	x7, x2, #0x1
+               	str	w7, [x1, #0x4]
+               	add	x7, x2, #0x2
+               	str	w7, [x1, #0x8]
+               	add	x7, x2, #0x3
+               	str	w7, [x1, #0xc]
                	add	x2, x2, #0xa
                	str	w2, [x1, #0x10]
                	add	x2, x2, #0x1
                	str	w2, [x1, #0x14]
-               	sub	x1, x29, #0xd8
-               	add	x6, x1, x5
-               	mul	x2, x0, x4
-               	add	x5, x2, #0xa
-               	add	x7, x5, #0x2
-               	str	w7, [x6, #0x18]
-               	mul	x6, x0, x3
-               	add	x1, x1, x6
-               	add	x5, x5, #0x3
-               	str	w5, [x1, #0x1c]
+               	add	x1, x3, x6
+               	mul	x2, x0, x5
+               	add	x6, x2, #0xa
+               	add	x7, x6, #0x2
+               	str	w7, [x1, #0x18]
+               	mul	x1, x0, x4
+               	add	x1, x3, x1
+               	add	x6, x6, #0x3
+               	str	w6, [x1, #0x1c]
                	add	x2, x2, #0x14
                	str	w2, [x1, #0x20]
-               	add	x5, x2, #0x1
-               	str	w5, [x1, #0x24]
-               	add	x5, x2, #0x2
-               	str	w5, [x1, #0x28]
+               	add	x6, x2, #0x1
+               	str	w6, [x1, #0x24]
+               	add	x6, x2, #0x2
+               	str	w6, [x1, #0x28]
                	add	x2, x2, #0x3
                	str	w2, [x1, #0x2c]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x3c               // =60
-               	mov	x4, #0x64               // =100
-               	sub	x1, x29, #0x78
-               	mul	x5, x0, x3
-               	add	x1, x1, x5
-               	mul	x2, x0, x4
+               	mov	x4, #0x3c               // =60
+               	mov	x5, #0x64               // =100
+               	sub	x3, x29, #0x78
+               	mul	x6, x0, x4
+               	add	x1, x3, x6
+               	mul	x2, x0, x5
                	str	w2, [x1]
-               	add	x6, x2, #0x1
-               	str	w6, [x1, #0x4]
-               	add	x6, x2, #0x2
-               	str	w6, [x1, #0x8]
-               	add	x6, x2, #0x3
-               	str	w6, [x1, #0xc]
-               	add	x6, x2, #0x4
-               	str	w6, [x1, #0x10]
+               	add	x7, x2, #0x1
+               	str	w7, [x1, #0x4]
+               	add	x7, x2, #0x2
+               	str	w7, [x1, #0x8]
+               	add	x7, x2, #0x3
+               	str	w7, [x1, #0xc]
+               	add	x7, x2, #0x4
+               	str	w7, [x1, #0x10]
                	add	x2, x2, #0xa
                	str	w2, [x1, #0x14]
-               	sub	x1, x29, #0x78
-               	add	x6, x1, x5
-               	mul	x5, x0, x4
-               	add	x2, x5, #0xa
+               	add	x1, x3, x6
+               	mul	x6, x0, x5
+               	add	x2, x6, #0xa
                	add	x7, x2, #0x1
-               	str	w7, [x6, #0x18]
-               	mul	x6, x0, x3
-               	add	x1, x1, x6
-               	add	x7, x2, #0x2
-               	str	w7, [x1, #0x1c]
-               	add	x7, x2, #0x3
-               	str	w7, [x1, #0x20]
+               	str	w7, [x1, #0x18]
+               	mul	x7, x0, x4
+               	add	x1, x3, x7
+               	add	x8, x2, #0x2
+               	str	w8, [x1, #0x1c]
+               	add	x8, x2, #0x3
+               	str	w8, [x1, #0x20]
                	add	x2, x2, #0x4
                	str	w2, [x1, #0x24]
-               	add	x2, x5, #0x14
+               	add	x2, x6, #0x14
                	str	w2, [x1, #0x28]
                	add	x2, x2, #0x1
                	str	w2, [x1, #0x2c]
-               	sub	x2, x29, #0x78
-               	add	x5, x2, x6
-               	mul	x1, x0, x4
+               	add	x2, x3, x7
+               	mul	x1, x0, x5
                	add	x1, x1, #0x14
                	add	x6, x1, #0x2
-               	str	w6, [x5, #0x30]
-               	mul	x5, x0, x3
-               	add	x2, x2, x5
-               	add	x5, x1, #0x3
-               	str	w5, [x2, #0x34]
+               	str	w6, [x2, #0x30]
+               	mul	x2, x0, x4
+               	add	x2, x3, x2
+               	add	x6, x1, #0x3
+               	str	w6, [x2, #0x34]
                	add	x1, x1, #0x4
                	str	w1, [x2, #0x38]
                	add	x0, x0, #0x1

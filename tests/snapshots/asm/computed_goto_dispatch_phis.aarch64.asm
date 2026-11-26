@@ -360,6 +360,7 @@ Disassembly of section .text:
                	adr	x13, <addr>
                	stur	x13, [x29, #-0x8]
                	ldrb	w13, [x0]
+               	sub	x20, x29, #0x20
                	ldr	x14, [x2, x13, lsl #3]
                	mov	x13, x15
                	mov	x2, x1
@@ -370,17 +371,16 @@ Disassembly of section .text:
                	add	x10, x10, x11
                	eor	x9, x9, x10
                	add	x8, x8, x9
-               	sub	x21, x29, #0x20
                	sxtw	x14, w1
                	add	x1, x14, #0x1
                	mov	x17, #0xa2e9            // =41705
                	movk	x17, #0x2e8b, lsl #16
-               	mul	x20, x14, x17
-               	asr	x20, x20, #33
-               	add	x20, x20, x20, lsr #63
-               	msub	x14, x20, x15, x14
+               	mul	x21, x14, x17
+               	asr	x21, x21, #33
+               	add	x21, x21, x21, lsr #63
+               	msub	x14, x21, x15, x14
                	ldrb	w14, [x0, x14]
-               	ldr	x14, [x21, x14, lsl #3]
+               	ldr	x14, [x20, x14, lsl #3]
                	br	x14
                	add	x7, x7, x8
                	sub	x6, x6, x7
@@ -388,19 +388,17 @@ Disassembly of section .text:
                	eor	x4, x4, x5
                	add	x13, x13, x4
                	add	x3, x3, x13
-               	sub	x21, x29, #0x20
                	sxtw	x14, w1
                	add	x1, x14, #0x1
                	mov	x17, #0xa2e9            // =41705
                	movk	x17, #0x2e8b, lsl #16
-               	mul	x20, x14, x17
-               	asr	x20, x20, #33
-               	add	x20, x20, x20, lsr #63
-               	msub	x14, x20, x15, x14
+               	mul	x21, x14, x17
+               	asr	x21, x21, #33
+               	add	x21, x21, x21, lsr #63
+               	msub	x14, x21, x15, x14
                	ldrb	w14, [x0, x14]
-               	ldr	x14, [x21, x14, lsl #3]
+               	ldr	x14, [x20, x14, lsl #3]
                	br	x14
-               	sub	x20, x29, #0x20
                	sxtw	x14, w1
                	mov	x17, #0xa2e9            // =41705
                	movk	x17, #0x2e8b, lsl #16

@@ -74,10 +74,10 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x3, #0x4e6d             // =20077
                	movk	x3, #0x41c6, lsl #16
+               	sub	x4, x29, #0x100
                	mov	x1, x2
                	mul	x1, x1, x3
                	add	x1, x1, x2
-               	sub	x4, x29, #0x100
                	and	x5, x1, #0x7fffffff
                	str	w5, [x4, x0, lsl #2]
                	add	x0, x0, #0x1

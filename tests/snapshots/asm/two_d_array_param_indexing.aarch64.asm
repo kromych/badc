@@ -19,8 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x400
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x400
-               	add	x1, x1, x0, lsl #2
-               	str	wzr, [x1]
+               	add	x2, x1, x0, lsl #2
+               	str	wzr, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x100
                	b.lt	<addr>
@@ -30,13 +30,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x3, #0xc                // =12
                	mov	x4, #0x64               // =100
-               	sub	x1, x29, #0x78
-               	mul	x2, x0, x3
-               	add	x1, x1, x2
+               	sub	x5, x29, #0x78
+               	mul	x1, x0, x3
+               	add	x1, x5, x1
                	mul	x2, x0, x4
                	str	w2, [x1]
-               	add	x5, x2, #0x1
-               	str	w5, [x1, #0x4]
+               	add	x6, x2, #0x1
+               	str	w6, [x1, #0x4]
                	add	x2, x2, #0x2
                	str	w2, [x1, #0x8]
                	add	x0, x0, #0x1
@@ -54,15 +54,15 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0x20
-               	lsl	x3, x0, #2
+               	sub	x3, x29, #0x20
+               	lsl	x2, x0, #2
                	add	x1, x0, #0x41
-               	strb	w1, [x2, x3]
-               	add	x2, x2, x3
-               	add	x3, x1, #0x1
-               	strb	w3, [x2, #0x1]
-               	add	x3, x1, #0x2
-               	strb	w3, [x2, #0x2]
+               	strb	w1, [x3, x2]
+               	add	x2, x3, x2
+               	add	x4, x1, #0x1
+               	strb	w4, [x2, #0x1]
+               	add	x4, x1, #0x2
+               	strb	w4, [x2, #0x2]
                	add	x1, x1, #0x3
                	strb	w1, [x2, #0x3]
                	add	x0, x0, #0x1

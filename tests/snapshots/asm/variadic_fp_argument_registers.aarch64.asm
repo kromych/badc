@@ -49,10 +49,10 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	ldr	d0, [x29, #0x50]
                	mov	x0, #0x0                // =0
+               	fmov	d1, #10.00000000
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
-               	fmov	d1, #10.00000000
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
@@ -120,10 +120,10 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	fcvt	d0, s0
                	mov	x0, #0x0                // =0
+               	fmov	d1, #10.00000000
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
-               	fmov	d1, #10.00000000
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]

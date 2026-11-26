@@ -99,20 +99,20 @@ Disassembly of section .text:
                	stp	x16, x17, [x2]
                	mov	x0, #0x0                // =0
                	sub	x3, x29, #0x30
-               	ldrb	w4, [x1, x0]
-               	ldrb	w5, [x2, x0]
-               	eor	x4, x4, x5
-               	strb	w4, [x3, x0]
-               	sub	x3, x29, #0x20
-               	ldrb	w4, [x1, x0]
-               	ldrb	w5, [x2, x0]
-               	and	x4, x4, x5
-               	strb	w4, [x3, x0]
-               	sub	x3, x29, #0x10
-               	ldrb	w4, [x1, x0]
-               	ldrb	w5, [x2, x0]
-               	orr	x4, x4, x5
-               	strb	w4, [x3, x0]
+               	sub	x4, x29, #0x20
+               	sub	x5, x29, #0x10
+               	ldrb	w6, [x1, x0]
+               	ldrb	w7, [x2, x0]
+               	eor	x6, x6, x7
+               	strb	w6, [x3, x0]
+               	ldrb	w6, [x1, x0]
+               	ldrb	w7, [x2, x0]
+               	and	x6, x6, x7
+               	strb	w6, [x4, x0]
+               	ldrb	w6, [x1, x0]
+               	ldrb	w7, [x2, x0]
+               	orr	x6, x6, x7
+               	strb	w6, [x5, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

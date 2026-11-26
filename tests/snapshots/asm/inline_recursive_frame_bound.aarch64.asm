@@ -34,10 +34,10 @@ Disassembly of section .text:
                	cmp	w20, #0x40
                	b.lt	<addr>
                	mov	x2, #0x0                // =0
-               	mov	x20, x2
                	sub	x1, x29, #0x100
-               	ldrsw	x1, [x1, x2, lsl #2]
-               	add	x20, x20, x1
+               	mov	x20, x2
+               	ldrsw	x3, [x1, x2, lsl #2]
+               	add	x20, x20, x3
                	add	x2, x2, #0x1
                	cmp	w2, #0x40
                	b.lt	<addr>

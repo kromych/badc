@@ -271,6 +271,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
+               	sub	x4, x29, #0x10
                	b	<addr>
                	str	x1, [x4, x0, lsl #3]
                	add	x0, x0, #0x1
@@ -281,7 +282,6 @@ Disassembly of section .text:
                	eor	x1, x1, x1, lsr #7
                	eor	x1, x1, x1, lsl #17
                	str	x1, [x2, #0x10]
-               	sub	x4, x29, #0x10
                	and	x3, x1, #0x7
                	cbnz	w3, <addr>
                	mov	x1, #-0x8000000000000000 // =-9223372036854775808

@@ -158,9 +158,9 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x1, #0x0                // =0
                	sub	x2, x29, #0x130
-               	add	x2, x2, x1
-               	and	x3, x1, #0x7
-               	strb	w3, [x2]
+               	add	x3, x2, x1
+               	and	x4, x1, #0x7
+               	strb	w4, [x3]
                	add	x1, x1, #0x1
                	cmp	w1, #0x12c
                	b.lt	<addr>

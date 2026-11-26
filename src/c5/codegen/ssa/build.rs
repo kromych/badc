@@ -1,9 +1,10 @@
 //! Direct construction of [`FunctionSsa`] from a syntactic walk.
 //!
-//! The builder feeds the AST walker (`irgen::walk_function`) and
-//! parser-side synthesis (`emit_sys_trampolines`, the synthetic CRT
-//! entry); anything constructed here is consumed by the allocator
-//! and per-arch emit unchanged.
+//! The builder serves the AST walker
+//! ([`crate::c5::irgen::walk_function`]) and the forwarding bodies of
+//! libc bindings ([`crate::c5::compiler::Compiler::emit_sys_trampolines`]);
+//! anything constructed here is consumed by the allocator and per-arch
+//! emit unchanged.
 //!
 //! Ergonomic API:
 //!
@@ -23,9 +24,9 @@
 //!
 //! Callers are responsible for the structural invariants the
 //! downstream passes rely on: every block has exactly one
-//! terminator; values referenced by an inst are defined earlier in
-//! the same block or reach via the virtual stack (`VstackSpill` /
-//! `VstackReload`); the entry block is block 0.
+//! terminator; a value an inst reads other than through a phi is
+//! defined earlier in the same block or in a dominating block
+//! ([`super::verify`]); the entry block is block 0.
 
 #![allow(dead_code)]
 
@@ -470,7 +471,7 @@ impl SsaBuilder {
     /// bytes. Consumed by the per-arch emit's frame layout.
     pub(crate) fn set_locals(&mut self, n: i64) {
         self.func.locals = n;
-        // Slots reserved after this point are synthetic; `ssa_slot_coalesce`
+        // Slots reserved after this point are synthetic; `slot_coalesce`
         // reuses only those, leaving the declared range untouched.
         self.func.synthetic_base = n;
     }
@@ -969,11 +970,9 @@ impl SsaBuilder {
     }
 
     /// `Inst::AllocaInit` -- the frame offset of the per-function alloca
-    /// bookkeeping slot. Slot 0 means "no alloca in this function"; the
-    /// per-arch emit short-circuits and writes nothing for the
-    /// zero case. The walker emits one per function so the
-    /// codegen's per-function state (`current_alloca_top`)
-    /// initializes consistently across SSA producers.
+    /// bookkeeping slot. Slot 0 means "no alloca in this function"; a
+    /// nonzero slot gives the frame a stack pointer that moves at run
+    /// time. It emits no code.
     pub(crate) fn alloca_init(&mut self, slot: i64) -> ValueId {
         self.push(Inst::AllocaInit(slot))
     }
@@ -1690,7 +1689,7 @@ impl SsaBuilder {
     /// `Inst::FpCast`. Pure value; same input + same kind ->
     /// same output. CSE-eligible. The f32-ness of the result is set
     /// from `kind`: `F64ToF32` and `IntToFp`-to-float callers mark via
-    /// the dedicated [`Self::fp_narrow`] / [`Self::mark_f32`] helpers;
+    /// the dedicated [`Self::fp_narrow_to_f32`] / [`Self::mark_f32`] helpers;
     /// `F32ToF64` clears it.
     pub(crate) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
         let key = PureKey::FpCast {

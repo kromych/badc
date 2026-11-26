@@ -1,14 +1,12 @@
 //! Per-function SSA IR.
 //!
-//! The shape consumed by the linear-scan allocator
+//! The shape consumed by the register allocator
 //! ([`super::codegen::ssa::reg_alloc::allocate`]) and the per-arch SSA
-//! emitters. Two producers:
-//!
-//!   * The AST walker ([`super::irgen::walk_function`]) -- the
-//!     canonical source for every parser-produced function.
-//!   * The direct construction API
-//!     ([`super::ssa_build::SsaBuilder`]) -- used by
-//!     `emit_sys_trampolines` and other parser-side synthesis.
+//! emitters. Every function is built through
+//! [`super::codegen::ssa::build::SsaBuilder`]: by the AST walker
+//! ([`super::irgen::walk_function`]) for each parser-produced function,
+//! and by [`super::compiler::Compiler::emit_sys_trampolines`] for the
+//! forwarding body of a libc binding.
 //!
 //! Variants mirror the per-arch native instruction set wherever a
 //! single Inst lowers to a single instruction (one ldr per Load,
@@ -106,7 +104,7 @@ pub(crate) enum Inst {
     /// bytes. Zero means the access is naturally aligned for its width,
     /// which C99 6.3.2.3p7 guarantees for every well-formed object; a
     /// packed member or a packed bitfield storage unit records the lower
-    /// bound it actually has. Under [`NativeOptions::strict_align`] the
+    /// bound it actually has. Under [`super::codegen::NativeOptions::strict_align`] the
     /// lowering then composes the value from accesses no wider than
     /// that. A pass that rebuilds the access at the same address must
     /// carry the field across; one that retargets it to a different
@@ -2618,8 +2616,8 @@ impl core::fmt::LowerHex for FpMask {
 /// argument / return classification. Interned per function in
 /// [`FunctionSsa::agg_descs`] and referenced by index from the call
 /// instructions' `arg_aggs` / `ret_agg` and the function's own
-/// `param_aggs` / `ret_agg`. Built by the walker via
-/// `Compiler::flatten_fields`; the per-arch emit feeds it to
+/// `param_aggs` / `ret_agg`. Built by
+/// [`super::compiler::host_abi_agg_desc`]; the per-arch emit feeds it to
 /// `abi_classify::classify_aggregate`.
 #[derive(Debug, Clone)]
 pub(crate) struct AggDesc {
@@ -2796,26 +2794,24 @@ pub(crate) struct FunctionSsa {
     /// entry block.
     pub blocks: Vec<Block>,
     /// Per-Inst extern symbol references: `(inst_idx, sym_idx)`
-    /// pairs where `sym_idx` is the parser-symbol index (into the
-    /// unit's `parser_symbols`) for an `Inst::Call::target_pc`
+    /// pairs where `sym_idx` indexes the unit's
+    /// [`super::program::Program::symbols`] for an `Inst::Call::target_pc`
     /// whose target lives in another translation unit. The walker
-    /// records the sym at parse time; the linker resolves each
-    /// pair after merging through the unit's `sym_remap` so
-    /// `Inst::Call::target_pc` lands on the defining unit's
+    /// records the symbol; the linker binds each pair by the symbol's
+    /// name so `Inst::Call::target_pc` lands on the defining unit's
     /// `ent_pc`. Empty for functions built outside the walker.
     pub extern_call_refs: Vec<(u32, u32)>,
     /// Per-Inst extern symbol references for `Inst::ImmCode(pc)`.
     /// Same shape as `extern_call_refs`; the linker resolves the
-    /// referenced sym to a `SymbolKind::Function`'s merged ent_pc.
+    /// referenced symbol to its function's merged ent_pc.
     pub extern_imm_code_refs: Vec<(u32, u32)>,
     /// Per-Inst extern symbol references for `Inst::ImmData(off)`.
     /// Same shape as `extern_call_refs`; the linker resolves the
-    /// referenced sym to a `SymbolKind::Data`'s merged data
-    /// offset.
+    /// referenced symbol to its object's merged data offset.
     pub extern_imm_data_refs: Vec<(u32, u32)>,
     /// Per-Inst extern symbol references for `Inst::TlsAddr(off)`.
     /// Same shape as `extern_call_refs`; the linker resolves the
-    /// referenced sym to a `SymbolKind::TlsData`'s merged TLS
+    /// referenced symbol to its thread-local object's merged TLS
     /// offset.
     pub extern_tls_refs: Vec<(u32, u32)>,
     /// Per-Inst single-precision marker, parallel to `insts`. `true`
@@ -2935,7 +2931,7 @@ pub(crate) struct FunctionSsa {
     /// plus-alloca count here; every slot reserved afterward by
     /// `alloc_synthetic_local` / `alloc_synthetic_struct` has an offset
     /// magnitude greater than this. The declared/synthetic boundary:
-    /// `ssa_slot_coalesce` confines itself to the synthetic range when
+    /// `slot_coalesce` confines itself to the synthetic range when
     /// debug info is emitted (preserving per-local `DW_OP_fbreg`
     /// locations); without debug info it coalesces the declared range
     /// too. -1 for SSA built outside the walker, which disables coalescing.
@@ -2945,7 +2941,7 @@ pub(crate) struct FunctionSsa {
     /// synthetic aggregate (`alloc_synthetic_struct`). The group occupies
     /// `base_offset ..= base_offset + cells - 1` (base is the lowest
     /// address). Declared groups may overlap a reused slot across disjoint
-    /// scopes. `ssa_slot_coalesce` reserves these so a coalesced scalar never
+    /// scopes. `slot_coalesce` reserves these so a coalesced scalar never
     /// lands on an interior cell, which is referenced by no instruction, and
     /// `passes::sroa` reads them as its candidate set. Empty for SSA built
     /// outside the walker.

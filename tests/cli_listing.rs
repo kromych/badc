@@ -674,7 +674,7 @@ fn the_writer_s_got_load_reads_as_a_load() {
     let src = "extern int counter;\nint *f(void) { return &counter; }\n";
     let l = listing(&dir, "got", src, &["-fPIC"]);
     assert_tiled(&l);
-    assert!(l.contains("movq counter@GOTPCREL(%rip), %rax"), "{l}");
+    assert!(l.contains(" movq\tcounter@GOTPCREL(%rip), %rax\n"), "{l}");
 }
 
 /// `-S -o -` writes the listing to standard output, one per function with
@@ -756,8 +756,8 @@ fn a64_the_writer_s_got_load_reads_as_a_load() {
     let src = "extern int counter;\nint *f(void) { return &counter; }\n";
     let l = listing_for("linux-aarch64", &dir, "got", src, &["-fPIC"]);
     assert_tiled(&l);
-    assert!(l.contains("adrp x0, :got:counter"), "{l}");
-    assert!(l.contains("ldr x0, [x0, :got_lo12:counter]"), "{l}");
+    assert!(l.contains(" adrp\tx0, :got:counter\n"), "{l}");
+    assert!(l.contains(" ldr\tx0, [x0, :got_lo12:counter]\n"), "{l}");
 }
 
 /// The system instructions an inline-asm template's parser encodes itself
@@ -770,12 +770,12 @@ fn a64_parser_encoded_template_instructions_read_as_instructions() {
     let l = listing_for("linux-aarch64", &dir, "sys", src, &[]);
     assert_tiled(&l);
     for text in [
-        "msr DAIFSet, #0x2",
-        "dmb ish",
+        "msr\tDAIFSet, #0x2",
+        "dmb\tish",
         "ssbb",
         "isb",
-        "bti c",
-        "clrex #0x3",
+        "bti\tc",
+        "clrex\t#0x3",
     ] {
         assert!(l.contains(&format!(" {text}\n")), "{text}\n{l}");
     }
@@ -807,7 +807,28 @@ fn a64_alignment_fill_reads_as_no_ops() {
     let l = listing_for("linux-aarch64", &dir, "asm-align", src, &[]);
     assert_tiled(&l);
     let rows = rows(&l);
-    let add2 = rows.iter().find(|r| r.2 == "add w0, w0, #0x2").expect(&l);
+    let add2 = rows.iter().find(|r| r.2 == "add\tw0, w0, #0x2").expect(&l);
     assert_eq!(add2.0 % 32, 0, "{l}");
-    assert!(rows.iter().any(|r| r.2 == ".zero 8" && r.1 == 8), "{l}");
+    assert!(rows.iter().any(|r| r.2 == ".zero\t8" && r.1 == 8), "{l}");
+}
+
+/// A tab, not a space, separates an instruction's mnemonic, prefixes
+/// included, from its operands, so that the operands start in one column;
+/// an instruction with no operand ends at its mnemonic.
+#[test]
+fn a_tab_starts_the_operands() {
+    let dir = TempDir::new("badc-listing-tab");
+    let src = "int f(int *p) { return __atomic_fetch_add(p, 1, __ATOMIC_SEQ_CST); }\n";
+    let l = listing(&dir, "tab", src, &["-O"]);
+    for text in [
+        " movl\t$0x1, %eax\n",
+        " lock xaddl\t%eax, (%rdi)\n",
+        " retq\n",
+    ] {
+        assert!(l.contains(text), "{text:?}\n{l}");
+    }
+    let l = listing_for("linux-aarch64", &dir, "tab", src, &["-O"]);
+    for text in [" ldaddal\tw1, w0, [x0]\n", " ret\n"] {
+        assert!(l.contains(text), "{text:?}\n{l}");
+    }
 }

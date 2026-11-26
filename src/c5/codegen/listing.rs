@@ -419,6 +419,33 @@ mod rows {
         name.strip_prefix('\u{1}').unwrap_or(name)
     }
 
+    /// The prefixes an x86-64 instruction's text spells ahead of its
+    /// mnemonic.
+    const PREFIXES: [&str; 20] = [
+        "lock", "rep", "repe", "repz", "repne", "repnz", "notrack", "bnd", "xacquire", "xrelease",
+        "data16", "data32", "addr32", "rex64", "cs", "ss", "ds", "es", "fs", "gs",
+    ];
+
+    /// `text` with a tab, not a space, between its mnemonic, the prefixes
+    /// ahead of it included, and its first operand, so that operands start
+    /// in one column. A text with no operand, or one whose mnemonic a tab
+    /// already ends, stays as it is.
+    fn operands_tabbed(mut text: String) -> String {
+        let mut at = 0;
+        for word in text.split(' ') {
+            let end = at + word.len();
+            if word.contains('\t') || end == text.len() {
+                return text;
+            }
+            if !PREFIXES.contains(&word) {
+                text.replace_range(end..end + 1, "\t");
+                return text;
+            }
+            at = end + 1;
+        }
+        text
+    }
+
     fn with_addend(name: &str, addend: i64) -> String {
         match addend {
             0 => String::from(name),
@@ -585,7 +612,7 @@ mod rows {
             for _ in col..30 {
                 out.push(' ');
             }
-            let _ = writeln!(out, " {text}");
+            let _ = writeln!(out, " {}", operands_tabbed(text));
             at = to;
         }
         out

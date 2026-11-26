@@ -69,11 +69,18 @@ fn thread_all(func: &mut FunctionSsa, pending: &mut repair::Pending) -> bool {
     let mut preds = predecessors(func);
     let mut succs = successor_lists(&preds);
     let mut changed = false;
+    // Blocks a moved edge left unreachable: their edges are gone from the
+    // lists, as the prune that follows the pass removes the blocks.
+    let mut dead = alloc::vec![false; func.blocks.len()];
     // The scan resumes at a rethread's block rather than restarting,
     // bounded by the block count.
     let mut rethreads = func.blocks.len();
     let mut b = 0;
     'blocks: while b < func.blocks.len() {
+        if dead[b] {
+            b += 1;
+            continue;
+        }
         let Some(site) = site_of(func, pending, &block_of, &preds, b as BlockId) else {
             b += 1;
             continue;
@@ -101,13 +108,31 @@ fn thread_all(func: &mut FunctionSsa, pending: &mut repair::Pending) -> bool {
                 continue;
             }
             let live = live_after(func, &succs, p, site.head, succ);
-            // The line dies: the next round reads the function the prune left.
+            // The line dies with the edge: its phis' readers read the values
+            // `p` fed them, and the scan goes on past it.
             if !live[site.head as usize]
-                && let Some(to) = dying_line(func, pending, &block_of, &site, p, succ, &live)
+                && let Some(to) = dying_line(
+                    func,
+                    pending,
+                    (&block_of, &readers, &dead),
+                    &site,
+                    (p, succ),
+                    &live,
+                )
                 && thread(func, pending, &block_of, &mut readers, &site, p, succ)
             {
-                forward(func, &to);
-                return true;
+                forward(func, &mut readers, &to);
+                move_edge(&mut preds, &mut succs, p, site.head, succ);
+                let died: Vec<usize> = (0..dead.len()).filter(|&d| !live[d] && !dead[d]).collect();
+                for d in died {
+                    dead[d] = true;
+                    for s in core::mem::take(&mut succs[d]) {
+                        preds[s as usize].retain(|&q| q as usize != d);
+                    }
+                }
+                changed = true;
+                b += 1;
+                continue 'blocks;
             }
             if let Some(phis) = &escaping
                 && let Some(homes) = rethread(
@@ -487,10 +512,9 @@ fn decide(func: &FunctionSsa, pending: &repair::Pending, site: &Site, p: BlockId
 fn dying_line(
     func: &FunctionSsa,
     pending: &repair::Pending,
-    block_of: &[BlockId],
+    (block_of, readers, dead): (&[BlockId], &repair::Readers, &[bool]),
     site: &Site,
-    p: BlockId,
-    succ: BlockId,
+    (p, succ): (BlockId, BlockId),
     live: &[bool],
 ) -> Option<Vec<(ValueId, ValueId)>> {
     let mut to = Vec::new();
@@ -500,55 +524,73 @@ fn dying_line(
         };
         to.push((v, incoming.iter().find(|&&(q, _)| q == p)?.1));
     }
-    let dead = |v: ValueId| {
-        block_of
-            .get(v as usize)
-            .is_some_and(|&b| b != BlockId::MAX && !live[b as usize])
-    };
-    let mut reads: Vec<ValueId> = Vec::new();
-    for (b, block) in func.blocks.iter().enumerate().filter(|&(b, _)| live[b]) {
-        for i in pending.values(func, b as BlockId) {
-            match &func.insts[i as usize] {
-                // `succ` takes over the branch block's edge from `p`.
-                Inst::Phi { incoming, .. } => {
-                    reads.extend(incoming.iter().filter_map(|&(q, v)| {
-                        let q = if b as BlockId == succ && q == site.branch {
-                            p
-                        } else {
-                            q
-                        };
-                        live[q as usize].then_some(v)
-                    }))
-                }
-                inst => inst.for_each_operand(|v| reads.push(v)),
-            }
-        }
-        block.terminator.for_each_operand(|v| reads.push(v));
-        reads.push(block.exit_acc);
-    }
+    let lives = |b: BlockId| b != BlockId::MAX && live[b as usize];
     let mut wide = None;
-    for v in reads.into_iter().filter(|&v| dead(v)) {
-        let &(phi, w) = to.iter().find(|&&(phi, _)| phi == v)?;
-        if !reads_alike(func, &mut wide, phi, w) {
-            return None;
+    // The reads, from the blocks that live, of each value the blocks dying
+    // with the edge define; a block dead before reads and is read by none.
+    for d in (0..live.len()).filter(|&d| !live[d] && !dead[d]) {
+        for v in pending.values(func, d as BlockId) {
+            for &reader in readers.of(v) {
+                let reads = match reader {
+                    repair::Reader::End(b) => {
+                        let block = &func.blocks[b as usize];
+                        let mut reads = block.exit_acc == v;
+                        block.terminator.for_each_operand(|w| reads |= w == v);
+                        lives(b) && reads
+                    }
+                    repair::Reader::Inst(i) => {
+                        let b = block_of[i as usize];
+                        match &func.insts[i as usize] {
+                            _ if !lives(b) => false,
+                            // `succ` takes over the branch block's edge from `p`.
+                            Inst::Phi { incoming, .. } => incoming.iter().any(|&(q, w)| {
+                                let q = if b == succ && q == site.branch { p } else { q };
+                                w == v && live[q as usize]
+                            }),
+                            inst => {
+                                let mut reads = false;
+                                inst.for_each_operand(|w| reads |= w == v);
+                                reads
+                            }
+                        }
+                    }
+                };
+                if !reads {
+                    continue;
+                }
+                let &(phi, w) = to.iter().find(|&&(phi, _)| phi == v)?;
+                if !reads_alike(func, &mut wide, phi, w) {
+                    return None;
+                }
+            }
         }
     }
     Some(to)
 }
 
 /// Point every reader of each phi in `to` at its value.
-fn forward(func: &mut FunctionSsa, to: &[(ValueId, ValueId)]) {
+fn forward(func: &mut FunctionSsa, readers: &mut repair::Readers, to: &[(ValueId, ValueId)]) {
     let map = |v: &mut ValueId| {
         if let Some(&(_, w)) = to.iter().find(|&&(phi, _)| phi == *v) {
             *v = w;
         }
     };
-    for inst in func.insts.iter_mut() {
-        inst.for_each_operand_mut(map);
+    let mut at: BTreeSet<repair::Reader> = BTreeSet::new();
+    for &(phi, _) in to {
+        at.extend(readers.of(phi).iter().copied());
     }
-    for block in func.blocks.iter_mut() {
-        map(&mut block.exit_acc);
-        block.terminator.for_each_operand_mut(map);
+    for reader in at {
+        match reader {
+            repair::Reader::Inst(i) => func.insts[i as usize].for_each_operand_mut(map),
+            repair::Reader::End(b) => {
+                let block = &mut func.blocks[b as usize];
+                map(&mut block.exit_acc);
+                block.terminator.for_each_operand_mut(map);
+            }
+        }
+        for &(_, w) in to {
+            readers.add(w, reader);
+        }
     }
 }
 

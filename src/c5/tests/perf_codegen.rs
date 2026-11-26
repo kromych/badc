@@ -5753,6 +5753,37 @@ fn many_rethreaded_branches_take_one_tape_rewrite() {
     assert!(o < o0 * 10, "-O took {o:?} against -O0's {o0:?}");
 }
 
+/// The best-of-three times of compiling `src` at `-O0` and at `-O`.
+fn o0_and_o_times(src: &str) -> (std::time::Duration, std::time::Duration) {
+    let best = |optimize: bool| {
+        (0..3)
+            .map(|_| {
+                let start = std::time::Instant::now();
+                object_at(src, Target::LinuxX64, optimize);
+                start.elapsed()
+            })
+            .min()
+            .expect("three runs")
+    };
+    (best(false), best(true))
+}
+
+/// A thousand run-once loops: threading each loop's entry past its test
+/// retires the loop, whose phis' readers then read the entry values. The
+/// pass goes on past each retired loop, so `-O` stays within a small
+/// multiple of `-O0`.
+#[test]
+fn many_retired_run_once_loops_take_one_threading_pass() {
+    use core::fmt::Write;
+    let mut src = String::from("int f(int a) {\n    int s = 0;\n");
+    for i in 0..1000 {
+        let _ = writeln!(src, "    for (int done = 0; !done; done = 1) s += a + {i};");
+    }
+    src.push_str("    return s;\n}\n");
+    let (o0, o) = o0_and_o_times(&src);
+    assert!(o < o0 * 15, "-O took {o:?} against -O0's {o0:?}");
+}
+
 /// A function calling an always-inline body of two blocks thousands of
 /// times compiles within a small multiple of the same function calling it
 /// out of line: the splices of a round take one rebuild of the caller, not

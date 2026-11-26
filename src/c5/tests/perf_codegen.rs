@@ -5722,66 +5722,81 @@ int f(const unsigned char *p, int n) {\n\
     assert!(!ws[first].iter().any(|&w| adrp(w)), "{ws:08x?}");
 }
 
-/// A thousand branches on a merged constant whose value is also read past
-/// the branch: threading each predecessor past its merge places a phi
-/// where the value's two definitions meet. The placed phis take one tape
-/// rewrite per pass, not one each, so `-O` stays within a small multiple
-/// of `-O0`. Best of three runs.
+/// How much more thread CPU time compiling `source(large)` takes than
+/// `source(small)`: four rounds alternate the two, the small one compiled
+/// `large / small` times a round, and the sums compare, so linear work
+/// comes out near that ratio and work quadratic in the input near its
+/// square. The thread's clock leaves out the time spent waiting for a core.
+#[cfg(not(debug_assertions))]
+fn compile_growth(
+    source: impl Fn(usize) -> String,
+    (small, large): (usize, usize),
+    optimize: bool,
+) -> f64 {
+    use super::thread_cpu_time;
+    use core::time::Duration;
+    let (a, b) = (source(small), source(large));
+    let times = (large / small) as u32;
+    let cost = |src: &str, reps: u32| {
+        let start = thread_cpu_time();
+        for _ in 0..reps {
+            object_at(src, Target::LinuxX64, optimize);
+        }
+        thread_cpu_time() - start
+    };
+    let (mut ta, mut tb) = (Duration::ZERO, Duration::ZERO);
+    for _ in 0..4 {
+        ta += cost(&a, times);
+        tb += cost(&b, 1);
+    }
+    assert!(!ta.is_zero(), "no measurable compile time to compare");
+    tb.as_secs_f64() * f64::from(times) / ta.as_secs_f64()
+}
+
+/// Branches on a merged constant whose value is also read past the
+/// branch: threading each predecessor past its merge places a phi where
+/// the value's two definitions meet. The placed phis take one tape rewrite
+/// per pass, not one each, so eight times the branches take under 24 times
+/// the compile's thread CPU time at `-O`.
 #[test]
+#[cfg(not(debug_assertions))]
 fn many_rethreaded_branches_take_one_tape_rewrite() {
     use core::fmt::Write;
-    let mut src = String::from("int f(int a, int b) {\n    int s = 0;\n");
-    for i in 0..1000 {
-        let _ = writeln!(
-            src,
-            "    {{ int c = a > {i} ? 1 : 2; if (b) c = 3; \
-             if (c == 1) s += {i}; else s -= {i}; s ^= c; }}"
-        );
-    }
-    src.push_str("    return s;\n}\n");
-    let best = |optimize: bool| {
-        (0..3)
-            .map(|_| {
-                let start = std::time::Instant::now();
-                object_at(&src, Target::LinuxX64, optimize);
-                start.elapsed()
-            })
-            .min()
-            .expect("three runs")
+    let source = |n: usize| {
+        let mut src = String::from("int f(int a, int b) {\n    int s = 0;\n");
+        for i in 0..n {
+            let _ = writeln!(
+                src,
+                "    {{ int c = a > {i} ? 1 : 2; if (b) c = 3; \
+                 if (c == 1) s += {i}; else s -= {i}; s ^= c; }}"
+            );
+        }
+        src + "    return s;\n}\n"
     };
-    let (o0, o) = (best(false), best(true));
-    assert!(o < o0 * 10, "-O took {o:?} against -O0's {o0:?}");
+    let growth = compile_growth(source, (250, 2000), true);
+    assert!(
+        growth < 24.0,
+        "8x the branches took {growth:.1}x the CPU time"
+    );
 }
 
-/// The best-of-three times of compiling `src` at `-O0` and at `-O`.
-fn o0_and_o_times(src: &str) -> (std::time::Duration, std::time::Duration) {
-    let best = |optimize: bool| {
-        (0..3)
-            .map(|_| {
-                let start = std::time::Instant::now();
-                object_at(src, Target::LinuxX64, optimize);
-                start.elapsed()
-            })
-            .min()
-            .expect("three runs")
-    };
-    (best(false), best(true))
-}
-
-/// A thousand run-once loops: threading each loop's entry past its test
-/// retires the loop, whose phis' readers then read the entry values. The
-/// pass goes on past each retired loop, so `-O` stays within a small
-/// multiple of `-O0`.
+/// Run-once loops: threading each loop's entry past its test retires the
+/// loop, whose phis' readers then read the entry values. The pass goes on
+/// past each retired loop, so eight times the loops take under 24 times
+/// the compile's thread CPU time at `-O`.
 #[test]
+#[cfg(not(debug_assertions))]
 fn many_retired_run_once_loops_take_one_threading_pass() {
     use core::fmt::Write;
-    let mut src = String::from("int f(int a) {\n    int s = 0;\n");
-    for i in 0..1000 {
-        let _ = writeln!(src, "    for (int done = 0; !done; done = 1) s += a + {i};");
-    }
-    src.push_str("    return s;\n}\n");
-    let (o0, o) = o0_and_o_times(&src);
-    assert!(o < o0 * 15, "-O took {o:?} against -O0's {o0:?}");
+    let source = |n: usize| {
+        let mut src = String::from("int f(int a) {\n    int s = 0;\n");
+        for i in 0..n {
+            let _ = writeln!(src, "    for (int done = 0; !done; done = 1) s += a + {i};");
+        }
+        src + "    return s;\n}\n"
+    };
+    let growth = compile_growth(source, (250, 2000), true);
+    assert!(growth < 24.0, "8x the loops took {growth:.1}x the CPU time");
 }
 
 /// A call drops the operand-free values of the block's value cache, and
@@ -5991,104 +6006,90 @@ fn threaded_edges_settle_reachability_per_component() {
     }
 }
 
-/// A chain of a thousand loads from a constant table, each indexed by the
-/// one before, folds in one sweep: a load whose index a folded load gives
-/// folds in the same sweep, so `-O` stays within a small multiple of
-/// `-O0` and the function returns a constant.
+/// A chain of loads from a constant table, each indexed by the one
+/// before, folds in one sweep: a load whose index a folded load gives
+/// folds in the same sweep, so eight times the chain takes under 24 times
+/// the compile's thread CPU time at `-O`, and the function returns a
+/// constant.
 #[test]
+#[cfg(not(debug_assertions))]
 fn a_chain_of_constant_table_loads_folds_in_one_sweep() {
     use core::fmt::Write;
-    const N: usize = 1000;
-    let table: Vec<String> = (0..=N).map(|i| ((i + 1) % (N + 1)).to_string()).collect();
-    let mut src = alloc::format!(
-        "static const int t[{}] = {{{}}};\nint f(void) {{\n    int v = t[0];\n",
-        N + 1,
-        table.join(",")
-    );
-    for _ in 0..N {
-        let _ = writeln!(src, "    v = t[v];");
-    }
-    src.push_str("    return v;\n}\n");
-    let (o0, o) = o0_and_o_times(&src);
-    assert!(o < o0 * 10, "-O took {o:?} against -O0's {o0:?}");
-    let loads = x64(&src, "f").iter().filter(|i| i.op == 0x8B).count();
+    let source = |n: usize| {
+        let table: Vec<String> = (0..=n).map(|i| ((i + 1) % (n + 1)).to_string()).collect();
+        let mut src = alloc::format!(
+            "static const int t[{}] = {{{}}};\nint f(void) {{\n    int v = t[0];\n",
+            n + 1,
+            table.join(",")
+        );
+        for _ in 0..n {
+            let _ = writeln!(src, "    v = t[v];");
+        }
+        src + "    return v;\n}\n"
+    };
+    let growth = compile_growth(source, (125, 1000), true);
+    assert!(growth < 24.0, "8x the chain took {growth:.1}x the CPU time");
+    let loads = x64(&source(1000), "f")
+        .iter()
+        .filter(|i| i.op == 0x8B)
+        .count();
     assert_eq!(loads, 0, "every load folds");
 }
 
-/// A function calling an always-inline body of two blocks thousands of
-/// times compiles within a small multiple of the same function calling it
-/// out of line: the splices of a round take one rebuild of the caller, not
-/// one each. At `-O0`, where only the mandatory splices run. Best of three.
+/// A function calling an always-inline body of two blocks many times: the
+/// splices of a round take one rebuild of the caller, not one each, so
+/// eight times the calls take under 24 times the compile's thread CPU time
+/// at `-O0`, where only the mandatory splices run.
 #[test]
+#[cfg(not(debug_assertions))]
 fn many_multi_block_splices_compile_in_time_linear_in_their_number() {
     use core::fmt::Write;
-    const N: usize = 2000;
-    let src = |attr: &str| {
-        let mut s = alloc::format!(
-            "static inline __attribute__(({attr})) int helper(int x) \
-             {{ if (x > 3) return x * 2; return x + 1; }}\n\
-             int f(int a) {{\n    int s = 0;\n"
+    let source = |n: usize| {
+        let mut s = String::from(
+            "static inline __attribute__((always_inline)) int helper(int x) \
+             { if (x > 3) return x * 2; return x + 1; }\n\
+             int f(int a) {\n    int s = 0;\n",
         );
-        for i in 0..N {
+        for i in 0..n {
             let _ = writeln!(s, "    s += helper(a + {i});");
         }
-        s.push_str("    return s;\n}\n");
-        s
+        s + "    return s;\n}\n"
     };
-    let (spliced, called) = (src("always_inline"), src("noinline"));
-    let best = |src: &str| {
-        (0..3)
-            .map(|_| {
-                let start = std::time::Instant::now();
-                object_at(src, Target::LinuxX64, false);
-                start.elapsed()
-            })
-            .min()
-            .expect("three runs")
-    };
-    let (inlined, out_of_line) = (best(&spliced), best(&called));
-    assert!(
-        inlined < out_of_line * 6,
-        "{inlined:?} spliced against {out_of_line:?} called"
-    );
-    let calls = x64_at(&spliced, "f", false)
-        .iter()
+    let growth = compile_growth(source, (250, 2000), false);
+    assert!(growth < 24.0, "8x the calls took {growth:.1}x the CPU time");
+    let calls = (x64_at(&source(2000), "f", false).iter())
         .filter(|i| i.op == 0xE8)
         .count();
     assert_eq!(calls, 0, "every call is spliced");
 }
 
-/// A function of thousands of conditional updates, each a branch
-/// if-conversion turns into a select, compiles at `-O` within a small
-/// multiple of its `-O0` time: the conversions take one sweep and one tape
-/// rewrite, not a pass over the function each. Best of three runs.
+/// A function of conditional updates, each a branch if-conversion turns
+/// into a select: the conversions take one sweep and one tape rewrite,
+/// not a pass over the function each, so eight times the updates take
+/// under 24 times the compile's thread CPU time at `-O`.
 #[test]
+#[cfg(not(debug_assertions))]
 fn many_convertible_branches_compile_in_time_linear_in_their_number() {
     use core::fmt::Write;
     const N: usize = 3000;
-    let mut src = String::from("long f(long a, long b) {\n    long x = 0;\n");
-    for i in 0..N {
-        let _ = if i % 2 == 1 {
-            writeln!(src, "    if (a > {i}) x += {};", i % 7 + 1)
-        } else {
-            writeln!(src, "    if (b < {i}) x -= {};", i % 5 + 1)
-        };
-    }
-    src.push_str("    return x;\n}\n");
-    let best = |optimize: bool| {
-        (0..3)
-            .map(|_| {
-                let start = std::time::Instant::now();
-                object_at(&src, Target::LinuxX64, optimize);
-                start.elapsed()
-            })
-            .min()
-            .expect("three runs")
+    let source = |n: usize| {
+        let mut src = String::from("long f(long a, long b) {\n    long x = 0;\n");
+        for i in 0..n {
+            let _ = if i % 2 == 1 {
+                writeln!(src, "    if (a > {i}) x += {};", i % 7 + 1)
+            } else {
+                writeln!(src, "    if (b < {i}) x -= {};", i % 5 + 1)
+            };
+        }
+        src + "    return x;\n}\n"
     };
-    let (o0, o) = (best(false), best(true));
-    assert!(o < o0 * 10, "-O took {o:?} against -O0's {o0:?}");
+    let growth = compile_growth(source, (N / 8, N), true);
+    assert!(
+        growth < 24.0,
+        "8x the updates took {growth:.1}x the CPU time"
+    );
     let cmov = |i: &&X64Insn| matches!(i.op, 0x0F40..=0x0F4F);
-    assert_eq!(x64(&src, "f").iter().filter(cmov).count(), N);
+    assert_eq!(x64(&source(N), "f").iter().filter(cmov).count(), N);
 }
 
 /// A computed-goto dispatch is a cycle entered at every label, no natural

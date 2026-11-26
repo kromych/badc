@@ -18,10 +18,9 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    QUAL_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_BIT, is_floating_scalar, is_long_double_scalar,
-    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct,
-    pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
-    usual_arith_common_ty,
+    UNSIGNED_BIT, is_floating_scalar, is_long_double_scalar, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_type_start_token, pointee_size_no_struct, pointee_ty, strip_unsigned,
+    struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
 
@@ -530,7 +529,7 @@ impl Compiler {
             };
             let elem = self.vectorize_innermost(field.ty, n)?;
             let agg = self.array_agg_type(elem, &dims);
-            return Ok((agg + levels) | (ty & (VOLATILE_BIT | QUAL_PTR_LVL_MASK)));
+            return Ok((agg + levels) | super::types::ptr_quals_over_array(ty, 0));
         }
         let elem = base & !DERIVATION_QUAL_MASK;
         use super::diag::Operand;

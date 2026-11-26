@@ -2,7 +2,8 @@
 // windows-msvc triple: the pointer it follows is 4 bytes, sign-extended to
 // 64 bits when it widens and truncated when it narrows; converted to a
 // wider integer it is its 32 bits. Layouts, a pointer to one, arrays,
-// members and static integer-constant initializers follow. Each failed
+// a pointer to an array, members and static integer-constant initializers
+// follow. Each failed
 // check sets its bit; off the PE targets the unit checks nothing.
 
 #ifdef _WIN32
@@ -42,6 +43,11 @@ int main(void) {
     bad |= ((long long)(int *)table[1] != 0x20 || (long long)(int *)table[2] != -4) << 10;
     int *wide = (int *)(long long)0x123456789LL;
     bad |= ((long long)widen(narrow(wide)) != 0x23456789) << 11;
+    // A 32-bit pointer to an array, alone and as an element.
+    int (* __ptr32 rows[2])[4] = { 0, (int (* __ptr32)[4])(long long)-32 };
+    int (* __ptr32 *rp)[4] = &rows[1];
+    bad |= (sizeof(int (* __ptr32)[4]) != 4 || sizeof rows != 8) << 12;
+    bad |= ((long long)(int (*)[4])*rp != -32 || (char *)(rp + 1) - (char *)rp != 4) << 13;
     return bad;
 }
 #else

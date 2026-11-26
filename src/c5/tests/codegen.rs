@@ -13402,6 +13402,53 @@ fn packed_bitfield_accesses_stay_inside_the_object() {
     }
 }
 
+/// A named address space after the `*` of a pointer to an array qualifies
+/// that pointer object, so reading or writing the pointer rides the
+/// segment and the array's elements do not: through a typedef, spelled
+/// out, two-dimensional, variable-length, and as a global.
+#[test]
+fn a_segment_on_a_pointer_to_an_array_rides_that_pointer() {
+    use crate::c5::ir::{AsmSeg, Inst};
+    const SRC: &str = "typedef int A[4];\n\
+        int a1(A *__seg_gs *pp) { return (**pp)[1]; }\n\
+        int a2(A *__seg_fs *pp) { return (**pp)[1]; }\n\
+        int a3(int (*__seg_gs *pp)[2][3]) { return (**pp)[1][2]; }\n\
+        int a4(int n, int (*__seg_gs *pp)[n]) { return (**pp)[1]; }\n\
+        extern A *__seg_gs g;\n\
+        int a5(void) { return (*g)[1]; }\n\
+        void a6(A *__seg_fs *pp, A *q) { *pp = q; }\n";
+    let program = crate::Compiler::with_options(
+        SRC.into(),
+        crate::Target::LinuxX64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        crate::Target::LinuxX64,
+        true,
+        true,
+    )
+    .expect("ssa");
+    for (name, want) in [
+        ("a1", AsmSeg::Gs),
+        ("a2", AsmSeg::Fs),
+        ("a3", AsmSeg::Gs),
+        ("a4", AsmSeg::Gs),
+        ("a5", AsmSeg::Gs),
+        ("a6", AsmSeg::Fs),
+    ] {
+        let func = funcs.iter().find(|g| g.name == name).expect("function");
+        let seg = (func.insts.iter())
+            .filter(|i| {
+                matches!(i, Inst::SegLoad { seg, .. } | Inst::SegStore { seg, .. } if *seg == want)
+            })
+            .count();
+        assert_eq!(seg, 1, "{name}: {:?}", func.insts);
+    }
+}
+
 /// A bit-field in a unit wider than 8 bytes is read, written and updated
 /// through its named address space, every piece of the unit riding the
 /// segment. A 128-bit value read there is rejected, as any 128-bit access

@@ -1766,7 +1766,7 @@ impl Compiler {
                 );
             }
             let declared = self.symbols[vm.sym].type_;
-            let quals = declared & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK);
+            let quals = super::types::ptr_quals_over_array(declared, 0);
             self.symbols[vm.sym].type_ = (vla_ty + vm.levels * Ty::Ptr as i64) | quals;
         }
         self.restore_lex(resume);

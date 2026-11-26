@@ -564,69 +564,115 @@ fn fixture_flags(src: &str, target: &str) -> Vec<String> {
     flags
 }
 
+/// The corpora the listings are checked over: a target and the flags the
+/// fixtures compile with beyond their own. The optimizing one goes first,
+/// as its fixtures take the longest to compile.
+const CORPORA: [(&str, &[&str]); 5] = [
+    ("linux-x64", &["-O"]),
+    ("linux-x64", &[]),
+    ("windows-x64", &[]),
+    ("linux-aarch64", &[]),
+    ("windows-arm64", &[]),
+];
+
+/// The fixtures one llvm-objdump run decodes.
+const CHUNK: usize = 8;
+
+/// llvm-objdump's output for each of `objs`, in the order it decoded them.
+fn per_object<'a>(text: &'a str, objs: &[PathBuf]) -> Vec<&'a str> {
+    let starts: Vec<usize> = (objs.iter())
+        .map(|o| {
+            let head = format!("{}:\tfile format", o.display());
+            text.find(&head).unwrap_or_else(|| panic!("no `{head}`"))
+        })
+        .chain([text.len()])
+        .collect();
+    starts.windows(2).map(|w| &text[w[0]..w[1]]).collect()
+}
+
 /// Compare the listing with the object for every snapshot fixture `-c`
-/// compiles under `target` and `extra`; returns (compared, issues).
-fn corpus(tool: &str, target: &str, extra: &[&str]) -> (usize, Vec<String>) {
+/// compiles in each of [`CORPORA`]; returns (compared, issues) by corpus.
+fn corpora(tool: &str) -> Vec<(usize, Vec<String>)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/c");
-    let mut fixtures: Vec<PathBuf> = std::fs::read_dir(&root)
+    let mut fixtures: Vec<(u64, PathBuf)> = std::fs::read_dir(&root)
         .unwrap()
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().is_some_and(|e| e == "c"))
+        .map(|p| (std::fs::metadata(&p).map_or(0, |m| m.len()), p))
         .collect();
-    fixtures.sort();
-    let dir = TempDir::new(&format!("badc-listing-{target}-{}", extra.len()));
+    // The larger sources first, so that the run does not end on a long
+    // compile.
+    fixtures.sort_by(|a, b| b.cmp(a));
+    let fixtures: Vec<PathBuf> = fixtures.into_iter().map(|(_, p)| p).collect();
+    let dir = TempDir::new("badc-listing-corpora");
+    let tasks: Vec<(usize, &[PathBuf])> = (0..CORPORA.len())
+        .flat_map(|c| fixtures.chunks(CHUNK).map(move |chunk| (c, chunk)))
+        .collect();
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let results = std::sync::Mutex::new((0usize, Vec::new()));
+    let results = std::sync::Mutex::new(vec![(0usize, Vec::new()); CORPORA.len()]);
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
     std::thread::scope(|s| {
         for _ in 0..workers {
             s.spawn(|| {
-                loop {
-                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some(fx) = fixtures.get(i) else {
-                        break;
-                    };
-                    let src = std::fs::read_to_string(fx).unwrap_or_default();
-                    let stem = dir.join(fx.file_stem().unwrap());
-                    let (obj, asm) = (stem.with_extension("o"), stem.with_extension("s"));
-                    let run = |mode: &str, out: &Path| {
-                        badc()
-                            .arg(format!("--target={target}"))
-                            .arg("-q")
-                            .args(extra)
-                            .args(fixture_flags(&src, target))
-                            .arg(fx)
-                            .args([mode, "-o"])
-                            .arg(out)
-                            .output()
-                            .unwrap()
-                    };
-                    // A fixture the target does not compile has no object.
-                    if !run("-c", &obj).status.success() {
-                        continue;
+                while let Some(&(c, chunk)) =
+                    tasks.get(next.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+                {
+                    let (target, extra) = CORPORA[c];
+                    let (mut compiled, mut issues, mut built) = (0, Vec::new(), Vec::new());
+                    for fx in chunk {
+                        let src = std::fs::read_to_string(fx).unwrap_or_default();
+                        let stem = dir.join(format!("{c}-{}", fx.file_stem().unwrap().display()));
+                        let (obj, asm) = (stem.with_extension("o"), stem.with_extension("s"));
+                        let run = |mode: &str, out: &Path| {
+                            badc()
+                                .arg(format!("--target={target}"))
+                                .arg("-q")
+                                .args(extra)
+                                .args(fixture_flags(&src, target))
+                                .arg(fx)
+                                .args([mode, "-o"])
+                                .arg(out)
+                                .stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::piped())
+                                .spawn()
+                                .unwrap()
+                        };
+                        let (to_obj, to_asm) = (run("-c", &obj), run("-S", &asm));
+                        let to_obj = to_obj.wait_with_output().unwrap();
+                        let out = to_asm.wait_with_output().unwrap();
+                        // A fixture the target does not compile has no object.
+                        if !to_obj.status.success() {
+                            continue;
+                        }
+                        compiled += 1;
+                        let name = fx.file_name().unwrap().to_string_lossy().into_owned();
+                        if out.status.success() {
+                            built.push((name, obj, asm));
+                        } else {
+                            let err = String::from_utf8_lossy(&out.stderr);
+                            issues.push(format!("{name}: -S failed: {err}"));
+                        }
                     }
-                    let name = fx.file_name().unwrap().to_string_lossy().into_owned();
-                    let out = run("-S", &asm);
-                    let issues = if out.status.success() {
+                    if !built.is_empty() {
+                        let objs: Vec<PathBuf> = built.iter().map(|b| b.1.clone()).collect();
                         let dis = Command::new(tool)
                             .args(["-dr", "-t"])
-                            .arg(&obj)
+                            .args(&objs)
                             .output()
                             .unwrap();
-                        compare(
-                            &std::fs::read_to_string(&asm).unwrap(),
-                            &String::from_utf8_lossy(&dis.stdout),
-                            target.ends_with("arm64") || target.ends_with("aarch64"),
-                        )
-                    } else {
-                        vec![format!(
-                            "-S failed: {}",
-                            String::from_utf8_lossy(&out.stderr)
-                        )]
-                    };
+                        let dis = String::from_utf8_lossy(&dis.stdout);
+                        for ((name, _, asm), dis) in built.iter().zip(per_object(&dis, &objs)) {
+                            let found = compare(
+                                &std::fs::read_to_string(asm).unwrap(),
+                                dis,
+                                target.ends_with("arm64") || target.ends_with("aarch64"),
+                            );
+                            issues.extend(found.into_iter().map(|i| format!("{name}: {i}")));
+                        }
+                    }
                     let mut r = results.lock().unwrap();
-                    r.0 += 1;
-                    r.1.extend(issues.into_iter().map(|i| format!("{name}: {i}")));
+                    r[c].0 += compiled;
+                    r[c].1.extend(issues);
                 }
             });
         }
@@ -640,14 +686,7 @@ fn every_listed_instruction_is_the_one_the_object_holds() {
         eprintln!("skipped: no LLVM objdump on PATH");
         return;
     };
-    for (target, extra) in [
-        ("linux-x64", &[][..]),
-        ("linux-x64", &["-O"][..]),
-        ("windows-x64", &[][..]),
-        ("linux-aarch64", &[][..]),
-        ("windows-arm64", &[][..]),
-    ] {
-        let (compared, issues) = corpus(tool, target, extra);
+    for ((target, extra), (compared, issues)) in CORPORA.iter().zip(corpora(tool)) {
         assert!(
             compared > 1000,
             "{target} {extra:?}: {compared} fixtures compiled"

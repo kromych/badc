@@ -106,6 +106,31 @@ fn memory_only_constraint_stays_memory() {
     assert_eq!(inp("m").map(|(k, _)| k), Some(AsmConstraint::Mem));
 }
 
+/// A matching constraint is its whole decimal number: `10` ties the input
+/// to output 10 of 11, and an index past the last output is diagnosed.
+#[test]
+fn a_matching_constraint_is_its_whole_number() {
+    let input = |c: &str| crate::Compiler::parse_asm_constraint(c, false, 11, true);
+    assert_eq!(input("10"), Some((AsmConstraint::Match(10), false)));
+    assert_eq!(input("1"), Some((AsmConstraint::Match(1), false)));
+    assert_eq!(input("11"), None);
+    let src = "int main(void) { long a = 0, b = 1; \
+               __asm__ volatile(\"\" : \"+r\"(a) : \"12\"(b)); return (int)a; }";
+    let err = crate::Compiler::with_options(
+        src.to_string(),
+        crate::Target::LinuxX64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(
+        err.contains("matching constraint `12` names no output: the last is 0"),
+        "{err}"
+    );
+}
+
 #[test]
 fn read_write_flag_tracks_the_plus_modifier() {
     assert_eq!(out("=rm"), Some((AsmConstraint::Reg, false)));

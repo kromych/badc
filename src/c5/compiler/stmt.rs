@@ -1969,10 +1969,20 @@ impl Compiler {
                     Some(c) => c,
                     None => {
                         self.truncate_data(data_base);
-                        return Err(self.compile_err(
-                            Code::UNSUPPORTED,
-                            alloc::format!("inline asm: unsupported constraint `{cstr}`"),
-                        ));
+                        let text = match matching_index(cstr) {
+                            Some(_) if !is_output => match n_outputs.checked_sub(1) {
+                                Some(last) => alloc::format!(
+                                    "inline asm: matching constraint `{cstr}` names no output: \
+                                     the last is {last}"
+                                ),
+                                None => alloc::format!(
+                                    "inline asm: matching constraint `{cstr}` in a statement \
+                                     with no outputs"
+                                ),
+                            },
+                            _ => alloc::format!("inline asm: unsupported constraint `{cstr}`"),
+                        };
+                        return Err(self.compile_err(Code::UNSUPPORTED, text));
                     }
                 };
             if self.lex.tk != '(' {
@@ -2779,12 +2789,11 @@ impl Compiler {
             return Some((AsmConstraint::Fixed(0), is_rw));
         }
         // A matching constraint ties an input to an earlier output.
-        if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {
-            let idx = d as u8 - b'0';
-            if (idx as usize) < n_outputs {
-                return Some((AsmConstraint::Match(idx), is_rw));
-            }
-            return None;
+        if let Some(idx) = matching_index(body) {
+            return (idx < n_outputs)
+                .then(|| u8::try_from(idx).ok())
+                .flatten()
+                .map(|idx| (AsmConstraint::Match(idx), is_rw));
         }
         // Fixed-register class letters.
         let fixed = |c: char| -> Option<u8> {
@@ -4016,4 +4025,15 @@ enum AsmListPos {
     SectionStart,
     AfterOperand,
     AfterComma,
+}
+
+/// The output a matching constraint names: the decimal number its digits
+/// spell, all of them.
+fn matching_index(body: &str) -> Option<usize> {
+    let start = body.find(|c: char| c.is_ascii_digit())?;
+    let digits = &body[start..];
+    let end = digits
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(digits.len());
+    Some(digits[..end].parse().unwrap_or(usize::MAX))
 }

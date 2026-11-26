@@ -5722,6 +5722,23 @@ int f(const unsigned char *p, int n) {\n\
     assert!(!ws[first].iter().any(|&w| adrp(w)), "{ws:08x?}");
 }
 
+/// A computed-goto dispatch is a cycle entered at every label, no natural
+/// loop. The table address its dispatches read is set once, ahead of the
+/// cycle, where the entry's own dispatch reads it too.
+#[test]
+fn computed_goto_dispatch_sets_its_table_address_once() {
+    const SRC: &str = "int run(const unsigned char *pc, int acc) {\n\
+    static void *const t[] = {&&add, &&sub, &&dbl, &&halt};\n\
+    goto *t[*pc++];\n\
+add: acc += *pc++; goto *t[*pc++];\n\
+sub: acc -= *pc++; goto *t[*pc++];\n\
+dbl: acc *= 2; goto *t[*pc++];\n\
+halt: return acc;\n}\n";
+    let adrp = |w: &&u32| **w & 0x9F00_0000 == 0x9000_0000;
+    let ws = a64(SRC, "run");
+    assert_eq!(ws.iter().filter(adrp).count(), 1, "{ws:08x?}");
+}
+
 /// A select or a branch on an `int` parameter tests its low word, so the
 /// parameter takes no entry sign extension; one the function also reads
 /// at 64 bits keeps it.

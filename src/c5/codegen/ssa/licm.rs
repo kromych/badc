@@ -16,14 +16,12 @@
 //! binop over a hoisted `Inst::Imm`, which puts it on the path above --
 //! one mechanism covers both shapes.
 //!
-//! Destination: the immediate dominator of the header of the outermost
-//! loop containing the site, taken repeatedly until the destination
-//! itself is in no loop. That block dominates the header, the header
-//! dominates every block of a natural loop, and dominance is
-//! transitive, so it dominates every site and every predecessor an
-//! edge use of a site sits on. After `passes::split_crit_edges` a
-//! single-entry loop's header has a dedicated predecessor, which is
-//! what the immediate dominator resolves to.
+//! Destination: the nearest dominator of the site that lies on no cycle
+//! of the control flow graph. It dominates every site and every
+//! predecessor an edge use of a site sits on, and runs once per entry
+//! into the outermost cycle holding the site: a natural loop, whose
+//! header's immediate dominator it is after `passes::split_crit_edges`,
+//! or a cycle with several entries, such as a computed-goto dispatch.
 //!
 //! Placement is measured, not assumed: a hoist lengthens a live range
 //! across the whole loop, so the function is allocated a second time
@@ -70,7 +68,7 @@ use super::{FixedRegs, Target};
 use crate::c5::codegen::passes::drop_redundant_extend::{
     compute_high_clear, compute_high_observed,
 };
-use crate::c5::codegen::passes::layout::{natural_loops, rpo_numbers};
+use crate::c5::codegen::passes::layout::{natural_loops, on_cycles, rpo_numbers};
 
 const NO_BLOCK: BlockId = BlockId::MAX;
 /// `extern_*_refs` sentinel for an instruction with no bound symbol.
@@ -199,7 +197,13 @@ pub(super) fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     if range.contains(&cond) {
         at = at.min(cond);
     }
-    let blocked = (at..range.end).any(|i| {
+    may_precede(func, b, at).then_some(at)
+}
+
+/// Whether a copy may go ahead of `at` in block `b`, by the rules of
+/// [`insert_point`].
+fn may_precede(func: &FunctionSsa, b: BlockId, at: ValueId) -> bool {
+    !(at..func.blocks[b as usize].inst_range.end).any(|i| {
         matches!(
             func.insts[i as usize],
             Inst::Phi { .. }
@@ -208,51 +212,34 @@ pub(super) fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
                 | Inst::RetPart { .. }
                 | Inst::AsmOut { .. }
         )
-    });
-    if blocked { None } else { Some(at) }
+    })
 }
 
 /// Destination block per block: where a materialization in it hoists
-/// to, or [`NO_BLOCK`] when it is in no loop or no destination exists.
+/// to, or [`NO_BLOCK`] when it is on no cycle or no destination exists.
 fn destinations(func: &FunctionSsa) -> Vec<BlockId> {
     let n = func.blocks.len();
     let mut dest = vec![NO_BLOCK; n];
     if n < 2 {
         return dest;
     }
-    let idom = dominators(func);
-    let preds = predecessors(func);
-    let rpo = rpo_numbers(func);
-    let loops = natural_loops(func, &idom, &preds, &rpo);
-    if loops.is_empty() {
+    let cyclic = on_cycles(func);
+    if !cyclic.contains(&true) {
         return dest;
     }
-    // Outermost loop containing each block. Two natural loops are
-    // disjoint or nested once loops sharing a header are merged, so the
-    // largest body containing a block is the outermost one.
-    let mut outer = vec![usize::MAX; n];
-    for (li, l) in loops.iter().enumerate() {
-        for &b in &l.body {
-            let cur = outer[b as usize];
-            if cur == usize::MAX || loops[cur].body.len() < l.body.len() {
-                outer[b as usize] = li;
-            }
-        }
-    }
+    let idom = dominators(func);
     for (b, slot) in dest.iter_mut().enumerate() {
         let mut t = b as BlockId;
-        for _ in 0..=n {
-            let li = outer[t as usize];
-            if li == usize::MAX {
-                break;
-            }
-            let up = idom[loops[li].header as usize];
-            if up == NO_BLOCK || up == loops[li].header {
+        while cyclic[t as usize] {
+            let up = idom[t as usize];
+            if up == NO_BLOCK || up == t {
                 break;
             }
             t = up;
         }
-        *slot = if t == b as BlockId { NO_BLOCK } else { t };
+        if t != b as BlockId && !cyclic[t as usize] {
+            *slot = t;
+        }
     }
     debug_assert!(
         dest.iter()
@@ -397,7 +384,46 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
             }
         }
     }
+    // A site of the same value in the destination itself, up to the
+    // insertion point, would set it twice: the copy goes ahead of the
+    // first such site and serves it too, unless a call lies between, which
+    // the copy's range would then cross.
+    let block_of = block_of(func);
+    for h in &mut out {
+        let to = block_of[h.at as usize];
+        let first = (func.blocks[to as usize].inst_range.start..=h.at).find(|&v| {
+            uses.get(v as usize).copied().unwrap_or(0) != 0
+                && plain_key(func, v, &data_sym, &code_sym, &tls_sym) == Some(h.key)
+        });
+        let call_free = |v: ValueId| {
+            !(v..h.at).any(|i| super::reg_alloc::is_call_site(&func.insts[i as usize], tls_call))
+        };
+        if let Some(v) = first.filter(|&v| may_precede(func, to, v) && call_free(v)) {
+            h.at = v;
+            h.redirect.push(v);
+        }
+    }
     cap_per_destination(func, target, fixed, out)
+}
+
+/// The key of a materialization at `v` that sets its value alone, not
+/// folded into a binop.
+fn plain_key(
+    func: &FunctionSsa,
+    v: ValueId,
+    data_sym: &HashMap<u32, u32>,
+    code_sym: &HashMap<u32, u32>,
+    tls_sym: &HashMap<u32, u32>,
+) -> Option<Key> {
+    let sym = |m: &HashMap<u32, u32>| m.get(&v).copied().unwrap_or(NO_SYM);
+    Some(match func.insts[v as usize] {
+        Inst::ImmData(k) => Key::Data(k, sym(data_sym)),
+        Inst::ImmCode(t) => Key::Code(t, sym(code_sym)),
+        Inst::ImmExtCode(import) => Key::ExtCode(import),
+        Inst::TlsAddr(o) => Key::Tls(o, sym(tls_sym)),
+        Inst::Imm(k) => Key::Imm(k, func.f32_values.get(v as usize).copied().unwrap_or(false)),
+        _ => return None,
+    })
 }
 
 /// Keep the most profitable hoists per destination, bounded by a share
@@ -1315,6 +1341,94 @@ mod tests {
 
     fn loop_func(body: Vec<Inst>) -> FunctionSsa {
         loop_func_pre(vec![local(2), local(3), local(4)], body)
+    }
+
+    #[test]
+    fn a_cycle_with_two_entries_hoists_to_their_dominator() {
+        // b0: Bnz v0 to b1 or b2 / b1: address, load, store; Jmp b2 /
+        // b2: address, load, store, test; Bnz to b1 or b3 / b3: Return.
+        // The cycle of b1 and b2 is entered at both: no natural loop.
+        let f = func_with(
+            vec![
+                local(2),
+                Inst::ImmData(0x38),
+                load(1),
+                sink(2),
+                Inst::ImmData(0x38),
+                load(4),
+                sink(5),
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 0,
+                    rhs_imm: 7,
+                },
+            ],
+            vec![
+                block(
+                    0..1,
+                    Terminator::Bnz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                ),
+                block(1..4, Terminator::Jmp(2)),
+                block(
+                    4..8,
+                    Terminator::Bnz {
+                        cond: 7,
+                        target: 1,
+                        fall_through: 3,
+                    },
+                ),
+                block(8..8, Terminator::Return(NO_VALUE)),
+            ],
+        );
+        let hoists = plan(&f, Target::LinuxAarch64);
+        assert_eq!(hoists.len(), 1);
+        assert_eq!(hoists[0].key, Key::Data(0x38, NO_SYM));
+        assert_eq!(hoists[0].redirect, vec![1, 4]);
+        assert_eq!(hoists[0].at, 0);
+    }
+
+    #[test]
+    fn a_site_in_the_destination_is_the_copy_that_serves_the_loop() {
+        // The preheader reads the address the body reads: one copy, ahead
+        // of the preheader's site, serves both.
+        let pre = vec![local(2), local(3), Inst::ImmData(0x38), load(2), sink(3)];
+        let body = 6;
+        let f = loop_func_pre(pre, vec![Inst::ImmData(0x38), load(body), sink(body + 1)]);
+        let hoists = plan(&f, Target::LinuxAarch64);
+        assert_eq!(hoists.len(), 1);
+        assert_eq!(hoists[0].at, 2);
+        assert_eq!(hoists[0].redirect, vec![body, 2]);
+        // A call past the preheader's site keeps it: the copy stays at the
+        // end, where its range crosses no call.
+        let call = Inst::CallExt {
+            binding_idx: 0,
+            args: vec![2],
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
+            fp_return: false,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let pre = vec![
+            local(2),
+            Inst::ImmData(0x38),
+            load(1),
+            call,
+            sink(3),
+            local(3),
+        ];
+        let body = 7;
+        let f = loop_func_pre(pre, vec![Inst::ImmData(0x38), load(body), sink(body + 1)]);
+        let hoists = plan(&f, Target::LinuxAarch64);
+        assert_eq!(hoists.len(), 1);
+        assert_eq!(hoists[0].at, 5);
+        assert_eq!(hoists[0].redirect, vec![body]);
     }
 
     #[test]

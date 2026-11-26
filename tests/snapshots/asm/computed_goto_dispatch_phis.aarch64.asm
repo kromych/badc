@@ -22,13 +22,9 @@ Disassembly of section .text:
                	ldr	x6, [x4, x2, lsl #3]
                	add	x6, x6, #0x1
                	str	x6, [x4, x2, lsl #3]
-               	adrp	x6, <page>
-               	add	x6, x6, <lo12>
                	adrp	x7, <page>
                	add	x7, x7, <lo12>
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	ldr	x6, [x6, x2, lsl #3]
+               	ldr	x6, [x7, x2, lsl #3]
                	mov	x2, x3
                	br	x6
                	add	x1, x1, #0x8
@@ -558,12 +554,10 @@ Disassembly of section .text:
 
 <records>:
                	mov	x2, #0x0                // =0
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldrb	w4, [x0], #0x1
                	adrp	x8, <page>
                	add	x8, x8, <lo12>
-               	ldr	x6, [x3, x4, lsl #3]
+               	ldrb	w3, [x0], #0x1
+               	ldr	x6, [x8, x3, lsl #3]
                	mov	x5, x2
                	mov	x3, x2
                	mov	x4, x2

@@ -528,6 +528,27 @@ fn cycle_depths(func: &FunctionSsa, rpo: &[usize]) -> Vec<u32> {
     depth
 }
 
+/// Per block, whether it lies on a cycle of the control flow graph.
+pub(crate) fn on_cycles(func: &FunctionSsa) -> Vec<bool> {
+    let succs: Vec<Vec<BlockId>> = (func.blocks.iter())
+        .map(|b| {
+            successors(
+                &b.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            )
+        })
+        .collect();
+    let nodes: Vec<BlockId> = (0..func.blocks.len() as BlockId).collect();
+    let mut cyclic = alloc::vec![false; nodes.len()];
+    for scc in components(&nodes, &succs, |_| true) {
+        if scc.len() > 1 || succs[scc[0] as usize].contains(&scc[0]) {
+            scc.iter().for_each(|&b| cyclic[b as usize] = true);
+        }
+    }
+    cyclic
+}
+
 /// The strongly connected components of `nodes` over the edges `inside`
 /// admits (Tarjan, iterative).
 fn components(

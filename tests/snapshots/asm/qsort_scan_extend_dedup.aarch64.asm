@@ -70,11 +70,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x110
                	str	x20, [sp]
-               	mov	x1, #0x3039             // =12345
-               	mov	x0, #0x0                // =0
                	mov	x2, #0x3039             // =12345
+               	mov	x0, #0x0                // =0
                	mov	x3, #0x4e6d             // =20077
                	movk	x3, #0x41c6, lsl #16
+               	mov	x1, x2
                	mul	x1, x1, x3
                	add	x1, x1, x2
                	sub	x4, x29, #0x100

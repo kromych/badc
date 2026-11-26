@@ -132,11 +132,11 @@ Disassembly of section .text:
                	ret
 
 <lcg_wide>:
-               	mov	x0, #0x3039             // =12345
-               	mov	x1, #0x0                // =0
                	mov	x2, #0x3039             // =12345
+               	mov	x1, #0x0                // =0
                	mov	x3, #0x4e6d             // =20077
                	movk	x3, #0x41c6, lsl #16
+               	mov	x0, x2
                	mul	x0, x0, x3
                	add	x0, x0, x2
                	mov	w0, w0

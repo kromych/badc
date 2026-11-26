@@ -221,14 +221,14 @@ fn ent_pc=18 n_params=1 variadic=false locals=0
     v10  Imm(1)                                           -> -
     v11  Store { addr=v9, disp=0, value=v10, kind=I32 pc_rel } -> -
     v12  ImmData(80)                                      -> -
-    v13  ImmData(40)                                      -> -
-    v14  ImmData(80)                                      -> -
+    v13  ImmData(80)                                      -> -
+    v14  ImmData(40)                                      -> -
     v15  CallExt { binding_idx=224, args=[v12], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)   (exit_acc=v15)
   block 1  start_pc=0
     v19  ImmData(80)                                      -> -
     v20  ImmData(40)                                      -> -
-    v21  CallExt { binding_idx=221, args=[v14, v13], fp_arg_mask=0x0 } -> x0
+    v21  CallExt { binding_idx=221, args=[v12, v14], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)   (exit_acc=v21)
   block 2  start_pc=0
     v16  ImmData(188)                                     -> -

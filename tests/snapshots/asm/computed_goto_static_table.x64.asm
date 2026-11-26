@@ -27,11 +27,10 @@ Disassembly of section .text:
 
 <interp>:
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx # <addr>
-               	movl	$0x1, %ecx
-               	movzbq	(%rdi), %r8
                	leaq	<rip>, %rsi # <addr>
-               	movq	(%rdx,%r8,8), %rdx
+               	movl	$0x1, %ecx
+               	movzbq	(%rdi), %rdx
+               	movq	(%rsi,%rdx,8), %rdx
                	jmpq	*%rdx
                	leaq	0x1(%rcx), %rdx
                	movzbq	(%rdi,%rcx), %rcx

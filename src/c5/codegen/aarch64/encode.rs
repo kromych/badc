@@ -91,54 +91,91 @@ impl Reg {
     pub const SP: Reg = Reg(31);
 }
 
-/// An instruction word and, under the `listing` feature, the mnemonic and
-/// operands its assembly text reads.
-#[derive(Clone, Copy, Debug)]
+/// An instruction word and, under the `listing` feature, how its assembly
+/// text is formed: fixed, or by a closure over the encoder's operands that
+/// the sink calls only when a listing is open.
+#[derive(Clone, Copy)]
 pub(crate) struct Insn {
     pub(crate) word: u32,
     #[cfg(feature = "listing")]
-    desc: t::Desc,
+    text: TextOf,
+}
+
+#[cfg(feature = "listing")]
+#[derive(Clone, Copy)]
+enum TextOf {
+    Fixed(&'static str),
+    Lazy(t::Lazy),
 }
 
 impl Insn {
-    /// `word`, reading as `mnem` over `ops`.
+    /// `word`, reading as `text` whatever its operands.
+    pub(crate) const fn fixed(word: u32, text: &'static str) -> Self {
+        #[cfg(not(feature = "listing"))]
+        let _ = text;
+        Insn {
+            word,
+            #[cfg(feature = "listing")]
+            text: TextOf::Fixed(text),
+        }
+    }
+
+    /// `word`, reading as `text` forms it; [`insn!`] builds the closure.
+    #[cfg(feature = "listing")]
     #[inline(always)]
-    pub(crate) const fn new<const N: usize>(word: u32, mnem: &str, ops: [Op; N]) -> Self {
-        #[cfg(not(feature = "listing"))]
-        let _ = (mnem, ops);
+    pub(crate) fn lazy<F: Fn() -> super::listing::Text + Copy + 'static>(
+        word: u32,
+        text: F,
+    ) -> Self {
         Insn {
             word,
-            #[cfg(feature = "listing")]
-            desc: t::Desc::new(mnem, &ops),
+            text: TextOf::Lazy(t::Lazy::new(text)),
         }
     }
 
-    /// `word`, reading as `mnem` over `ops`, a mnemonic and operands known
-    /// only at run time.
-    pub(crate) fn of_ops(word: u32, mnem: &str, ops: &[Op]) -> Self {
-        #[cfg(not(feature = "listing"))]
-        let _ = (mnem, ops);
-        Insn {
-            word,
-            #[cfg(feature = "listing")]
-            desc: t::Desc::new(mnem, ops),
-        }
-    }
-
-    /// `word`, reading as catalog mnemonic `mnem` over `ops`.
-    pub(crate) fn of_table(word: u32, mnem: &str, ops: &[super::table::Opnd]) -> Self {
-        let mut all = [Op::Lit(""); 5];
-        for (a, o) in all.iter_mut().zip(ops) {
-            *a = Op::T(*o);
-        }
-        Self::of_ops(word, mnem, &all[..ops.len().min(5)])
+    /// `word` alone, the listing compiled out.
+    #[cfg(not(feature = "listing"))]
+    #[inline(always)]
+    pub(crate) const fn bare(word: u32) -> Self {
+        Insn { word }
     }
 
     #[cfg(feature = "listing")]
     pub(crate) fn text(&self) -> super::listing::Text {
-        self.desc.text()
+        match self.text {
+            TextOf::Fixed(s) => super::listing::Text::from(alloc::string::String::from(s)),
+            TextOf::Lazy(l) => l.text(),
+        }
     }
 }
+
+impl core::fmt::Debug for Insn {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Insn({:#010x})", self.word)
+    }
+}
+
+/// [`Insn`] of `word` reading as `mnem` over the operands: with the
+/// `listing` feature a closure over what the operands read forms the text
+/// when a listing is open; without it the operands are not evaluated.
+#[cfg(feature = "listing")]
+macro_rules! insn {
+    ($word:expr, $mnem:expr, [$($op:expr),* $(,)?]) => {
+        $crate::c5::codegen::aarch64::encode::Insn::lazy($word, move || {
+            $crate::c5::codegen::aarch64::text::text($mnem, &[$($op),*])
+        })
+    };
+}
+
+#[cfg(not(feature = "listing"))]
+macro_rules! insn {
+    ($word:expr, $mnem:expr, [$($op:expr),* $(,)?]) => {{
+        let _ = || ($mnem, $($op,)*);
+        $crate::c5::codegen::aarch64::encode::Insn::bare($word)
+    }};
+}
+
+pub(crate) use insn;
 
 impl PartialEq<u32> for Insn {
     fn eq(&self, word: &u32) -> bool {
@@ -160,10 +197,10 @@ impl PartialEq<u32> for Insn {
 /// 2 = bits[47:32], 3 = bits[63:48].
 pub(crate) fn enc_movz(rd: Reg, imm16: u16, hw: u8) -> Insn {
     debug_assert!(hw < 4, "movz: hw must be 0..=3");
-    Insn::new(
+    insn!(
         0xD280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32),
         "movz",
-        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))],
+        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))]
     )
 }
 
@@ -173,10 +210,10 @@ pub(crate) fn enc_movz(rd: Reg, imm16: u16, hw: u8) -> Insn {
 /// (see [`load_imm64`]).
 pub(crate) fn enc_movk(rd: Reg, imm16: u16, hw: u8) -> Insn {
     debug_assert!(hw < 4, "movk: hw must be 0..=3");
-    Insn::new(
+    insn!(
         0xF280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32),
         "movk",
-        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))],
+        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))]
     )
 }
 
@@ -184,10 +221,10 @@ pub(crate) fn enc_movk(rd: Reg, imm16: u16, hw: u8) -> Insn {
 /// lane `hw`, which sets every other lane.
 pub(crate) fn enc_movn(rd: Reg, imm16: u16, hw: u8) -> Insn {
     debug_assert!(hw < 4, "movn: hw must be 0..=3");
-    Insn::new(
+    insn!(
         0x9280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32),
         "movn",
-        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))],
+        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))]
     )
 }
 
@@ -195,7 +232,7 @@ pub(crate) fn enc_movn(rd: Reg, imm16: u16, hw: u8) -> Insn {
 /// AAPCS64 puts the return address in `x30` on entry, so the bare form
 /// `ret` (= `ret x30`) is the usual one.
 pub(crate) fn enc_ret(rn: Reg) -> Insn {
-    Insn::new(0xD65F_0000 | ((rn.0 as u32) << 5), "ret", [t::x(rn)])
+    insn!(0xD65F_0000 | ((rn.0 as u32) << 5), "ret", [t::x(rn)])
 }
 
 /// `BL <label>` -- branch with link to a PC-relative label.
@@ -209,10 +246,10 @@ pub(crate) fn enc_bl(imm26: i32) -> Insn {
         (-(1 << 25)..(1 << 25)).contains(&imm26),
         "bl: offset {imm26} out of range (must fit in signed 26 bits)"
     );
-    Insn::new(
+    insn!(
         0x9400_0000 | ((imm26 as u32) & 0x03FF_FFFF),
         "bl",
-        [t::target(0, 26)],
+        [t::target(0, 26)]
     )
 }
 
@@ -253,10 +290,10 @@ fn enc_pair(load: bool, form: PairForm, width: u32, rt: Reg, rt2: Reg, rn: Reg, 
 /// Used in function prologues: `stp x29, x30, [sp, #-16]!` saves the
 /// caller's frame pointer + link register and bumps sp in one go.
 pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(false, PairForm::Pre, 8, rt, rt2, rn, imm),
         "stp",
-        [t::x(rt), t::x(rt2), t::pre(rn, imm.into())],
+        [t::x(rt), t::x(rt2), t::pre(rn, imm.into())]
     )
 }
 
@@ -264,71 +301,71 @@ pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
 /// Mirror of [`enc_stp_pre`] for function epilogues:
 /// `ldp x29, x30, [sp], #16` restores fp/lr and bumps sp back.
 pub(crate) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(true, PairForm::Post, 8, rt, rt2, rn, imm),
         "ldp",
-        [t::x(rt), t::x(rt2), t::mem(rn, 0), t::imm(imm.into())],
+        [t::x(rt), t::x(rt2), t::mem(rn, 0), t::imm(imm.into())]
     )
 }
 
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- store-pair, post-indexed.
 pub(crate) fn enc_stp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(false, PairForm::Post, 8, rt, rt2, rn, imm),
         "stp",
-        [t::x(rt), t::x(rt2), t::mem(rn, 0), t::imm(imm.into())],
+        [t::x(rt), t::x(rt2), t::mem(rn, 0), t::imm(imm.into())]
     )
 }
 
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset
 /// (no writeback).
 pub(crate) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(false, PairForm::Offset, 8, rt, rt2, rn, imm),
         "stp",
-        [t::x(rt), t::x(rt2), t::mem(rn, imm.into())],
+        [t::x(rt), t::x(rt2), t::mem(rn, imm.into())]
     )
 }
 
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset
 /// (no writeback). Mirror of [`enc_stp_off`].
 pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(true, PairForm::Offset, 8, rt, rt2, rn, imm),
         "ldp",
-        [t::x(rt), t::x(rt2), t::mem(rn, imm.into())],
+        [t::x(rt), t::x(rt2), t::mem(rn, imm.into())]
     )
 }
 
 /// `LDP` of two `width`-byte (8 or 4) registers at `[rn, #imm]`.
 pub(crate) fn enc_ldp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(true, PairForm::Offset, width, rt, rt2, rn, imm),
         "ldp",
         [
             t::r(rt, width == 8),
             t::r(rt2, width == 8),
             t::mem(rn, imm.into()),
-        ],
+        ]
     )
 }
 
 /// `STP` of two `width`-byte (8 or 4) registers at `[rn, #imm]`.
 pub(crate) fn enc_stp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(false, PairForm::Offset, width, rt, rt2, rn, imm),
         "stp",
         [
             t::r(rt, width == 8),
             t::r(rt2, width == 8),
             t::mem(rn, imm.into()),
-        ],
+        ]
     )
 }
 
 /// `LDP` of two `width`-byte (8 or 4) registers at `[rn], #imm`, post-indexed.
 pub(crate) fn enc_ldp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(true, PairForm::Post, width, rt, rt2, rn, imm),
         "ldp",
         [
@@ -336,13 +373,13 @@ pub(crate) fn enc_ldp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32
             t::r(rt2, width == 8),
             t::mem(rn, 0),
             t::imm(imm.into()),
-        ],
+        ]
     )
 }
 
 /// `STP` of two `width`-byte (8 or 4) registers at `[rn], #imm`, post-indexed.
 pub(crate) fn enc_stp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_pair(false, PairForm::Post, width, rt, rt2, rn, imm),
         "stp",
         [
@@ -350,7 +387,7 @@ pub(crate) fn enc_stp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32
             t::r(rt2, width == 8),
             t::mem(rn, 0),
             t::imm(imm.into()),
-        ],
+        ]
     )
 }
 
@@ -372,37 +409,37 @@ fn enc_ldst_pair_d(base: u32, dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
 
 /// `STP <Dt1>, <Dt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset.
 pub(crate) fn enc_stp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_ldst_pair_d(0x6D00_0000, dt, dt2, rn, imm),
         "stp",
-        [t::d(dt), t::d(dt2), t::mem(rn, imm.into())],
+        [t::d(dt), t::d(dt2), t::mem(rn, imm.into())]
     )
 }
 
 /// `LDP <Dt1>, <Dt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset.
 pub(crate) fn enc_ldp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_ldst_pair_d(0x6D40_0000, dt, dt2, rn, imm),
         "ldp",
-        [t::d(dt), t::d(dt2), t::mem(rn, imm.into())],
+        [t::d(dt), t::d(dt2), t::mem(rn, imm.into())]
     )
 }
 
 /// `STP <Dt1>, <Dt2>, [<Xn|SP>, #imm]!` -- store-pair, pre-indexed.
 pub(crate) fn enc_stp_d_pre(dt: u8, dt2: u8, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_ldst_pair_d(0x6D80_0000, dt, dt2, rn, imm),
         "stp",
-        [t::d(dt), t::d(dt2), t::pre(rn, imm.into())],
+        [t::d(dt), t::d(dt2), t::pre(rn, imm.into())]
     )
 }
 
 /// `LDP <Dt1>, <Dt2>, [<Xn|SP>], #imm` -- load-pair, post-indexed.
 pub(crate) fn enc_ldp_d_post(dt: u8, dt2: u8, rn: Reg, imm: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_ldst_pair_d(0x6CC0_0000, dt, dt2, rn, imm),
         "ldp",
-        [t::d(dt), t::d(dt2), t::mem(rn, 0), t::imm(imm.into())],
+        [t::d(dt), t::d(dt2), t::mem(rn, 0), t::imm(imm.into())]
     )
 }
 
@@ -415,10 +452,10 @@ pub(crate) fn enc_str_d_pre(dt: u8, rn: Reg, imm: i32) -> Insn {
         "str-d-pre imm: {imm} out of range"
     );
     let imm9 = (imm as u32) & 0x1FF;
-    Insn::new(
+    insn!(
         0xFC00_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32),
         "str",
-        [t::d(dt), t::pre(rn, imm.into())],
+        [t::d(dt), t::pre(rn, imm.into())]
     )
 }
 
@@ -431,10 +468,10 @@ pub(crate) fn enc_ldr_d_post(dt: u8, rn: Reg, imm: i32) -> Insn {
         "ldr-d-post imm: {imm} out of range"
     );
     let imm9 = (imm as u32) & 0x1FF;
-    Insn::new(
+    insn!(
         0xFC40_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32),
         "ldr",
-        [t::d(dt), t::mem(rn, 0), t::imm(imm.into())],
+        [t::d(dt), t::mem(rn, 0), t::imm(imm.into())]
     )
 }
 
@@ -444,10 +481,10 @@ pub(crate) fn enc_ldr_d_post(dt: u8, rn: Reg, imm: i32) -> Insn {
 /// need when the source is SP itself, because in `add` field 31 means
 /// SP). Use [`enc_add_imm`] with `imm=0` for the `mov xd, sp` case.
 pub(crate) fn enc_mov_reg(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xAA00_0000 | ((rn.0 as u32) << 16) | ((Reg::SP.0 as u32) << 5) | (rd.0 as u32),
         "orr",
-        [t::x(rd), t::x(Reg::SP), t::x(rn)],
+        [t::x(rd), t::x(Reg::SP), t::x(rn)]
     )
 }
 
@@ -456,10 +493,10 @@ pub(crate) fn enc_mov_reg(rd: Reg, rn: Reg) -> Insn {
 /// load-into-register-and-add long form; we don't need either yet.
 pub(crate) fn enc_add_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "add imm: {imm12} > 12-bit max");
-    Insn::new(
+    insn!(
         0x9100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "add",
-        [t::xsp(rd), t::xsp(rn), t::lo12(imm12)],
+        [t::xsp(rd), t::xsp(rn), t::lo12(imm12)]
     )
 }
 
@@ -467,10 +504,10 @@ pub(crate) fn enc_add_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
 /// Used to allocate stack space in function prologues.
 pub(crate) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "sub imm: {imm12} > 12-bit max");
-    Insn::new(
+    insn!(
         0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "sub",
-        [t::xsp(rd), t::xsp(rn), t::imm(imm12.into())],
+        [t::xsp(rd), t::xsp(rn), t::imm(imm12.into())]
     )
 }
 
@@ -480,10 +517,10 @@ pub(crate) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
 /// `1101_0001` (SUB) to `1111_0001` (SUBS).
 pub(crate) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
-    Insn::new(
+    insn!(
         0xF100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "subs",
-        [t::x(rd), t::xsp(rn), t::imm(imm12.into())],
+        [t::x(rd), t::xsp(rn), t::imm(imm12.into())]
     )
 }
 
@@ -493,10 +530,10 @@ pub(crate) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
 /// any 24-bit byte count in two instructions.
 pub(crate) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "sub imm lsl12: {imm12} > 12-bit max");
-    Insn::new(
+    insn!(
         0xD140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "sub",
-        [t::xsp(rd), t::xsp(rn), t::imm(imm12.into()), t::lsl(12)],
+        [t::xsp(rd), t::xsp(rn), t::imm(imm12.into()), t::lsl(12)]
     )
 }
 
@@ -505,10 +542,10 @@ pub(crate) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> Insn {
 /// stack-restoration adjustments into two instructions.
 pub(crate) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "add imm lsl12: {imm12} > 12-bit max");
-    Insn::new(
+    insn!(
         0x9140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "add",
-        [t::xsp(rd), t::xsp(rn), t::lo12(imm12), t::lsl(12)],
+        [t::xsp(rd), t::xsp(rn), t::lo12(imm12), t::lsl(12)]
     )
 }
 
@@ -516,10 +553,10 @@ pub(crate) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> Insn {
 /// form, the only register add whose Rn / Rd may be SP (the
 /// shifted-register form reads register 31 as XZR).
 pub(crate) fn enc_add_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x8B20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "add",
-        [t::xsp(rd), t::xsp(rn), t::x(rm), t::ext(3, 0)],
+        [t::xsp(rd), t::xsp(rn), t::x(rm), t::ext(3, 0)]
     )
 }
 
@@ -538,22 +575,25 @@ pub(crate) fn enc_add_index(rd: Reg, rn: Reg, rm: Reg, ext: IndexExt, shift: u32
         | (shift << 10)
         | ((rn.0 as u32) << 5)
         | (rd.0 as u32);
-    let ops = [
-        t::xsp(rd),
-        t::xsp(rn),
-        t::w(rm),
-        t::ext(option as u8, shift as u8),
-    ];
-    Insn::new(word, "add", ops)
+    insn!(
+        word,
+        "add",
+        [
+            t::xsp(rd),
+            t::xsp(rn),
+            t::w(rm),
+            t::ext(option as u8, shift as u8),
+        ]
+    )
 }
 
 /// `SUB <Xd|SP>, <Xn|SP>, <Xm>, UXTX #0`. Mirror of
 /// [`enc_add_ext_reg`].
 pub(crate) fn enc_sub_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xCB20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "sub",
-        [t::xsp(rd), t::xsp(rn), t::x(rm), t::ext(3, 0)],
+        [t::xsp(rd), t::xsp(rn), t::x(rm), t::ext(3, 0)]
     )
 }
 
@@ -692,7 +732,7 @@ pub(crate) fn enc_rrr_shifted(
     shift: RegShift,
     amount: u32,
 ) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(base, rd, rn, rm) | ((shift as u32) << 22) | ((amount & 0x3f) << 10),
         rrr_name(base),
         [
@@ -700,16 +740,16 @@ pub(crate) fn enc_rrr_shifted(
             t::x(rn),
             t::x(rm),
             t::shift(shift as u8, amount as u8),
-        ],
+        ]
     )
 }
 
 /// `ADD <Xd>, <Xn>, <Xm>` -- 64-bit register add, no shift.
 pub(crate) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(ADD_REG, rd, rn, rm),
         "add",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
@@ -721,10 +761,10 @@ pub(crate) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> Insn {
 
 /// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
 pub(crate) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(SUB_REG, rd, rn, rm),
         "sub",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
@@ -732,29 +772,29 @@ pub(crate) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
 /// `Rn` is baked to XZR (31); the shifted-register SUB reads 31 as the
 /// zero register, not SP.
 pub(crate) fn enc_neg(rd: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(SUB_REG, rd, Reg::SP, rm),
         "sub",
-        [t::x(rd), t::x(Reg::SP), t::x(rm)],
+        [t::x(rd), t::x(Reg::SP), t::x(rm)]
     )
 }
 
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
 pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(AND_REG, rd, rn, rm),
         "and",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 /// `BIC <Xd>, <Xn>, <Xm>` -- bit clear: `Xn & ~Xm`. The logical
 /// shifted-register `AND` form with `N=1` (bit 21) complements `Xm`.
 pub(crate) fn enc_bic_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(BIC_REG, rd, rn, rm),
         "bic",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
@@ -851,9 +891,14 @@ pub(crate) fn enc_logical_imm(
         | ((rn.0 as u32) << 5)
         | (rd.0 as u32);
     let value = if is64 { value } else { value & 0xFFFF_FFFF };
-    let rd = t::gp(rd.0, is64, op != LogicalOp::Ands);
     let mnem = ["and", "orr", "eor", "ands"][op as usize];
-    Some(Insn::new(word, mnem, [rd, t::r(rn, is64), t::uimm(value)]))
+    // Rd = 31 is SP except where the flags are set.
+    let sp = op != LogicalOp::Ands;
+    Some(insn!(
+        word,
+        mnem,
+        [t::gp(rd.0, is64, sp), t::r(rn, is64), t::uimm(value)]
+    ))
 }
 
 /// `AND <Xd|SP>, <Xn>, #-(1 << log2_align)`: round a GPR down to a power of two.
@@ -864,10 +909,10 @@ pub(crate) fn enc_and_align_down(rd: Reg, rn: Reg, log2_align: u32) -> Insn {
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
 pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(ORR_REG, rd, rn, rm),
         "orr",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
@@ -875,77 +920,77 @@ pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
 /// to a W register clears the upper 32 bits of the X register, so this is
 /// also the one-instruction zero-extension of the low word (`x & 0xffffffff`).
 pub(crate) fn enc_mov_w_w(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x2A00_03E0 | ((rn.0 as u32) << 16) | (rd.0 as u32),
         "orr",
-        [t::w(rd), t::w(Reg::SP), t::w(rn)],
+        [t::w(rd), t::w(Reg::SP), t::w(rn)]
     )
 }
 
 /// `EOR <Xd>, <Xn>, <Xm>` -- bitwise xor.
 pub(crate) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(EOR_REG, rd, rn, rm),
         "eor",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 /// `MVN <Xd>, <Xm>` (`ORN Xd, XZR, Xm`) -- bitwise NOT. `Rn` is baked
 /// to XZR (31); ORN is ORR with the N bit set.
 pub(crate) fn enc_mvn(rd: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xAA20_03E0 | ((rm.0 as u32) << 16) | (rd.0 as u32),
         "orn",
-        [t::x(rd), t::x(Reg::SP), t::x(rm)],
+        [t::x(rd), t::x(Reg::SP), t::x(rm)]
     )
 }
 
 /// `MUL <Xd>, <Xn>, <Xm>` -- alias for `MADD Xd, Xn, Xm, XZR`.
 /// We bake in `Ra = XZR (31)` so this stays a 3-register helper.
 pub(crate) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9B00_7C00, rd, rn, rm),
         "madd",
-        [t::x(rd), t::x(rn), t::x(rm), t::x(Reg::SP)],
+        [t::x(rd), t::x(rn), t::x(rm), t::x(Reg::SP)]
     )
 }
 
 /// `SMULH <Xd>, <Xn>, <Xm>` -- high 64 bits of the signed 64x64
 /// product.
 pub(crate) fn enc_smulh(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9B40_7C00, rd, rn, rm),
         "smulh",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 /// `UMULH <Xd>, <Xn>, <Xm>` -- high 64 bits of the unsigned 64x64
 /// product.
 pub(crate) fn enc_umulh(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9BC0_7C00, rd, rn, rm),
         "umulh",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 /// `SDIV <Xd>, <Xn>, <Xm>` -- signed integer division. Pairs with
 /// [`enc_msub`] when computing modulo.
 pub(crate) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9AC0_0C00, rd, rn, rm),
         "sdiv",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 pub(crate) fn enc_sdiv_w(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x1AC0_0C00, rd, rn, rm),
         "sdiv",
-        [t::w(rd), t::w(rn), t::w(rm)],
+        [t::w(rd), t::w(rn), t::w(rm)]
     )
 }
 
@@ -953,18 +998,18 @@ pub(crate) fn enc_sdiv_w(rd: Reg, rn: Reg, rm: Reg) -> Insn {
 /// SDIV only in the opcode2 field (bit 10 cleared). Pairs with
 /// [`enc_msub`] when computing unsigned modulo.
 pub(crate) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9AC0_0800, rd, rn, rm),
         "udiv",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 pub(crate) fn enc_udiv_w(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x1AC0_0800, rd, rn, rm),
         "udiv",
-        [t::w(rd), t::w(rn), t::w(rm)],
+        [t::w(rd), t::w(rn), t::w(rm)]
     )
 }
 
@@ -977,142 +1022,142 @@ fn enc_mul_acc(base: u32, rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
 /// AArch64 idiom for `mod` is `sdiv q, a, b ; msub r, q, b, a`,
 /// which yields `r = a - (a/b)*b`.
 pub(crate) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_mul_acc(0x9B00_8000, rd, rn, rm, ra),
         "msub",
-        [t::x(rd), t::x(rn), t::x(rm), t::x(ra)],
+        [t::x(rd), t::x(rn), t::x(rm), t::x(ra)]
     )
 }
 
 pub(crate) fn enc_msub_w(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_mul_acc(0x1B00_8000, rd, rn, rm, ra),
         "msub",
-        [t::w(rd), t::w(rn), t::w(rm), t::w(ra)],
+        [t::w(rd), t::w(rn), t::w(rm), t::w(ra)]
     )
 }
 
 /// `MADD <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa + (Xn * Xm)`.
 pub(crate) fn enc_madd(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_mul_acc(0x9B00_0000, rd, rn, rm, ra),
         "madd",
-        [t::x(rd), t::x(rn), t::x(rm), t::x(ra)],
+        [t::x(rd), t::x(rn), t::x(rm), t::x(ra)]
     )
 }
 
 /// `LSLV <Xd>, <Xn>, <Xm>` -- variable left shift, masking the shift
 /// amount to 6 bits (i.e., shifting by `Xm % 64`).
 pub(crate) fn enc_lslv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9AC0_2000, rd, rn, rm),
         "lslv",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 /// `LSRV <Xd>, <Xn>, <Xm>` -- variable logical right shift.
 pub(crate) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9AC0_2400, rd, rn, rm),
         "lsrv",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 /// `ASRV <Xd>, <Xn>, <Xm>` -- variable arithmetic right shift. The
 /// signed counterpart to `LSRV`
 pub(crate) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9AC0_2800, rd, rn, rm),
         "asrv",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 /// `RORV <Xd>, <Xn>, <Xm>` -- variable rotate right.
 pub(crate) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x9AC0_2C00, rd, rn, rm),
         "rorv",
-        [t::x(rd), t::x(rn), t::x(rm)],
+        [t::x(rd), t::x(rn), t::x(rm)]
     )
 }
 
 /// `RORV <Wd>, <Wn>, <Wm>` -- the 32-bit rotate, the result zero-extended.
 pub(crate) fn enc_rorv_w(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x1AC0_2C00, rd, rn, rm),
         "rorv",
-        [t::w(rd), t::w(rn), t::w(rm)],
+        [t::w(rd), t::w(rn), t::w(rm)]
     )
 }
 
 /// `CLZ <Xd>, <Xn>` -- count leading zero bits; 64 for a zero source.
 pub(crate) fn enc_clz(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xDAC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "clz",
-        [t::x(rd), t::x(rn)],
+        [t::x(rd), t::x(rn)]
     )
 }
 
 /// `CLZ <Wd>, <Wn>` -- count leading zero bits of the low word; 32 for a
 /// zero source. The 32-bit write zero-extends into `Xd`.
 pub(crate) fn enc_clz32(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x5AC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "clz",
-        [t::w(rd), t::w(rn)],
+        [t::w(rd), t::w(rn)]
     )
 }
 
 /// `CLS <Xd>, <Xn>` -- count leading sign bits: the bits below the sign
 /// bit that repeat it, 63 for 0 and -1.
 pub(crate) fn enc_cls(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xDAC0_1400 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "cls",
-        [t::x(rd), t::x(rn)],
+        [t::x(rd), t::x(rn)]
     )
 }
 
 /// `CLS <Wd>, <Wn>` -- the low word's leading sign bits; the 32-bit write
 /// zero-extends into `Xd`.
 pub(crate) fn enc_cls32(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x5AC0_1400 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "cls",
-        [t::w(rd), t::w(rn)],
+        [t::w(rd), t::w(rn)]
     )
 }
 
 /// `RBIT <Xd>, <Xn>` -- reverse the bit order.
 pub(crate) fn enc_rbit64(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xDAC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "rbit",
-        [t::x(rd), t::x(rn)],
+        [t::x(rd), t::x(rn)]
     )
 }
 
 /// `RBIT <Wd>, <Wn>` -- reverse the bit order of the low word; the 32-bit
 /// write zero-extends into `Xd`.
 pub(crate) fn enc_rbit32(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x5AC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "rbit",
-        [t::w(rd), t::w(rn)],
+        [t::w(rd), t::w(rn)]
     )
 }
 
 /// `CNT <Vd>.8B, <Vn>.8B` -- the set bits of each of the low eight bytes.
 pub(crate) fn enc_cnt_8b(vd: u8, vn: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32);
-    Insn::new(
+    insn!(
         0x0E20_5800 | ((vn as u32) << 5) | (vd as u32),
         "cnt",
-        [t::v(vd, 0, false), t::v(vn, 0, false)],
+        [t::v(vd, 0, false), t::v(vn, 0, false)]
     )
 }
 
@@ -1120,17 +1165,17 @@ pub(crate) fn enc_cnt_8b(vd: u8, vn: u8) -> Insn {
 /// with the rest of `Vd` cleared.
 pub(crate) fn enc_addv_8b(vd: u8, vn: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32);
-    Insn::new(
+    insn!(
         0x0E31_B800 | ((vn as u32) << 5) | (vd as u32),
         "addv",
-        [t::fp(vd, 0), t::v(vn, 0, false)],
+        [t::fp(vd, 0), t::v(vn, 0, false)]
     )
 }
 
 /// `ADD` / `SUB <Xd>, <Xn>, <Xm>, LSR #<shift>`, or the `W` forms when
 /// `!is64`.
 pub(crate) fn enc_addsub_lsr(sub: bool, rd: Reg, rn: Reg, rm: Reg, shift: u32, is64: bool) -> Insn {
-    Insn::new(
+    insn!(
         ((is64 as u32) << 31)
             | ((sub as u32) << 30)
             | 0x0B40_0000
@@ -1144,43 +1189,43 @@ pub(crate) fn enc_addsub_lsr(sub: bool, rd: Reg, rn: Reg, rm: Reg, shift: u32, i
             t::r(rn, is64),
             t::r(rm, is64),
             t::shift(1, shift as u8),
-        ],
+        ]
     )
 }
 
 /// `MUL <Wd>, <Wn>, <Wm>` -- `MADD Wd, Wn, Wm, WZR`.
 pub(crate) fn enc_mul32(rd: Reg, rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         enc_rrr(0x1B00_7C00, rd, rn, rm),
         "madd",
-        [t::w(rd), t::w(rn), t::w(rm), t::w(Reg::SP)],
+        [t::w(rd), t::w(rn), t::w(rm), t::w(Reg::SP)]
     )
 }
 
 /// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
 /// as the EXTR alias `EXTR Xd, Xs, Xs, #shift`.
 pub(crate) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
-    Insn::new(
+    insn!(
         0x93C0_0000
             | ((rn.0 as u32) << 16)
             | (((shift as u32) & 63) << 10)
             | ((rn.0 as u32) << 5)
             | (rd.0 as u32),
         "extr",
-        [t::x(rd), t::x(rn), t::x(rn), t::imm((shift & 63).into())],
+        [t::x(rd), t::x(rn), t::x(rn), t::imm((shift & 63).into())]
     )
 }
 
 /// `ROR <Wd>, <Wn>, #shift` (`EXTR Wd, Wn, Wn, #shift`) -- the 32-bit form.
 pub(crate) fn enc_ror_imm_w(rd: Reg, rn: Reg, shift: u8) -> Insn {
-    Insn::new(
+    insn!(
         0x1380_0000
             | ((rn.0 as u32) << 16)
             | (((shift as u32) & 31) << 10)
             | ((rn.0 as u32) << 5)
             | (rd.0 as u32),
         "extr",
-        [t::w(rd), t::w(rn), t::w(rn), t::imm((shift & 31).into())],
+        [t::w(rd), t::w(rn), t::w(rn), t::imm((shift & 31).into())]
     )
 }
 
@@ -1200,20 +1245,20 @@ pub(crate) fn enc_ror_imm_w(rd: Reg, rn: Reg, shift: u8) -> Insn {
 /// before arithmetic.
 pub(crate) fn enc_fmov_x_to_d(dd: u8, xn: Reg) -> Insn {
     debug_assert!(dd < 32);
-    Insn::new(
+    insn!(
         0x9E67_0000 | ((xn.0 as u32) << 5) | (dd as u32),
         "fmov",
-        [t::d(dd), t::x(xn)],
+        [t::d(dd), t::x(xn)]
     )
 }
 
 /// `FMOV <Xd>, <Dn>` -- copy the 64 low bits of `Dn` back into `Xd`.
 pub(crate) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> Insn {
     debug_assert!(dn < 32);
-    Insn::new(
+    insn!(
         0x9E66_0000 | ((dn as u32) << 5) | (rd.0 as u32),
         "fmov",
-        [t::x(rd), t::d(dn)],
+        [t::x(rd), t::d(dn)]
     )
 }
 
@@ -1221,7 +1266,7 @@ pub(crate) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> Insn {
 /// move a `double` value into the allocator's chosen d-register
 /// when the producer wrote a different one.
 pub(crate) fn enc_fmov_d_d(dd: u8, dn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E60_4000, dd, dn), "fmov", [t::d(dd), t::d(dn)])
+    insn!(enc_fp1(0x1E60_4000, dd, dn), "fmov", [t::d(dd), t::d(dn)])
 }
 
 /// VFPExpandImm: the pattern `FMOV <Dd>|<Sd>, #imm8` writes, zero-extended.
@@ -1241,20 +1286,20 @@ pub(crate) fn fp_imm8(bits: u64, single: bool) -> Option<u8> {
 pub(crate) fn enc_fmov_imm(dd: u8, imm8: u8, single: bool) -> Insn {
     debug_assert!(dd < 32);
     let base = if single { 0x1E20_1000 } else { 0x1E60_1000 };
-    Insn::new(
+    insn!(
         base | ((imm8 as u32) << 13) | (dd as u32),
         "fmov",
-        [t::sd(dd, single), t::fp_imm(imm8)],
+        [t::sd(dd, single), t::fp_imm(imm8)]
     )
 }
 
 /// `MOVI <Dd>, #0` -- zero the whole vector register, +0.0 in either view.
 pub(crate) fn enc_movi_d_zero(dd: u8) -> Insn {
     debug_assert!(dd < 32);
-    Insn::new(
+    insn!(
         0x2F00_E400 | (dd as u32),
         "movi",
-        [t::d(dd), t::lit("#0000000000000000")],
+        [t::d(dd), t::lit("#0000000000000000")]
     )
 }
 
@@ -1294,92 +1339,92 @@ fn enc_fp1(base: u32, d: u8, n: u8) -> u32 {
 
 /// `FADD <Dd>, <Dn>, <Dm>` -- double-precision add. `Dd = Dn + Dm`.
 pub(crate) fn enc_fadd_d(dd: u8, dn: u8, dm: u8) -> Insn {
-    Insn::new(
+    insn!(
         enc_fp2(0x1E60_2800, dd, dn, dm),
         "fadd",
-        [t::d(dd), t::d(dn), t::d(dm)],
+        [t::d(dd), t::d(dn), t::d(dm)]
     )
 }
 
 /// `FSUB <Dd>, <Dn>, <Dm>`. `Dd = Dn - Dm`.
 pub(crate) fn enc_fsub_d(dd: u8, dn: u8, dm: u8) -> Insn {
-    Insn::new(
+    insn!(
         enc_fp2(0x1E60_3800, dd, dn, dm),
         "fsub",
-        [t::d(dd), t::d(dn), t::d(dm)],
+        [t::d(dd), t::d(dn), t::d(dm)]
     )
 }
 
 /// `FMUL <Dd>, <Dn>, <Dm>`. `Dd = Dn * Dm`.
 pub(crate) fn enc_fmul_d(dd: u8, dn: u8, dm: u8) -> Insn {
-    Insn::new(
+    insn!(
         enc_fp2(0x1E60_0800, dd, dn, dm),
         "fmul",
-        [t::d(dd), t::d(dn), t::d(dm)],
+        [t::d(dd), t::d(dn), t::d(dm)]
     )
 }
 
 /// `FDIV <Dd>, <Dn>, <Dm>`. `Dd = Dn / Dm`.
 pub(crate) fn enc_fdiv_d(dd: u8, dn: u8, dm: u8) -> Insn {
-    Insn::new(
+    insn!(
         enc_fp2(0x1E60_1800, dd, dn, dm),
         "fdiv",
-        [t::d(dd), t::d(dn), t::d(dm)],
+        [t::d(dd), t::d(dn), t::d(dm)]
     )
 }
 
 /// `FNEG <Dd>, <Dn>`. `Dd = -Dn`.
 pub(crate) fn enc_fneg_d(dd: u8, dn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E61_4000, dd, dn), "fneg", [t::d(dd), t::d(dn)])
+    insn!(enc_fp1(0x1E61_4000, dd, dn), "fneg", [t::d(dd), t::d(dn)])
 }
 
 /// `FSQRT <Dd>, <Dn>` -- scalar double square root. FP data-processing
 /// (1 source), ptype=01, opcode=000011.
 pub(crate) fn enc_fsqrt_d(dd: u8, dn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E61_C000, dd, dn), "fsqrt", [t::d(dd), t::d(dn)])
+    insn!(enc_fp1(0x1E61_C000, dd, dn), "fsqrt", [t::d(dd), t::d(dn)])
 }
 
 /// `FSQRT <Sd>, <Sn>` -- scalar single square root. ptype=00.
 pub(crate) fn enc_fsqrt_s(sd: u8, sn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E21_C000, sd, sn), "fsqrt", [t::s(sd), t::s(sn)])
+    insn!(enc_fp1(0x1E21_C000, sd, sn), "fsqrt", [t::s(sd), t::s(sn)])
 }
 
 /// `FABS <Dd>, <Dn>` -- scalar double absolute value. opcode=000001.
 pub(crate) fn enc_fabs_d(dd: u8, dn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E60_C000, dd, dn), "fabs", [t::d(dd), t::d(dn)])
+    insn!(enc_fp1(0x1E60_C000, dd, dn), "fabs", [t::d(dd), t::d(dn)])
 }
 
 /// `FABS <Sd>, <Sn>` -- scalar single absolute value.
 pub(crate) fn enc_fabs_s(sd: u8, sn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E20_C000, sd, sn), "fabs", [t::s(sd), t::s(sn)])
+    insn!(enc_fp1(0x1E20_C000, sd, sn), "fabs", [t::s(sd), t::s(sn)])
 }
 
 /// `FRINTM <Dd>, <Dn>` -- round to integral toward -inf (floor).
 /// FP-1-source opcode 001010.
 pub(crate) fn enc_frintm_d(dd: u8, dn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E65_4000, dd, dn), "frintm", [t::d(dd), t::d(dn)])
+    insn!(enc_fp1(0x1E65_4000, dd, dn), "frintm", [t::d(dd), t::d(dn)])
 }
 /// `FRINTM <Sd>, <Sn>`.
 pub(crate) fn enc_frintm_s(sd: u8, sn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E25_4000, sd, sn), "frintm", [t::s(sd), t::s(sn)])
+    insn!(enc_fp1(0x1E25_4000, sd, sn), "frintm", [t::s(sd), t::s(sn)])
 }
 /// `FRINTP <Dd>, <Dn>` -- round to integral toward +inf (ceil).
 /// FP-1-source opcode 001001.
 pub(crate) fn enc_frintp_d(dd: u8, dn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E64_C000, dd, dn), "frintp", [t::d(dd), t::d(dn)])
+    insn!(enc_fp1(0x1E64_C000, dd, dn), "frintp", [t::d(dd), t::d(dn)])
 }
 /// `FRINTP <Sd>, <Sn>`.
 pub(crate) fn enc_frintp_s(sd: u8, sn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E24_C000, sd, sn), "frintp", [t::s(sd), t::s(sn)])
+    insn!(enc_fp1(0x1E24_C000, sd, sn), "frintp", [t::s(sd), t::s(sn)])
 }
 /// `FRINTZ <Dd>, <Dn>` -- round to integral toward zero (trunc).
 /// FP-1-source opcode 001011.
 pub(crate) fn enc_frintz_d(dd: u8, dn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E65_C000, dd, dn), "frintz", [t::d(dd), t::d(dn)])
+    insn!(enc_fp1(0x1E65_C000, dd, dn), "frintz", [t::d(dd), t::d(dn)])
 }
 /// `FRINTZ <Sd>, <Sn>`.
 pub(crate) fn enc_frintz_s(sd: u8, sn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E25_C000, sd, sn), "frintz", [t::s(sd), t::s(sn)])
+    insn!(enc_fp1(0x1E25_C000, sd, sn), "frintz", [t::s(sd), t::s(sn)])
 }
 
 /// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
@@ -1389,10 +1434,10 @@ pub(crate) fn enc_frintz_s(sd: u8, sn: u8) -> Insn {
 /// state (`==` false, `!=` true, every relational form false).
 pub(crate) fn enc_fcmp_d(dn: u8, dm: u8) -> Insn {
     debug_assert!(dn < 32 && dm < 32);
-    Insn::new(
+    insn!(
         0x1E60_2000 | ((dm as u32) << 16) | ((dn as u32) << 5),
         "fcmp",
-        [t::d(dn), t::d(dm)],
+        [t::d(dn), t::d(dm)]
     )
 }
 
@@ -1404,15 +1449,15 @@ pub(crate) fn enc_fcmp_d(dn: u8, dm: u8) -> Insn {
 pub(crate) fn enc_fcmpe(dn: u8, dm: u8, single: bool) -> Insn {
     let base = if single { 0x1E20_2010 } else { 0x1E60_2010 };
     let word = base | ((dm as u32) << 16) | ((dn as u32) << 5);
-    Insn::new(word, "fcmpe", [t::sd(dn, single), t::sd(dm, single)])
+    insn!(word, "fcmpe", [t::sd(dn, single), t::sd(dm, single)])
 }
 
 pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> Insn {
     debug_assert!(sd < 32);
-    Insn::new(
+    insn!(
         0x1E27_0000 | ((wn.0 as u32) << 5) | (sd as u32),
         "fmov",
-        [t::s(sd), t::w(wn)],
+        [t::s(sd), t::w(wn)]
     )
 }
 
@@ -1420,10 +1465,10 @@ pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> Insn {
 /// write zero-extends into `Xd`.
 pub(crate) fn enc_fmov_s_to_w(rd: Reg, sn: u8) -> Insn {
     debug_assert!(sn < 32);
-    Insn::new(
+    insn!(
         0x1E26_0000 | ((sn as u32) << 5) | (rd.0 as u32),
         "fmov",
-        [t::w(rd), t::s(sn)],
+        [t::w(rd), t::s(sn)]
     )
 }
 
@@ -1437,13 +1482,13 @@ pub(crate) fn enc_ins_gen(vd: u8, esize: u32, index: u32, wn: Reg) -> Insn {
     debug_assert!(esize.is_power_of_two() && esize <= 8);
     debug_assert!(index * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
-    Insn::new(
+    insn!(
         0x4E00_1C00 | (imm5 << 16) | ((wn.0 as u32) << 5) | (vd as u32),
         "ins",
         [
             t::elem(vd, lane_log2(esize), index as u8),
             t::r(wn, esize == 8),
-        ],
+        ]
     )
 }
 
@@ -1457,13 +1502,13 @@ pub(crate) fn enc_umov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> Insn {
     debug_assert!(index * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
     let q = u32::from(esize == 8) << 30;
-    Insn::new(
+    insn!(
         0x0E00_3C00 | q | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32),
         "umov",
         [
             t::r(rd, esize == 8),
             t::elem(vn, lane_log2(esize), index as u8),
-        ],
+        ]
     )
 }
 
@@ -1474,10 +1519,10 @@ pub(crate) fn enc_smov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> Insn {
     debug_assert!(esize.is_power_of_two() && esize <= 4);
     debug_assert!(index * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
-    Insn::new(
+    insn!(
         0x4E00_2C00 | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32),
         "smov",
-        [t::x(rd), t::elem(vn, lane_log2(esize), index as u8)],
+        [t::x(rd), t::elem(vn, lane_log2(esize), index as u8)]
     )
 }
 
@@ -1494,13 +1539,13 @@ pub(crate) fn enc_ins_elem_from(vd: u8, esize: u32, index: u32, vn: u8, from: u3
     debug_assert!(index * esize < 16 && from * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
     let imm4 = from << esize.trailing_zeros();
-    Insn::new(
+    insn!(
         0x6E00_0400 | (imm5 << 16) | (imm4 << 11) | ((vn as u32) << 5) | (vd as u32),
         "ins",
         [
             t::elem(vd, lane_log2(esize), index as u8),
             t::elem(vn, lane_log2(esize), from as u8),
-        ],
+        ]
     )
 }
 
@@ -1515,7 +1560,7 @@ pub(crate) fn enc_ld1_st1_lane(load: bool, vt: u8, esize: u32, index: u32, rn: R
         4 => (4, index << 2),
         _ => (4, (index << 3) | 1),
     };
-    Insn::new(
+    insn!(
         0x0D00_0000
             | ((qss >> 3) << 30)
             | (u32::from(load) << 22)
@@ -1528,7 +1573,7 @@ pub(crate) fn enc_ld1_st1_lane(load: bool, vt: u8, esize: u32, index: u32, rn: R
         [
             t::lane_list(vt, lane_log2(esize), index as u8),
             t::mem(rn, 0),
-        ],
+        ]
     )
 }
 
@@ -1536,10 +1581,10 @@ pub(crate) fn enc_ld1_st1_lane(load: bool, vt: u8, esize: u32, index: u32, rn: R
 /// low element of `vm`.
 pub(crate) fn enc_zip1_2d(vd: u8, vn: u8, vm: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32 && vm < 32);
-    Insn::new(
+    insn!(
         0x4EC0_3800 | ((vm as u32) << 16) | ((vn as u32) << 5) | (vd as u32),
         "zip1",
-        [t::v(vd, 3, true), t::v(vn, 3, true), t::v(vm, 3, true)],
+        [t::v(vd, 3, true), t::v(vn, 3, true), t::v(vm, 3, true)]
     )
 }
 
@@ -1547,10 +1592,10 @@ pub(crate) fn enc_zip1_2d(vd: u8, vn: u8, vm: u8) -> Insn {
 /// when `q`, from general register `rn` (`X` for 8-byte lanes).
 pub(crate) fn enc_dup_gen(vd: u8, esize: u32, q: bool, rn: Reg) -> Insn {
     debug_assert!(vd < 32 && esize.is_power_of_two() && esize <= 8);
-    Insn::new(
+    insn!(
         0x0E00_0C00 | (u32::from(q) << 30) | (esize << 16) | ((rn.0 as u32) << 5) | (vd as u32),
         "dup",
-        [t::v(vd, lane_log2(esize), q), t::r(rn, esize == 8)],
+        [t::v(vd, lane_log2(esize), q), t::r(rn, esize == 8)]
     )
 }
 
@@ -1558,13 +1603,13 @@ pub(crate) fn enc_dup_gen(vd: u8, esize: u32, q: bool, rn: Reg) -> Insn {
 /// bytes when `q`, from lane 0 of `vn`.
 pub(crate) fn enc_dup_elem(vd: u8, esize: u32, q: bool, vn: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32 && esize.is_power_of_two() && esize <= 8);
-    Insn::new(
+    insn!(
         0x0E00_0400 | (u32::from(q) << 30) | (esize << 16) | ((vn as u32) << 5) | (vd as u32),
         "dup",
         [
             t::v(vd, lane_log2(esize), q),
             t::elem(vn, lane_log2(esize), 0),
-        ],
+        ]
     )
 }
 
@@ -1575,13 +1620,13 @@ pub(crate) fn enc_dup_elem_scalar(vd: u8, vn: u8, esize: u32, index: u32) -> Ins
     debug_assert!(esize.is_power_of_two() && esize <= 8);
     debug_assert!(index * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
-    Insn::new(
+    insn!(
         0x5E00_0400 | (imm5 << 16) | ((vn as u32) << 5) | (vd as u32),
         "dup",
         [
             t::fp(vd, lane_log2(esize)),
             t::elem(vn, lane_log2(esize), index as u8),
-        ],
+        ]
     )
 }
 
@@ -1589,49 +1634,49 @@ pub(crate) fn enc_dup_elem_scalar(vd: u8, vn: u8, esize: u32, index: u32) -> Ins
 /// move an `float` value into the allocator's chosen register when
 /// the producer wrote a different one.
 pub(crate) fn enc_fmov_s_s(sd: u8, sn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E20_4000, sd, sn), "fmov", [t::s(sd), t::s(sn)])
+    insn!(enc_fp1(0x1E20_4000, sd, sn), "fmov", [t::s(sd), t::s(sn)])
 }
 
 /// `FADD <Sd>, <Sn>, <Sm>` -- single-precision add. `Sd = Sn + Sm`
 /// (C99 6.3.1.8: `float op float` has type `float`).
 pub(crate) fn enc_fadd_s(sd: u8, sn: u8, sm: u8) -> Insn {
-    Insn::new(
+    insn!(
         enc_fp2(0x1E20_2800, sd, sn, sm),
         "fadd",
-        [t::s(sd), t::s(sn), t::s(sm)],
+        [t::s(sd), t::s(sn), t::s(sm)]
     )
 }
 
 /// `FSUB <Sd>, <Sn>, <Sm>`. `Sd = Sn - Sm`.
 pub(crate) fn enc_fsub_s(sd: u8, sn: u8, sm: u8) -> Insn {
-    Insn::new(
+    insn!(
         enc_fp2(0x1E20_3800, sd, sn, sm),
         "fsub",
-        [t::s(sd), t::s(sn), t::s(sm)],
+        [t::s(sd), t::s(sn), t::s(sm)]
     )
 }
 
 /// `FMUL <Sd>, <Sn>, <Sm>`. `Sd = Sn * Sm`.
 pub(crate) fn enc_fmul_s(sd: u8, sn: u8, sm: u8) -> Insn {
-    Insn::new(
+    insn!(
         enc_fp2(0x1E20_0800, sd, sn, sm),
         "fmul",
-        [t::s(sd), t::s(sn), t::s(sm)],
+        [t::s(sd), t::s(sn), t::s(sm)]
     )
 }
 
 /// `FDIV <Sd>, <Sn>, <Sm>`. `Sd = Sn / Sm`.
 pub(crate) fn enc_fdiv_s(sd: u8, sn: u8, sm: u8) -> Insn {
-    Insn::new(
+    insn!(
         enc_fp2(0x1E20_1800, sd, sn, sm),
         "fdiv",
-        [t::s(sd), t::s(sn), t::s(sm)],
+        [t::s(sd), t::s(sn), t::s(sm)]
     )
 }
 
 /// `FNEG <Sd>, <Sn>`. `Sd = -Sn`.
 pub(crate) fn enc_fneg_s(sd: u8, sn: u8) -> Insn {
-    Insn::new(enc_fp1(0x1E21_4000, sd, sn), "fneg", [t::s(sd), t::s(sn)])
+    insn!(enc_fp1(0x1E21_4000, sd, sn), "fneg", [t::s(sd), t::s(sn)])
 }
 
 /// Floating-point fused multiply-add (3 source). `Dd = (neg_product ?
@@ -1662,7 +1707,7 @@ pub(crate) fn enc_fma(
         (true, false) => (1, 0),
         (true, true) => (0, 1),
     };
-    Insn::new(
+    insn!(
         base | (neg << 21)
             | ((dm as u32) << 16)
             | (o0 << 15)
@@ -1675,7 +1720,7 @@ pub(crate) fn enc_fma(
             t::sd(dn, is_f32),
             t::sd(dm, is_f32),
             t::sd(da, is_f32),
-        ],
+        ]
     )
 }
 
@@ -1683,10 +1728,10 @@ pub(crate) fn enc_fma(
 /// Same NaN caveat as [`enc_fcmp_d`].
 pub(crate) fn enc_fcmp_s(sn: u8, sm: u8) -> Insn {
     debug_assert!(sn < 32 && sm < 32);
-    Insn::new(
+    insn!(
         0x1E20_2000 | ((sm as u32) << 16) | ((sn as u32) << 5),
         "fcmp",
-        [t::s(sn), t::s(sm)],
+        [t::s(sn), t::s(sm)]
     )
 }
 
@@ -1695,10 +1740,10 @@ pub(crate) fn enc_fcmp_s(sn: u8, sm: u8) -> Insn {
 /// values saturate.
 pub(crate) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> Insn {
     debug_assert!(dn < 32);
-    Insn::new(
+    insn!(
         0x9E78_0000 | ((dn as u32) << 5) | (rd.0 as u32),
         "fcvtzs",
-        [t::x(rd), t::d(dn)],
+        [t::x(rd), t::d(dn)]
     )
 }
 
@@ -1707,10 +1752,10 @@ pub(crate) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> Insn {
 /// [2^63, 2^64) converts to the correct u64 rather than saturating.
 pub(crate) fn enc_fcvtzu_x_d(rd: Reg, dn: u8) -> Insn {
     debug_assert!(dn < 32);
-    Insn::new(
+    insn!(
         0x9E79_0000 | ((dn as u32) << 5) | (rd.0 as u32),
         "fcvtzu",
-        [t::x(rd), t::d(dn)],
+        [t::x(rd), t::d(dn)]
     )
 }
 
@@ -1718,10 +1763,10 @@ pub(crate) fn enc_fcvtzu_x_d(rd: Reg, dn: u8) -> Insn {
 /// nearest-ties-to-even mantissa.
 pub(crate) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> Insn {
     debug_assert!(dd < 32);
-    Insn::new(
+    insn!(
         0x9E62_0000 | ((xn.0 as u32) << 5) | (dd as u32),
         "scvtf",
-        [t::d(dd), t::x(xn)],
+        [t::d(dd), t::x(xn)]
     )
 }
 
@@ -1730,10 +1775,10 @@ pub(crate) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> Insn {
 /// to a positive double rather than a negative one.
 pub(crate) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> Insn {
     debug_assert!(dd < 32);
-    Insn::new(
+    insn!(
         0x9E63_0000 | ((xn.0 as u32) << 5) | (dd as u32),
         "ucvtf",
-        [t::d(dd), t::x(xn)],
+        [t::d(dd), t::x(xn)]
     )
 }
 
@@ -1743,10 +1788,10 @@ pub(crate) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> Insn {
 /// direct form for `(float)n` that avoids the double-then-narrow pair.
 pub(crate) fn enc_scvtf_s_x(sd: u8, xn: Reg) -> Insn {
     debug_assert!(sd < 32);
-    Insn::new(
+    insn!(
         0x9E22_0000 | ((xn.0 as u32) << 5) | (sd as u32),
         "scvtf",
-        [t::s(sd), t::x(xn)],
+        [t::s(sd), t::x(xn)]
     )
 }
 
@@ -1754,10 +1799,10 @@ pub(crate) fn enc_scvtf_s_x(sd: u8, xn: Reg) -> Insn {
 /// with ptype `00`.
 pub(crate) fn enc_ucvtf_s_x(sd: u8, xn: Reg) -> Insn {
     debug_assert!(sd < 32);
-    Insn::new(
+    insn!(
         0x9E23_0000 | ((xn.0 as u32) << 5) | (sd as u32),
         "ucvtf",
-        [t::s(sd), t::x(xn)],
+        [t::s(sd), t::x(xn)]
     )
 }
 
@@ -1767,10 +1812,10 @@ pub(crate) fn enc_ucvtf_s_x(sd: u8, xn: Reg) -> Insn {
 /// `float` to double first.
 pub(crate) fn enc_fcvtzs_x_s(rd: Reg, sn: u8) -> Insn {
     debug_assert!(sn < 32);
-    Insn::new(
+    insn!(
         0x9E38_0000 | ((sn as u32) << 5) | (rd.0 as u32),
         "fcvtzs",
-        [t::x(rd), t::s(sn)],
+        [t::x(rd), t::s(sn)]
     )
 }
 
@@ -1778,10 +1823,10 @@ pub(crate) fn enc_fcvtzs_x_s(rd: Reg, sn: u8) -> Insn {
 /// `enc_fcvtzu_x_d` with ptype `00`.
 pub(crate) fn enc_fcvtzu_x_s(rd: Reg, sn: u8) -> Insn {
     debug_assert!(sn < 32);
-    Insn::new(
+    insn!(
         0x9E39_0000 | ((sn as u32) << 5) | (rd.0 as u32),
         "fcvtzu",
-        [t::x(rd), t::s(sn)],
+        [t::x(rd), t::s(sn)]
     )
 }
 
@@ -1791,12 +1836,12 @@ pub(crate) fn enc_fcvtzu_x_s(rd: Reg, sn: u8) -> Insn {
 /// `.tdata` / `.tbss`) follows immediately after the TCB header.
 /// `var_addr = TPIDR_EL0 + TLS_TCB_HEAD (16) + offset_in_block`.
 pub(crate) fn enc_mrs_tpidr_el0(rt: Reg) -> Insn {
-    Insn::new(
+    insn!(
         // 1101_0101_0011_0011_1101_0000_0100_0000 + Rt
         // (op0=11, op1=011, CRn=1101, CRm=0000, op2=010)
         0xD53B_D040 | (rt.0 as u32),
         "mrs",
-        [t::x(rt), t::sys_reg(0xDE82)],
+        [t::x(rt), t::sys_reg(0xDE82)]
     )
 }
 
@@ -1805,10 +1850,10 @@ pub(crate) fn enc_mrs_tpidr_el0(rt: Reg) -> Insn {
 /// form [`crate::c5::codegen::stack_guard_sysreg`] returns). The
 /// instruction carries the low 15 bits of the field at bits 19..5.
 pub(crate) fn enc_mrs(rt: Reg, field: u16) -> Insn {
-    Insn::new(
+    insn!(
         0xD530_0000 | ((u32::from(field) & 0x7FFF) << 5) | (rt.0 as u32),
         "mrs",
-        [t::x(rt), t::sys_reg(field)],
+        [t::x(rt), t::sys_reg(field)]
     )
 }
 
@@ -1856,13 +1901,13 @@ pub(crate) fn enc_str_bh_imm(width: u32, vt: u8, rn: Reg, imm: u32) -> Insn {
 /// lane (1 or 2) of `vn` zero-extended to twice its width in `vd`.
 pub(crate) fn enc_uxtl(vd: u8, vn: u8, elem: u32) -> Insn {
     debug_assert!(matches!(elem, 1 | 2) && vd < 32 && vn < 32);
-    Insn::new(
+    insn!(
         0x2F00_A400 | (elem << 19) | (u32::from(vn) << 5) | u32::from(vd),
         "uxtl",
         [
             t::v(vd, lane_log2(elem) + 1, true),
             t::v(vn, lane_log2(elem), false),
-        ],
+        ]
     )
 }
 
@@ -1870,13 +1915,13 @@ pub(crate) fn enc_uxtl(vd: u8, vn: u8, elem: u32) -> Insn {
 /// `elem`-byte lane (1 or 2) of `vd`'s low 64 bits.
 pub(crate) fn enc_xtn(vd: u8, vn: u8, elem: u32) -> Insn {
     debug_assert!(matches!(elem, 1 | 2) && vd < 32 && vn < 32);
-    Insn::new(
+    insn!(
         0x0E21_2800 | ((elem - 1) << 22) | (u32::from(vn) << 5) | u32::from(vd),
         "xtn",
         [
             t::v(vd, lane_log2(elem), false),
             t::v(vn, lane_log2(elem) + 1, true),
-        ],
+        ]
     )
 }
 
@@ -1947,16 +1992,19 @@ pub(crate) fn enc_vec_binop(
     // Q (bit 30) selects the 128-bit form.
     let base = if q { base } else { base & !0x4000_0000 };
     let word = base | u32::from(vm) << 16 | u32::from(vn) << 5 | u32::from(vd);
-    let ops = [t::v(vd, lane, q), t::v(vn, lane, q), t::v(vm, lane, q)];
-    Some(Insn::new(word, mnem, ops))
+    Some(insn!(
+        word,
+        mnem,
+        [t::v(vd, lane, q), t::v(vn, lane, q), t::v(vm, lane, q)]
+    ))
 }
 
 pub(crate) fn enc_mov_v16b(vd: u8, vn: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32);
-    Insn::new(
+    insn!(
         0x4EA0_1C00 | ((vn as u32) << 16) | ((vn as u32) << 5) | vd as u32,
         "orr",
-        [t::v(vd, 0, true), t::v(vn, 0, true), t::v(vn, 0, true)],
+        [t::v(vd, 0, true), t::v(vn, 0, true), t::v(vn, 0, true)]
     )
 }
 
@@ -1969,10 +2017,10 @@ pub(crate) fn enc_adr(rd: Reg, off_bytes: i32) -> Insn {
     let off = (off_bytes as u32) & 0x001F_FFFF;
     let immlo = off & 0x3;
     let immhi = (off >> 2) & 0x0007_FFFF;
-    Insn::new(
+    insn!(
         0x1000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32),
         "adr",
-        [t::x(rd), t::adr()],
+        [t::x(rd), t::adr()]
     )
 }
 
@@ -1983,10 +2031,10 @@ pub(crate) fn enc_adr(rd: Reg, off_bytes: i32) -> Insn {
 /// 0 it is as if longjmp had been called with the value 1").
 pub(crate) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> Insn {
     let inv = (cond as u32) ^ 1;
-    Insn::new(
+    insn!(
         0x9A80_0400 | ((rn.0 as u32) << 16) | (inv << 12) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "csinc",
-        [t::x(rd), t::x(rn), t::x(rn), t::cond(cond.flip())],
+        [t::x(rd), t::x(rn), t::x(rn), t::cond(cond.flip())]
     )
 }
 
@@ -1996,10 +2044,10 @@ pub(crate) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> Insn {
 /// single-precision load.
 pub(crate) fn enc_fcvt_d_s(dd: u8, sn: u8) -> Insn {
     debug_assert!(dd < 32 && sn < 32);
-    Insn::new(
+    insn!(
         0x1E22_C000 | ((sn as u32) << 5) | (dd as u32),
         "fcvt",
-        [t::d(dd), t::s(sn)],
+        [t::d(dd), t::s(sn)]
     )
 }
 
@@ -2009,10 +2057,10 @@ pub(crate) fn enc_fcvt_d_s(dd: u8, sn: u8) -> Insn {
 /// lowering before the single-precision store.
 pub(crate) fn enc_fcvt_s_d(sd: u8, dn: u8) -> Insn {
     debug_assert!(sd < 32 && dn < 32);
-    Insn::new(
+    insn!(
         0x1E62_4000 | ((dn as u32) << 5) | (sd as u32),
         "fcvt",
-        [t::s(sd), t::d(dn)],
+        [t::s(sd), t::d(dn)]
     )
 }
 
@@ -2021,50 +2069,50 @@ pub(crate) fn enc_fcvt_s_d(sd: u8, dn: u8) -> Insn {
 /// `CMP <Xn>, <Xm>` = `SUBS XZR, <Xn>, <Xm>` -- compare two registers,
 /// updating the NZCV flags but discarding the result.
 pub(crate) fn enc_cmp_reg(rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xEB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32),
         "subs",
-        [t::x(Reg::SP), t::x(rn), t::x(rm)],
+        [t::x(Reg::SP), t::x(rn), t::x(rm)]
     )
 }
 
 /// `CMP <Wn>, <Wm>` -- the 32-bit form of [`enc_cmp_reg`]. The operands
 /// are read as W registers, so bits 32..63 do not reach the flags.
 pub(crate) fn enc_cmp_reg_w(rn: Reg, rm: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x6B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32),
         "subs",
-        [t::w(Reg::SP), t::w(rn), t::w(rm)],
+        [t::w(Reg::SP), t::w(rn), t::w(rm)]
     )
 }
 
 /// `SUBS <Wd>, <Wn|WSP>, #imm12` -- the 32-bit form of [`enc_subs_imm`].
 pub(crate) fn enc_subs_imm_w(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
-    Insn::new(
+    insn!(
         0x7100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "subs",
-        [t::w(rd), t::wsp(rn), t::imm(imm12.into())],
+        [t::w(rd), t::wsp(rn), t::imm(imm12.into())]
     )
 }
 
 /// `ADDS Xd, Xn, #imm12`; `cmn Xn, #imm12` with Xd = XZR.
 pub(crate) fn enc_adds_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "adds imm: {imm12} > 12-bit max");
-    Insn::new(
+    insn!(
         0xB100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "adds",
-        [t::x(rd), t::xsp(rn), t::imm(imm12.into())],
+        [t::x(rd), t::xsp(rn), t::imm(imm12.into())]
     )
 }
 
 /// `ADDS Wd, Wn, #imm12`; `cmn Wn, #imm12` with Wd = WZR.
 pub(crate) fn enc_adds_imm_w(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "adds imm: {imm12} > 12-bit max");
-    Insn::new(
+    insn!(
         0x3100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "adds",
-        [t::w(rd), t::wsp(rn), t::imm(imm12.into())],
+        [t::w(rd), t::wsp(rn), t::imm(imm12.into())]
     )
 }
 
@@ -2149,33 +2197,33 @@ impl Cond {
 
 /// `CSINC <Xd>, <Xn>, <Xm>, <cond>`: `Xd = cond ? Xn : Xm + 1`.
 pub(crate) fn enc_csinc(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> Insn {
-    Insn::new(
+    insn!(
         0x9A80_0400
             | ((rm.0 as u32) << 16)
             | ((cond as u32) << 12)
             | ((rn.0 as u32) << 5)
             | (rd.0 as u32),
         "csinc",
-        [t::x(rd), t::x(rn), t::x(rm), t::cond(cond)],
+        [t::x(rd), t::x(rn), t::x(rm), t::cond(cond)]
     )
 }
 
 /// `CSEL <Xd>, <Xn>, <Xm>, <cond>`: `Xd = cond ? Xn : Xm`.
 pub(crate) fn enc_csel(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> Insn {
-    Insn::new(
+    insn!(
         0x9A80_0000
             | ((rm.0 as u32) << 16)
             | ((cond as u32) << 12)
             | ((rn.0 as u32) << 5)
             | (rd.0 as u32),
         "csel",
-        [t::x(rd), t::x(rn), t::x(rm), t::cond(cond)],
+        [t::x(rd), t::x(rn), t::x(rm), t::cond(cond)]
     )
 }
 
 /// `FCSEL <Dd|Sd>, <Dn|Sn>, <Dm|Sm>, <cond>`: `d = cond ? n : m`.
 pub(crate) fn enc_fcsel(dd: u8, dn: u8, dm: u8, cond: Cond, single: bool) -> Insn {
-    Insn::new(
+    insn!(
         (if single { 0x1E20_0C00u32 } else { 0x1E60_0C00 })
             | ((dm as u32) << 16)
             | ((cond as u32) << 12)
@@ -2187,21 +2235,21 @@ pub(crate) fn enc_fcsel(dd: u8, dn: u8, dm: u8, cond: Cond, single: bool) -> Ins
             t::sd(dn, single),
             t::sd(dm, single),
             t::cond(cond),
-        ],
+        ]
     )
 }
 
 /// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
 /// Sets `Xd` to 1 if `cond` holds, 0 otherwise.
 pub(crate) fn enc_cset(rd: Reg, cond: Cond) -> Insn {
-    Insn::new(
+    insn!(
         0x9A80_0400
         | ((Reg::SP.0 as u32) << 16) // Rm = XZR
         | (cond.invert() << 12)
         | ((Reg::SP.0 as u32) << 5)  // Rn = XZR
         | (rd.0 as u32),
         "csinc",
-        [t::x(rd), t::x(Reg::SP), t::x(Reg::SP), t::cond(cond.flip())],
+        [t::x(rd), t::x(Reg::SP), t::x(Reg::SP), t::cond(cond.flip())]
     )
 }
 
@@ -2214,10 +2262,10 @@ pub(crate) fn enc_b(imm26: i32) -> Insn {
         (-(1 << 25)..(1 << 25)).contains(&imm26),
         "b: offset {imm26} out of range"
     );
-    Insn::new(
+    insn!(
         0x1400_0000 | ((imm26 as u32) & 0x03FF_FFFF),
         "b",
-        [t::target(0, 26)],
+        [t::target(0, 26)]
     )
 }
 
@@ -2228,10 +2276,10 @@ pub(crate) fn enc_cbz(rt: Reg, imm19: i32) -> Insn {
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "cbz: offset {imm19} out of range (must fit in signed 19 bits)"
     );
-    Insn::new(
+    insn!(
         0xB400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32),
         "cbz",
-        [t::x(rt), t::target(5, 19)],
+        [t::x(rt), t::target(5, 19)]
     )
 }
 
@@ -2241,26 +2289,26 @@ pub(crate) fn enc_cbnz(rt: Reg, imm19: i32) -> Insn {
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "cbnz: offset {imm19} out of range"
     );
-    Insn::new(
+    insn!(
         0xB500_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32),
         "cbnz",
-        [t::x(rt), t::target(5, 19)],
+        [t::x(rt), t::target(5, 19)]
     )
 }
 
 /// `CBZ Wt, label`: the 32-bit form of [`enc_cbz`].
 pub(crate) fn enc_cbz_w(rt: Reg, imm19: i32) -> Insn {
-    Insn::new(
+    insn!(
         enc_cbz(rt, imm19).word & !0x8000_0000,
         "cbz",
-        [t::w(rt), t::target(5, 19)],
+        [t::w(rt), t::target(5, 19)]
     )
 }
 
 /// `CBNZ Wt, label`: the 32-bit form of [`enc_cbnz`].
 pub(crate) fn enc_cbnz_w(rt: Reg, imm19: i32) -> Insn {
     let word = enc_cbnz(rt, imm19).word & !0x8000_0000;
-    Insn::new(word, "cbnz", [t::w(rt), t::target(5, 19)])
+    insn!(word, "cbnz", [t::w(rt), t::target(5, 19)])
 }
 
 /// `TBZ Rt, #bit, label` -- branch if bit `bit` of `Xt` is zero; `imm14`
@@ -2272,22 +2320,25 @@ pub(crate) fn enc_tbz(rt: Reg, bit: u8, imm14: i32) -> Insn {
         "tbz: offset {imm14} out of range"
     );
     let b = bit as u32;
-    Insn::new(
+    insn!(
         0x3600_0000
             | ((b >> 5) << 31)
             | ((b & 31) << 19)
             | (((imm14 as u32) & 0x3FFF) << 5)
             | rt.0 as u32,
         "tbz",
-        [t::r(rt, bit >= 32), t::imm(bit.into()), t::target(5, 14)],
+        [t::r(rt, bit >= 32), t::imm(bit.into()), t::target(5, 14)]
     )
 }
 
 /// `TBNZ Rt, #bit, label` -- branch if bit `bit` of `Xt` is one.
 pub(crate) fn enc_tbnz(rt: Reg, bit: u8, imm14: i32) -> Insn {
     let word = enc_tbz(rt, bit, imm14).word | 0x0100_0000;
-    let ops = [t::r(rt, bit >= 32), t::imm(bit.into()), t::target(5, 14)];
-    Insn::new(word, "tbnz", ops)
+    insn!(
+        word,
+        "tbnz",
+        [t::r(rt, bit >= 32), t::imm(bit.into()), t::target(5, 14)]
+    )
 }
 
 /// `B.<cond> <label>` -- branch if the NZCV flags satisfy `cond`.
@@ -2299,10 +2350,10 @@ pub(crate) fn enc_b_cond(cond: Cond, imm19: i32) -> Insn {
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "b.cond: offset {imm19} out of range (must fit in signed 19 bits)"
     );
-    Insn::new(
+    insn!(
         0x5400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (cond as u32),
         cond.branch(),
-        [t::target(5, 19)],
+        [t::target(5, 19)]
     )
 }
 
@@ -2315,46 +2366,46 @@ pub(crate) fn enc_b_cond_code(cond: u8, imm19: i32) -> Insn {
         "b.lt", "b.gt", "b.le", "b.al", "b.nv",
     ];
     let word = 0x5400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | u32::from(cond & 15);
-    Insn::new(word, NAMES[usize::from(cond & 15)], [t::target(5, 19)])
+    insn!(word, NAMES[usize::from(cond & 15)], [t::target(5, 19)])
 }
 
 /// `BRK #imm16`.
 pub(crate) fn enc_brk(imm16: u16) -> Insn {
-    Insn::new(
+    insn!(
         0xD420_0000 | (u32::from(imm16) << 5),
         "brk",
-        [t::imm(imm16.into())],
+        [t::imm(imm16.into())]
     )
 }
 
 pub(crate) fn enc_blr(rn: Reg) -> Insn {
-    Insn::new(0xD63F_0000 | ((rn.0 as u32) << 5), "blr", [t::x(rn)])
+    insn!(0xD63F_0000 | ((rn.0 as u32) << 5), "blr", [t::x(rn)])
 }
 
 /// `BTI C` -- branch-target landing pad accepting an indirect call
 /// (`BLR`, PSTATE.BTYPE 0b10) and a `BR` through x16/x17 (0b01).
 /// `HINT #34`, so it decodes as a NOP where FEAT_BTI is absent.
-pub(crate) const BTI_C: Insn = Insn::new(0xD503_245F, "bti c", []);
+pub(crate) const BTI_C: Insn = Insn::fixed(0xD503_245F, "bti c");
 
 /// `BTI J` -- landing pad accepting a `BR` through any register
 /// (PSTATE.BTYPE 0b11) as well as 0b01. `HINT #36`.
-pub(crate) const BTI_J: Insn = Insn::new(0xD503_249F, "bti j", []);
+pub(crate) const BTI_J: Insn = Insn::fixed(0xD503_249F, "bti j");
 
 /// `PACIASP` -- sign x30 with key A, modifier sp. `HINT #25`, so it
 /// decodes as a NOP where FEAT_PAuth is absent. Also a landing pad
 /// for PSTATE.BTYPE 0b01 / 0b10, which is every way a function entry
 /// is reached indirectly (Arm ARM D24.2.2).
-pub(crate) const PACIASP: Insn = Insn::new(0xD503_233F, "paciasp", []);
+pub(crate) const PACIASP: Insn = Insn::fixed(0xD503_233F, "paciasp");
 
 /// `AUTIASP` -- authenticate x30 with key A, modifier sp. `HINT #29`.
 /// The modifier must match the one `PACIASP` signed with, so sp has to
 /// be back at its function-entry value.
-pub(crate) const AUTIASP: Insn = Insn::new(0xD503_23BF, "autiasp", []);
+pub(crate) const AUTIASP: Insn = Insn::fixed(0xD503_23BF, "autiasp");
 
 /// `PACIBSP` / `AUTIBSP` -- `PACIASP` / `AUTIASP` with key B. `HINT #27`
 /// and `HINT #31`.
-pub(crate) const PACIBSP: Insn = Insn::new(0xD503_237F, "pacibsp", []);
-pub(crate) const AUTIBSP: Insn = Insn::new(0xD503_23FF, "autibsp", []);
+pub(crate) const PACIBSP: Insn = Insn::fixed(0xD503_237F, "pacibsp");
+pub(crate) const AUTIBSP: Insn = Insn::fixed(0xD503_23FF, "autibsp");
 
 /// The sign and authenticate instructions of the key `hardening` names.
 pub(crate) fn pac_pair(hardening: crate::c5::codegen::Hardening) -> (Insn, Insn) {
@@ -2368,10 +2419,10 @@ pub(crate) fn pac_pair(hardening: crate::c5::codegen::Hardening) -> (Insn, Insn)
 /// decodes as a NOP where FEAT_PAuth is absent and leaves an unsigned
 /// pointer unchanged. x30 is the only register the hint form reaches;
 /// stripping any other needs `XPACI <Xd>`, which requires FEAT_PAuth.
-pub(crate) const XPACLRI: Insn = Insn::new(0xD503_20FF, "xpaclri", []);
+pub(crate) const XPACLRI: Insn = Insn::fixed(0xD503_20FF, "xpaclri");
 
 /// `NOP` (`HINT #0`).
-pub(crate) const NOP: Insn = Insn::new(0xD503_201F, "nop", []);
+pub(crate) const NOP: Insn = Insn::fixed(0xD503_201F, "nop");
 
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
 /// the `Terminator::TailExt` lowering to forward control to the
@@ -2379,17 +2430,17 @@ pub(crate) const NOP: Insn = Insn::new(0xD503_201F, "nop", []);
 /// the libc fn's `RET` lands back at the c5 caller's post-call
 /// continuation instead of bouncing back through the trampoline.
 pub(crate) fn enc_br(rn: Reg) -> Insn {
-    Insn::new(0xD61F_0000 | ((rn.0 as u32) << 5), "br", [t::x(rn)])
+    insn!(0xD61F_0000 | ((rn.0 as u32) << 5), "br", [t::x(rn)])
 }
 
 /// `SVC #imm16` -- supervisor call (system call). On Linux/aarch64
 /// the kernel reads the intrinsic number from `x8` and the arguments
 /// from `x0..x5`; the immediate is conventionally zero.
 pub(crate) fn enc_svc(imm16: u16) -> Insn {
-    Insn::new(
+    insn!(
         0xD400_0001 | ((imm16 as u32) << 5),
         "svc",
-        [t::imm(imm16.into())],
+        [t::imm(imm16.into())]
     )
 }
 
@@ -2522,18 +2573,19 @@ pub(crate) fn enc_mem(op: MemOp, rt: u8, rn: Reg, off: MemOff) -> Insn {
     );
     debug_assert!(rt < 32);
     let word = op.word | off.field | ((rn.0 as u32) << 5) | (rt as u32);
-    let t = match op.rt {
+    let (kind, scale) = (op.rt, op.scale as u8);
+    let rt = move || match kind {
         'x' => t::x(Reg(rt)),
         'w' => t::w(Reg(rt)),
-        _ => t::fp(rt, op.scale as u8),
+        _ => t::fp(rt, scale),
     };
     // Bit 24 selects the scaled form; bits 11:10 01 the post-indexed one.
     if off.field & 1 << 24 != 0 {
-        Insn::new(word, op.name, [t, t::mem_lo12(rn, op.scale as u8)])
+        insn!(word, op.name, [rt(), t::mem_lo12(rn, scale)])
     } else if off.field >> 10 & 3 == 1 {
-        Insn::new(word, op.name, [t, t::mem(rn, 0), t::imm(off.disp)])
+        insn!(word, op.name, [rt(), t::mem(rn, 0), t::imm(off.disp)])
     } else {
-        Insn::new(word, op.unscaled_name, [t, t::mem(rn, off.disp)])
+        insn!(word, op.unscaled_name, [rt(), t::mem(rn, off.disp)])
     }
 }
 
@@ -2589,10 +2641,10 @@ fn enc_reg_offset(form: u32, rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
 /// `LDR Xt, [Xn|SP, Rm, <ext> #3]`. The Win64 TLS lowering fetches
 /// `tls_array[_tls_index]` with it.
 pub(crate) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0xF860_1800, rt, rn, rm, ext),
         "ldr",
-        [t::x(rt), index(rn, rm, ext, Some(3))],
+        [t::x(rt), index(rn, rm, ext, Some(3))]
     )
 }
 
@@ -2600,116 +2652,116 @@ pub(crate) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn
 /// the SIMD&FP bit (26) set.
 pub(crate) fn enc_ldr_fp_reg(single: bool, rt: u8, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
     let form = if single { 0xBC60_1800 } else { 0xFC60_1800 };
-    Insn::new(
+    insn!(
         enc_reg_offset(form, Reg(rt), rn, rm, ext),
         "ldr",
         [
             t::sd(rt, single),
             index(rn, rm, ext, Some(if single { 2 } else { 3 })),
-        ],
+        ]
     )
 }
 
 /// The store counterpart of [`enc_ldr_fp_reg`].
 pub(crate) fn enc_str_fp_reg(single: bool, rt: u8, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
     let form = if single { 0xBC20_1800 } else { 0xFC20_1800 };
-    Insn::new(
+    insn!(
         enc_reg_offset(form, Reg(rt), rn, rm, ext),
         "str",
         [
             t::sd(rt, single),
             index(rn, rm, ext, Some(if single { 2 } else { 3 })),
-        ],
+        ]
     )
 }
 
 /// `LDRSW Xt, [Xn|SP, Rm, <ext> #2]`.
 pub(crate) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0xB8A0_1800, rt, rn, rm, ext),
         "ldrsw",
-        [t::x(rt), index(rn, rm, ext, Some(2))],
+        [t::x(rt), index(rn, rm, ext, Some(2))]
     )
 }
 
 /// `LDR Wt, [Xn|SP, Rm, <ext> #2]`.
 pub(crate) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0xB860_1800, rt, rn, rm, ext),
         "ldr",
-        [t::w(rt), index(rn, rm, ext, Some(2))],
+        [t::w(rt), index(rn, rm, ext, Some(2))]
     )
 }
 
 /// `LDRSH Xt, [Xn|SP, Rm, <ext> #1]`.
 pub(crate) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0x78A0_1800, rt, rn, rm, ext),
         "ldrsh",
-        [t::x(rt), index(rn, rm, ext, Some(1))],
+        [t::x(rt), index(rn, rm, ext, Some(1))]
     )
 }
 
 /// `LDRH Wt, [Xn|SP, Rm, <ext> #1]`.
 pub(crate) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0x7860_1800, rt, rn, rm, ext),
         "ldrh",
-        [t::w(rt), index(rn, rm, ext, Some(1))],
+        [t::w(rt), index(rn, rm, ext, Some(1))]
     )
 }
 
 /// `LDRSB Xt, [Xn|SP, Rm, <ext>]`.
 pub(crate) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0x38A0_0800, rt, rn, rm, ext),
         "ldrsb",
-        [t::x(rt), index(rn, rm, ext, None)],
+        [t::x(rt), index(rn, rm, ext, None)]
     )
 }
 
 /// `LDRB Wt, [Xn|SP, Rm, <ext>]`.
 pub(crate) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0x3860_0800, rt, rn, rm, ext),
         "ldrb",
-        [t::w(rt), index(rn, rm, ext, None)],
+        [t::w(rt), index(rn, rm, ext, None)]
     )
 }
 
 /// `STR Xt, [Xn|SP, Rm, <ext> #3]`.
 pub(crate) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0xF820_1800, rt, rn, rm, ext),
         "str",
-        [t::x(rt), index(rn, rm, ext, Some(3))],
+        [t::x(rt), index(rn, rm, ext, Some(3))]
     )
 }
 
 /// `STR Wt, [Xn|SP, Rm, <ext> #2]`.
 pub(crate) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0xB820_1800, rt, rn, rm, ext),
         "str",
-        [t::w(rt), index(rn, rm, ext, Some(2))],
+        [t::w(rt), index(rn, rm, ext, Some(2))]
     )
 }
 
 /// `STRH Wt, [Xn|SP, Rm, <ext> #1]`.
 pub(crate) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0x7820_1800, rt, rn, rm, ext),
         "strh",
-        [t::w(rt), index(rn, rm, ext, Some(1))],
+        [t::w(rt), index(rn, rm, ext, Some(1))]
     )
 }
 
 /// `STRB Wt, [Xn|SP, Rm, <ext>]`.
 pub(crate) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
-    Insn::new(
+    insn!(
         enc_reg_offset(0x3820_0800, rt, rn, rm, ext),
         "strb",
-        [t::w(rt), index(rn, rm, ext, None)],
+        [t::w(rt), index(rn, rm, ext, None)]
     )
 }
 
@@ -2823,10 +2875,10 @@ pub(crate) fn enc_lse(
     // `ST<op>` alias.
     if rt == Reg::SP && !acq && op != LseOp::Swp {
         let mnem = LSE_STORES[op as usize][usize::from(rel)][w];
-        return Insn::new(word, mnem, [t::r(rs, wide), t::mem(rn, 0)]);
+        return insn!(word, mnem, [t::r(rs, wide), t::mem(rn, 0)]);
     }
     let mnem = LSE_LOADS[op as usize][ordering(acq, rel)][w];
-    Insn::new(word, mnem, [t::r(rs, wide), t::r(rt, wide), t::mem(rn, 0)])
+    insn!(word, mnem, [t::r(rs, wide), t::r(rt, wide), t::mem(rn, 0)])
 }
 
 /// The `LD<op>` and `SWP` mnemonics by [`LseOp`], [`ordering`] and
@@ -2922,7 +2974,7 @@ pub(crate) fn enc_cas(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg, width: u8
     ];
     let mnem = CAS[ordering(acq, rel)][width_index(width)];
     let wide = width == 8;
-    Insn::new(word, mnem, [t::r(rs, wide), t::r(rt, wide), t::mem(rn, 0)])
+    insn!(word, mnem, [t::r(rs, wide), t::r(rt, wide), t::mem(rn, 0)])
 }
 
 /// `CASP{A}{L} <Xs>, <X(s+1)>, <Xt>, <X(t+1)>, [<Xn|SP>]` -- compare and
@@ -2930,7 +2982,7 @@ pub(crate) fn enc_cas(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg, width: u8
 /// pair at `rs` the comparand and then the prior contents, the pair at
 /// `rt` the replacement.
 pub(crate) fn enc_casp(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x4820_7C00
             | (u32::from(acq) << 22)
             | (u32::from(rel) << 15)
@@ -2944,47 +2996,47 @@ pub(crate) fn enc_casp(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg) -> Insn 
             t::x(rt),
             t::x(Reg(rt.0 + 1)),
             t::mem(rn, 0),
-        ],
+        ]
     )
 }
 
 /// `LDAPR{B,H} <Wt>, [<Xn|SP>]` / `LDAPR <Xt>, [<Xn|SP>]` -- load-acquire
 /// RCpc register of `width` bytes, zero-extended (FEAT_LRCPC).
 pub(crate) fn enc_ldapr(rt: Reg, rn: Reg, width: u8) -> Insn {
-    Insn::new(
+    insn!(
         0x38BF_C000 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32),
         ["ldaprb", "ldaprh", "ldapr"][width_index(width)],
-        [t::r(rt, width == 8), t::mem(rn, 0)],
+        [t::r(rt, width == 8), t::mem(rn, 0)]
     )
 }
 
 /// `LDAR{B,H} <Wt>, [<Xn|SP>]` / `LDAR <Wt|Xt>, [<Xn|SP>]` --
 /// load-acquire register of `width` bytes, zero-extended. No offset.
 pub(crate) fn enc_ldar(rt: Reg, rn: Reg, width: u8) -> Insn {
-    Insn::new(
+    insn!(
         0x08DF_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32),
         ["ldarb", "ldarh", "ldar"][width_index(width)],
-        [t::r(rt, width == 8), t::mem(rn, 0)],
+        [t::r(rt, width == 8), t::mem(rn, 0)]
     )
 }
 
 /// `STLR{B,H} <Wt>, [<Xn|SP>]` / `STLR <Wt|Xt>, [<Xn|SP>]` --
 /// store-release register of `width` bytes. No offset.
 pub(crate) fn enc_stlr(rt: Reg, rn: Reg, width: u8) -> Insn {
-    Insn::new(
+    insn!(
         0x089F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32),
         ["stlrb", "stlrh", "stlr"][width_index(width)],
-        [t::r(rt, width == 8), t::mem(rn, 0)],
+        [t::r(rt, width == 8), t::mem(rn, 0)]
     )
 }
 
 /// `LDAXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load-acquire exclusive pair of
 /// 64-bit registers, the load half of a 128-bit exclusive access.
 pub(crate) fn enc_ldaxp(rt: Reg, rt2: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xC87F_8000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32),
         "ldaxp",
-        [t::x(rt), t::x(rt2), t::mem(rn, 0)],
+        [t::x(rt), t::x(rt2), t::mem(rn, 0)]
     )
 }
 
@@ -2992,24 +3044,24 @@ pub(crate) fn enc_ldaxp(rt: Reg, rt2: Reg, rn: Reg) -> Insn {
 /// pair of 64-bit registers. `rs` receives 0 on success and 1 when the
 /// monitor was lost.
 pub(crate) fn enc_stlxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xC820_8000
             | ((rs.0 as u32) << 16)
             | ((rt2.0 as u32) << 10)
             | ((rn.0 as u32) << 5)
             | (rt.0 as u32),
         "stlxp",
-        [t::w(rs), t::x(rt), t::x(rt2), t::mem(rn, 0)],
+        [t::w(rs), t::x(rt), t::x(rt2), t::mem(rn, 0)]
     )
 }
 
 /// `LDXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load exclusive pair, the non-acquire
 /// counterpart of [`enc_ldaxp`] (the acquire `o0` bit 15 cleared).
 pub(crate) fn enc_ldxp(rt: Reg, rt2: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xC87F_0000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32),
         "ldxp",
-        [t::x(rt), t::x(rt2), t::mem(rn, 0)],
+        [t::x(rt), t::x(rt2), t::mem(rn, 0)]
     )
 }
 
@@ -3017,14 +3069,14 @@ pub(crate) fn enc_ldxp(rt: Reg, rt2: Reg, rn: Reg) -> Insn {
 /// non-release counterpart of [`enc_stlxp`] (the release `o0` bit 15
 /// cleared). `rs` receives 0 on success and 1 when the monitor was lost.
 pub(crate) fn enc_stxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xC820_0000
             | ((rs.0 as u32) << 16)
             | ((rt2.0 as u32) << 10)
             | ((rn.0 as u32) << 5)
             | (rt.0 as u32),
         "stxp",
-        [t::w(rs), t::x(rt), t::x(rt2), t::mem(rn, 0)],
+        [t::w(rs), t::x(rt), t::x(rt2), t::mem(rn, 0)]
     )
 }
 
@@ -3032,7 +3084,7 @@ pub(crate) fn enc_stxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> Insn {
 /// 64-bit. When `cond` holds, compare `Xn` with `Xm`; otherwise set the
 /// flags directly from `nzcv`. Used to fuse a two-word equality test.
 pub(crate) fn enc_ccmp(rn: Reg, rm: Reg, nzcv: u8, cond: Cond) -> Insn {
-    Insn::new(
+    insn!(
         0xFA40_0000
             | ((rm.0 as u32) << 16)
             | ((cond as u32) << 12)
@@ -3044,7 +3096,7 @@ pub(crate) fn enc_ccmp(rn: Reg, rm: Reg, nzcv: u8, cond: Cond) -> Insn {
             t::x(rm),
             t::imm((nzcv & 0xF).into()),
             t::cond(cond),
-        ],
+        ]
     )
 }
 
@@ -3122,7 +3174,7 @@ pub(crate) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
     debug_assert!(shift < 64, "lsl imm: {shift} >= 64");
     let immr = ((64 - shift as u32) & 63) << 16;
     let imms = ((63 - shift as u32) & 63) << 10;
-    Insn::new(
+    insn!(
         0xD340_0000 | immr | imms | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "ubfm",
         [
@@ -3130,7 +3182,7 @@ pub(crate) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
             t::x(rn),
             t::dec(i64::from((64 - u32::from(shift)) & 63)),
             t::dec(i64::from((63 - u32::from(shift)) & 63)),
-        ],
+        ]
     )
 }
 
@@ -3139,7 +3191,7 @@ pub(crate) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
 pub(crate) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
     debug_assert!(shift < 64, "lsr imm: {shift} >= 64");
     let immr = ((shift as u32) & 63) << 16;
-    Insn::new(
+    insn!(
         0xD340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "ubfm",
         [
@@ -3147,7 +3199,7 @@ pub(crate) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
             t::x(rn),
             t::dec(i64::from(shift & 63)),
             t::dec(63),
-        ],
+        ]
     )
 }
 
@@ -3156,7 +3208,7 @@ pub(crate) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
 pub(crate) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
     debug_assert!(shift < 64, "asr imm: {shift} >= 64");
     let immr = ((shift as u32) & 63) << 16;
-    Insn::new(
+    insn!(
         0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "sbfm",
         [
@@ -3164,26 +3216,26 @@ pub(crate) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
             t::x(rn),
             t::dec(i64::from(shift & 63)),
             t::dec(63),
-        ],
+        ]
     )
 }
 
 /// `REV <Xd>, <Xn>` -- reverse the 8 bytes.
 pub(crate) fn enc_rev64(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0xDAC0_0C00 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "rev",
-        [t::x(rd), t::x(rn)],
+        [t::x(rd), t::x(rn)]
     )
 }
 
 /// `REV <Wd>, <Wn>` -- reverse the low 4 bytes; the 32-bit write
 /// zero-extends into `Xd`.
 pub(crate) fn enc_rev32(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x5AC0_0800 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "rev",
-        [t::w(rd), t::w(rn)],
+        [t::w(rd), t::w(rn)]
     )
 }
 
@@ -3193,7 +3245,7 @@ pub(crate) fn enc_rev32(rd: Reg, rn: Reg) -> Insn {
 pub(crate) fn enc_lsr32_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
     debug_assert!(shift < 32, "lsr32 imm: {shift} >= 32");
     let immr = ((shift as u32) & 31) << 16;
-    Insn::new(
+    insn!(
         0x5300_7C00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "ubfm",
         [
@@ -3201,7 +3253,7 @@ pub(crate) fn enc_lsr32_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
             t::w(rn),
             t::dec(i64::from(shift & 31)),
             t::dec(31),
-        ],
+        ]
     )
 }
 
@@ -3214,7 +3266,7 @@ pub(crate) fn enc_bfx(signed: bool, rd: Reg, rn: Reg, lsb: u8, width: u8) -> Ins
         "bfx #{lsb}, #{width}"
     );
     let base = if signed { 0x9340_0000 } else { 0xD340_0000 };
-    Insn::new(
+    insn!(
         base | (lsb << 16) | ((lsb + width - 1) << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
         if signed { "sbfm" } else { "ubfm" },
         [
@@ -3222,7 +3274,7 @@ pub(crate) fn enc_bfx(signed: bool, rd: Reg, rn: Reg, lsb: u8, width: u8) -> Ins
             t::x(rn),
             t::dec(lsb.into()),
             t::dec((lsb + width - 1).into()),
-        ],
+        ]
     )
 }
 
@@ -3235,30 +3287,27 @@ pub(crate) fn enc_uxt_w(rd: Reg, rn: Reg, bits: u8) -> Insn {
     debug_assert!(matches!(bits, 8 | 16));
     let imms = u32::from(bits) - 1;
     let word = 0x5300_0000 | (imms << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32);
-    Insn::new(
+    insn!(
         word,
         "ubfm",
-        [t::w(rd), t::w(rn), t::dec(0), t::dec(imms.into())],
+        [t::w(rd), t::w(rn), t::dec(0), t::dec(imms.into())]
     )
 }
 
 pub(crate) fn enc_sxtw(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
-        // sf=1, opc=00 (SBFM), immr=0, imms=31, Rn, Rd.
-        0x9340_7C00 | ((rn.0 as u32) << 5) | (rd.0 as u32),
-        "sbfm",
-        [t::x(rd), t::x(rn), t::dec(0), t::dec(31)],
-    )
+    // sf=1, opc=00 (SBFM), immr=0, imms=31, Rn, Rd.
+    let word = 0x9340_7C00 | ((rn.0 as u32) << 5) | (rd.0 as u32);
+    insn!(word, "sbfm", [t::x(rd), t::x(rn), t::dec(0), t::dec(31)])
 }
 
 /// `SXTH <Xd>, <Wn>` -- sign-extend low 16 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #15`. Companion to `enc_sxtw` for the
 /// short-narrow shape (`Shl 48; Shr 48`).
 pub(crate) fn enc_sxth(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x9340_3C00 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "sbfm",
-        [t::x(rd), t::x(rn), t::dec(0), t::dec(15)],
+        [t::x(rd), t::x(rn), t::dec(0), t::dec(15)]
     )
 }
 
@@ -3266,10 +3315,10 @@ pub(crate) fn enc_sxth(rd: Reg, rn: Reg) -> Insn {
 /// Alias of `SBFM Xd, Xn, #0, #7`. Companion to `enc_sxtw` for the
 /// char-narrow shape (`Shl 56; Shr 56`).
 pub(crate) fn enc_sxtb(rd: Reg, rn: Reg) -> Insn {
-    Insn::new(
+    insn!(
         0x9340_1C00 | ((rn.0 as u32) << 5) | (rd.0 as u32),
         "sbfm",
-        [t::x(rd), t::x(rn), t::dec(0), t::dec(7)],
+        [t::x(rd), t::x(rn), t::dec(0), t::dec(7)]
     )
 }
 
@@ -3287,10 +3336,10 @@ pub(crate) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> Insn {
         "str-pre imm: {imm} out of range"
     );
     let imm9 = (imm as u32) & 0x1FF;
-    Insn::new(
+    insn!(
         0xF800_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32),
         "str",
-        [t::x(rt), t::pre(rn, imm.into())],
+        [t::x(rt), t::pre(rn, imm.into())]
     )
 }
 
@@ -3302,10 +3351,10 @@ pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> Insn {
         "ldr-post imm: {imm} out of range"
     );
     let imm9 = (imm as u32) & 0x1FF;
-    Insn::new(
+    insn!(
         0xF840_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32),
         "ldr",
-        [t::x(rt), t::mem(rn, 0), t::imm(imm.into())],
+        [t::x(rt), t::mem(rn, 0), t::imm(imm.into())]
     )
 }
 
@@ -3313,7 +3362,7 @@ pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> Insn {
 pub(crate) fn enc_ldr_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> Insn {
     let word = enc_str_w_post(width, rt, rn, imm).word | 0x0040_0000;
     let mnem = ["ldrb", "ldrh", "ldr"][width_index(width)];
-    Insn::new(word, mnem, [t::w(rt), t::mem(rn, 0), t::imm(imm.into())])
+    insn!(word, mnem, [t::w(rt), t::mem(rn, 0), t::imm(imm.into())])
 }
 
 /// `STR <Wt>, [<Xn|SP>], #imm` / `STRH` / `STRB` -- post-indexed store of `width` 4, 2 or 1.
@@ -3328,10 +3377,10 @@ pub(crate) fn enc_str_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> Insn {
         _ => 0b00,
     };
     let imm9 = (imm as u32) & 0x1FF;
-    Insn::new(
+    insn!(
         0x3800_0400 | (size << 30) | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32),
         ["strb", "strh", "str"][width_index(width)],
-        [t::w(rt), t::mem(rn, 0), t::imm(imm.into())],
+        [t::w(rt), t::mem(rn, 0), t::imm(imm.into())]
     )
 }
 
@@ -3353,10 +3402,10 @@ pub(crate) fn enc_adrp(rd: Reg, imm21: i32) -> Insn {
     let v = (imm21 as u32) & 0x1F_FFFF;
     let immlo = v & 0x3;
     let immhi = (v >> 2) & 0x7_FFFF;
-    Insn::new(
+    insn!(
         0x9000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32),
         "adrp",
-        [t::x(rd), t::adrp()],
+        [t::x(rd), t::adrp()]
     )
 }
 
@@ -3433,16 +3482,40 @@ pub(crate) fn put(code: &mut Vec<u8>, insn: Insn) {
     code.extend_from_slice(&insn.word.to_le_bytes());
 }
 
-/// `mnemonic` over `ops` through the instruction catalog.
-pub(crate) fn enc_table(
+/// `mnemonic` over `ops` through the instruction catalog, reading as the
+/// catalog takes them.
+pub(crate) fn emit_table(
+    code: &mut CodeBuf,
     mnemonic: &str,
     ops: &[super::table::Opnd],
-) -> Result<Insn, alloc::string::String> {
-    super::table::encode(mnemonic, ops).map(|word| Insn::of_table(word, mnemonic, ops))
+) -> Result<(), alloc::string::String> {
+    let word = super::table::encode(mnemonic, ops)?;
+    let at = code.len();
+    code.extend_from_slice(&word.to_le_bytes());
+    #[cfg(feature = "listing")]
+    code.describe(at, || t::table_text(mnemonic, ops));
+    #[cfg(not(feature = "listing"))]
+    let _ = at;
+    Ok(())
+}
+
+/// Rewrite the instruction at `at` into `mnemonic` over `ops` through the
+/// instruction catalog.
+pub(crate) fn patch_table(
+    code: &mut CodeBuf,
+    at: usize,
+    mnemonic: &str,
+    ops: &[super::table::Opnd],
+) -> Result<(), alloc::string::String> {
+    let word = super::table::encode(mnemonic, ops)?;
+    code[at..at + 4].copy_from_slice(&word.to_le_bytes());
+    #[cfg(feature = "listing")]
+    code.redescribe(at, || t::table_text(mnemonic, ops));
+    Ok(())
 }
 
 /// `UDF #0`, the placeholder of a word a later pass rewrites.
-pub(crate) const UDF: Insn = Insn::new(0, "udf", [t::imm(0)]);
+pub(crate) const UDF: Insn = Insn::fixed(0, "udf #0x0");
 
 /// Rewrite the instruction at `at` into `insn`.
 #[inline(always)]
@@ -4615,7 +4688,7 @@ mod tests {
     #[test]
     fn emit_writes_little_endian() {
         let mut code = CodeBuf::default();
-        emit(&mut code, Insn::new(0xDEAD_BEEF, "udf", []));
+        emit(&mut code, insn!(0xDEAD_BEEF, "udf", []));
         assert_eq!(*code, vec![0xEF, 0xBE, 0xAD, 0xDE]);
     }
 

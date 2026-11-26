@@ -52,7 +52,7 @@ pub(super) fn emit_intrinsic(
             } else {
                 (0x04E0_E3E0, "cntd")
             };
-            emit(code, Insn::new(base | u32::from(rd.0), mnem, [text::x(rd)]));
+            emit(code, insn!(base | u32::from(rd.0), mnem, [text::x(rd)]));
             store_spilled_int(code, frame, dst, rd);
             Ok(())
         }
@@ -88,19 +88,19 @@ pub(super) fn emit_intrinsic(
         }
         // `yield`, the AArch64 spin-loop hint.
         I::CpuRelax => {
-            emit(code, Insn::new(0xD503_203F, "yield", []));
+            emit(code, insn!(0xD503_203F, "yield", []));
             Ok(())
         }
         // `dmb ish`, a full barrier across the inner shareable domain:
         // the seq_cst, release and acq_rel thread fences (C11 7.17.4.1).
         I::AtomicThreadFence | I::AtomicReleaseFence => {
-            emit(code, Insn::new(0xD503_3BBF, "dmb", [text::lit("ish")]));
+            emit(code, insn!(0xD503_3BBF, "dmb", [text::lit("ish")]));
             Ok(())
         }
         // `dmb ishld`: the acquire fence orders earlier loads before
         // later loads and stores.
         I::AtomicAcquireFence => {
-            emit(code, Insn::new(0xD503_39BF, "dmb", [text::lit("ishld")]));
+            emit(code, insn!(0xD503_39BF, "dmb", [text::lit("ishld")]));
             Ok(())
         }
         // A signal fence (C11 7.17.4.2) needs no instruction.
@@ -122,12 +122,12 @@ pub(super) fn emit_intrinsic(
         // `dsb ish`: data synchronization barrier over the inner shareable
         // domain.
         I::AArch64DsbIsh => {
-            emit(code, Insn::new(0xD503_3B9F, "dsb", [text::lit("ish")]));
+            emit(code, insn!(0xD503_3B9F, "dsb", [text::lit("ish")]));
             Ok(())
         }
         // `isb`: instruction synchronization barrier.
         I::AArch64Isb => {
-            emit(code, Insn::new(0xD503_3FDF, "isb", []));
+            emit(code, insn!(0xD503_3FDF, "isb", []));
             Ok(())
         }
         I::AArch64DcCvau | I::AArch64IcIvau => {
@@ -510,7 +510,7 @@ fn emit_cache_op(
     };
     emit(
         code,
-        Insn::new(base | (rt.0 as u32), mnem, [text::lit(op), text::x(rt)]),
+        insn!(base | (rt.0 as u32), mnem, [text::lit(op), text::x(rt)]),
     );
     Ok(())
 }

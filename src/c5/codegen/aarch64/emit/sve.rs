@@ -27,10 +27,10 @@ pub(super) fn enc_sve_mem(load: bool, vector: bool, t: u8, n: Reg, imm: i32) -> 
         base: n.0,
         off: imm.into(),
     };
-    Insn::new(
+    insn!(
         word,
         if load { "ldr" } else { "str" },
-        [text::Op::T(reg), text::Op::T(mem)],
+        [text::Op::T(reg), text::Op::T(mem)]
     )
 }
 
@@ -38,18 +38,17 @@ pub(super) fn enc_sve_mem(load: bool, vector: bool, t: u8, n: Reg, imm: i32) -> 
 pub(super) fn enc_mov_z(d: u8, n: u8) -> Insn {
     let word = 0x0460_3000 | u32::from(n) << 16 | u32::from(n) << 5 | u32::from(d);
     let z = |num| text::Op::T(Opnd::ZReg { num, size: Some(3) });
-    Insn::new(word, "mov", [z(d), z(n)])
+    insn!(word, "mov", [z(d), z(n)])
 }
 
 /// `mov pd.b, pn.b`, the ORR of `pn` with itself under `pn`.
 pub(super) fn enc_mov_p(d: u8, n: u8) -> Insn {
     let p = |num| text::Op::T(Opnd::PReg { num, size: Some(0) });
-    let ops = [p(d), p(n)];
-    let n = u32::from(n);
-    Insn::new(
-        0x2580_4000 | n << 16 | n << 10 | n << 5 | u32::from(d),
+    let w = u32::from(n);
+    insn!(
+        0x2580_4000 | w << 16 | w << 10 | w << 5 | u32::from(d),
         "mov",
-        ops,
+        [p(d), p(n)]
     )
 }
 
@@ -58,8 +57,11 @@ fn enc_addvl(d: Reg, n: Reg, imm: i32, pl: bool) -> Insn {
     // ADDPL differs from ADDVL in bit 22.
     let base = if pl { 0x0460_5000 } else { 0x0420_5000 };
     let word = base | u32::from(n.0) << 16 | ((imm as u32) & 0x3F) << 5 | u32::from(d.0);
-    let ops = [text::xsp(d), text::xsp(n), text::dec(imm.into())];
-    Insn::new(word, if pl { "addpl" } else { "addvl" }, ops)
+    insn!(
+        word,
+        if pl { "addpl" } else { "addvl" },
+        [text::xsp(d), text::xsp(n), text::dec(imm.into())]
+    )
 }
 
 /// Reserve the VL-scaled region in steps of at most 3840 bytes (15 vector

@@ -119,11 +119,8 @@ fn immediate(i: SveImm) -> Opnd {
 }
 
 fn word(code: &mut CodeBuf, mnem: &str, ops: &[Opnd]) -> Emit {
-    match super::encode::enc_table(mnem, ops) {
-        Ok(w) => {
-            emit(code, w);
-            Ok(())
-        }
+    match super::encode::emit_table(code, mnem, ops) {
+        Ok(()) => Ok(()),
         Err(e) => fail(alloc::format!("SVE row `{mnem}`: {e}")),
     }
 }

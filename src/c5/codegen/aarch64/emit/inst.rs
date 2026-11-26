@@ -1554,25 +1554,22 @@ fn emit_vec_const(
         size: size as u8,
         q,
     };
-    let modified = |m: &str, v: u64, shift: u32| {
-        (v >> 8 == 0)
-            .then(|| {
-                super::encode::enc_table(
-                    m,
-                    &[
-                        vreg(esize.trailing_zeros()),
-                        Opnd::Imm(v as i64),
-                        Opnd::Lsl(shift),
-                    ],
-                )
-            })
-            .and_then(Result::ok)
+    // A form the catalog encodes: its mnemonic and operands.
+    let encodes =
+        |m: &'static str, ops: Vec<Opnd>| super::table::encode(m, &ops).is_ok().then_some((m, ops));
+    let modified = |m: &'static str, v: u64, shift: u32| {
+        let ops = alloc::vec![
+            vreg(esize.trailing_zeros()),
+            Opnd::Imm(v as i64),
+            Opnd::Lsl(shift)
+        ];
+        (v >> 8 == 0).then(|| encodes(m, ops)).flatten()
     };
     let bytewise = pattern.to_le_bytes().iter().all(|&b| b == 0 || b == 0xFF);
     let word = if bytewise {
-        super::encode::enc_table("movi", &[vreg(3), Opnd::Imm(pattern as i64)]).ok()
+        encodes("movi", alloc::vec![vreg(3), Opnd::Imm(pattern as i64)])
     } else if esize == 1 {
-        super::encode::enc_table("movi", &[vreg(0), Opnd::Imm(lane as i64)]).ok()
+        encodes("movi", alloc::vec![vreg(0), Opnd::Imm(lane as i64)])
     } else if esize <= 4 {
         (0..bits).step_by(8).find_map(|s| {
             let (v, n) = (lane >> s, !lane & mask);
@@ -1589,7 +1586,11 @@ fn emit_vec_const(
         None
     };
     match word {
-        Some(w) => emit(code, w),
+        Some((m, ops)) => {
+            if let Err(e) = super::encode::emit_table(code, m, &ops) {
+                return fail(e);
+            }
+        }
         None => {
             super::encode::load_imm64(code, scratch.primary, lane);
             emit(

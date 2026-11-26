@@ -51,7 +51,12 @@ fn accumulates(row: &SimdOp) -> bool {
 /// by-element row names its last register's lane `imm`, or without one
 /// is the vector form over that register, which holds the lane in every
 /// lane.
-fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<Insn, alloc::string::String> {
+fn encode(
+    code: &mut CodeBuf,
+    row: &SimdOp,
+    regs: &[u8],
+    imm: Option<u8>,
+) -> Result<(), alloc::string::String> {
     use super::table::Opnd;
     // A table lookup names its table as a one-register list.
     if let crate::c5::simd::Sem::Tbl(bytes) | crate::c5::simd::Sem::Tbx(bytes) = row.sem {
@@ -70,7 +75,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<Insn, alloc::str
             size: 0,
             q: true,
         };
-        return super::encode::enc_table(row.mnem, &[index(rd), table, index(rm)]);
+        return super::encode::emit_table(code, row.mnem, &[index(rd), table, index(rm)]);
     }
     // A 64-bit polynomial product names its 128-bit lane `.1q` and its
     // sources' 64-bit lanes as vectors, the `2` form the upper ones.
@@ -80,7 +85,8 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<Insn, alloc::str
     ) = (row.sem, regs)
     {
         let v = |num, size, q| Opnd::VecReg { num, size, q };
-        return super::encode::enc_table(
+        return super::encode::emit_table(
+            code,
             row.mnem,
             &[v(*rd, 4, true), v(*rn, 3, high), v(*rm, 3, high)],
         );
@@ -96,7 +102,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<Insn, alloc::str
             num: *rn,
             is_d: false,
         };
-        return super::encode::enc_table(row.mnem, &[Opnd::QReg(*rd), e, w]);
+        return super::encode::emit_table(code, row.mnem, &[Opnd::QReg(*rd), e, w]);
     }
     // The SHA-256 and SHA-512 hashes name their state halves as q registers.
     if let (
@@ -109,7 +115,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<Insn, alloc::str
             size: row.ret.lane_bytes().trailing_zeros() as u8,
             q: true,
         };
-        return super::encode::enc_table(row.mnem, &[Opnd::QReg(*rd), Opnd::QReg(*rn), w]);
+        return super::encode::emit_table(code, row.mnem, &[Opnd::QReg(*rd), Opnd::QReg(*rn), w]);
     }
     // `dup` names its source lane in the operand: `vN.T[index]`.
     if let (crate::c5::simd::Sem::DupLane(w), [rd, rn], Some(index)) = (row.sem, regs, imm) {
@@ -126,7 +132,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<Insn, alloc::str
                 index,
             },
         ];
-        return super::encode::enc_table(row.mnem, &ops);
+        return super::encode::emit_table(code, row.mnem, &ops);
     }
     let skip = usize::from(accumulates(row));
     let mut ops: Vec<Opnd> = regs
@@ -177,13 +183,13 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<Insn, alloc::str
             (None, Opnd::VReg { is_d, .. }) => Opnd::VReg { num, is_d },
             (None, _) => return Err(alloc::format!("{}: no vector form", row.name)),
         };
-        return super::encode::enc_table(row.mnem, &ops);
+        return super::encode::emit_table(code, row.mnem, &ops);
     }
     ops.extend(imm.map(|n| Opnd::Imm(i64::from(n))));
     if row.compares_with_zero() {
         ops.push(Opnd::Imm(0));
     }
-    super::encode::enc_table(row.mnem, &ops)
+    super::encode::emit_table(code, row.mnem, &ops)
 }
 
 /// A halfword element's register is four bits wide: one from v16 up has
@@ -212,7 +218,7 @@ fn halfword_element(
                     index,
                 },
             ];
-            emit(code, super::encode::enc_table("dup", &ops)?);
+            super::encode::emit_table(code, "dup", &ops)?;
             Ok((scratch, None))
         }
         _ => Ok((reg, imm)),
@@ -292,8 +298,8 @@ pub(super) fn emit_a64_simd(
     } else {
         &regs[..n]
     });
-    match encode(row, &ops, imm) {
-        Ok(word) => emit(code, word),
+    match encode(code, row, &ops, imm) {
+        Ok(()) => {}
         Err(e) => return fail(alloc::format!("{}: {e}", row.name)),
     }
     transfer(code, args[0], frame.fp_scratch[0], (row.ret_bytes(), false))
@@ -363,8 +369,8 @@ pub(super) fn emit_a64_simd_val(
     } else {
         ops.extend(&regs[..n]);
     }
-    match encode(row, &ops, imm) {
-        Ok(word) => emit(code, word),
+    match encode(code, row, &ops, imm) {
+        Ok(()) => {}
         Err(e) => return fail(alloc::format!("{}: {e}", row.name)),
     }
     if acc != vd {

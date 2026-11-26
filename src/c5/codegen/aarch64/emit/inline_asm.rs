@@ -399,7 +399,7 @@ fn encode_deferred_asm_region(
                     for o in &insn.operands {
                         ops.push(conv(o)?);
                     }
-                    emit(&mut bytes, super::encode::enc_table(&insn.mnemonic, &ops)?);
+                    super::encode::emit_table(&mut bytes, &insn.mnemonic, &ops)?;
                 }
             }
         }
@@ -1903,10 +1903,7 @@ impl<'a> TemplateStream<'a> {
             table_ops.push(ops.conv(o)?);
         }
         let site = out.code.len();
-        emit(
-            out.code,
-            super::encode::enc_table(&insn.mnemonic, &table_ops)?,
-        );
+        super::encode::emit_table(out.code, &insn.mnemonic, &table_ops)?;
         if let Some((idx, expr)) = pending {
             self.insn_expr_fixups
                 .push((site, insn.mnemonic.clone(), table_ops, idx, expr));
@@ -1934,7 +1931,7 @@ impl<'a> TemplateStream<'a> {
             };
             let mut ops = ops.clone();
             ops[*idx] = Opnd::Imm(v);
-            patch(out.code, *site, super::encode::enc_table(mnemonic, &ops)?);
+            super::encode::patch_table(out.code, *site, mnemonic, &ops)?;
         }
         Ok(())
     }
@@ -2119,12 +2116,15 @@ fn encode_movw_abs(
         (false, true) => "movn",
         (false, false) => "movz",
     };
-    let ops = [
-        text::r(Reg(rd), is64),
-        text::imm(imm),
-        text::lsl(16 * u32::from(*group)),
-    ];
-    emit(out.code, Insn::new(word, mnem, ops));
+    let shift = 16 * u32::from(*group);
+    emit(
+        out.code,
+        insn!(
+            word,
+            mnem,
+            [text::r(Reg(rd), is64), text::imm(imm), text::lsl(shift)]
+        ),
+    );
     Ok(true)
 }
 
@@ -3027,12 +3027,15 @@ fn a64_movw_placeholder(
     };
     let word = if is64 { word } else { word & !(1 << 31) };
     let field = text::Op::At(crate::c5::codegen::listing::A64Field::Imm16, 0);
-    let ops = [
-        text::r(super::Reg(rd), is64),
-        field,
-        text::lsl(16 * u32::from(group)),
-    ];
-    Ok(Insn::new(word, if movk { "movk" } else { "movz" }, ops))
+    Ok(insn!(
+        word,
+        if movk { "movk" } else { "movz" },
+        [
+            text::r(super::Reg(rd), is64),
+            field,
+            text::lsl(16 * u32::from(group)),
+        ]
+    ))
 }
 
 /// The register shape of `o` after operand-reference resolution, for
@@ -3110,18 +3113,22 @@ fn encode_a64_sym_insn(
         } else {
             K::A64LdstLo12(size)
         };
-        // The offset field the relocation fills reads in the memory operand.
-        let n = ops.len() - 1;
-        let mut text_ops: Vec<text::Op> = ops[..n].iter().map(|&o| text::Op::T(o)).collect();
-        let base = match ops[n] {
-            Opnd::Mem { base, .. } => base,
-            _ => 31,
+        // The offset field the relocation fills reads in the memory operand;
+        // `a64_access_size` admits the one-register forms alone.
+        let (rt, base, scale) = match ops[..] {
+            [rt, Opnd::Mem { base, .. }] => (rt, base, size.trailing_zeros() as u8),
+            _ => {
+                return Err(alloc::string::String::from(
+                    "inline asm: `:lo12:` load/store takes one register",
+                ));
+            }
         };
-        text_ops.push(text::mem_lo12(
-            super::Reg(base),
-            size.trailing_zeros() as u8,
-        ));
-        let insn = Insn::of_ops(word, &insn.mnemonic, &text_ops);
+        let mnem = ldst_mnemonic(&insn.mnemonic);
+        let insn = insn!(
+            word,
+            mnem,
+            [text::Op::T(rt), text::mem_lo12(super::Reg(base), scale)]
+        );
         return Ok(Some((insn, kind, expr.clone())));
     }
     // A numeric-label reference (`b 1b`) is carried as a symbol reference
@@ -3242,8 +3249,9 @@ fn encode_a64_sym_insn(
                     "inline asm: `ldr` literal needs a register destination",
                 )
             })?;
-            let ops = [text::Op::T(conv(&insn.operands[0])?), text::target(5, 19)];
-            let word = Insn::of_ops(word, &insn.mnemonic, &ops);
+            let rt = conv(&insn.operands[0])?;
+            let mnem = ldst_mnemonic(&insn.mnemonic);
+            let word = insn!(word, mnem, [text::Op::T(rt), text::target(5, 19)]);
             Ok(Some((word, K::A64LdrLit19, name.clone())))
         }
         _ => {
@@ -3432,6 +3440,21 @@ fn a64_ldr_literal_word(mnem: &str, rt: &super::asm::AsmOpndA64) -> Option<(u32,
 
 /// The access size in bytes of a load/store mnemonic, from the mnemonic's
 /// width suffix or the register operand's class.
+/// The `'static` spelling of a single-register load or store mnemonic.
+fn ldst_mnemonic(mnem: &str) -> &'static str {
+    match mnem {
+        "ldrb" => "ldrb",
+        "strb" => "strb",
+        "ldrsb" => "ldrsb",
+        "ldrh" => "ldrh",
+        "strh" => "strh",
+        "ldrsh" => "ldrsh",
+        "ldrsw" => "ldrsw",
+        "str" => "str",
+        _ => "ldr",
+    }
+}
+
 fn a64_access_size(
     mnem: &str,
     rt: Option<&super::asm::AsmOpndA64>,

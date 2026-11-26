@@ -210,7 +210,7 @@ pub(crate) const fn lit(s: &'static str) -> Op {
 }
 
 #[cfg(feature = "listing")]
-pub(crate) use print::Desc;
+pub(crate) use print::{Lazy, table_text, text};
 
 #[cfg(feature = "listing")]
 mod print {
@@ -218,51 +218,53 @@ mod print {
     use alloc::string::String;
     use alloc::vec::Vec;
     use core::fmt::Write;
+    use core::mem::MaybeUninit;
 
     use super::super::table::Opnd;
     use super::Op;
     use crate::c5::codegen::listing::{Operand, Text};
 
-    /// The most operands and mnemonic bytes an A64 instruction takes.
-    const MAX_OPS: usize = 5;
-    const MAX_MNEM: usize = 12;
+    /// The bytes a [`Lazy`] closure's captures take: five words.
+    type Env = MaybeUninit<[u64; 5]>;
 
-    /// An instruction's mnemonic and operands.
-    #[derive(Clone, Copy, Debug)]
-    pub(crate) struct Desc {
-        mnem: [u8; MAX_MNEM],
-        len: u8,
-        ops: [Op; MAX_OPS],
-        n: u8,
+    /// A closure that forms an instruction's text, stored in place so that
+    /// every encoder returns one type and a lowering that lists nothing
+    /// pays for the stores of the captures alone.
+    #[derive(Clone, Copy)]
+    pub(crate) struct Lazy {
+        call: fn(&Env) -> Text,
+        env: Env,
     }
 
-    impl Desc {
-        pub(crate) const fn new(mnem: &str, ops: &[Op]) -> Self {
-            let bytes = mnem.as_bytes();
-            let mut m = [0; MAX_MNEM];
-            let mut i = 0;
-            while i < bytes.len() && i < MAX_MNEM {
-                m[i] = bytes[i];
-                i += 1;
+    impl Lazy {
+        #[inline(always)]
+        pub(crate) fn new<F: Fn() -> Text + Copy + 'static>(f: F) -> Self {
+            const { assert!(size_of::<F>() <= size_of::<Env>() && align_of::<F>() <= align_of::<Env>()) };
+            let mut env = Env::uninit();
+            // SAFETY: `F` fits `env` in size and alignment, checked above.
+            unsafe { env.as_mut_ptr().cast::<F>().write(f) };
+            Lazy {
+                call: Self::call::<F>,
+                env,
             }
-            let mut all = [Op::Lit(""); MAX_OPS];
-            let mut k = 0;
-            while k < ops.len() && k < MAX_OPS {
-                all[k] = ops[k];
-                k += 1;
-            }
-            Desc {
-                mnem: m,
-                len: i as u8,
-                ops: all,
-                n: k as u8,
-            }
+        }
+
+        fn call<F: Fn() -> Text + Copy>(env: &Env) -> Text {
+            // SAFETY: `env` holds the `F` that `new` wrote; `F` is `Copy`, so
+            // the bitwise copies of `Lazy` hold it too and none needs a drop.
+            let f = unsafe { env.as_ptr().cast::<F>().read() };
+            f()
         }
 
         pub(crate) fn text(&self) -> Text {
-            let mnem = core::str::from_utf8(&self.mnem[..usize::from(self.len)]).unwrap_or("?");
-            text(mnem, &self.ops[..usize::from(self.n)])
+            (self.call)(&self.env)
         }
+    }
+
+    /// The text of catalog mnemonic `mnem` over `ops`.
+    pub(crate) fn table_text(mnem: &str, ops: &[Opnd]) -> Text {
+        let ops: Vec<Op> = ops.iter().map(|&o| Op::T(o)).collect();
+        text(mnem, &ops)
     }
 
     const CONDS: [&str; 16] = [

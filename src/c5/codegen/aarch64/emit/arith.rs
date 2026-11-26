@@ -2,7 +2,7 @@ use super::*;
 
 /// `brk #0xf004`, which Windows on ARM64 reports as
 /// STATUS_INTEGER_DIVIDE_BY_ZERO.
-const BRK_DIVIDE_BY_ZERO: Insn = Insn::new(0xD43E_0080, "brk", [text::imm(0xf004)]);
+const BRK_DIVIDE_BY_ZERO: Insn = Insn::fixed(0xD43E_0080, "brk #0xf004");
 
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via the `SXTB` / `SXTH` / `SXTW` aliases.

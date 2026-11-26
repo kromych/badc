@@ -855,9 +855,9 @@ fn address_arguments_name_their_symbols() {
     let l = listing(&dir, "args", src, &["-O"]);
     assert_tiled(&l);
     for row in [
-        "leaq table(%rip), %rdi",
-        "leaq helper(%rip), %rsi",
-        "counter@GOTPCREL(%rip), %rdx",
+        " leaq\ttable(%rip), %rdi\n",
+        " leaq\thelper(%rip), %rsi\n",
+        "counter@GOTPCREL(%rip), %rdx\n",
     ] {
         assert!(l.contains(row), "no `{row}` in\n{l}");
     }

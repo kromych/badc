@@ -5784,6 +5784,30 @@ fn many_retired_run_once_loops_take_one_threading_pass() {
     assert!(o < o0 * 15, "-O took {o:?} against -O0's {o0:?}");
 }
 
+/// A chain of a thousand loads from a constant table, each indexed by the
+/// one before, folds in one sweep: a load whose index a folded load gives
+/// folds in the same sweep, so `-O` stays within a small multiple of
+/// `-O0` and the function returns a constant.
+#[test]
+fn a_chain_of_constant_table_loads_folds_in_one_sweep() {
+    use core::fmt::Write;
+    const N: usize = 1000;
+    let table: Vec<String> = (0..=N).map(|i| ((i + 1) % (N + 1)).to_string()).collect();
+    let mut src = alloc::format!(
+        "static const int t[{}] = {{{}}};\nint f(void) {{\n    int v = t[0];\n",
+        N + 1,
+        table.join(",")
+    );
+    for _ in 0..N {
+        let _ = writeln!(src, "    v = t[v];");
+    }
+    src.push_str("    return v;\n}\n");
+    let (o0, o) = o0_and_o_times(&src);
+    assert!(o < o0 * 10, "-O took {o:?} against -O0's {o0:?}");
+    let loads = x64(&src, "f").iter().filter(|i| i.op == 0x8B).count();
+    assert_eq!(loads, 0, "every load folds");
+}
+
 /// A function calling an always-inline body of two blocks thousands of
 /// times compiles within a small multiple of the same function calling it
 /// out of line: the splices of a round take one rebuild of the caller, not

@@ -5908,6 +5908,25 @@ fn slot_coalescing_a_wide_block_is_not_quadratic() {
     );
 }
 
+/// The vector-slot promotion of a block with thousands of vector objects
+/// looks each object up rather than scanning every multi-cell object.
+#[test]
+#[cfg(not(debug_assertions))]
+fn vector_slots_of_a_wide_block_are_not_quadratic() {
+    let growth = wide_block_growth(
+        true,
+        (250, 4000),
+        |_| {},
+        |f| {
+            crate::c5::codegen::ssa::vector_slots::run(f);
+        },
+    );
+    assert!(
+        growth < 64.0,
+        "16x the vectors took {growth:.1}x the CPU time"
+    );
+}
+
 /// Splitting a block's objects finds the ones nothing reads through sets
 /// built once, not by scanning every value and copy per object: over a
 /// block of 300 vectors live at once the search examines about 19000

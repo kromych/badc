@@ -571,7 +571,10 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("strtod_family_reads_c99s_subject_sequences.c", 0),
     ("printf_family_formats_c99_conversions.c", 0),
     ("printf_sharp_flag_leaves_infinity_and_nan_alone.c", 0),
-    ("printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c", 0),
+    (
+        "printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c",
+        0,
+    ),
     ("fscanf_reads_whole_fields_across_threads.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
@@ -2292,7 +2295,10 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("strtod_family_reads_c99s_subject_sequences.c", 0),
     ("printf_family_formats_c99_conversions.c", 0),
     ("printf_sharp_flag_leaves_infinity_and_nan_alone.c", 0),
-    ("printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c", 0),
+    (
+        "printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c",
+        0,
+    ),
     ("fscanf_reads_whole_fields_across_threads.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
@@ -3642,7 +3648,10 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("strtod_family_reads_c99s_subject_sequences.c", 0),
     ("printf_family_formats_c99_conversions.c", 0),
     ("printf_sharp_flag_leaves_infinity_and_nan_alone.c", 0),
-    ("printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c", 0),
+    (
+        "printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c",
+        0,
+    ),
     ("fscanf_reads_whole_fields_across_threads.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
@@ -4682,7 +4691,10 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("strtod_family_reads_c99s_subject_sequences.c", 0),
     ("printf_family_formats_c99_conversions.c", 0),
     ("printf_sharp_flag_leaves_infinity_and_nan_alone.c", 0),
-    ("printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c", 0),
+    (
+        "printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c",
+        0,
+    ),
     ("fscanf_reads_whole_fields_across_threads.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
@@ -5696,7 +5708,10 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("strtod_family_reads_c99s_subject_sequences.c", 0),
     ("printf_family_formats_c99_conversions.c", 0),
     ("printf_sharp_flag_leaves_infinity_and_nan_alone.c", 0),
-    ("printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c", 0),
+    (
+        "printf_sharp_flag_on_infinity_and_nan_keeps_width_sign_and_counts.c",
+        0,
+    ),
     ("fscanf_reads_whole_fields_across_threads.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",

@@ -5784,6 +5784,33 @@ fn many_retired_run_once_loops_take_one_threading_pass() {
     assert!(o < o0 * 15, "-O took {o:?} against -O0's {o0:?}");
 }
 
+/// A call drops the operand-free values of the block's value cache, and
+/// only those: over a thousand calls in one block, each with a value of
+/// its own computed ahead of it, the calls visit one entry in all, where a
+/// scan of the cache per call visits every value the block computed
+/// before it (two million here). Counted in cache entries visited.
+#[test]
+fn a_call_drops_only_the_cached_operand_free_values() {
+    use crate::c5::codegen::ssa::build::CALL_CACHE_VISITS;
+    use core::fmt::Write;
+    const N: u64 = 1000;
+    let mut src = String::from(
+        "static inline __attribute__((always_inline)) int helper(int x) \
+         { if (x > 3) return x * 2; return x + 1; }\nint f(int a) {\n    int s = 0;\n",
+    );
+    for i in 0..N {
+        let _ = writeln!(src, "    s += helper(a + {i});");
+    }
+    src.push_str("    return s;\n}\n");
+    let before = CALL_CACHE_VISITS.with(|n| n.get());
+    object_at(&src, Target::LinuxX64, false);
+    let visits = CALL_CACHE_VISITS.with(|n| n.get()) - before;
+    assert!(
+        visits < 8 * N,
+        "{N} calls visited {visits} cache entries: the cache is scanned per call"
+    );
+}
+
 /// Each threaded edge settles what stays reachable from the head's
 /// strongly connected component rather than by a walk of the function:
 /// over a thousand rethreaded merges and a thousand retired loops, the

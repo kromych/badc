@@ -100,6 +100,13 @@ enum FrameSlot {
     Parent(i64),
 }
 
+// Cache entries a call drops on this thread, so a test can bound the
+// work by count rather than by wall clock.
+#[cfg(test)]
+std::thread_local! {
+    pub(crate) static CALL_CACHE_VISITS: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+}
+
 /// Discriminant for the pure-value CSE cache. Imm / ImmData /
 /// ImmCode produce no side effects and read no memory, so the
 /// cache only needs `switch_to` invalidation. The intra-block
@@ -181,6 +188,8 @@ pub(crate) struct SsaBuilder {
     /// `switch_to`. Every insert is guarded by a prior `lookup_pure`,
     /// so each key maps to exactly one ValueId.
     pure_cache: hashbrown::HashMap<PureKey, ValueId>,
+    /// The operand-free keys of `pure_cache`, which a call drops.
+    operand_free: Vec<PureKey>,
     /// Per-block start indices in `func.insts`. Index is `BlockId`
     /// as `usize`. Set on [`Self::new_block`] and re-anchored by
     /// [`Self::switch_to`] -- the latter is what guarantees the
@@ -296,6 +305,7 @@ impl SsaBuilder {
             parent_frame: None,
             local_cache: Vec::new(),
             pure_cache: hashbrown::HashMap::new(),
+            operand_free: Vec::new(),
             block_starts: Vec::new(),
             block_ends: Vec::new(),
             block_terminators: Vec::new(),
@@ -602,6 +612,7 @@ impl SsaBuilder {
         // block's first uses (would need phi to merge them).
         self.local_cache.clear();
         self.pure_cache.clear();
+        self.operand_free.clear();
     }
 
     /// The implicit entry block (block 0). Always exists.
@@ -619,16 +630,17 @@ impl SsaBuilder {
     /// keep across it.
     fn cross_call(&mut self) {
         self.local_cache.clear();
-        self.pure_cache.retain(|k, _| {
-            !matches!(
-                k,
-                PureKey::Imm(_)
-                    | PureKey::ImmF32(_)
-                    | PureKey::ImmData(_)
-                    | PureKey::ImmCode(_)
-                    | PureKey::TlsAddr(_)
-            )
-        });
+        #[cfg(test)]
+        CALL_CACHE_VISITS.with(|n| n.set(n.get() + self.operand_free.len() as u64));
+        for key in self.operand_free.drain(..) {
+            self.pure_cache.remove(&key);
+        }
+    }
+
+    /// Cache an operand-free value, which [`Self::cross_call`] drops.
+    fn cache_operand_free(&mut self, key: PureKey, id: ValueId) {
+        self.pure_cache.insert(key, id);
+        self.operand_free.push(key);
     }
 
     fn lookup_pure(&self, key: PureKey) -> Option<ValueId> {
@@ -859,7 +871,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Imm(v));
-        self.pure_cache.insert(PureKey::Imm(v), id);
+        self.cache_operand_free(PureKey::Imm(v), id);
         id
     }
 
@@ -872,7 +884,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Imm(v));
-        self.pure_cache.insert(PureKey::ImmF32(v), id);
+        self.cache_operand_free(PureKey::ImmF32(v), id);
         self.mark_f32(id)
     }
 
@@ -885,7 +897,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::ImmData(off));
-        self.pure_cache.insert(PureKey::ImmData(off), id);
+        self.cache_operand_free(PureKey::ImmData(off), id);
         id
     }
 
@@ -906,7 +918,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::ImmCode(target_pc));
-        self.pure_cache.insert(PureKey::ImmCode(target_pc), id);
+        self.cache_operand_free(PureKey::ImmCode(target_pc), id);
         id
     }
 
@@ -1024,7 +1036,7 @@ impl SsaBuilder {
         }
         self.local_cache.clear();
         let id = self.push(Inst::TlsAddr(off));
-        self.pure_cache.insert(PureKey::TlsAddr(off), id);
+        self.cache_operand_free(PureKey::TlsAddr(off), id);
         id
     }
 

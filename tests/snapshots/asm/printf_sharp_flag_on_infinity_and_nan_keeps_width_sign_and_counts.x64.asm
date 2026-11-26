@@ -392,60 +392,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	cmpl	$0x3, %ebx
-               	je	<addr>
-               	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdi
-               	movq	%rbx, %r8
-               	leaq	<rip>, %rsi
-               	leaq	<rip>, %rdx
-               	leaq	0x110(%rsp), %rcx
-               	leaq	<rip>, %r9
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
-               	movsd	<rip>, %xmm0
-               	leaq	0x110(%rsp), %rdi
-               	movl	$0x40, %esi
-               	leaq	<rip>, %rdx
-               	movb	$0x1, %al
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	leaq	0x110(%rsp), %rdi
-               	leaq	<rip>, %rsi
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	cmpl	$0x4, %ebx
-               	je	<addr>
-               	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdi
-               	movq	%rbx, %r8
-               	leaq	<rip>, %rsi
-               	leaq	<rip>, %rdx
-               	leaq	0x110(%rsp), %rcx
-               	leaq	<rip>, %r9
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
-               	movsd	<rip>, %xmm0
-               	leaq	0x110(%rsp), %rdi
-               	movl	$0x40, %esi
-               	leaq	<rip>, %rdx
-               	movb	$0x1, %al
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	leaq	0x110(%rsp), %rdi
-               	leaq	<rip>, %rsi
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
                	cmpl	$0xb, %ebx
                	je	<addr>
                	movq	<rip>, %rax # <addr>

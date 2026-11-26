@@ -5832,6 +5832,82 @@ fn wide_vectors(n: usize) -> String {
     s
 }
 
+/// How much more thread CPU time `pass` takes over the walked `wide` of
+/// `large` vectors than of `small`, each after `prep`: rounds interleave
+/// the two sizes and are summed, the small one run `large / small` times a
+/// round, so linear work comes out near that ratio and work quadratic in
+/// the block near its square.
+#[cfg(not(debug_assertions))]
+fn wide_block_growth(
+    optimize: bool,
+    (small, large): (usize, usize),
+    prep: impl Fn(&mut crate::c5::ir::FunctionSsa),
+    pass: impl Fn(&mut crate::c5::ir::FunctionSsa),
+) -> f64 {
+    use super::thread_cpu_time;
+    use core::time::Duration;
+    const ROUNDS: u32 = 8;
+    let batch = (large / small) as u32;
+    let walk = |n: usize| {
+        use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
+        let opts = crate::CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(optimize);
+        let program = crate::Compiler::with_options(wide_vectors(n), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        let mut f = (produce_ssa_funcs(&program, Target::LinuxX64, optimize, true))
+            .expect("walk")
+            .into_iter()
+            .find(|f| f.name == "wide")
+            .expect("wide");
+        prep(&mut f);
+        f
+    };
+    let (small, large) = (walk(small), walk(large));
+    let cost = |f: &crate::c5::ir::FunctionSsa, reps: u32| {
+        let mut total = Duration::ZERO;
+        for _ in 0..reps {
+            let mut g = f.clone();
+            let start = thread_cpu_time();
+            pass(&mut g);
+            total += thread_cpu_time() - start;
+        }
+        total
+    };
+    let (mut s, mut l) = (Duration::ZERO, Duration::ZERO);
+    for _ in 0..ROUNDS {
+        s += cost(&small, batch);
+        l += cost(&large, 1);
+    }
+    assert!(!s.is_zero(), "no measurable cost to compare");
+    l.as_secs_f64() * f64::from(batch) / s.as_secs_f64()
+}
+
+/// The -O0 slot coalescing of a block with thousands of vectors live at
+/// once builds its interference a word of 64 bits at a time and colors
+/// each object through the shorter of its row and the row's complement.
+#[test]
+#[cfg(not(debug_assertions))]
+fn slot_coalescing_a_wide_block_is_not_quadratic() {
+    let growth = wide_block_growth(
+        false,
+        (250, 2000),
+        |_| {},
+        |f| {
+            crate::c5::codegen::ssa::slot_coalesce::run(
+                core::slice::from_mut(f),
+                false,
+                Default::default(),
+            );
+        },
+    );
+    assert!(
+        growth < 32.0,
+        "8x the vectors took {growth:.1}x the CPU time"
+    );
+}
+
 /// Splitting a block's objects finds the ones nothing reads through sets
 /// built once, not by scanning every value and copy per object: over a
 /// block of 300 vectors live at once the search examines about 19000

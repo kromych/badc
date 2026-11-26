@@ -5722,6 +5722,39 @@ int f(const unsigned char *p, int n) {\n\
     assert!(!ws[first].iter().any(|&w| adrp(w)), "{ws:08x?}");
 }
 
+/// A function of thousands of conditional updates, each a branch
+/// if-conversion turns into a select, compiles at `-O` within a small
+/// multiple of its `-O0` time: the conversions take one sweep and one tape
+/// rewrite, not a pass over the function each. Best of three runs.
+#[test]
+fn many_convertible_branches_compile_in_time_linear_in_their_number() {
+    use core::fmt::Write;
+    const N: usize = 3000;
+    let mut src = String::from("long f(long a, long b) {\n    long x = 0;\n");
+    for i in 0..N {
+        let _ = if i % 2 == 1 {
+            writeln!(src, "    if (a > {i}) x += {};", i % 7 + 1)
+        } else {
+            writeln!(src, "    if (b < {i}) x -= {};", i % 5 + 1)
+        };
+    }
+    src.push_str("    return x;\n}\n");
+    let best = |optimize: bool| {
+        (0..3)
+            .map(|_| {
+                let start = std::time::Instant::now();
+                object_at(&src, Target::LinuxX64, optimize);
+                start.elapsed()
+            })
+            .min()
+            .expect("three runs")
+    };
+    let (o0, o) = (best(false), best(true));
+    assert!(o < o0 * 10, "-O took {o:?} against -O0's {o0:?}");
+    let cmov = |i: &&X64Insn| matches!(i.op, 0x0F40..=0x0F4F);
+    assert_eq!(x64(&src, "f").iter().filter(cmov).count(), N);
+}
+
 /// A computed-goto dispatch is a cycle entered at every label, no natural
 /// loop. The table address its dispatches read is set once, ahead of the
 /// cycle, where the entry's own dispatch reads it too.

@@ -4299,6 +4299,29 @@ fn a_rescanned_statement_expression_applies_its_pragmas_once() {
     assert_eq!(after.visibility, None, "the pop restored the default");
 }
 
+/// An `__int128` constant keeps its high half where it decides a condition
+/// -- `_Static_assert`, `__builtin_choose_expr` in an initializer and in an
+/// expression -- and an unsigned one converts to floating as unsigned when
+/// a `const` local folds (C17 6.3.1.4p2).
+#[test]
+fn int128_constants_keep_their_high_half() {
+    let program = Compiler::new(
+        "_Static_assert((__int128)1 << 64, \"the high half is non-zero\");\n\
+         static int chosen = __builtin_choose_expr((__int128)1 << 64, 1, 2);\n\
+         int main(void) {\n\
+             const double d = (unsigned __int128)-1;\n\
+             int r = 0;\n\
+             switch (1) { case (d > 0): r = 1; }\n\
+             int e = __builtin_choose_expr((__int128)1 << 64, 1, 2);\n\
+             return (chosen != 1) + 2 * (e != 1) + 4 * (r != 1);\n\
+         }\n"
+        .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 0);
+}
+
 #[test]
 fn visibility_takes_gccs_four_operands() {
     // The `visibility` attribute and `#pragma GCC visibility push`:

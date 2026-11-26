@@ -579,7 +579,7 @@ impl Compiler {
     /// evaluated. The condition must fold to an integer constant.
     pub(super) fn parse_choose_expr_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_choose_expr (`.
-        let cond = self.parse_constant_int()?;
+        let cond = self.parse_constant_truth()?;
         if self.lex.tk != ',' {
             return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`"));
         }
@@ -618,12 +618,12 @@ impl Compiler {
             ) = saved_decay;
             Ok(())
         };
-        parse_arm(self, cond != 0)?;
+        parse_arm(self, cond)?;
         if self.lex.tk != ',' {
             return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`"));
         }
         self.next()?;
-        parse_arm(self, cond == 0)?;
+        parse_arm(self, !cond)?;
         if self.lex.tk != ')' {
             return Err(self.compile_err(
                 Code::SYNTAX,

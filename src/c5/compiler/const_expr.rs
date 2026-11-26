@@ -347,11 +347,12 @@ impl ConstVal {
         ConstVal::int(i64::from(f(a, b)))
     }
 
-    /// Coerce to an `f64`. Integer values widen exactly for any value
-    /// within `f64`'s 53-bit mantissa range (which is every integer
-    /// constant c5 currently lexes).
+    /// Coerce to an `f64`, an integer by its type's signedness (C17
+    /// 6.3.1.4p2): an unsigned 128-bit value past `i128::MAX` is held
+    /// negative.
     pub(super) fn as_float(self) -> f64 {
         match self {
+            ConstVal::Int { val, ty, .. } if super::types::is_unsigned_ty(ty) => val as u128 as f64,
             ConstVal::Int { val, .. } => val as f64,
             ConstVal::Float { val, .. } => val,
             ConstVal::Addr(a) => a.value as f64,
@@ -647,6 +648,13 @@ impl Compiler {
     pub(super) fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
         let v = self.parse_const_expr_cond_val()?;
         Ok(self.require_integer_const(v)?.as_int())
+    }
+
+    /// Whether an integer constant expression is non-zero, all 128 bits
+    /// of it: a condition the parser decides.
+    pub(super) fn parse_constant_truth(&mut self) -> Result<bool, C5Error> {
+        let v = self.parse_const_expr_cond_val()?;
+        Ok(self.require_integer_const(v)?.as_i128() != 0)
     }
 
     /// As [`Self::parse_constant_int`], with references to block-scope
@@ -1084,7 +1092,7 @@ impl Compiler {
         self.const_object_fold += 1;
         let value = self.parse_const_expr_cond_val();
         self.const_object_fold -= 1;
-        let value = self.require_integer_const(value?)?.as_int();
+        let value = self.require_integer_const(value?)?.as_i128();
         // The message argument is optional in C23 but required in
         // C11. Accept both shapes: a trailing `, "msg"` is the
         // canonical form; a bare `(expr)` falls back to a generic
@@ -1707,7 +1715,7 @@ impl Compiler {
                 );
             }
             self.next()?;
-            let c = self.parse_const_expr_cond_val()?.as_int();
+            let c = self.parse_const_expr_cond_val()?.as_i128();
             if self.lex.tk != ',' {
                 return Err(
                     self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`")

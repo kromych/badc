@@ -31,38 +31,40 @@ Disassembly of section .text:
                	imulq	$0x38, %rdi, %rax
                	leaq	(%rsi,%rax), %rcx
                	leaq	0x1(%rdi), %rdx
-               	movsd	(%rcx), %xmm3
-               	movsd	0x8(%rcx), %xmm4
-               	movsd	0x10(%rcx), %xmm5
+               	movsd	(%rcx), %xmm5
+               	movsd	0x8(%rcx), %xmm6
+               	movsd	0x10(%rcx), %xmm7
+               	movsd	0x30(%rcx), %xmm0
                	cmpl	$0x5, %edx
                	jge	<addr>
                	imulq	$0x38, %rdx, %rax
                	addq	%rsi, %rax
-               	vsubsd	(%rax), %xmm3, %xmm0
-               	vsubsd	0x8(%rax), %xmm4, %xmm1
-               	vsubsd	0x10(%rax), %xmm5, %xmm2
-               	movsd	0x18(%rcx), %xmm6
-               	vfnmadd231sd	0x30(%rax), %xmm0, %xmm6 # xmm6 = -(xmm0 * mem) + xmm6
-               	movsd	%xmm6, 0x18(%rcx)
-               	movsd	0x20(%rcx), %xmm6
-               	vfnmadd231sd	0x30(%rax), %xmm1, %xmm6 # xmm6 = -(xmm1 * mem) + xmm6
-               	movsd	%xmm6, 0x20(%rcx)
-               	movsd	0x28(%rcx), %xmm6
-               	vfnmadd231sd	0x30(%rax), %xmm2, %xmm6 # xmm6 = -(xmm2 * mem) + xmm6
-               	movsd	%xmm6, 0x28(%rcx)
-               	movsd	0x18(%rax), %xmm6
-               	vfmadd132sd	0x30(%rcx), %xmm6, %xmm0 # xmm0 = (xmm0 * mem) + xmm6
-               	movsd	%xmm0, 0x18(%rax)
-               	movsd	0x20(%rax), %xmm0
-               	vfmadd231sd	0x30(%rcx), %xmm1, %xmm0 # xmm0 = (xmm1 * mem) + xmm0
-               	movsd	%xmm0, 0x20(%rax)
-               	movsd	0x28(%rax), %xmm0
-               	vfmadd231sd	0x30(%rcx), %xmm2, %xmm0 # xmm0 = (xmm2 * mem) + xmm0
-               	movsd	%xmm0, 0x28(%rax)
+               	vsubsd	(%rax), %xmm5, %xmm2
+               	vsubsd	0x8(%rax), %xmm6, %xmm3
+               	vsubsd	0x10(%rax), %xmm7, %xmm4
+               	movsd	0x18(%rcx), %xmm8
+               	movsd	0x30(%rax), %xmm1
+               	vfnmadd231sd	%xmm1, %xmm2, %xmm8 # xmm8 = -(xmm2 * xmm1) + xmm8
+               	movsd	%xmm8, 0x18(%rcx)
+               	movapd	%xmm3, %xmm8
+               	vfnmadd213sd	0x20(%rcx), %xmm1, %xmm8 # xmm8 = -(xmm1 * xmm8) + mem
+               	movsd	%xmm8, 0x20(%rcx)
+               	vfnmadd213sd	0x28(%rcx), %xmm4, %xmm1 # xmm1 = -(xmm4 * xmm1) + mem
+               	movsd	%xmm1, 0x28(%rcx)
+               	movapd	%xmm2, %xmm1
+               	vfmadd213sd	0x18(%rax), %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) + mem
+               	movsd	%xmm1, 0x18(%rax)
+               	movapd	%xmm3, %xmm1
+               	vfmadd213sd	0x20(%rax), %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) + mem
+               	movsd	%xmm1, 0x20(%rax)
+               	movapd	%xmm4, %xmm1
+               	vfmadd213sd	0x28(%rax), %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) + mem
+               	movsd	%xmm1, 0x28(%rax)
                	incq	%rdx
                	cmpl	$0x5, %edx
                	jl	<addr>
                	incq	%rdi
+               	nopw	(%rax,%rax)
                	cmpl	$0x5, %edi
                	jl	<addr>
                	retq

@@ -3256,6 +3256,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // compaction retry re-runs them and re-checks the report is empty.
     // A probe always reports: its caller compacts the program from this
     // set alone, so it needs the all-live one too.
+    // The file-scope objects' spans, which the alias queries of the
+    // forwarding and of LICM compare data offsets within.
+    let objects = super::alias::data_objects(program);
     if native.optimizes() || mode == super::LowerMode::DataLivenessProbe {
         let sets = pipeline.run(
             "ssa::shadow::drop_unreachable_statics",
@@ -3362,7 +3365,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
         pipeline.run("passes::store_forward::run", &mut ssa_funcs, |funcs| {
-            super::super::passes::store_forward::run(funcs);
+            super::super::passes::store_forward::run(funcs, &objects);
             for f in funcs.iter_mut() {
                 super::super::passes::store_forward::drop_overwritten_stores(f, false);
             }
@@ -3532,7 +3535,6 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // with the spilled values' call-free reuse runs split out; a retry
     // is kept only when it lowers the function's loop-weighted cost.
     let data_len = program.data.len() + program.zero_fill_len;
-    let objects = super::alias::data_objects(program);
     let ssa_allocs: alloc::vec::Vec<super::reg_alloc::Allocation> =
         pipeline.run("ssa::reg_alloc::allocate", &mut ssa_funcs, |funcs| {
             funcs

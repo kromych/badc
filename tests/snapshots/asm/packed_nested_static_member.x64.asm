@@ -45,11 +45,10 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax # <addr>
                	imulq	$0x19, %rdi, %rcx
-               	addq	%rcx, %rax
-               	leaq	0xa(%rdi), %rcx
-               	movl	%ecx, 0x1(%rax)
+               	addq	%rax, %rcx
+               	leaq	0xa(%rdi), %rax
+               	movl	%eax, 0x1(%rcx)
                	movw	$0x14, <rip> # <addr>
-               	movl	0x1(%rax), %eax
                	addq	$0x14, %rax
                	retq
 

@@ -31,86 +31,80 @@ Disassembly of section .text:
                	mov	sp, x0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldrb	w2, [x1]
-               	strb	w2, [x0]
-               	ldrb	w2, [x1, #0x1]
-               	strb	w2, [x0, #0x1]
-               	ldrb	w2, [x1, #0x2]
-               	strb	w2, [x0, #0x2]
-               	ldrb	w2, [x1, #0x3]
-               	strb	w2, [x0, #0x3]
-               	ldrb	w2, [x1, #0x4]
-               	strb	w2, [x0, #0x4]
-               	ldrb	w2, [x1, #0x5]
-               	strb	w2, [x0, #0x5]
+               	ldrb	w12, [x1]
+               	strb	w12, [x0]
+               	ldrb	w10, [x1, #0x1]
+               	strb	w10, [x0, #0x1]
+               	ldrb	w3, [x1, #0x2]
+               	strb	w3, [x0, #0x2]
+               	ldrb	w4, [x1, #0x3]
+               	strb	w4, [x0, #0x3]
+               	ldrb	w5, [x1, #0x4]
+               	strb	w5, [x0, #0x4]
+               	ldrb	w11, [x1, #0x5]
+               	strb	w11, [x0, #0x5]
                	mov	x17, #0xffff            // =65535
-               	add	x12, x0, x17
+               	add	x13, x0, x17
                	ldrb	w1, [x1, #0x6]
-               	strb	w1, [x12]
-               	ldrb	w13, [x0]
-               	ldrb	w10, [x0, #0x1]
-               	ldrb	w7, [x0, #0x2]
-               	ldrb	w8, [x0, #0x3]
-               	ldrb	w9, [x0, #0x4]
-               	ldrb	w11, [x0, #0x5]
-               	add	x1, x13, x10
-               	add	x2, x7, x8
-               	add	x3, x9, x11
-               	add	x4, x1, x1, lsl #1
-               	add	x5, x2, x2, lsl #2
+               	strb	w1, [x13]
+               	add	x1, x12, x10
+               	add	x2, x3, x4
+               	add	x6, x5, x11
+               	add	x7, x1, x1, lsl #1
+               	add	x8, x2, x2, lsl #2
                	mov	x17, #0x7               // =7
-               	mul	x6, x3, x17
+               	mul	x9, x6, x17
                	cmp	w1, w2
-               	csel	x14, x4, x5, lt
-               	cmp	w2, w3
-               	csel	x15, x5, x6, lt
-               	cmp	w3, w1
-               	csel	x20, x6, x4, lt
-               	add	x21, x1, x7
-               	add	x21, x21, x8
-               	add	x21, x21, x9
+               	csel	x14, x7, x8, lt
+               	cmp	w2, w6
+               	csel	x15, x8, x9, lt
+               	cmp	w6, w1
+               	csel	x20, x9, x7, lt
+               	add	x21, x1, x3
+               	add	x21, x21, x4
+               	add	x21, x21, x5
                	add	x21, x21, x11
                	add	x21, x21, x1
                	add	x21, x21, x2
-               	add	x21, x21, x3
-               	add	x21, x21, x4
-               	add	x21, x21, x5
                	add	x21, x21, x6
+               	add	x21, x21, x7
+               	add	x21, x21, x8
+               	add	x21, x21, x9
                	add	x14, x21, x14
                	add	x14, x14, x15
                	add	x14, x14, x20
-               	cmp	w13, w10
-               	cset	x13, lt
-               	cmp	w10, w7
+               	cmp	w12, w10
+               	cset	x12, lt
+               	cmp	w10, w3
                	cset	x10, lt
-               	add	x10, x13, x10
-               	cmp	w7, w8
-               	cset	x7, lt
-               	add	x7, x10, x7
-               	cmp	w8, w9
-               	cset	x8, lt
-               	add	x7, x7, x8
-               	cmp	w9, w11
-               	cset	x8, lt
-               	add	x7, x7, x8
+               	add	x10, x12, x10
+               	cmp	w3, w4
+               	cset	x3, lt
+               	add	x3, x10, x3
+               	cmp	w4, w5
+               	cset	x4, lt
+               	add	x3, x3, x4
+               	cmp	w5, w11
+               	cset	x4, lt
+               	add	x3, x3, x4
                	cmp	w1, w2
                	cset	x1, gt
-               	add	x1, x7, x1
-               	cmp	w2, w3
+               	add	x1, x3, x1
+               	cmp	w2, w6
                	cset	x2, gt
                	add	x1, x1, x2
-               	cmp	w4, w5
+               	cmp	w7, w8
                	cset	x2, ne
                	add	x1, x1, x2
-               	cmp	w5, w6
+               	cmp	w8, w9
                	cset	x2, ne
                	add	x1, x1, x2
-               	cmp	w6, w4
+               	cmp	w9, w7
                	cset	x2, ne
                	add	x1, x1, x2
                	add	x1, x14, x1
                	ldrb	w2, [x0]
-               	ldrb	w3, [x12]
+               	ldrb	w3, [x13]
                	add	x3, x2, x3
                	ldrb	w2, [x0, #0x2]
                	ldrb	w0, [x0, #0x3]

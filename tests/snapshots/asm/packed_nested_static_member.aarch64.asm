@@ -43,9 +43,8 @@ Disassembly of section .text:
                	add	x2, x1, x2
                	add	x0, x0, #0xa
                	stur	w0, [x2, #0x1]
-               	mov	x0, #0x14               // =20
-               	strh	w0, [x1, #0x2e]
-               	ldursw	x0, [x2, #0x1]
+               	mov	x2, #0x14               // =20
+               	strh	w2, [x1, #0x2e]
                	add	x0, x0, #0x14
                	ret
 

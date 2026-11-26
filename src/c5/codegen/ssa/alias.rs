@@ -15,7 +15,7 @@
 //! ensures. An instruction's effect on memory is unknown unless listed.
 
 use crate::c5::codegen::passes::value_range::{self, Ranges};
-use crate::c5::ir::{BinOp, BlockId, FunctionSsa, IndexExt, Inst, ValueId};
+use crate::c5::ir::{BinOp, BlockId, FunctionSsa, IndexExt, Inst, LoadKind, ValueId};
 use crate::c5::op::Intrinsic;
 use alloc::vec::Vec;
 
@@ -138,18 +138,17 @@ pub(crate) fn data_objects(program: &crate::c5::program::Program) -> Vec<(i64, i
 }
 
 /// The disambiguation queries over one function.
-pub(crate) struct Alias<'f> {
-    func: &'f FunctionSsa,
+pub(crate) struct Alias<'o> {
     /// [`data_objects`] of the unit.
-    objects: &'f [(i64, i64)],
+    objects: &'o [(i64, i64)],
     /// Per value: an `ImmData` another unit's symbol resolves, whose
     /// offset is not a position in this image.
     bound: Vec<bool>,
     ranges: Option<Ranges>,
 }
 
-impl<'f> Alias<'f> {
-    pub(crate) fn new(func: &'f FunctionSsa, objects: &'f [(i64, i64)]) -> Self {
+impl<'o> Alias<'o> {
+    pub(crate) fn new(func: &FunctionSsa, objects: &'o [(i64, i64)]) -> Self {
         let mut bound = alloc::vec![false; func.insts.len()];
         for &(v, _) in &func.extern_imm_data_refs {
             if let Some(b) = bound.get_mut(v as usize) {
@@ -157,7 +156,6 @@ impl<'f> Alias<'f> {
             }
         }
         Alias {
-            func,
             objects,
             bound,
             ranges: None,
@@ -170,13 +168,13 @@ impl<'f> Alias<'f> {
         (i > 0).then(|| self.objects[i - 1]).filter(|o| k < o.1)
     }
 
-    fn form(&self, v: ValueId, depth: u32) -> Form {
+    fn form(&self, func: &FunctionSsa, v: ValueId, depth: u32) -> Form {
         let atom = Form::term(Term::Value(v));
         if depth == 0 {
             return atom;
         }
-        let sub = |x: ValueId| self.form(x, depth - 1);
-        let f = match self.func.insts.get(v as usize) {
+        let sub = |x: ValueId| self.form(func, x, depth - 1);
+        let f = match func.insts.get(v as usize) {
             Some(&Inst::ImmData(k)) if !self.bound[v as usize] => match self.object_of(k) {
                 Some((start, _)) => Form::term(Term::Object(start)).offset(k - start),
                 None => Form::term(Term::DataAt(k)),
@@ -237,22 +235,28 @@ impl<'f> Alias<'f> {
 
     /// The bytes instruction `v` of `block` reads or writes: a
     /// non-volatile load or store, through a pointer or of a frame slot.
-    pub(crate) fn access(&self, v: ValueId, block: BlockId) -> Option<Access> {
-        let (form, width) = match *self.func.insts.get(v as usize)? {
+    pub(crate) fn access(&self, func: &FunctionSsa, v: ValueId, block: BlockId) -> Option<Access> {
+        let (form, width) = match *func.insts.get(v as usize)? {
             Inst::Load {
                 addr,
                 disp,
                 kind,
                 volatile: false,
                 ..
-            } => (self.form(addr, MAX_DEPTH).offset(disp as i64), kind.bytes()),
+            } => (
+                self.form(func, addr, MAX_DEPTH).offset(disp as i64),
+                kind.bytes(),
+            ),
             Inst::Store {
                 addr,
                 disp,
                 kind,
                 volatile: false,
                 ..
-            } => (self.form(addr, MAX_DEPTH).offset(disp as i64), kind.bytes()),
+            } => (
+                self.form(func, addr, MAX_DEPTH).offset(disp as i64),
+                kind.bytes(),
+            ),
             Inst::LoadIndexed {
                 base,
                 index,
@@ -260,7 +264,10 @@ impl<'f> Alias<'f> {
                 scale,
                 kind,
                 ..
-            } => (self.indexed(base, index, index_ext, scale), kind.bytes()),
+            } => (
+                self.indexed(func, base, index, index_ext, scale),
+                kind.bytes(),
+            ),
             Inst::StoreIndexed {
                 base,
                 index,
@@ -268,7 +275,10 @@ impl<'f> Alias<'f> {
                 scale,
                 kind,
                 ..
-            } => (self.indexed(base, index, index_ext, scale), kind.bytes()),
+            } => (
+                self.indexed(func, base, index, index_ext, scale),
+                kind.bytes(),
+            ),
             Inst::LoadLocal {
                 off,
                 disp,
@@ -298,19 +308,26 @@ impl<'f> Alias<'f> {
     }
 
     /// `base + index * scale`, the index read as `index_ext` says.
-    fn indexed(&self, base: ValueId, index: ValueId, index_ext: IndexExt, scale: u8) -> Form {
+    fn indexed(
+        &self,
+        func: &FunctionSsa,
+        base: ValueId,
+        index: ValueId,
+        index_ext: IndexExt,
+        scale: u8,
+    ) -> Form {
         let index = match index_ext {
-            IndexExt::None => self.form(index, MAX_DEPTH - 1),
+            IndexExt::None => self.form(func, index, MAX_DEPTH - 1),
             IndexExt::Sxtw => Form::term(Term::Ext(index, true)),
             IndexExt::Uxtw => Form::term(Term::Ext(index, false)),
         };
-        self.form(base, MAX_DEPTH - 1)
+        self.form(func, base, MAX_DEPTH - 1)
             .plus(&index.scale(scale as i64))
     }
 
     /// What instruction `v` of `block` does to memory.
-    pub(crate) fn effect(&self, v: ValueId, block: BlockId) -> Effect {
-        let Some(inst) = self.func.insts.get(v as usize) else {
+    pub(crate) fn effect(&self, func: &FunctionSsa, v: ValueId, block: BlockId) -> Effect {
+        let Some(inst) = func.insts.get(v as usize) else {
             return Effect::Unknown;
         };
         match inst {
@@ -320,9 +337,9 @@ impl<'f> Alias<'f> {
             | Inst::StoreLocal {
                 volatile: false, ..
             }
-            | Inst::StoreIndexed { .. } => {
-                self.access(v, block).map_or(Effect::Unknown, Effect::Write)
-            }
+            | Inst::StoreIndexed { .. } => self
+                .access(func, v, block)
+                .map_or(Effect::Unknown, Effect::Write),
             Inst::Load {
                 volatile: false, ..
             }
@@ -378,13 +395,12 @@ impl<'f> Alias<'f> {
     }
 
     /// Bounds on `t` where an instruction of `block` reads it.
-    fn bounds(&mut self, block: BlockId, t: Term) -> (i128, i128) {
+    fn bounds(&mut self, func: &FunctionSsa, block: BlockId, t: Term) -> (i128, i128) {
         let (v, ext) = match t {
             Term::Value(v) => (v, None),
             Term::Ext(v, signed) => (v, Some(signed)),
             _ => return value_range::UNIVERSE.bounds(),
         };
-        let func = self.func;
         let ranges = self.ranges.get_or_insert_with(|| {
             Ranges::compute_assuming(func, &[], &value_range::iv::assumptions(func))
         });
@@ -403,7 +419,7 @@ impl<'f> Alias<'f> {
     }
 
     /// Whether `a` and `b` touch no common byte.
-    pub(crate) fn disjoint(&mut self, a: &Access, b: &Access) -> bool {
+    pub(crate) fn disjoint(&mut self, func: &FunctionSsa, a: &Access, b: &Access) -> bool {
         let diff = a.form.plus(&b.form.clone().scale(-1));
         let lo = 1 - a.width as i128;
         let hi = b.width as i128 - 1;
@@ -411,7 +427,38 @@ impl<'f> Alias<'f> {
         if !residue_meets(diff.c, g.isolate_lowest_one(), lo, hi) {
             return true;
         }
-        if g == 0 {
+        // A base term has no bound, nor has a sum it is part of. A pointer
+        // -- a full-width value read from memory, a parameter or a call's
+        // result -- is taken as unbounded too, sparing the range analysis:
+        // only a branch on the pointer itself could bound it.
+        let pointer = |v: ValueId| {
+            matches!(
+                func.insts.get(v as usize),
+                Some(
+                    Inst::Load {
+                        kind: LoadKind::I64,
+                        ..
+                    } | Inst::LoadLocal {
+                        kind: LoadKind::I64,
+                        ..
+                    } | Inst::LoadIndexed {
+                        kind: LoadKind::I64,
+                        ..
+                    } | Inst::ParamRef {
+                        kind: LoadKind::I64,
+                        ..
+                    } | Inst::Call { .. }
+                        | Inst::CallExt { .. }
+                        | Inst::CallIndirect { .. }
+                )
+            )
+        };
+        let unbounded = |t: &(Term, i64)| match t.0 {
+            Term::Value(v) => t.1.unsigned_abs() == 1 && pointer(v),
+            Term::Ext(..) => false,
+            _ => true,
+        };
+        if g == 0 || diff.terms.iter().any(unbounded) {
             return false;
         }
         // A term of either side is read where that side executes; one both
@@ -422,10 +469,10 @@ impl<'f> Alias<'f> {
             let in_b = b.form.terms.iter().any(|e| e.0 == t);
             let mut r = value_range::UNIVERSE.bounds();
             if in_a {
-                r = meet(r, self.bounds(a.block, t));
+                r = meet(r, self.bounds(func, a.block, t));
             }
             if in_b {
-                r = meet(r, self.bounds(b.block, t));
+                r = meet(r, self.bounds(func, b.block, t));
             }
             if r.0 > r.1 {
                 return true;
@@ -437,13 +484,13 @@ impl<'f> Alias<'f> {
 
     /// Whether every byte `a` covers lies in the file-scope object its
     /// base names, for every value its terms take where it executes.
-    pub(crate) fn in_object(&mut self, a: &Access) -> bool {
+    pub(crate) fn in_object(&mut self, func: &FunctionSsa, a: &Access) -> bool {
         let mut span: Vec<(i64, (i128, i128))> = Vec::new();
         let mut base = None;
         for &(t, k) in &a.form.terms {
             match t {
                 Term::Object(start) if k == 1 => base = Some(start),
-                Term::Value(_) | Term::Ext(..) => span.push((k, self.bounds(a.block, t))),
+                Term::Value(_) | Term::Ext(..) => span.push((k, self.bounds(func, a.block, t))),
                 _ => return false,
             }
         }
@@ -575,8 +622,8 @@ mod tests {
 
     fn apart(f: &FunctionSsa, a: ValueId, b: ValueId) -> bool {
         let mut q = Alias::new(f, &[]);
-        let (x, y) = (q.access(a, 0).unwrap(), q.access(b, 0).unwrap());
-        q.disjoint(&x, &y) && q.disjoint(&y, &x)
+        let (x, y) = (q.access(f, a, 0).unwrap(), q.access(f, b, 0).unwrap());
+        q.disjoint(f, &x, &y) && q.disjoint(f, &y, &x)
     }
 
     /// One base compares offsets; two unrelated bases may always meet.
@@ -671,7 +718,7 @@ mod tests {
         assert!(!apart(&f, 3, 6));
         assert!(!apart(&f, 7, 4));
         let q = Alias::new(&f, &[]);
-        assert!(matches!(q.effect(4, 0), Effect::Write(_)));
+        assert!(matches!(q.effect(&f, 4, 0), Effect::Write(_)));
     }
 
     /// A marked extension is the identity; an unmarked one is opaque.
@@ -724,15 +771,15 @@ mod tests {
         let fits = |end: i64, v: ValueId| {
             let objects = [(0, 80), (80, end)];
             let mut q = Alias::new(&f, &objects);
-            let a = q.access(v, 0).unwrap();
-            q.in_object(&a)
+            let a = q.access(&f, v, 0).unwrap();
+            q.in_object(&f, &a)
         };
         assert!(fits(80 + 3 * 56 + 16, 5));
         assert!(!fits(80 + 3 * 56 + 15, 5));
         assert!(!fits(i64::MAX, 8));
         let mut q = Alias::new(&f, &[]);
-        let a = q.access(5, 0).unwrap();
-        assert!(!q.in_object(&a));
+        let a = q.access(&f, 5, 0).unwrap();
+        assert!(!q.in_object(&f, &a));
     }
 
     /// Offsets compare within one object; two objects may always meet.
@@ -749,11 +796,11 @@ mod tests {
         ]);
         let objects = [(80, 136), (136, 300)];
         let mut q = Alias::new(&f, &objects);
-        let x = q.access(3, 0).unwrap();
-        let w: Vec<Access> = (4..7).map(|v| q.access(v, 0).unwrap()).collect();
-        assert!(q.disjoint(&x, &w[0]));
-        assert!(!q.disjoint(&x, &w[1]));
-        assert!(!q.disjoint(&x, &w[2]));
+        let x = q.access(&f, 3, 0).unwrap();
+        let w: Vec<Access> = (4..7).map(|v| q.access(&f, v, 0).unwrap()).collect();
+        assert!(q.disjoint(&f, &x, &w[0]));
+        assert!(!q.disjoint(&f, &x, &w[1]));
+        assert!(!q.disjoint(&f, &x, &w[2]));
     }
 
     /// Volatile, atomic, fence, setjmp, asm, block and unlisted intrinsic
@@ -861,14 +908,14 @@ mod tests {
         let q = Alias::new(&f, &[]);
         for v in 1..=n_unknown {
             assert!(
-                matches!(q.effect(v, 0), Effect::Unknown),
+                matches!(q.effect(&f, v, 0), Effect::Unknown),
                 "{:?}",
                 f.insts[v as usize]
             );
         }
         for v in n_unknown + 1..f.insts.len() as ValueId {
             assert!(
-                matches!(q.effect(v, 0), Effect::None),
+                matches!(q.effect(&f, v, 0), Effect::None),
                 "{:?}",
                 f.insts[v as usize]
             );

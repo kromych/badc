@@ -21,40 +21,38 @@ Disassembly of section .text:
                	mul	x0, x5, x3
                	add	x1, x4, x0
                	add	x2, x5, #0x1
-               	ldr	d4, [x1]
-               	ldr	d5, [x1, #0x8]
-               	ldr	d6, [x1, #0x10]
+               	ldr	d5, [x1]
+               	ldr	d6, [x1, #0x8]
+               	ldr	d7, [x1, #0x10]
                	ldr	d0, [x1, #0x30]
                	cmp	w2, #0x5
                	b.ge	<addr>
                	mul	x0, x2, x3
                	add	x0, x4, x0
                	ldr	d1, [x0]
-               	fsub	d1, d4, d1
-               	ldr	d2, [x0, #0x8]
-               	fsub	d2, d5, d2
-               	ldr	d3, [x0, #0x10]
-               	fsub	d3, d6, d3
-               	ldr	d7, [x1, #0x18]
-               	ldr	d19, [x0, #0x30]
-               	fmsub	d7, d1, d19, d7
-               	str	d7, [x1, #0x18]
-               	ldr	d7, [x1, #0x20]
-               	ldr	d19, [x0, #0x30]
-               	fmsub	d7, d2, d19, d7
-               	str	d7, [x1, #0x20]
-               	ldr	d7, [x1, #0x28]
-               	ldr	d19, [x0, #0x30]
-               	fmsub	d7, d3, d19, d7
-               	str	d7, [x1, #0x28]
-               	ldr	d7, [x0, #0x18]
-               	fmadd	d1, d1, d0, d7
+               	fsub	d2, d5, d1
+               	ldr	d1, [x0, #0x8]
+               	fsub	d3, d6, d1
+               	ldr	d1, [x0, #0x10]
+               	fsub	d4, d7, d1
+               	ldr	d19, [x1, #0x18]
+               	ldr	d1, [x0, #0x30]
+               	fmsub	d19, d2, d1, d19
+               	str	d19, [x1, #0x18]
+               	ldr	d19, [x1, #0x20]
+               	fmsub	d19, d3, d1, d19
+               	str	d19, [x1, #0x20]
+               	ldr	d19, [x1, #0x28]
+               	fmsub	d1, d4, d1, d19
+               	str	d1, [x1, #0x28]
+               	ldr	d1, [x0, #0x18]
+               	fmadd	d1, d2, d0, d1
                	str	d1, [x0, #0x18]
                	ldr	d1, [x0, #0x20]
-               	fmadd	d1, d2, d0, d1
+               	fmadd	d1, d3, d0, d1
                	str	d1, [x0, #0x20]
                	ldr	d1, [x0, #0x28]
-               	fmadd	d1, d3, d0, d1
+               	fmadd	d1, d4, d0, d1
                	str	d1, [x0, #0x28]
                	add	x2, x2, #0x1
                	cmp	w2, #0x5

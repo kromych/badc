@@ -554,7 +554,7 @@ fn plan_loads(
             let mut out = Vec::new();
             for &b in &l.body {
                 for v in func.blocks[b as usize].inst_range.clone() {
-                    match alias.effect(v, b) {
+                    match alias.effect(func, v, b) {
                         Effect::None => {}
                         Effect::Write(a) => out.push(a),
                         Effect::Unknown => return None,
@@ -642,7 +642,7 @@ fn plan_loads(
                 },
                 _ => continue,
             };
-            let Some(access) = alias.access(v, b) else {
+            let Some(access) = alias.access(func, v, b) else {
                 continue;
             };
             // The outermost loop the address is invariant in and no write
@@ -656,11 +656,11 @@ fn plan_loads(
                 let access = access.clone().at(dest);
                 if let Some(ops) = addr
                     && (ops.iter().any(|&a| loops[l].contains(block_of[a as usize]))
-                        || !alias.in_object(&access))
+                        || !alias.in_object(func, &access))
                 {
                     return false;
                 }
-                ws.iter().all(|w| alias.disjoint(&access, w))
+                ws.iter().all(|w| alias.disjoint(func, &access, w))
             }) else {
                 continue;
             };

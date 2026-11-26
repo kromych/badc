@@ -8913,11 +8913,11 @@ long s = 0; for (long i = 0; i < n; i++) s += a[i] * (x * y + 3); return s; }\n"
     );
 }
 
-/// Rows of a 56-byte struct indexed by two counters: row `i`'s position is
-/// read once before the inner loop, whose stores reach only the velocity
-/// fields of rows `i` and `j`, and so is its mass on AArch64; an x86-64
-/// multiply takes the mass as its memory operand, which costs the loop
-/// nothing. Row `j`'s position stays one load per field in the loop.
+/// Rows of a 56-byte struct indexed by two counters: row `i`'s position and
+/// mass are read once before the inner loop, whose stores reach only the
+/// velocity fields of rows `i` and `j`. Row `j`'s position and mass are one
+/// load per field in the loop: the stores between the mass's three reads
+/// leave it in a register.
 #[test]
 fn fields_a_strided_loop_does_not_store_are_read_before_it() {
     const SRC: &str = "struct body { double x, y, z, vx, vy, vz, mass; };\n\
@@ -8956,8 +8956,7 @@ void pull(void) {\n\
         for disp in ["disp=0,", "disp=8,", "disp=16,"] {
             assert_eq!(live(disp), 1, "{target:?} {disp}\n{dump}");
         }
-        let mass = if target == Target::LinuxAarch64 { 3 } else { 6 };
-        assert_eq!(live("disp=48,"), mass, "{target:?}\n{dump}");
+        assert_eq!(live("disp=48,"), 1, "{target:?}\n{dump}");
     }
 }
 

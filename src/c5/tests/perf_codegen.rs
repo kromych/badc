@@ -5722,6 +5722,49 @@ int f(const unsigned char *p, int n) {\n\
     assert!(!ws[first].iter().any(|&w| adrp(w)), "{ws:08x?}");
 }
 
+/// A function calling an always-inline body of two blocks thousands of
+/// times compiles within a small multiple of the same function calling it
+/// out of line: the splices of a round take one rebuild of the caller, not
+/// one each. At `-O0`, where only the mandatory splices run. Best of three.
+#[test]
+fn many_multi_block_splices_compile_in_time_linear_in_their_number() {
+    use core::fmt::Write;
+    const N: usize = 2000;
+    let src = |attr: &str| {
+        let mut s = alloc::format!(
+            "static inline __attribute__(({attr})) int helper(int x) \
+             {{ if (x > 3) return x * 2; return x + 1; }}\n\
+             int f(int a) {{\n    int s = 0;\n"
+        );
+        for i in 0..N {
+            let _ = writeln!(s, "    s += helper(a + {i});");
+        }
+        s.push_str("    return s;\n}\n");
+        s
+    };
+    let (spliced, called) = (src("always_inline"), src("noinline"));
+    let best = |src: &str| {
+        (0..3)
+            .map(|_| {
+                let start = std::time::Instant::now();
+                object_at(src, Target::LinuxX64, false);
+                start.elapsed()
+            })
+            .min()
+            .expect("three runs")
+    };
+    let (inlined, out_of_line) = (best(&spliced), best(&called));
+    assert!(
+        inlined < out_of_line * 6,
+        "{inlined:?} spliced against {out_of_line:?} called"
+    );
+    let calls = x64_at(&spliced, "f", false)
+        .iter()
+        .filter(|i| i.op == 0xE8)
+        .count();
+    assert_eq!(calls, 0, "every call is spliced");
+}
+
 /// A function of thousands of conditional updates, each a branch
 /// if-conversion turns into a select, compiles at `-O` within a small
 /// multiple of its `-O0` time: the conversions take one sweep and one tape

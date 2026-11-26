@@ -30,9 +30,10 @@
 //! value space, `ParamRef(i)` mapping to the i-th call argument, the
 //! `Inst::Call` is removed, and the callee's `Return(v)` value replaces
 //! every later reference to the call's `ValueId`. Any other callee goes
-//! through `splice_multi_block`, which splits the caller's block at the
-//! call, appends the callee's blocks between the halves, relocates its
-//! frame slots into the caller's frame and joins its returns.
+//! through `splice_sites`, which splits the caller's block at the call,
+//! appends the callee's blocks after the caller's, relocates its frame
+//! slots into the caller's frame and joins its returns; one rebuild of
+//! the caller takes every site a round accepts.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
@@ -1048,7 +1049,7 @@ fn candidacy(
     // A single `Return` block rewrites to `Jmp(postfix)`; multiple route
     // through a synthetic join block whose phi merges the per-return
     // values into the call result. Both need the multi-block splice
-    // (`splice_multi_block`); the flat aggregate splice handles one
+    // (`splice_sites`); the flat aggregate splice handles one
     // Return only. `JumpTable` and `AsmGoto` ride the same path: each
     // names its successors in a `jump_tables` row, which the splice
     // clones with the callee's block ids shifted into the caller and the
@@ -1153,7 +1154,7 @@ fn candidacy(
         .filter(|&s| s != 0)
         .collect();
     // A callee's own local slots are relocated into the caller's frame by
-    // `splice_multi_block`, which `inline_caller` runs for every multi-block
+    // `splice_sites`, which `inline_caller` runs for every multi-block
     // callee and for the single-block callees `needs_reloc_splice` names.
     // The reloc path is what lets an asm output write through an own local
     // (the output's `LocalAddr(<0)` and the read-back `LoadLocal(<0)`
@@ -2353,7 +2354,7 @@ fn splice_arg_addresses(
     callee: &FunctionSsa,
 ) -> Option<Vec<ValueId>> {
     // Parameters whose cell the splice fills from the argument; mirrors
-    // the `param_slot_copy` list `splice_multi_block` builds.
+    // the `param_slot_copy` list `splice_sites` builds.
     let copied = |i: usize| {
         callee.param_aggs.get(i).copied().flatten().is_some()
             && callee.param_local_slots.get(i).copied().unwrap_or(0) != 0
@@ -2628,132 +2629,372 @@ fn returned_marked_slots(callee: &FunctionSsa) -> BTreeSet<i64> {
     out
 }
 
-fn splice_multi_block(
-    caller: &mut FunctionSsa,
-    callee: Callee<'_>,
-    splice_block_idx: usize,
+/// A multi-block splice a round takes: the call site, its callee, the
+/// argument addresses [`splice_arg_addresses`] bound, the site's return
+/// slot, and the frame region the callee's slots take.
+struct Site<'a> {
+    block: usize,
     call_pc: u32,
-    call_args: &[ValueId],
+    callee: Callee<'a>,
+    args: Vec<ValueId>,
     ret_slot: i64,
-    placement: &mut SlotPlacement<'_>,
-) {
-    let Callee {
-        body: callee,
-        facts,
-    } = callee;
-    let SlotPlacement {
-        regions,
-        cyclic,
-        sp_tainted,
-        whole_vector,
-        ..
-    } = placement;
-    let n_caller = caller.blocks.len();
-    let n_callee = callee.blocks.len();
-    let prefix_id = splice_block_idx as u32;
-    let postfix_id = (splice_block_idx + 1) as u32;
-    // For an aggregate-returning callee the postfix block opens with a
-    // per-field copy from the returned address into the caller's return
-    // slot -- the register transfer a non-inlined call performs. The call
-    // result has no scalar value (the caller reads its own slot), so
-    // `remap[call_pc]` stays NO_VALUE.
-    let ret_pieces: Option<Vec<(u32, u32)>> = callee
-        .ret_agg
-        .map(|i| agg_pieces(&callee.agg_descs[i as usize], *whole_vector));
-    // The pieces are read from the caller's object, so its own
-    // alignment bounds each read; the return slot they land in is a
-    // frame slot and needs no bound.
-    let ret_align: u32 = callee
-        .ret_agg
-        .map_or(0, |i| callee.agg_descs[i as usize].align);
-    // The callee ends a returned object's lifetime ahead of its `Return`,
-    // which reads it out of line; spliced, the postfix copy reads it, so
-    // its markers move to follow the copy.
-    let held_ends: BTreeSet<i64> = if ret_pieces.is_some() {
-        returned_marked_slots(callee)
-    } else {
-        BTreeSet::new()
-    };
-    // Frame slots holding a register-passed struct parameter's bytes,
-    // mapped to (parameter index, layout). The cell relocates into the
-    // caller frame with the callee's other own locals; the prefix copies
-    // the argument into it, which is what the prologue does out of line.
-    // `splice_arg_addresses` normalized each such argument to the address
-    // of the caller's copy, so it is the copy's source. A cell the body
-    // never names is unobservable and takes no copy.
-    let names_slot = |s: i64| {
-        callee.insts.iter().any(|i| match i {
-            Inst::LocalAddr(o)
-            | Inst::LoadLocal { off: o, .. }
-            | Inst::StoreLocal { off: o, .. } => *o == s,
-            _ => false,
-        })
-    };
-    let param_slot_copy: Vec<(i64, usize, u32)> = if needs_param_agg_copy(callee) {
-        callee
-            .param_aggs
-            .iter()
-            .enumerate()
-            .filter_map(|(i, a)| a.map(|d| (i, d)))
-            .filter_map(|(i, d)| callee.param_local_slots.get(i).map(|&s| (s, i, d)))
-            .filter(|&(s, ..)| s != 0 && names_slot(s))
-            .collect()
-    } else {
-        Vec::new()
-    };
-    // Cells with no copy bind to the caller's argument instead; the body's
-    // `LocalAddr(slot)` reads resolve to it and no instruction is emitted.
-    let param_slot_arg: BTreeMap<i64, usize> = if param_slot_copy.is_empty() {
-        callee
-            .param_aggs
-            .iter()
-            .enumerate()
-            .filter(|(_, a)| a.is_some())
-            .filter_map(|(i, _)| callee.param_local_slots.get(i).map(|&s| (s, i)))
-            .filter(|&(s, _)| s != 0)
-            .collect()
-    } else {
-        BTreeMap::new()
-    };
-    // Caller-block-id remap: blocks > splice shift by +1 to make room
-    // for the postfix.
-    let shift_caller_bid = |b: u32| -> u32 {
-        if b > splice_block_idx as u32 {
-            b + 1
+    region_base: i64,
+}
+
+/// What a site's splice derives before the emission, and the ids the
+/// counting pass assigns it.
+struct SitePlan<'a> {
+    callee: &'a FunctionSsa,
+    facts: &'a CalleeFacts,
+    call_pc: u32,
+    args: &'a [ValueId],
+    ret_slot: i64,
+    region_base: i64,
+    needed: i64,
+    ret_pieces: Option<Vec<(u32, u32)>>,
+    ret_align: u32,
+    held_ends: BTreeSet<i64>,
+    param_slot_copy: Vec<(i64, usize, u32)>,
+    param_slot_arg: BTreeMap<i64, usize>,
+    param_cell_reloc: BTreeMap<i64, i64>,
+    returned_ends: Vec<i64>,
+    use_join: bool,
+    agg_map: Vec<u32>,
+    /// The caller row the callee's first jump-table row becomes.
+    jt_base: u32,
+    /// The caller block id of the callee's entry block.
+    callee_base: u32,
+    /// The block the call's continuation opens, which the returns reach.
+    postfix_id: u32,
+    join_id: u32,
+    pieces_base: u32,
+    agg_join_phi: ValueId,
+    callee_remap: Vec<ValueId>,
+}
+
+impl<'a> SitePlan<'a> {
+    fn new(site: &'a Site<'a>, original: &mut FunctionSsa, whole_vector: u32, fresh: bool) -> Self {
+        let Callee {
+            body: callee,
+            facts,
+        } = site.callee;
+        // For an aggregate-returning callee the postfix block opens with a
+        // per-field copy from the returned address into the caller's return
+        // slot -- the register transfer a non-inlined call performs. The call
+        // result has no scalar value (the caller reads its own slot), so
+        // `remap[call_pc]` stays NO_VALUE.
+        let ret_pieces = callee
+            .ret_agg
+            .map(|i| agg_pieces(&callee.agg_descs[i as usize], whole_vector));
+        // The pieces are read from the caller's object, so its own
+        // alignment bounds each read; the return slot they land in is a
+        // frame slot and needs no bound.
+        let ret_align = callee
+            .ret_agg
+            .map_or(0, |i| callee.agg_descs[i as usize].align);
+        // The callee ends a returned object's lifetime ahead of its `Return`,
+        // which reads it out of line; spliced, the postfix copy reads it, so
+        // its markers move to follow the copy.
+        let held_ends = if ret_pieces.is_some() {
+            returned_marked_slots(callee)
         } else {
-            b
+            BTreeSet::new()
+        };
+        // Frame slots holding a register-passed struct parameter's bytes,
+        // mapped to (parameter index, layout). The cell relocates into the
+        // caller frame with the callee's other own locals; the prefix copies
+        // the argument into it, which is what the prologue does out of line.
+        // `splice_arg_addresses` normalized each such argument to the address
+        // of the caller's copy, so it is the copy's source. A cell the body
+        // never names is unobservable and takes no copy.
+        let names_slot = |s: i64| {
+            callee.insts.iter().any(|i| match i {
+                Inst::LocalAddr(o)
+                | Inst::LoadLocal { off: o, .. }
+                | Inst::StoreLocal { off: o, .. } => *o == s,
+                _ => false,
+            })
+        };
+        let param_slot_copy: Vec<(i64, usize, u32)> = if needs_param_agg_copy(callee) {
+            callee
+                .param_aggs
+                .iter()
+                .enumerate()
+                .filter_map(|(i, a)| a.map(|d| (i, d)))
+                .filter_map(|(i, d)| callee.param_local_slots.get(i).map(|&s| (s, i, d)))
+                .filter(|&(s, ..)| s != 0 && names_slot(s))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        // Cells with no copy bind to the caller's argument instead; the body's
+        // `LocalAddr(slot)` reads resolve to it and no instruction is emitted.
+        let param_slot_arg: BTreeMap<i64, usize> = if param_slot_copy.is_empty() {
+            callee
+                .param_aggs
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| a.is_some())
+                .filter_map(|(i, _)| callee.param_local_slots.get(i).map(|&s| (s, i)))
+                .filter(|&(s, _)| s != 0)
+                .collect()
+        } else {
+            BTreeMap::new()
+        };
+        // Multiple returns route through a synthetic join block appended after
+        // the callee blocks; its phi merges the per-return values -- for an
+        // aggregate return, the per-return result addresses the postfix copy
+        // reads. A void multi-return has no value to merge and needs no join.
+        // A single return keeps the direct `Jmp(postfix)`.
+        let n_returns = (callee.blocks.iter())
+            .filter(|b| matches!(b.terminator, Terminator::Return(_)))
+            .count();
+        let non_void_return = (callee.blocks.iter())
+            .any(|b| matches!(b.terminator, Terminator::Return(v) if v != NO_VALUE));
+        let region_base = site.region_base;
+        // Frame-kept parameter cells -- the cell's address is taken, an access
+        // is volatile, or an access whose value the body consumes -- relocate
+        // into fresh caller slots below the callee's relocated own locals. A
+        // spilled cell's kept prologue spill (`StoreLocal` of the `ParamRef`,
+        // first access by construction) initializes the relocated cell with
+        // the remapped argument value; a materialized cell has no spill and
+        // the prefix synthesizes that store instead. A cell touched only by
+        // dead non-volatile accesses keeps the established drop.
+        let param_cell_reloc: BTreeMap<i64, i64> = (facts.relocated.iter())
+            .enumerate()
+            .map(|(i, &s)| (s, -(region_base + callee.locals + i as i64 + 1)))
+            .collect();
+        // The callee's objects end when it returns (C99 6.2.4p2). In slots of
+        // their own, those reached through an address that state no end of
+        // their own state it at the head of the continuation, so the repack
+        // bounds them as the shared region did.
+        let returned_ends: Vec<i64> = if fresh {
+            let marked: BTreeSet<i64> = (callee.insts.iter())
+                .filter_map(|i| match *i {
+                    Inst::LifetimeEnd(s) => Some(s),
+                    _ => None,
+                })
+                .collect();
+            (callee.insts.iter())
+                .filter_map(|i| match *i {
+                    Inst::LocalAddr(s) if marked.contains(&s) || held_ends.contains(&s) => None,
+                    Inst::LocalAddr(s) if s < 0 => Some(s - region_base),
+                    Inst::LocalAddr(s) => param_cell_reloc.get(&s).copied(),
+                    _ => None,
+                })
+                .collect::<BTreeSet<i64>>()
+                .into_iter()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        SitePlan {
+            callee,
+            facts,
+            call_pc: site.call_pc,
+            args: &site.args,
+            ret_slot: site.ret_slot,
+            region_base,
+            needed: callee.locals + facts.relocated.len() as i64,
+            ret_pieces,
+            ret_align,
+            held_ends,
+            param_slot_copy,
+            param_slot_arg,
+            param_cell_reloc,
+            returned_ends,
+            use_join: n_returns > 1 && non_void_return,
+            agg_map: merge_agg_descs(&mut original.agg_descs, &callee.agg_descs),
+            jt_base: 0,
+            callee_base: 0,
+            postfix_id: 0,
+            join_id: 0,
+            pieces_base: 0,
+            agg_join_phi: NO_VALUE,
+            callee_remap: vec![NO_VALUE; callee.insts.len()],
         }
-    };
-    let callee_block_base = (n_caller + 1) as u32;
-    let shift_callee_bid = |b: u32| -> u32 { b + callee_block_base };
-    // Multiple returns route through a synthetic join block appended after
-    // the callee blocks; its phi merges the per-return values -- for an
-    // aggregate return, the per-return result addresses the postfix copy
-    // reads. A void multi-return has no value to merge and needs no join.
-    // A single return keeps the direct `Jmp(postfix)`.
-    let n_returns = callee
-        .blocks
-        .iter()
-        .filter(|b| matches!(b.terminator, Terminator::Return(_)))
-        .count();
-    let non_void_return = callee
-        .blocks
-        .iter()
-        .any(|b| matches!(b.terminator, Terminator::Return(v) if v != NO_VALUE));
-    let use_join = n_returns > 1 && non_void_return;
-    let join_id = callee_block_base + n_callee as u32;
-    let map_terminator_caller = |term: Terminator, remap: &[ValueId]| -> Terminator {
+    }
+
+    /// Assign ids to the callee body's instructions from `at`, as the
+    /// emission will issue them, and the call's result; `remap` holds the
+    /// caller's ids, which the arguments read.
+    fn count_body(&mut self, remap: &mut [ValueId], at: &mut u32) {
+        let callee = self.callee;
+        let counted_args: Vec<ValueId> = self.args.iter().map(|&a| map_v(a, remap)).collect();
+        for cblock in &callee.blocks {
+            for ce_pc in cblock.inst_range.clone() {
+                let slot = &mut self.callee_remap[ce_pc as usize];
+                // Dropped by the emission; reserve no id.
+                if !self.facts.live[ce_pc as usize] {
+                    *slot = NO_VALUE;
+                    continue;
+                }
+                let mut take = || {
+                    *at += 1;
+                    *at - 1
+                };
+                *slot = match &callee.insts[ce_pc as usize] {
+                    Inst::ParamRef { idx, kind } => {
+                        let arg = counted_args.get(*idx as usize).copied().unwrap_or(NO_VALUE);
+                        if param_read_insts(*kind) == 0 {
+                            arg
+                        } else {
+                            take()
+                        }
+                    }
+                    // A forwarded parameter cell's read takes the same
+                    // width conversion against the call-site argument.
+                    Inst::LoadLocal {
+                        disp: 0, off, kind, ..
+                    } if self.facts.forwarded.contains(off) => {
+                        let arg =
+                            (counted_args.get((*off - 2) as usize).copied()).unwrap_or(NO_VALUE);
+                        if param_read_insts(*kind) == 0 {
+                            arg
+                        } else {
+                            take()
+                        }
+                    }
+                    // A bound parameter cell resolves to the caller's
+                    // argument; no instruction is emitted for it.
+                    Inst::LocalAddr(s) if self.param_slot_arg.contains_key(s) => counted_args
+                        .get(self.param_slot_arg[s])
+                        .copied()
+                        .unwrap_or(NO_VALUE),
+                    Inst::LocalAddr(s) if *s < 0 || *s >= 2 => take(),
+                    Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. }
+                        if *off < 0 || self.param_cell_reloc.contains_key(off) =>
+                    {
+                        take()
+                    }
+                    // A callee object's marker moves with the object. The
+                    // region's other occupants are the objects of splices
+                    // that ran before this one or run after it, never
+                    // during it, so the end it states holds for them too.
+                    // A returned object's marker follows the postfix copy.
+                    Inst::LifetimeEnd(off) if *off < 0 && !self.held_ends.contains(off) => take(),
+                    Inst::LoadLocal { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::AllocaInit(_)
+                    | Inst::LifetimeEnd(_) => NO_VALUE,
+                    _ => take(),
+                };
+            }
+        }
+        // The call result. One return maps directly; multiple feed the join
+        // phi one past the spliced callee body. A void multi-return has no
+        // value. An aggregate return has no scalar result either -- the
+        // postfix copy writes the caller's return slot -- but its
+        // multi-return join phi (over the result addresses) sits at the
+        // same reserved id.
+        if self.ret_pieces.is_some() {
+            if self.use_join {
+                self.agg_join_phi = *at;
+            }
+        } else if self.use_join {
+            remap[self.call_pc as usize] = *at;
+        } else {
+            for cblock in &callee.blocks {
+                if let Terminator::Return(v) = cblock.terminator {
+                    remap[self.call_pc as usize] = map_v(v, &self.callee_remap);
+                }
+            }
+        }
+        if self.use_join {
+            *at += 1;
+        }
+    }
+
+    /// The address the aggregate-return copy reads: the single Return's
+    /// mapped result address, or the join phi merging the per-return ones.
+    fn agg_ret_src(&self) -> ValueId {
+        if self.ret_pieces.is_none() {
+            return NO_VALUE;
+        }
+        if self.use_join {
+            return self.agg_join_phi;
+        }
+        let mut src = NO_VALUE;
+        for cblock in &self.callee.blocks {
+            if let Terminator::Return(v) = cblock.terminator {
+                src = map_v(v, &self.callee_remap);
+            }
+        }
+        src
+    }
+}
+
+/// The instruction stream a splice builds, with its parallel tables.
+#[derive(Default)]
+struct Emitted {
+    insts: Vec<Inst>,
+    src: Vec<crate::c5::ir::InstSrc>,
+    f32: Vec<bool>,
+}
+
+impl Emitted {
+    fn push(&mut self, inst: Inst, f32: bool) -> ValueId {
+        self.insts.push(inst);
+        self.src.push(crate::c5::ir::InstSrc::default());
+        self.f32.push(f32);
+        self.len() - 1
+    }
+
+    fn len(&self) -> u32 {
+        self.insts.len() as u32
+    }
+}
+
+/// Splice every site of a round into `caller` in one rebuild of its body.
+/// A site splits its block at the call: the instructions ahead of it end in
+/// a jump into the callee's body, appended after the caller's blocks, and
+/// the instructions after it open a block the callee's returns reach; the
+/// block's last such part carries its terminator. Blocks keep their order
+/// and tile the tape in it. `sites` are in block and instruction order, and
+/// each has its frame region placed.
+fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32, fresh: bool) {
+    let n_caller = caller.blocks.len();
+    let mut original = core::mem::take(caller);
+    // A block's entry keeps its own place; each site in it adds the block
+    // its continuation opens, and the block's out-edges leave from its last.
+    let mut sites_in = vec![0u32; n_caller];
+    for s in sites {
+        sites_in[s.block] += 1;
+    }
+    let mut entry = vec![0u32; n_caller];
+    let mut next = 0u32;
+    for (b, id) in entry.iter_mut().enumerate() {
+        *id = next;
+        next += 1 + sites_in[b];
+    }
+    let entry_of = |b: u32| entry[b as usize];
+    let out_of = |b: u32| entry[b as usize] + sites_in[b as usize];
+    let mut plans: Vec<SitePlan<'_>> = Vec::with_capacity(sites.len());
+    let mut by_block: Vec<Vec<usize>> = vec![Vec::new(); n_caller];
+    let (mut callee_base, mut jt_base) = (next, original.jump_tables.len() as u32);
+    for s in sites {
+        let mut p = SitePlan::new(s, &mut original, whole_vector, fresh);
+        p.postfix_id = entry[s.block] + 1 + by_block[s.block].len() as u32;
+        p.callee_base = callee_base;
+        p.join_id = callee_base + p.callee.blocks.len() as u32;
+        p.jt_base = jt_base;
+        callee_base = p.join_id + u32::from(p.use_join);
+        jt_base += p.callee.jump_tables.len() as u32;
+        by_block[s.block].push(plans.len());
+        plans.push(p);
+    }
+    let map_term = |term: Terminator, remap: &[ValueId]| -> Terminator {
         match term {
-            Terminator::Jmp(b) => Terminator::Jmp(shift_caller_bid(b)),
-            Terminator::FallThrough(b) => Terminator::FallThrough(shift_caller_bid(b)),
+            Terminator::Jmp(b) => Terminator::Jmp(entry_of(b)),
+            Terminator::FallThrough(b) => Terminator::FallThrough(entry_of(b)),
             Terminator::Bz {
                 cond,
                 target,
                 fall_through,
             } => Terminator::Bz {
                 cond: map_v(cond, remap),
-                target: shift_caller_bid(target),
-                fall_through: shift_caller_bid(fall_through),
+                target: entry_of(target),
+                fall_through: entry_of(fall_through),
             },
             Terminator::Bnz {
                 cond,
@@ -2761,8 +3002,8 @@ fn splice_multi_block(
                 fall_through,
             } => Terminator::Bnz {
                 cond: map_v(cond, remap),
-                target: shift_caller_bid(target),
-                fall_through: shift_caller_bid(fall_through),
+                target: entry_of(target),
+                fall_through: entry_of(fall_through),
             },
             Terminator::Return(v) => Terminator::Return(map_v(v, remap)),
             Terminator::TailExt(x) => Terminator::TailExt(x),
@@ -2781,589 +3022,269 @@ fn splice_multi_block(
         }
     };
 
-    let mut original = core::mem::take(caller);
-    let agg_map = merge_agg_descs(&mut original.agg_descs, &callee.agg_descs);
-    let splice_block = original.blocks[splice_block_idx].clone();
-    // Frame-kept parameter cells -- the cell's address is taken, an access
-    // is volatile, or an access whose value the body consumes -- relocate
-    // into fresh caller slots below the callee's relocated own locals. A
-    // spilled cell's kept prologue spill (`StoreLocal` of the `ParamRef`,
-    // first access by construction) initializes the relocated cell with
-    // the remapped argument value; a materialized cell has no spill and
-    // the prefix synthesizes that store instead. A cell touched only by
-    // dead non-volatile accesses keeps the established drop.
-    let param_cells = &facts.relocated;
-    let materialized = &facts.materialized;
-    // Parameter cells whose reads resolve to the call-site argument
-    // instead of a frame slot; disjoint from `param_cells`.
-    let forwarded = &facts.forwarded;
-    // Region backing the callee's relocated slots, shared across call
-    // sites when sound (see `CallerRegions`). A cycle member appends, and
-    // so does any splice whose caller or callee can come to execute
-    // stack-pointer asm (`sp_asm_reachers`): a stack switch lets a spliced
-    // activation stay live -- suspended mid-body on another stack -- while
-    // the caller proceeds to further sites, so no two sites may share.
-    let needed = callee.locals + param_cells.len() as i64;
-    let region_base = if needed > 0 {
-        let key = splice_region_key(
-            original.ent_pc,
-            callee,
-            cyclic,
-            sp_tainted,
-            call_args,
-            &original.insts,
-        );
-        regions.place(key, needed, original.locals)
-    } else {
-        original.locals
-    };
-    let param_cell_reloc: alloc::collections::BTreeMap<i64, i64> = param_cells
-        .iter()
-        .enumerate()
-        .map(|(i, &s)| (s, -(region_base + callee.locals + i as i64 + 1)))
-        .collect();
-    // The callee's objects end when it returns (C99 6.2.4p2). In slots of
-    // their own, those reached through an address that state no end of
-    // their own state it at the head of the continuation, so the repack
-    // bounds them as the shared region did.
-    let returned_ends: Vec<i64> = if regions.fresh {
-        let marked: BTreeSet<i64> = callee
-            .insts
-            .iter()
-            .filter_map(|i| match *i {
-                Inst::LifetimeEnd(s) => Some(s),
-                _ => None,
-            })
-            .collect();
-        callee
-            .insts
-            .iter()
-            .filter_map(|i| match *i {
-                Inst::LocalAddr(s) if marked.contains(&s) || held_ends.contains(&s) => None,
-                Inst::LocalAddr(s) if s < 0 => Some(s - region_base),
-                Inst::LocalAddr(s) => param_cell_reloc.get(&s).copied(),
-                _ => None,
-            })
-            .collect::<BTreeSet<i64>>()
-            .into_iter()
-            .collect()
-    } else {
-        Vec::new()
-    };
-    // Caller's own rows precede the callee's in `merged_jump_tables`; a
-    // spliced callee's `table` re-indexes to `caller_jt_len + table`.
-    let caller_jt_len = original.jump_tables.len() as u32;
-
-    let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
-    let mut new_inst_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(new_insts.capacity());
-    let mut new_f32: Vec<bool> = Vec::with_capacity(new_insts.capacity());
-    let mut new_blocks: Vec<Block> = Vec::with_capacity(n_caller + n_callee + 1);
-    let mut remap: Vec<ValueId> = vec![NO_VALUE; original.insts.len()];
-    let mut callee_remap: Vec<ValueId> = vec![NO_VALUE; callee.insts.len()];
-    // First new-inst id of the spliced callee body (Step 6, emitted last).
-    // Callee phis are shifted at emission; the post-fixpoint caller-phi
-    // shift skips this tail so it does not double-shift them. Assigned on
-    // every fixpoint pass (Step 6 precedes the loop's breaks).
-    let callee_insts_start: u32;
-
-    let emit_caller_inst = |pc: u32,
-                            new_insts: &mut Vec<Inst>,
-                            new_inst_src: &mut Vec<crate::c5::ir::InstSrc>,
-                            new_f32: &mut Vec<bool>,
-                            remap: &mut [ValueId],
-                            original: &mut FunctionSsa| {
-        let src = original
-            .inst_src
-            .get(pc as usize)
-            .copied()
-            .unwrap_or_default();
-        let f32 = original
-            .f32_values
-            .get(pc as usize)
-            .copied()
-            .unwrap_or(false);
-        // The emission runs once and `original` is dropped afterward:
-        // move the instruction out rather than deep-cloning its
-        // operand vectors.
-        let mut mapped = core::mem::replace(&mut original.insts[pc as usize], Inst::Imm(0));
-        remap_inst_operands(&mut mapped, remap);
-        // `&&label` names a block, not a value, so the value remap leaves
-        // it alone; it moves with the splice's block-id shift.
-        if let Inst::BlockAddr(b) = &mut mapped {
-            *b = shift_caller_bid(*b);
-        }
-        let new_id = new_insts.len() as u32;
-        debug_assert_eq!(remap[pc as usize], new_id);
-        remap[pc as usize] = new_id;
-        new_insts.push(mapped);
-        new_inst_src.push(src);
-        new_f32.push(f32);
-    };
-
-    // Neither block array is ordered definitions-before-uses, and the
-    // call result's mapping only materializes when the callee's Return
-    // is spliced (Step 6) -- after Step 4 already emitted the caller
-    // blocks that follow the splice point. The emission order and the
-    // per-site emit counts never depend on mapped values, so every new
-    // id is position arithmetic: assign the complete value maps up
+    // Neither block array is ordered definitions-before-uses, and a call
+    // result's mapping only materializes when its callee's Return is
+    // spliced, after the caller blocks reading it are emitted. The emission
+    // order and the per-site emit counts never depend on mapped values, so
+    // every new id is position arithmetic: assign the complete value maps up
     // front, then emit once. The emission re-derives each id and
     // debug-asserts it matches the assignment.
-    // First new-inst id of the aggregate-return postfix copy (the
-    // `LocalAddr(ret_slot)` + per-piece load/store run opening the postfix
-    // block), and the id of the join phi it reads for a multi-return
-    // callee. Assigned by the counting pass below.
-    let mut pieces_base: u32 = 0;
-    let mut agg_join_phi: ValueId = NO_VALUE;
-    {
-        let mut at: u32 = 0;
-        let count = |pc: u32, remap: &mut [ValueId], at: &mut u32| {
-            remap[pc as usize] = *at;
-            *at += 1;
-        };
-        for block in original.blocks.iter().take(splice_block_idx) {
-            for pc in block.inst_range.clone() {
-                count(pc, &mut remap, &mut at);
+    let mut remap: Vec<ValueId> = vec![NO_VALUE; original.insts.len()];
+    let mut at: u32 = 0;
+    for (b, block) in original.blocks.iter().enumerate() {
+        let mut pc = block.inst_range.start;
+        for &i in &by_block[b] {
+            let p = &mut plans[i];
+            for q in pc..p.call_pc {
+                remap[q as usize] = at;
+                at += 1;
             }
-        }
-        for pc in splice_block.inst_range.start..call_pc {
-            count(pc, &mut remap, &mut at);
-        }
-        // The by-value aggregate parameter copies close the prefix block:
-        // a `LocalAddr` of the relocated cell plus the `Mcpy` per parameter.
-        at += 2 * param_slot_copy.len() as u32;
-        // One synthesized initializing store per materialized cell.
-        at += materialized.len() as u32;
-        // The aggregate-return copy opens the postfix block: one
-        // `LocalAddr(ret_slot)` plus a load and a store per piece. The ids
-        // are position arithmetic like everything else; only the copy's own
-        // stores reference them.
-        if let Some(pieces) = &ret_pieces {
-            pieces_base = at;
-            at += 1 + 2 * pieces.len() as u32 + held_ends.len() as u32;
-        }
-        at += returned_ends.len() as u32;
-        for pc in (call_pc + 1)..splice_block.inst_range.end {
-            count(pc, &mut remap, &mut at);
-        }
-        for block in original.blocks.iter().skip(splice_block_idx + 1) {
-            for pc in block.inst_range.clone() {
-                count(pc, &mut remap, &mut at);
+            // The by-value aggregate parameter copies close the prefix block
+            // (a `LocalAddr` of the relocated cell plus the `Mcpy` per
+            // parameter), then one synthesized initializing store per
+            // materialized cell.
+            at += 2 * p.param_slot_copy.len() as u32 + p.facts.materialized.len() as u32;
+            // The aggregate-return copy opens the continuation: one
+            // `LocalAddr(ret_slot)` plus a load and a store per piece.
+            if let Some(pieces) = &p.ret_pieces {
+                p.pieces_base = at;
+                at += 1 + 2 * pieces.len() as u32 + p.held_ends.len() as u32;
             }
+            at += p.returned_ends.len() as u32;
+            pc = p.call_pc + 1;
         }
-        let counted_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
-        for cblock in &callee.blocks {
-            for ce_pc in cblock.inst_range.clone() {
-                // Dropped by the emission below; reserve no id.
-                if !facts.live[ce_pc as usize] {
-                    callee_remap[ce_pc as usize] = NO_VALUE;
-                    continue;
-                }
-                match &callee.insts[ce_pc as usize] {
-                    Inst::ParamRef { idx, kind } => {
-                        let arg = counted_args.get(*idx as usize).copied().unwrap_or(NO_VALUE);
-                        callee_remap[ce_pc as usize] = if param_read_insts(*kind) == 0 {
-                            arg
-                        } else {
-                            at += 1;
-                            at - 1
-                        };
-                    }
-                    // A forwarded parameter cell's read takes the same
-                    // width conversion against the call-site argument.
-                    Inst::LoadLocal {
-                        disp: 0, off, kind, ..
-                    } if forwarded.contains(off) => {
-                        let arg = counted_args
-                            .get((*off - 2) as usize)
-                            .copied()
-                            .unwrap_or(NO_VALUE);
-                        callee_remap[ce_pc as usize] = if param_read_insts(*kind) == 0 {
-                            arg
-                        } else {
-                            at += 1;
-                            at - 1
-                        };
-                    }
-                    // A bound parameter cell resolves to the caller's
-                    // argument; no instruction is emitted for it.
-                    Inst::LocalAddr(s) if param_slot_arg.contains_key(s) => {
-                        callee_remap[ce_pc as usize] = counted_args
-                            .get(param_slot_arg[s])
-                            .copied()
-                            .unwrap_or(NO_VALUE);
-                    }
-                    Inst::LocalAddr(s) if *s < 0 || *s >= 2 => {
-                        callee_remap[ce_pc as usize] = at;
-                        at += 1;
-                    }
-                    Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. }
-                        if *off < 0 || param_cell_reloc.contains_key(off) =>
-                    {
-                        callee_remap[ce_pc as usize] = at;
-                        at += 1;
-                    }
-                    // A callee object's marker moves with the object. The
-                    // region's other occupants are the objects of splices
-                    // that ran before this one or run after it, never
-                    // during it, so the end it states holds for them too.
-                    // A returned object's marker follows the postfix copy.
-                    Inst::LifetimeEnd(off) if *off < 0 && !held_ends.contains(off) => {
-                        callee_remap[ce_pc as usize] = at;
-                        at += 1;
-                    }
-                    Inst::LoadLocal { .. }
-                    | Inst::StoreLocal { .. }
-                    | Inst::AllocaInit(_)
-                    | Inst::LifetimeEnd(_) => {
-                        callee_remap[ce_pc as usize] = NO_VALUE;
-                    }
-                    _ => {
-                        callee_remap[ce_pc as usize] = at;
-                        at += 1;
-                    }
-                }
-            }
-        }
-        // The call result. One return maps directly; multiple feed the
-        // join phi, whose id is one past the spliced callee body -- the
-        // current `at`, since Step 6 emits exactly that many callee insts
-        // and the phi is pushed right after. A void multi-return has no
-        // value. An aggregate return has no scalar result either -- the
-        // postfix copy writes the caller's return slot -- but its
-        // multi-return join phi (over the result addresses) sits at the
-        // same reserved id.
-        if ret_pieces.is_some() {
-            if use_join {
-                agg_join_phi = at;
-            }
-        } else if use_join {
-            remap[call_pc as usize] = at;
-        } else {
-            for cblock in &callee.blocks {
-                if let Terminator::Return(v) = cblock.terminator {
-                    remap[call_pc as usize] = map_v(v, &callee_remap);
-                }
-            }
+        for q in pc..block.inst_range.end {
+            remap[q as usize] = at;
+            at += 1;
         }
     }
-    // Source address the aggregate-return copy reads: the single Return's
-    // mapped result address, or the join phi merging the per-return
-    // addresses. Resolvable here because the counting pass above assigned
-    // the complete callee map.
-    let agg_ret_src: ValueId = if ret_pieces.is_some() {
-        if use_join {
-            agg_join_phi
-        } else {
-            let mut src = NO_VALUE;
-            for cblock in &callee.blocks {
-                if let Terminator::Return(v) = cblock.terminator {
-                    src = map_v(v, &callee_remap);
+    for p in plans.iter_mut() {
+        p.count_body(&mut remap, &mut at);
+    }
+
+    let mut out = Emitted {
+        insts: Vec::with_capacity(at as usize),
+        src: Vec::with_capacity(at as usize),
+        f32: Vec::with_capacity(at as usize),
+    };
+    let mut new_blocks: Vec<Block> = Vec::with_capacity(callee_base as usize);
+    let emit_caller_inst = |pc: u32, out: &mut Emitted, original: &mut FunctionSsa| {
+        let src = (original.inst_src.get(pc as usize).copied()).unwrap_or_default();
+        let f32 = (original.f32_values.get(pc as usize).copied()).unwrap_or(false);
+        // The emission runs once and `original` is dropped afterward: move
+        // the instruction out rather than deep-cloning its operand vectors.
+        let mut mapped = core::mem::replace(&mut original.insts[pc as usize], Inst::Imm(0));
+        remap_inst_operands(&mut mapped, &remap);
+        // `&&label` names a block, not a value, so the value remap leaves it
+        // alone; it moves with the block-id shift.
+        if let Inst::BlockAddr(b) = &mut mapped {
+            *b = entry_of(*b);
+        }
+        debug_assert_eq!(remap[pc as usize], out.len());
+        out.insts.push(mapped);
+        out.src.push(src);
+        out.f32.push(f32);
+    };
+    for b in 0..n_caller {
+        let block = original.blocks[b].clone();
+        let mut pc = block.inst_range.start;
+        let mut part_start = out.len();
+        let mut start_pc = block.start_pc;
+        for &i in &by_block[b] {
+            let p = &plans[i];
+            for q in pc..p.call_pc {
+                emit_caller_inst(q, &mut out, &mut original);
+            }
+            // The prologue's copy of each by-value aggregate argument into
+            // the parameter's cell, reproduced here because the splice
+            // removes the prologue. C99 6.5.2.2p4: the parameter holds the
+            // argument's value as of the call, so the body must not read the
+            // caller's object -- which a write through another pointer into
+            // it would change.
+            for &(slot, i, desc) in &p.param_slot_copy {
+                let src = (p.args.get(i).map(|&a| map_v(a, &remap))).unwrap_or(NO_VALUE);
+                let d = &p.callee.agg_descs[desc as usize];
+                let dst = out.push(Inst::LocalAddr(slot - p.region_base), false);
+                // The type's alignment is the bound both endpoints are known
+                // to meet: the destination is a frame slot and the source is
+                // the caller's object of this type.
+                out.push(
+                    Inst::Mcpy {
+                        dst,
+                        src,
+                        size: d.size as i64,
+                        align: d.align,
+                    },
+                    false,
+                );
+            }
+            // The initializing store a materialized cell's missing prologue
+            // spill would have provided: the argument occupies its outgoing
+            // stack slot as a full eight-byte value, so an I64 store of the
+            // call-site argument reproduces the cell's entry state.
+            for &cell in p.facts.materialized.iter() {
+                let value = (p.args.get((cell - 2) as usize))
+                    .map(|&a| map_v(a, &remap))
+                    .unwrap_or(NO_VALUE);
+                out.push(
+                    Inst::StoreLocal {
+                        off: p.param_cell_reloc[&cell],
+                        disp: 0,
+                        value,
+                        kind: StoreKind::I64,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    false,
+                );
+            }
+            new_blocks.push(Block {
+                start_pc,
+                inst_range: part_start..out.len(),
+                terminator: Terminator::Jmp(p.callee_base),
+                exit_acc: NO_VALUE,
+            });
+            part_start = out.len();
+            start_pc = 0;
+            // Aggregate-return copy: read each piece from the returned
+            // address and store it into the caller's return slot. All loads
+            // precede all stores so an overlapping source (the callee
+            // returning through a pointer into the caller's own slot) copies
+            // correctly, matching the register transfer of a non-inlined call.
+            if let Some(pieces) = &p.ret_pieces {
+                debug_assert_eq!(out.len(), p.pieces_base);
+                let src = p.agg_ret_src();
+                let la = out.push(Inst::LocalAddr(p.ret_slot), false);
+                let loaded: Vec<ValueId> = (pieces.iter())
+                    .map(|&(off, size)| {
+                        out.push(
+                            Inst::Load {
+                                addr: src,
+                                disp: off as i32,
+                                kind: piece_kinds(size).0,
+                                volatile: false,
+                                align: piece_align(p.ret_align, off, size),
+                                pc_rel: false,
+                            },
+                            false,
+                        )
+                    })
+                    .collect();
+                for (&(off, size), &lv) in pieces.iter().zip(&loaded) {
+                    out.push(
+                        Inst::Store {
+                            addr: la,
+                            disp: off as i32,
+                            value: lv,
+                            kind: piece_kinds(size).1,
+                            volatile: false,
+                            align: 0,
+                            pc_rel: false,
+                        },
+                        false,
+                    );
+                }
+                for &s in &p.held_ends {
+                    out.push(Inst::LifetimeEnd(s - p.region_base), false);
                 }
             }
-            src
-        }
-    } else {
-        NO_VALUE
-    };
-    {
-        // Step 1: caller blocks 0..splice_block_idx (unchanged).
-        for b_idx in 0..splice_block_idx {
-            let blk = &original.blocks[b_idx];
-            let (rng, term0, exit0, start_pc) = (
-                blk.inst_range.clone(),
-                blk.terminator,
-                blk.exit_acc,
-                blk.start_pc,
-            );
-            let block_start = new_insts.len() as u32;
-            for pc in rng {
-                emit_caller_inst(
-                    pc,
-                    &mut new_insts,
-                    &mut new_inst_src,
-                    &mut new_f32,
-                    &mut remap,
-                    &mut original,
-                );
+            for &s in &p.returned_ends {
+                out.push(Inst::LifetimeEnd(s), false);
             }
-            let term = map_terminator_caller(term0, &remap);
-            let exit_acc = map_v(exit0, &remap);
-            new_blocks.push(Block {
-                start_pc,
-                inst_range: block_start..new_insts.len() as u32,
-                terminator: term,
-                exit_acc,
-            });
+            pc = p.call_pc + 1;
         }
-
-        // Step 2: prefix (caller's splice block, insts up to call).
-        let prefix_start = new_insts.len() as u32;
-        for pc in splice_block.inst_range.start..call_pc {
-            emit_caller_inst(
-                pc,
-                &mut new_insts,
-                &mut new_inst_src,
-                &mut new_f32,
-                &mut remap,
-                &mut original,
-            );
+        for q in pc..block.inst_range.end {
+            emit_caller_inst(q, &mut out, &mut original);
         }
-        // The prologue's copy of each by-value aggregate argument into the
-        // parameter's cell, reproduced here because the splice removes the
-        // prologue. C99 6.5.2.2p4: the parameter holds the argument's value
-        // as of the call, so the body must not read the caller's object --
-        // which a write through another pointer into it would change.
-        for &(slot, i, desc) in &param_slot_copy {
-            let src = call_args
-                .get(i)
-                .map(|&a| map_v(a, &remap))
-                .unwrap_or(NO_VALUE);
-            let d = &callee.agg_descs[desc as usize];
-            let dst = new_insts.len() as u32;
-            new_insts.push(Inst::LocalAddr(slot - region_base));
-            new_inst_src.push(crate::c5::ir::InstSrc::default());
-            new_f32.push(false);
-            // The type's alignment is the bound both endpoints are known
-            // to meet: the destination is a frame slot and the source is
-            // the caller's object of this type.
-            new_insts.push(Inst::Mcpy {
-                dst,
-                src,
-                size: d.size as i64,
-                align: d.align,
-            });
-            new_inst_src.push(crate::c5::ir::InstSrc::default());
-            new_f32.push(false);
-        }
-        // The initializing store a materialized cell's missing prologue
-        // spill would have provided: the argument occupies its outgoing
-        // stack slot as a full eight-byte value, so an I64 store of the
-        // call-site argument reproduces the cell's entry state.
-        for &cell in materialized.iter() {
-            let value = call_args
-                .get((cell - 2) as usize)
-                .map(|&a| map_v(a, &remap))
-                .unwrap_or(NO_VALUE);
-            new_insts.push(Inst::StoreLocal {
-                off: param_cell_reloc[&cell],
-                disp: 0,
-                value,
-                kind: StoreKind::I64,
-                volatile: false,
-                nsw: false,
-            });
-            new_inst_src.push(crate::c5::ir::InstSrc::default());
-            new_f32.push(false);
-        }
-        let callee_entry_new_id = callee_block_base;
-        new_blocks.push(Block {
-            start_pc: splice_block.start_pc,
-            inst_range: prefix_start..new_insts.len() as u32,
-            terminator: Terminator::Jmp(callee_entry_new_id),
-            exit_acc: NO_VALUE,
-        });
-        let _ = prefix_id;
-
-        // Step 3: postfix block (the splice block's insts after the call).
-        // Emitted here, in block-index order, so every block's inst_range
-        // tiles `new_insts` contiguously and ascending -- the invariant the
-        // flat splice and the liveness/reg-alloc value-id ordering rely on.
-        // The call result feeds these insts; its remap is set when the
-        // callee Return is spliced (Step 6) and resolves across the
-        // emission fixpoint, one forward-reference level per pass.
-        let postfix_start = new_insts.len() as u32;
-        // Aggregate-return copy: read each piece from the returned address
-        // (`agg_ret_src`, assigned by the counting pass) and store it into
-        // the caller's return slot. All loads precede all stores so an
-        // overlapping source (the callee returning through a pointer into
-        // the caller's own slot) copies correctly, matching the register
-        // transfer of a non-inlined call.
-        if let Some(pieces) = &ret_pieces {
-            debug_assert_eq!(postfix_start, pieces_base);
-            let la = new_insts.len() as u32;
-            new_insts.push(Inst::LocalAddr(ret_slot));
-            new_inst_src.push(crate::c5::ir::InstSrc::default());
-            new_f32.push(false);
-            let mut loaded: Vec<ValueId> = Vec::with_capacity(pieces.len());
-            for &(off, size) in pieces.iter() {
-                let (lk, _) = piece_kinds(size);
-                loaded.push(new_insts.len() as u32);
-                new_insts.push(Inst::Load {
-                    addr: agg_ret_src,
-                    disp: off as i32,
-                    kind: lk,
-                    volatile: false,
-                    align: piece_align(ret_align, off, size),
-                    pc_rel: false,
-                });
-                new_inst_src.push(crate::c5::ir::InstSrc::default());
-                new_f32.push(false);
-            }
-            for (&(off, size), &lv) in pieces.iter().zip(&loaded) {
-                let (_, sk) = piece_kinds(size);
-                new_insts.push(Inst::Store {
-                    addr: la,
-                    disp: off as i32,
-                    value: lv,
-                    kind: sk,
-                    volatile: false,
-                    align: 0,
-                    pc_rel: false,
-                });
-                new_inst_src.push(crate::c5::ir::InstSrc::default());
-                new_f32.push(false);
-            }
-            for &s in &held_ends {
-                new_insts.push(Inst::LifetimeEnd(s - region_base));
-                new_inst_src.push(crate::c5::ir::InstSrc::default());
-                new_f32.push(false);
-            }
-        }
-        for &s in &returned_ends {
-            new_insts.push(Inst::LifetimeEnd(s));
-            new_inst_src.push(crate::c5::ir::InstSrc::default());
-            new_f32.push(false);
-        }
-        for pc in (call_pc + 1)..splice_block.inst_range.end {
-            emit_caller_inst(
-                pc,
-                &mut new_insts,
-                &mut new_inst_src,
-                &mut new_f32,
-                &mut remap,
-                &mut original,
-            );
-        }
-        let postfix_term = match splice_block.terminator {
-            Terminator::FallThrough(b) => Terminator::Jmp(shift_caller_bid(b)),
-            other => map_terminator_caller(other, &remap),
+        let terminator = match block.terminator {
+            Terminator::FallThrough(t) if sites_in[b] > 0 => Terminator::Jmp(entry_of(t)),
+            other => map_term(other, &remap),
         };
-        let postfix_exit_acc = map_v(splice_block.exit_acc, &remap);
         new_blocks.push(Block {
-            start_pc: 0,
-            inst_range: postfix_start..new_insts.len() as u32,
-            terminator: postfix_term,
-            exit_acc: postfix_exit_acc,
+            start_pc,
+            inst_range: part_start..out.len(),
+            terminator,
+            exit_acc: map_v(block.exit_acc, &remap),
         });
-        let _ = postfix_id;
+    }
 
-        // Step 4: caller blocks splice_block_idx+1..n_caller (shifted +1).
-        for b_idx in (splice_block_idx + 1)..original.blocks.len() {
-            let blk = &original.blocks[b_idx];
-            let (rng, term0, exit0, start_pc) = (
-                blk.inst_range.clone(),
-                blk.terminator,
-                blk.exit_acc,
-                blk.start_pc,
-            );
-            let block_start = new_insts.len() as u32;
-            for pc in rng {
-                emit_caller_inst(
-                    pc,
-                    &mut new_insts,
-                    &mut new_inst_src,
-                    &mut new_f32,
-                    &mut remap,
-                    &mut original,
-                );
-            }
-            let term = map_terminator_caller(term0, &remap);
-            let exit_acc = map_v(exit0, &remap);
-            new_blocks.push(Block {
-                start_pc,
-                inst_range: block_start..new_insts.len() as u32,
-                terminator: term,
-                exit_acc,
-            });
-        }
-
-        // Step 5: remap the call's args through the caller's now-built remap.
-        let remapped_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
-
-        // Step 6: splice every callee block. A multi-return callee
-        // collects each return's (predecessor block, value) for the join
-        // phi emitted after the loop.
-        callee_insts_start = new_insts.len() as u32;
+    // Splice every callee body, in site order. A multi-return callee
+    // collects each return's (predecessor block, value) for the join phi
+    // emitted after its body.
+    let callee_insts_start = out.len();
+    for p in plans.iter_mut() {
+        let callee = p.callee;
+        let remapped_args: Vec<ValueId> = p.args.iter().map(|&a| map_v(a, &remap)).collect();
+        let shift = |b: BlockId| b + p.callee_base;
         let mut phi_incoming: Vec<(BlockId, ValueId)> = Vec::new();
         for (ci, cblock) in callee.blocks.iter().enumerate() {
-            let block_start = new_insts.len() as u32;
-            for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
+            let block_start = out.len();
+            for ce_pc in cblock.inst_range.clone() {
                 // A superseded arena entry the emit issues nothing for.
-                if !facts.live[ce_pc as usize] {
-                    callee_remap[ce_pc as usize] = NO_VALUE;
+                if !p.facts.live[ce_pc as usize] {
+                    p.callee_remap[ce_pc as usize] = NO_VALUE;
                     continue;
                 }
                 let cinst = &callee.insts[ce_pc as usize];
-                match cinst {
+                let f32 = (callee.f32_values.get(ce_pc as usize).copied()).unwrap_or(false);
+                let relocated = |off: i64| {
+                    if off < 0 {
+                        off - p.region_base
+                    } else {
+                        p.param_cell_reloc[&off]
+                    }
+                };
+                let id = match cinst {
+                    // Reproduce the phi in the caller: incoming values route
+                    // through `callee_remap`; predecessor block ids shift into
+                    // the caller's numbering.
                     Inst::Phi { incoming, kind } => {
-                        // Reproduce the phi in the caller: incoming values
-                        // route through `callee_remap`; predecessor block ids
-                        // shift into the caller's post-splice numbering.
-                        let new_incoming = incoming
-                            .iter()
-                            .map(|&(pred, v)| (shift_callee_bid(pred), map_v(v, &callee_remap)))
+                        let incoming = (incoming.iter())
+                            .map(|&(pred, v)| (shift(pred), map_v(v, &p.callee_remap)))
                             .collect();
-                        let new_id = new_insts.len() as u32;
-                        callee_remap[ce_pc as usize] = new_id;
-                        new_insts.push(Inst::Phi {
-                            incoming: new_incoming,
-                            kind: *kind,
-                        });
-                        new_inst_src.push(crate::c5::ir::InstSrc::default());
-                        new_f32.push(
-                            callee
-                                .f32_values
-                                .get(ce_pc as usize)
-                                .copied()
-                                .unwrap_or(false),
-                        );
-                        continue;
+                        out.push(
+                            Inst::Phi {
+                                incoming,
+                                kind: *kind,
+                            },
+                            f32,
+                        )
                     }
                     Inst::ParamRef { idx, kind } => {
-                        let i = *idx as usize;
-                        let arg = if i < remapped_args.len() {
-                            remapped_args[i]
-                        } else {
-                            NO_VALUE
-                        };
-                        callee_remap[ce_pc as usize] = splice_param_ref(
+                        let arg = remapped_args
+                            .get(*idx as usize)
+                            .copied()
+                            .unwrap_or(NO_VALUE);
+                        splice_param_ref(
                             *kind,
                             arg,
                             crate::c5::ir::InstSrc::default(),
-                            &mut new_insts,
-                            &mut new_inst_src,
-                            &mut new_f32,
-                        );
-                        continue;
+                            &mut out.insts,
+                            &mut out.src,
+                            &mut out.f32,
+                        )
                     }
                     // A forwarded parameter cell: the argument value the
                     // caller would have placed in its outgoing stack slot,
                     // taking the read's width conversion.
                     Inst::LoadLocal {
                         disp: 0, off, kind, ..
-                    } if forwarded.contains(off) => {
-                        let arg = remapped_args
-                            .get((*off - 2) as usize)
-                            .copied()
-                            .unwrap_or(NO_VALUE);
-                        callee_remap[ce_pc as usize] = splice_param_ref(
+                    } if p.facts.forwarded.contains(off) => {
+                        let arg =
+                            (remapped_args.get((*off - 2) as usize).copied()).unwrap_or(NO_VALUE);
+                        splice_param_ref(
                             *kind,
                             arg,
                             crate::c5::ir::InstSrc::default(),
-                            &mut new_insts,
-                            &mut new_inst_src,
-                            &mut new_f32,
-                        );
-                        continue;
+                            &mut out.insts,
+                            &mut out.src,
+                            &mut out.f32,
+                        )
                     }
                     // A bound parameter cell resolves to the caller's
                     // argument, mirroring the counting pass.
-                    Inst::LocalAddr(s) if param_slot_arg.contains_key(s) => {
-                        callee_remap[ce_pc as usize] = remapped_args
-                            .get(param_slot_arg[s])
-                            .copied()
-                            .unwrap_or(NO_VALUE);
-                        continue;
+                    Inst::LocalAddr(s) if p.param_slot_arg.contains_key(s) => {
+                        (remapped_args.get(p.param_slot_arg[s]).copied()).unwrap_or(NO_VALUE)
                     }
                     // A relocated slot access: a callee own local (negative)
                     // shifts below the caller's own locals; a materialized
@@ -3372,45 +3293,22 @@ fn splice_multi_block(
                     // parameter spills) and the alloca init carry no live
                     // value into the body and are dropped.
                     Inst::LocalAddr(s) if *s < 0 || *s >= 2 => {
-                        let slot = if *s < 0 {
-                            s - region_base
-                        } else {
-                            param_cell_reloc[s]
-                        };
-                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
-                        new_insts.push(Inst::LocalAddr(slot));
-                        new_inst_src.push(crate::c5::ir::InstSrc::default());
-                        new_f32.push(false);
-                        continue;
+                        out.push(Inst::LocalAddr(relocated(*s)), false)
                     }
                     Inst::LoadLocal {
                         off,
                         disp,
                         kind,
                         volatile,
-                    } if *off < 0 || param_cell_reloc.contains_key(off) => {
-                        let off = if *off < 0 {
-                            off - region_base
-                        } else {
-                            param_cell_reloc[off]
-                        };
-                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
-                        new_insts.push(Inst::LoadLocal {
-                            off,
+                    } if *off < 0 || p.param_cell_reloc.contains_key(off) => out.push(
+                        Inst::LoadLocal {
+                            off: relocated(*off),
                             disp: *disp,
                             kind: *kind,
                             volatile: *volatile,
-                        });
-                        new_inst_src.push(crate::c5::ir::InstSrc::default());
-                        new_f32.push(
-                            callee
-                                .f32_values
-                                .get(ce_pc as usize)
-                                .copied()
-                                .unwrap_or(false),
-                        );
-                        continue;
-                    }
+                        },
+                        f32,
+                    ),
                     Inst::StoreLocal {
                         off,
                         disp,
@@ -3418,95 +3316,76 @@ fn splice_multi_block(
                         kind,
                         volatile,
                         ..
-                    } if *off < 0 || param_cell_reloc.contains_key(off) => {
-                        let off = if *off < 0 {
-                            off - region_base
-                        } else {
-                            param_cell_reloc[off]
-                        };
-                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
-                        new_insts.push(Inst::StoreLocal {
-                            off,
+                    } if *off < 0 || p.param_cell_reloc.contains_key(off) => out.push(
+                        Inst::StoreLocal {
+                            off: relocated(*off),
                             disp: *disp,
-                            value: map_v(*value, &callee_remap),
+                            value: map_v(*value, &p.callee_remap),
                             kind: *kind,
                             volatile: *volatile,
                             nsw: false,
-                        });
-                        new_inst_src.push(crate::c5::ir::InstSrc::default());
-                        new_f32.push(false);
-                        continue;
-                    }
-                    Inst::LifetimeEnd(off) if *off < 0 && !held_ends.contains(off) => {
-                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
-                        new_insts.push(Inst::LifetimeEnd(off - region_base));
-                        new_inst_src.push(crate::c5::ir::InstSrc::default());
-                        new_f32.push(false);
-                        continue;
+                        },
+                        false,
+                    ),
+                    Inst::LifetimeEnd(off) if *off < 0 && !p.held_ends.contains(off) => {
+                        out.push(Inst::LifetimeEnd(off - p.region_base), false)
                     }
                     Inst::LoadLocal { .. }
                     | Inst::StoreLocal { .. }
                     | Inst::AllocaInit(_)
-                    | Inst::LifetimeEnd(_) => {
-                        callee_remap[ce_pc as usize] = NO_VALUE;
-                        continue;
-                    }
-                    _ => {}
-                }
-                if let Some(mut translated) =
-                    rewrite_callee_inst(cinst, &remapped_args, &callee_remap, &agg_map)
-                {
-                    // A nested call's aggregate-return slot is a callee own
-                    // local; it takes the region shift its `LocalAddr`
-                    // readers take just above.
-                    shift_ret_slot(&mut translated, region_base);
-                    let new_id = new_insts.len() as u32;
-                    callee_remap[ce_pc as usize] = new_id;
-                    new_insts.push(translated);
-                    new_inst_src.push(crate::c5::ir::InstSrc::default());
-                    new_f32.push(
-                        callee
-                            .f32_values
-                            .get(ce_pc as usize)
-                            .copied()
-                            .unwrap_or(false),
-                    );
-                }
+                    | Inst::LifetimeEnd(_) => NO_VALUE,
+                    _ => match rewrite_callee_inst(
+                        cinst,
+                        &remapped_args,
+                        &p.callee_remap,
+                        &p.agg_map,
+                    ) {
+                        // A nested call's aggregate-return slot is a callee
+                        // own local; it takes the region shift its `LocalAddr`
+                        // readers take just above.
+                        Some(mut translated) => {
+                            shift_ret_slot(&mut translated, p.region_base);
+                            out.push(translated, f32)
+                        }
+                        None => continue,
+                    },
+                };
+                p.callee_remap[ce_pc as usize] = id;
             }
-            let new_term = match cblock.terminator {
-                Terminator::Jmp(b) => Terminator::Jmp(shift_callee_bid(b)),
-                Terminator::FallThrough(b) => Terminator::Jmp(shift_callee_bid(b)),
+            let terminator = match cblock.terminator {
+                Terminator::Jmp(b) | Terminator::FallThrough(b) => Terminator::Jmp(shift(b)),
                 Terminator::Bz {
                     cond,
                     target,
                     fall_through,
                 } => Terminator::Bz {
-                    cond: map_v(cond, &callee_remap),
-                    target: shift_callee_bid(target),
-                    fall_through: shift_callee_bid(fall_through),
+                    cond: map_v(cond, &p.callee_remap),
+                    target: shift(target),
+                    fall_through: shift(fall_through),
                 },
                 Terminator::Bnz {
                     cond,
                     target,
                     fall_through,
                 } => Terminator::Bnz {
-                    cond: map_v(cond, &callee_remap),
-                    target: shift_callee_bid(target),
-                    fall_through: shift_callee_bid(fall_through),
+                    cond: map_v(cond, &p.callee_remap),
+                    target: shift(target),
+                    fall_through: shift(fall_through),
                 },
                 Terminator::Return(v) => {
-                    let rv = map_v(v, &callee_remap);
-                    if use_join {
-                        phi_incoming.push((shift_callee_bid(ci as u32), rv));
-                        Terminator::Jmp(join_id)
+                    let rv = map_v(v, &p.callee_remap);
+                    if p.use_join {
+                        phi_incoming.push((shift(ci as u32), rv));
+                        Terminator::Jmp(p.join_id)
                     } else {
                         // An aggregate return leaves the call's remap at
                         // NO_VALUE: the postfix copy reads `rv` and the
                         // caller consumes its own return slot.
-                        if ret_pieces.is_none() {
-                            remap[call_pc as usize] = rv;
-                        }
-                        Terminator::Jmp(postfix_id)
+                        debug_assert!(
+                            p.ret_pieces.is_some() || remap[p.call_pc as usize] == rv,
+                            "the counting pass mapped the call to its return"
+                        );
+                        Terminator::Jmp(p.postfix_id)
                     }
                 }
                 // A block sealed after a noreturn call: no successor, no
@@ -3522,84 +3401,70 @@ fn splice_multi_block(
                 // any other; an asm template's label refs resolve through
                 // the row at emit.
                 Terminator::JumpTable { idx, table } => Terminator::JumpTable {
-                    idx: map_v(idx, &callee_remap),
-                    table: caller_jt_len + table,
+                    idx: map_v(idx, &p.callee_remap),
+                    table: p.jt_base + table,
                 },
                 Terminator::AsmGoto { table } => Terminator::AsmGoto {
-                    table: caller_jt_len + table,
+                    table: p.jt_base + table,
                 },
-            };
-            let exit_acc = if cblock.exit_acc != NO_VALUE {
-                map_v(cblock.exit_acc, &callee_remap)
-            } else {
-                NO_VALUE
             };
             new_blocks.push(Block {
                 start_pc: 0,
-                inst_range: block_start..new_insts.len() as u32,
-                terminator: new_term,
-                exit_acc,
+                inst_range: block_start..out.len(),
+                terminator,
+                exit_acc: map_v(cblock.exit_acc, &p.callee_remap),
             });
         }
-
         // Multi-return join: a phi merges each return's value into the call
         // result, then branches to the postfix. The phi lands one id past
-        // the spliced callee body, matching the pre-pass reservation; a
-        // floating result joins in the FP file (`fp_join_kind`).
-        if use_join {
+        // the spliced callee body, matching the counting pass; a floating
+        // result joins in the FP file (`fp_join_kind`).
+        if p.use_join {
             let kind = match callee.ret_is_fp && callee.ret_agg.is_none() {
                 true => fp_join_kind(callee).unwrap_or(LoadKind::I64),
                 false => LoadKind::I64,
             };
-            let phi_id = new_insts.len() as u32;
+            let phi_id = out.push(
+                Inst::Phi {
+                    incoming: phi_incoming,
+                    kind,
+                },
+                kind == LoadKind::F32,
+            );
             debug_assert_eq!(
                 phi_id,
-                if ret_pieces.is_some() {
-                    agg_join_phi
+                if p.ret_pieces.is_some() {
+                    p.agg_join_phi
                 } else {
-                    remap[call_pc as usize]
+                    remap[p.call_pc as usize]
                 }
             );
-            new_insts.push(Inst::Phi {
-                incoming: phi_incoming,
-                kind,
-            });
-            new_inst_src.push(crate::c5::ir::InstSrc::default());
-            new_f32.push(kind == LoadKind::F32);
             new_blocks.push(Block {
                 start_pc: 0,
-                inst_range: phi_id..new_insts.len() as u32,
-                terminator: Terminator::Jmp(postfix_id),
+                inst_range: phi_id..out.len(),
+                terminator: Terminator::Jmp(p.postfix_id),
                 exit_acc: phi_id,
             });
         }
     }
+    debug_assert_eq!(out.len(), at);
 
-    // Remap surviving caller phis' incoming predecessor block ids across
-    // the block-id shift the splice introduced. A predecessor at or past
-    // the splice block moves up by one: blocks after the splice shift +1,
-    // and the splice block's own out-edges now leave from the postfix
-    // (splice_block_idx + 1), not the prefix. `emit_caller_inst` clones
-    // phis from the original with their block ids intact, so this reads the
-    // original ids once after the emission fixpoint. Only caller-origin
-    // phis (below `callee_insts_start`) take this shift; spliced callee
-    // phis had their predecessors mapped through `shift_callee_bid` at
-    // emission (Step 6) and must not shift again.
-    let splice_bid = splice_block_idx as u32;
-    for inst in new_insts[..callee_insts_start as usize].iter_mut() {
+    // A caller phi's predecessor is the block an edge leaves: a spliced
+    // block's out-edges now leave from its last continuation. Spliced
+    // callee phis had their predecessors mapped at emission.
+    for inst in out.insts[..callee_insts_start as usize].iter_mut() {
         if let Inst::Phi { incoming, .. } = inst {
             for (pred, _) in incoming.iter_mut() {
-                if *pred >= splice_bid {
-                    *pred += 1;
-                }
+                *pred = out_of(*pred);
             }
         }
     }
 
-    // Carry both the caller's own and the spliced callee's cross-TU
-    // symbol references onto their new value-ids. The symbol indices
-    // are translation-unit parser symbols, valid in the merged
-    // function because the callee is in the same unit.
+    // Carry both the caller's own and the spliced callees' cross-TU symbol
+    // references onto their new value-ids. The symbol indices are
+    // translation-unit parser symbols, valid in the merged function because
+    // each callee is in the same unit. A spliced call maps to its callee's
+    // return value, which is not a call: its own entry goes with it.
     let carry = |refs: &[(u32, u32)], m: &[ValueId], out: &mut Vec<(u32, u32)>| {
         for &(vid, sym) in refs {
             let nv = map_v(vid, m);
@@ -3608,113 +3473,121 @@ fn splice_multi_block(
             }
         }
     };
-    // The spliced call maps to the callee's return value, which is not a
-    // call: its own entry goes with it.
-    original.extern_call_refs.retain(|&(vid, _)| vid != call_pc);
+    let spliced_calls: BTreeSet<u32> = plans.iter().map(|p| p.call_pc).collect();
+    original
+        .extern_call_refs
+        .retain(|(vid, _)| !spliced_calls.contains(vid));
     let mut call_refs = Vec::new();
-    carry(&original.extern_call_refs, &remap, &mut call_refs);
-    carry(&callee.extern_call_refs, &callee_remap, &mut call_refs);
     let mut code_refs = Vec::new();
-    carry(&original.extern_imm_code_refs, &remap, &mut code_refs);
-    carry(&callee.extern_imm_code_refs, &callee_remap, &mut code_refs);
     let mut data_refs = Vec::new();
-    carry(&original.extern_imm_data_refs, &remap, &mut data_refs);
-    carry(&callee.extern_imm_data_refs, &callee_remap, &mut data_refs);
     let mut tls_refs = Vec::new();
+    carry(&original.extern_call_refs, &remap, &mut call_refs);
+    carry(&original.extern_imm_code_refs, &remap, &mut code_refs);
+    carry(&original.extern_imm_data_refs, &remap, &mut data_refs);
     carry(&original.extern_tls_refs, &remap, &mut tls_refs);
-    carry(&callee.extern_tls_refs, &callee_remap, &mut tls_refs);
+    for p in &plans {
+        carry(&p.callee.extern_call_refs, &p.callee_remap, &mut call_refs);
+        carry(
+            &p.callee.extern_imm_code_refs,
+            &p.callee_remap,
+            &mut code_refs,
+        );
+        carry(
+            &p.callee.extern_imm_data_refs,
+            &p.callee_remap,
+            &mut data_refs,
+        );
+        carry(&p.callee.extern_tls_refs, &p.callee_remap, &mut tls_refs);
+    }
 
-    // Relocate the callee's own local slots into the caller frame region
-    // at `region_base` (Step 6 shifts each slot by it; relocated parameter
-    // cells follow below the shifted locals); grow the frame and carry the
-    // callee's multi-cell (struct/union) slot records at their shifted
-    // ids, skipping the duplicates a shared region re-records per site. A
-    // callee with no locals leaves everything alone.
-    let merged_locals = original.locals.max(region_base + needed);
-    let mut merged_multi_cell = original.multi_cell_slots;
-    for &(slot, size) in &callee.multi_cell_slots {
-        let rec = (slot - region_base, size);
-        if !merged_multi_cell.contains(&rec) {
-            merged_multi_cell.push(rec);
-        }
-    }
-    // The array-holding objects follow the same relocation: a spliced
-    // callee's array is one of the caller's now, and the caller's frame
-    // orders it if the caller is protected.
-    let mut merged_array_slots = original.array_slots;
-    for &slot in &callee.array_slots {
-        let rec = slot - region_base;
-        if !merged_array_slots.contains(&rec) {
-            merged_array_slots.push(rec);
-        }
-    }
-    let mut merged_vector_objects = original.vector_objects;
-    for &slot in &callee.vector_objects {
-        let rec = slot - region_base;
-        if !merged_vector_objects.contains(&rec) {
-            merged_vector_objects.push(rec);
-        }
-    }
-    // Merge the callee's over-aligned region behind the caller's, at the
-    // caller's region size rounded up to the callee's alignment, so every
-    // member keeps its alignment; the merged region takes the larger
-    // alignment, which the caller's prologue realigns sp to. A shared
-    // per-callee record replays the same relocated slots at a later site;
-    // those entries already exist and grow nothing.
+    // Relocate each callee's own local slots into the caller frame region
+    // at its `region_base` (the emission shifts each slot by it; relocated
+    // parameter cells follow below the shifted locals); grow the frame and
+    // carry the callee's multi-cell (struct/union) slot records at their
+    // shifted ids, skipping the duplicates a shared region re-records per
+    // site. The array-holding and vector objects follow the same
+    // relocation. A callee's over-aligned region merges behind the
+    // caller's, at the caller's region size rounded up to the callee's
+    // alignment, so every member keeps its alignment; the merged region
+    // takes the larger alignment, which the caller's prologue realigns sp
+    // to. A shared per-callee record replays the same relocated slots at a
+    // later site; those entries already exist and grow nothing.
+    let mut merged_locals = original.locals;
+    let mut merged_multi_cell = core::mem::take(&mut original.multi_cell_slots);
+    let mut merged_array_slots = core::mem::take(&mut original.array_slots);
+    let mut merged_vector_objects = core::mem::take(&mut original.vector_objects);
     let mut merged_over_aligned = core::mem::take(&mut original.over_aligned);
     let mut merged_frame_align = original.frame_align;
     let mut merged_region_bytes = original.realign_region_bytes;
-    if !callee.over_aligned.is_empty() {
-        let align = callee.frame_align.max(16);
-        let base_off = (merged_region_bytes + align - 1) & !(align - 1);
-        let mut appended = false;
-        for m in &callee.over_aligned {
-            let rec = crate::c5::ir::RegionMember {
-                slot: m.slot - region_base,
-                off: base_off + m.off,
-                ..*m
-            };
-            if !merged_over_aligned.iter().any(|o| o.slot == rec.slot) {
-                merged_over_aligned.push(rec);
-                appended = true;
+    let mut ssp = original.ssp;
+    let mut fenv_access = original.fenv_access;
+    for p in &plans {
+        let (callee, base) = (p.callee, p.region_base);
+        merged_locals = merged_locals.max(base + p.needed);
+        for &(slot, size) in &callee.multi_cell_slots {
+            let rec = (slot - base, size);
+            if !merged_multi_cell.contains(&rec) {
+                merged_multi_cell.push(rec);
             }
         }
-        if appended {
-            merged_frame_align = merged_frame_align.max(callee.frame_align);
-            merged_region_bytes = base_off + callee.realign_region_bytes;
+        for (from, to) in [
+            (&callee.array_slots, &mut merged_array_slots),
+            (&callee.vector_objects, &mut merged_vector_objects),
+        ] {
+            for &slot in from {
+                if !to.contains(&(slot - base)) {
+                    to.push(slot - base);
+                }
+            }
         }
+        if !callee.over_aligned.is_empty() {
+            let align = callee.frame_align.max(16);
+            let base_off = (merged_region_bytes + align - 1) & !(align - 1);
+            let mut appended = false;
+            for m in &callee.over_aligned {
+                let rec = crate::c5::ir::RegionMember {
+                    slot: m.slot - base,
+                    off: base_off + m.off,
+                    ..*m
+                };
+                if !merged_over_aligned.iter().any(|o| o.slot == rec.slot) {
+                    merged_over_aligned.push(rec);
+                    appended = true;
+                }
+            }
+            if appended {
+                merged_frame_align = merged_frame_align.max(callee.frame_align);
+                merged_region_bytes = base_off + callee.realign_region_bytes;
+            }
+        }
+        ssp.merge(callee.ssp);
+        // A body translated with `FENV_ACCESS` on keeps its operations as
+        // they are wherever it is spliced.
+        fenv_access |= callee.fenv_access;
     }
 
-    // Shift the caller's own rows -- switch tables and asm-goto edge
-    // lists alike -- across the block-id shift, then append the callee's,
-    // shifted into the caller's post-splice block space. A row is a
-    // switch's target list or an asm-goto edge list; both shift the same
-    // way and the terminator carrying the row shifts its index by
-    // `caller_jt_len`.
-    let mut merged_jump_tables: Vec<Vec<BlockId>> = original
-        .jump_tables
-        .iter()
-        .map(|row| row.iter().map(|&b| shift_caller_bid(b)).collect())
+    // The caller's own rows -- switch tables and asm-goto edge lists alike
+    // -- name block entries; each callee's rows follow, shifted into its
+    // block space, at the row its terminators index.
+    let mut merged_jump_tables: Vec<Vec<BlockId>> = (original.jump_tables.iter())
+        .map(|row| row.iter().map(|&b| entry_of(b)).collect())
         .collect();
-    for row in &callee.jump_tables {
-        merged_jump_tables.push(row.iter().map(|&b| shift_callee_bid(b)).collect());
-    }
-
-    // The postfix block ends in the splice block's branch.
-    let mut predicted = alloc::vec![None; new_blocks.len()];
-    for b in 0..n_caller {
-        let to = if b == splice_block_idx {
-            postfix_id
-        } else {
-            shift_caller_bid(b as u32)
-        };
-        if let Some(slot) = predicted.get_mut(to as usize) {
-            *slot = original.predicted.get(b).copied().flatten();
+    for p in &plans {
+        for row in &p.callee.jump_tables {
+            merged_jump_tables.push(row.iter().map(|&b| b + p.callee_base).collect());
         }
     }
-    for ci in 0..n_callee {
-        if let Some(slot) = predicted.get_mut(shift_callee_bid(ci as u32) as usize) {
-            *slot = callee.predicted.get(ci).copied().flatten();
+
+    // A block's predicted branch is its terminator's, which its last part
+    // carries.
+    let mut predicted = vec![None; new_blocks.len()];
+    for b in 0..n_caller {
+        predicted[out_of(b as u32) as usize] = original.predicted.get(b).copied().flatten();
+    }
+    for p in &plans {
+        for ci in 0..p.callee.blocks.len() {
+            predicted[(p.callee_base + ci as u32) as usize] =
+                p.callee.predicted.get(ci).copied().flatten();
         }
     }
     *caller = FunctionSsa {
@@ -3727,13 +3600,9 @@ fn splice_multi_block(
         block_seh: Vec::new(),
         predicted,
         funclet_slots: Vec::new(),
-        // The caller's frame now holds the callee's automatic objects, so it
+        // The caller's frame now holds the callees' automatic objects, so it
         // inherits their stack-protector classification.
-        ssp: {
-            let mut s = original.ssp;
-            s.merge(callee.ssp);
-            s
-        },
+        ssp,
         n_params: original.n_params,
         is_variadic: original.is_variadic,
         is_inline: original.is_inline,
@@ -3752,21 +3621,21 @@ fn splice_multi_block(
         is_weak: original.is_weak,
         is_internal: original.is_internal,
         const_params: original.const_params,
-        insts: new_insts,
-        inst_src: new_inst_src,
+        insts: out.insts,
+        inst_src: out.src,
         blocks: new_blocks,
         extern_call_refs: call_refs,
         extern_imm_code_refs: code_refs,
         extern_imm_data_refs: data_refs,
         extern_tls_refs: tls_refs,
-        f32_values: new_f32,
+        f32_values: out.f32,
         // Rebuilt by `passes::narrow` after the pipeline settles.
         cmp32: Vec::new(),
         div32: Vec::new(),
         low_word_tests: Vec::new(),
         param_fp_mask: original.param_fp_mask,
         param_widths: original.param_widths,
-        // The caller's own layouts, plus the callee's (merged above so a
+        // The caller's own layouts, plus the callees' (merged above so a
         // spliced call's `arg_aggs` can name them).
         agg_descs: original.agg_descs,
         param_aggs: original.param_aggs,
@@ -3778,21 +3647,15 @@ fn splice_multi_block(
         ret_type_tag: original.ret_type_tag,
         ret_low_word: original.ret_low_word,
         indirect_result_slot: original.indirect_result_slot,
-        computed_goto_targets: original
-            .computed_goto_targets
-            .iter()
-            .map(|&b| shift_caller_bid(b))
+        computed_goto_targets: (original.computed_goto_targets.iter())
+            .map(|&b| entry_of(b))
             .collect(),
-        label_data_relocs: original
-            .label_data_relocs
-            .iter()
+        label_data_relocs: (original.label_data_relocs.iter())
             .map(|r| crate::c5::ir::LabelDataReloc {
-                block: shift_caller_bid(r.block),
+                block: entry_of(r.block),
                 ..*r
             })
             .collect(),
-        // The callee's switch and asm-goto rows join the caller's own
-        // (`merged_jump_tables`).
         jump_tables: merged_jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
@@ -3803,15 +3666,13 @@ fn splice_multi_block(
         over_aligned: merged_over_aligned,
         frame_align: merged_frame_align,
         realign_region_bytes: merged_region_bytes,
-        // The candidate filter rejects returns-twice callees, so only
-        // the caller's own flag can be set here.
+        // The candidate filter rejects returns-twice callees, so only the
+        // caller's own flag can be set here.
         has_returns_twice_call: original.has_returns_twice_call,
         did_unroll: original.did_unroll,
         did_inline: original.did_inline,
         frees_rbp: original.frees_rbp,
-        // A body translated with `FENV_ACCESS` on keeps its operations as
-        // they are wherever it is spliced.
-        fenv_access: original.fenv_access || callee.fenv_access,
+        fenv_access,
     };
 }
 
@@ -3907,7 +3768,7 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
     }
 }
 
-/// Whether a single-block callee must go through `splice_multi_block`
+/// Whether a single-block callee must go through `splice_sites`
 /// rather than the flat single-block path. The flat path never allocates
 /// a caller slot, so a body that takes the address of an own local -- an
 /// asm output written through it, an aggregate the body builds in the
@@ -4106,7 +3967,7 @@ fn inline_caller(
                 };
                 // Multi-block callees, and single-block callees whose asm /
                 // own-local accesses need relocation, are handled by
-                // `splice_multi_block` after this block-walk pass exits via
+                // `splice_sites` after this block-walk pass exits via
                 // the early-return below. Skip them on the flat path here and
                 // let the call survive the local walk; the multi-block pass
                 // runs once over the whole function.
@@ -4435,20 +4296,16 @@ fn inline_caller(
             .extend(spliced_tls_refs.iter().copied());
     }
 
-    // Single-block flat splice complete. Now find any remaining
-    // multi-block inlinable Call sites and apply the multi-block
-    // splice one at a time. Each splice re-shapes the caller's
-    // blocks so the loop re-scans from scratch after every step.
-    // Bounded by a generous step cap to keep runaway expansion in
-    // check.
-    // `splice_multi_block` shifts caller block ids > the splice point.
-    // Every block-id reference the caller can hold moves with it: phi
-    // incoming predecessors and `Inst::BlockAddr` inside the splice,
+    // Single-block flat splice complete. Now splice the remaining
+    // multi-block inlinable Call sites, bounded by a generous step cap to
+    // keep runaway expansion in check. `splice_sites` shifts caller block
+    // ids past each split block; every block-id reference the caller can
+    // hold moves with it: phi incoming predecessors and `Inst::BlockAddr`,
     // `computed_goto_targets` and the `jump_tables` rows behind a
-    // `JumpTable` (switch) or `AsmGoto` terminator on the way out. So any
-    // caller shape is spliceable.
-    // Optional splices count toward the per-step cap; a mandatory
-    // (`always_inline`) request is spliced past it at any caller size.
+    // `JumpTable` (switch) or `AsmGoto` terminator. So any caller shape is
+    // spliceable. Optional splices count toward the per-step cap; a
+    // mandatory (`always_inline`) request is spliced past it at any caller
+    // size.
     let mut steps = 0usize;
     let mut spliced = false;
     // Callees this caller can no longer afford: every splice through this
@@ -4458,15 +4315,21 @@ fn inline_caller(
     // and a pre-round count cannot see them. A mandatory request is
     // exempt; the probed prologue keeps the result safe.
     let mut unaffordable: BTreeSet<usize> = BTreeSet::new();
+    // Each round takes every site its scan accepts, in block order, and
+    // splices them in one rebuild; the call sites the spliced bodies bring
+    // are the next round's. A site is judged on the frame the sites ahead
+    // of it leave, so the rounds take the sites one rescan per splice would.
     loop {
-        let optional_open = steps < MAX_MULTI_BLOCK_SPLICE_STEPS;
         let reads = operand_read_mask(caller);
-        // Only a caller the vector promotion runs in sheds a splice's vector slots.
-        let promotes = crate::c5::codegen::ssa::vector_slots::applies(caller)
+        // Only a caller the vector promotion runs in sheds a splice's vector
+        // slots; a body bringing stack-pointer asm ends the promotion.
+        let mut promotes = crate::c5::codegen::ssa::vector_slots::applies(caller)
             && !placement.sp_tainted.contains(&caller.ent_pc);
-        let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>, i64)> = None;
-        'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
+        let mut locals = caller.locals;
+        let mut round: Vec<Site<'_>> = Vec::new();
+        for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
+                let optional_open = steps < MAX_MULTI_BLOCK_SPLICE_STEPS;
                 if let Inst::Call {
                     target_pc,
                     args,
@@ -4486,14 +4349,15 @@ fn inline_caller(
                     && !result_read_without_value(&reads, pc, c)
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)
                 {
+                    let f = &facts[target_pc];
                     let cost = if promotes {
-                        facts[target_pc].lasting_cost
+                        f.lasting_cost
                     } else {
-                        facts[target_pc].frame_cost
+                        f.frame_cost
                     };
                     // What the splice adds to the frame: nothing when its
                     // region is already large enough.
-                    let needed = c.locals + facts[target_pc].relocated.len() as i64;
+                    let needed = c.locals + f.relocated.len() as i64;
                     let key = splice_region_key(
                         caller.ent_pc,
                         c,
@@ -4502,7 +4366,7 @@ fn inline_caller(
                         args,
                         &caller.insts,
                     );
-                    let pooled = placement.regions.pooled_locals(caller.locals);
+                    let pooled = placement.regions.pooled_locals(locals);
                     let charge = cost.min(placement.regions.growth(key, needed, pooled));
                     let grown = pooled - placement.orig_locals + charge;
                     let frame = placement.own_cells + grown;
@@ -4519,40 +4383,60 @@ fn inline_caller(
                     let Some(bound) = splice_arg_addresses(&caller.insts, args, arg_aggs, c) else {
                         continue;
                     };
-                    hit = Some((b_idx, pc, *c, bound, *ret_slot_local));
-                    break 'find;
+                    // The region backing the callee's relocated slots,
+                    // shared across call sites when sound (see
+                    // `CallerRegions`).
+                    let region_base = if needed > 0 {
+                        let key = splice_region_key(
+                            caller.ent_pc,
+                            c,
+                            placement.cyclic,
+                            placement.sp_tainted,
+                            &bound,
+                            &caller.insts,
+                        );
+                        placement.regions.place(key, needed, locals)
+                    } else {
+                        locals
+                    };
+                    locals = locals.max(region_base + needed);
+                    if !c.is_always_inline {
+                        steps += 1;
+                        placement.spend_cycle(c.ent_pc);
+                    }
+                    promotes &= !(c.insts.iter().enumerate()).any(|(v, i)| {
+                        f.live[v] && matches!(i, Inst::InlineAsm { asm, .. } if asm.references_sp())
+                    });
+                    #[cfg(feature = "codegen_test")]
+                    if std::env::var("BADC_LOG_INLINE").is_ok() {
+                        eprintln!(
+                            "[inline] MULTIBLOCK splice callee={cn} ({cb} blks) into caller={n}",
+                            cn = c.name,
+                            cb = c.blocks.len(),
+                            n = caller.name
+                        );
+                    }
+                    round.push(Site {
+                        block: b_idx,
+                        call_pc: pc,
+                        callee: Callee { body: c, facts: f },
+                        args: bound,
+                        ret_slot: *ret_slot_local,
+                        region_base,
+                    });
                 }
             }
         }
-        let Some((b_idx, pc, callee, args, ret_slot)) = hit else {
+        if round.is_empty() {
             break;
-        };
-        #[cfg(feature = "codegen_test")]
-        if std::env::var("BADC_LOG_INLINE").is_ok() {
-            eprintln!(
-                "[inline] MULTIBLOCK splice callee={cn} ({cb} blks) into caller={n}",
-                cn = callee.name,
-                cb = callee.blocks.len(),
-                n = caller.name
-            );
         }
-        splice_multi_block(
+        splice_sites(
             caller,
-            Callee {
-                body: callee,
-                facts: &facts[&callee.ent_pc],
-            },
-            b_idx,
-            pc,
-            &args,
-            ret_slot,
-            placement,
+            &round,
+            placement.whole_vector,
+            placement.regions.fresh,
         );
         spliced = true;
-        if !callee.is_always_inline {
-            steps += 1;
-            placement.spend_cycle(callee.ent_pc);
-        }
     }
     any_change || spliced
 }

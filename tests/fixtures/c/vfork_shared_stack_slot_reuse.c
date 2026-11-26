@@ -9,6 +9,9 @@
 #include <sys/wait.h>
 
 int seed[64];
+int acc;
+
+__attribute__((noinline)) static void stir(void) { acc ^= 1; }
 
 int child_exec(int a0, int a1, int a2, int a3, int a4, int a5, int a6,
                int a7, int a8, int a9, int a10, int a11, int a12, int a13,
@@ -61,8 +64,8 @@ int main(void) {
         printf("ok\n");
         return 0;
     }
-    // Child: many simultaneously-live temporaries feeding a wide call,
-    // forcing spills into the frame the parent still owns.
+    // Child: temporaries live across a call spill into the frame the
+    // parent still owns whatever order the block takes.
     int t0 = seed[16] * 5 + 1;
     int t1 = seed[17] * 5 + 2;
     int t2 = seed[18] * 5 + 3;
@@ -83,6 +86,7 @@ int main(void) {
     int t17 = seed[33] * 5 + 18;
     int t18 = seed[34] * 5 + 19;
     int t19 = seed[35] * 5 + 20;
+    stir();
     _exit(child_exec(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,
                      t13, t14, t15, t16, t17, t18, t19));
     return 3;

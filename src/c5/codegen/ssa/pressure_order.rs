@@ -26,9 +26,19 @@ use crate::c5::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 /// A bank index per value: 0 integer, 1 floating-point and vector.
 const NO_BANK: u8 = u8::MAX;
 
+/// A ready instruction's priority, least first: the live values it adds to
+/// the full banks and to the others, the latest time a reader of it was
+/// placed (inverted), and its id (inverted, the later first).
+type Key = (i32, i32, usize, u32);
+
 /// Reorder the blocks of `func` whose peak passes `capacity`, where a new
 /// order lowers it. Returns whether any block changed.
 pub(crate) fn lower_peaks(func: &mut FunctionSsa, capacity: BankCapacity) -> bool {
+    lower_peaks_counting(func, capacity).0
+}
+
+/// [`lower_peaks`], and how many priorities its runs computed.
+fn lower_peaks_counting(func: &mut FunctionSsa, capacity: BankCapacity) -> (bool, usize) {
     let n = func.insts.len();
     let use_counts = compute_use_counts(func);
     let reads = operands_read(func, &use_counts);
@@ -44,6 +54,7 @@ pub(crate) fn lower_peaks(func: &mut FunctionSsa, capacity: BankCapacity) -> boo
         func,
         reads: &reads,
         bank: &bank,
+        keys: core::cell::Cell::new(0),
     };
     let mut order: Vec<ValueId> = (0..n as ValueId).collect();
     let mut live = Live::new(n);
@@ -79,16 +90,18 @@ pub(crate) fn lower_peaks(func: &mut FunctionSsa, capacity: BankCapacity) -> boo
             changed = true;
         }
     }
+    let keys = cx.keys.get();
     if changed {
         super::tape::reorder(func, &order);
     }
-    changed
+    (changed, keys)
 }
 
 struct Cx<'a> {
     func: &'a FunctionSsa,
     reads: &'a [bool],
     bank: &'a [u8],
+    keys: core::cell::Cell<usize>,
 }
 
 /// The values live at a point and their count per bank.
@@ -209,7 +222,14 @@ impl Cx<'_> {
 
     /// One run of movable instructions placed bottom-up; returns them last
     /// first, with the markers of the run ahead, so behind it once reversed.
+    /// An instruction's key only falls once its readers are placed: its
+    /// value stays live, and an operand, once live, stays live until its
+    /// own definition, which waits for this reader. So the ready ones sit in
+    /// a heap, an entry pushed anew whenever an operand of one turns live,
+    /// and the run costs O(e log e) in its operand reads.
     fn run(&self, run: &[ValueId], live: &mut Live, full: [bool; 2]) -> Vec<ValueId> {
+        use alloc::collections::BinaryHeap;
+        use core::cmp::Reverse;
         let lo = run[0];
         let at = |v: ValueId| {
             v.checked_sub(lo)
@@ -227,8 +247,11 @@ impl Cx<'_> {
         // lowering folds and the allocator does not count.
         let mut waiting = vec![0u32; run.len()];
         let mut operands: Vec<Vec<ValueId>> = vec![Vec::new(); run.len()];
+        // The run's instructions reading each value the allocator counts.
+        let mut readers: hashbrown::HashMap<ValueId, Vec<u32>> = hashbrown::HashMap::new();
         for (k, &v) in run.iter().enumerate() {
-            self.func.insts[v as usize].for_each_operand(|op| {
+            let inst = &self.func.insts[v as usize];
+            inst.for_each_operand(|op| {
                 if at(op).is_some() && !operands[k].contains(&op) {
                     operands[k].push(op);
                 }
@@ -236,37 +259,70 @@ impl Cx<'_> {
             for &op in &operands[k] {
                 waiting[at(op).expect("in the run")] += 1;
             }
+            if self.reads[v as usize] {
+                for_each_operand(inst, |op| {
+                    let list = readers.entry(op).or_default();
+                    if list.last() != Some(&(k as u32)) {
+                        list.push(k as u32);
+                    }
+                });
+            }
         }
         let mut read_at = vec![0usize; run.len()];
-        let mut ready: Vec<ValueId> = (run.iter().copied())
-            .filter(|&v| !self.func.insts[v as usize].is_lifetime_marker())
-            .filter(|&v| waiting[at(v).expect("in the run")] == 0)
-            .collect();
+        let mut key_now: Vec<Option<Key>> = vec![None; run.len()];
+        let mut heap: BinaryHeap<Reverse<(Key, u32)>> = BinaryHeap::new();
+        let key = |k: usize, live: &Live, read_at: &[usize]| -> Key {
+            self.keys.set(self.keys.get() + 1);
+            let v = run[k];
+            let d = self.added(v, live);
+            let hot: i32 = (0..2).filter(|&b| full[b]).map(|b| d[b]).sum();
+            let cold: i32 = (0..2).filter(|&b| !full[b]).map(|b| d[b]).sum();
+            (hot, cold, usize::MAX - read_at[k], u32::MAX - v)
+        };
+        for (k, &v) in run.iter().enumerate() {
+            if waiting[k] == 0 && !self.func.insts[v as usize].is_lifetime_marker() {
+                let kk = key(k, live, &read_at);
+                key_now[k] = Some(kk);
+                heap.push(Reverse((kk, k as u32)));
+            }
+        }
         let mut time = 1usize;
-        while !ready.is_empty() {
-            let pick = (0..ready.len())
-                .min_by_key(|&r| {
-                    let v = ready[r];
-                    let d = self.added(v, live);
-                    let hot: i32 = (0..2).filter(|&k| full[k]).map(|k| d[k]).sum();
-                    let cold: i32 = (0..2).filter(|&k| !full[k]).map(|k| d[k]).sum();
-                    (
-                        hot,
-                        cold,
-                        usize::MAX - read_at[at(v).expect("in the run")],
-                        u32::MAX - v,
-                    )
-                })
-                .expect("a ready instruction");
-            let v = ready.swap_remove(pick);
+        while let Some(Reverse((kk, k))) = heap.pop() {
+            let k = k as usize;
+            if key_now[k] != Some(kk) {
+                continue;
+            }
+            key_now[k] = None;
+            let v = run[k];
             out.push(v);
-            self.step_up(v, live);
-            for &op in &operands[at(v).expect("in the run")] {
-                let k = at(op).expect("in the run");
-                read_at[k] = time;
-                waiting[k] -= 1;
-                if waiting[k] == 0 {
-                    ready.push(op);
+            // Pass `v` walking up; each operand that turns live lowers the
+            // key of the ready instructions reading it.
+            live.remove(v, self.bank);
+            let inst = &self.func.insts[v as usize];
+            if self.reads[v as usize] {
+                for_each_operand(inst, |op| {
+                    if live.has(op) {
+                        return;
+                    }
+                    live.add(op, self.bank);
+                    for &r in readers.get(&op).map_or(&[][..], |l| &l[..]) {
+                        let r = r as usize;
+                        if key_now[r].is_some() {
+                            let kr = key(r, live, &read_at);
+                            key_now[r] = Some(kr);
+                            heap.push(Reverse((kr, r as u32)));
+                        }
+                    }
+                });
+            }
+            for &op in &operands[k] {
+                let j = at(op).expect("in the run");
+                read_at[j] = time;
+                waiting[j] -= 1;
+                if waiting[j] == 0 {
+                    let kj = key(j, live, &read_at);
+                    key_now[j] = Some(kj);
+                    heap.push(Reverse((kj, j as u32)));
                 }
             }
             time += 1;
@@ -299,5 +355,72 @@ impl Cx<'_> {
             });
         }
         d
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::c5::ir::{BinOp, Block, LoadKind, NO_VALUE, StoreKind};
+
+    /// A run thousands of instructions wide costs priorities in proportion
+    /// to its operand reads: one as an instruction turns ready and one as an
+    /// operand of it turns live, not one per ready instruction at each step.
+    /// N loads off one base, N additions each reading two of them, then N
+    /// stores; the scan this replaced computed about N^2 / 2.
+    #[test]
+    fn a_wide_run_computes_priorities_in_proportion_to_its_reads() {
+        let n: u32 = 4000;
+        let mut insts = vec![Inst::ImmData(0x10)];
+        for k in 0..n {
+            insts.push(Inst::Load {
+                addr: 0,
+                disp: 8 * k as i32,
+                kind: LoadKind::I64,
+                volatile: false,
+                align: 8,
+                pc_rel: false,
+            });
+        }
+        for k in 0..n {
+            insts.push(Inst::Binop {
+                op: BinOp::Add,
+                lhs: 1 + k,
+                rhs: 1 + (k * 7 + 1) % n,
+            });
+        }
+        for k in 0..n {
+            insts.push(Inst::Store {
+                addr: 0,
+                disp: 8 * k as i32,
+                value: 1 + n + k,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 8,
+                pc_rel: false,
+            });
+        }
+        let len = insts.len() as u32;
+        let mut f = FunctionSsa {
+            inst_src: vec![Default::default(); len as usize],
+            f32_values: vec![false; len as usize],
+            insts,
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..len,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+            ..Default::default()
+        };
+        let capacity = BankCapacity {
+            total: [12, 12],
+            callee: [6, 6],
+        };
+        let (changed, keys) = lower_peaks_counting(&mut f, capacity);
+        assert!(changed, "the run's peak passes the bank");
+        let reads = 4 * n as usize;
+        assert!(keys <= 2 * (len as usize + reads), "{keys} priorities");
+        super::super::verify::check(&f).expect("every value defined before it is read");
     }
 }

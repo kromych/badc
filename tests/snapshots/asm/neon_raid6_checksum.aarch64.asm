@@ -14,12 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <neon8_gen_syndrome>:
-               	stp	d8, d9, [sp, #-0x90]!
-               	stp	d10, d11, [sp, #0x10]
-               	stp	d12, d13, [sp, #0x20]
-               	stp	d14, d15, [sp, #0x30]
-               	stp	x29, x30, [sp, #0x80]
-               	add	x29, sp, #0x80
                	ldr	x12, [x2, #0x28]
                	ldr	x13, [x2, #0x30]
                	movi	v0.16b, #0x1d
@@ -58,88 +52,72 @@ Disassembly of section .text:
                	mov	v23.16b, v4.16b
                	mov	v22.16b, v3.16b
                	mov	v21.16b, v2.16b
+               	shl	v28.16b, v19.16b, #0x1
+               	sshr	v19.16b, v19.16b, #0x7
+               	and	v19.16b, v19.16b, v0.16b
+               	eor	v28.16b, v28.16b, v19.16b
                	ldr	x1, [x2, x0, lsl #3]
                	add	x11, x1, x3
-               	ldr	q28, [x11]
+               	ldr	q19, [x11]
+               	eor	v27.16b, v27.16b, v19.16b
+               	eor	v19.16b, v28.16b, v19.16b
+               	shl	v28.16b, v7.16b, #0x1
+               	sshr	v7.16b, v7.16b, #0x7
+               	and	v7.16b, v7.16b, v0.16b
+               	eor	v28.16b, v28.16b, v7.16b
                	add	x11, x1, x4
-               	ldr	q29, [x11]
+               	ldr	q7, [x11]
+               	eor	v26.16b, v26.16b, v7.16b
+               	eor	v7.16b, v28.16b, v7.16b
+               	shl	v28.16b, v6.16b, #0x1
+               	sshr	v6.16b, v6.16b, #0x7
+               	and	v6.16b, v6.16b, v0.16b
+               	eor	v28.16b, v28.16b, v6.16b
                	add	x11, x1, x5
-               	ldr	q30, [x11]
+               	ldr	q6, [x11]
+               	eor	v25.16b, v25.16b, v6.16b
+               	eor	v6.16b, v28.16b, v6.16b
+               	shl	v28.16b, v5.16b, #0x1
+               	sshr	v5.16b, v5.16b, #0x7
+               	and	v5.16b, v5.16b, v0.16b
+               	eor	v28.16b, v28.16b, v5.16b
                	add	x11, x1, x6
-               	ldr	q31, [x11]
+               	ldr	q5, [x11]
+               	eor	v24.16b, v24.16b, v5.16b
+               	eor	v5.16b, v28.16b, v5.16b
+               	shl	v28.16b, v4.16b, #0x1
+               	sshr	v4.16b, v4.16b, #0x7
+               	and	v4.16b, v4.16b, v0.16b
+               	eor	v28.16b, v28.16b, v4.16b
                	add	x1, x1, x7
-               	ldr	q8, [x1]
+               	ldr	q4, [x1]
+               	eor	v23.16b, v23.16b, v4.16b
+               	eor	v4.16b, v28.16b, v4.16b
+               	shl	v28.16b, v3.16b, #0x1
+               	sshr	v3.16b, v3.16b, #0x7
+               	and	v3.16b, v3.16b, v0.16b
+               	eor	v28.16b, v28.16b, v3.16b
                	ldr	x1, [x2, x0, lsl #3]
                	add	x11, x1, x8
-               	ldr	q9, [x11]
+               	ldr	q3, [x11]
+               	eor	v22.16b, v22.16b, v3.16b
+               	eor	v3.16b, v28.16b, v3.16b
+               	shl	v28.16b, v2.16b, #0x1
+               	sshr	v2.16b, v2.16b, #0x7
+               	and	v2.16b, v2.16b, v0.16b
+               	eor	v28.16b, v28.16b, v2.16b
                	add	x11, x1, x9
-               	ldr	q10, [x11]
+               	ldr	q2, [x11]
+               	eor	v21.16b, v21.16b, v2.16b
+               	eor	v2.16b, v28.16b, v2.16b
+               	shl	v28.16b, v1.16b, #0x1
+               	sshr	v1.16b, v1.16b, #0x7
+               	and	v1.16b, v1.16b, v0.16b
+               	eor	v28.16b, v28.16b, v1.16b
                	add	x1, x1, x10
-               	ldr	q11, [x1]
-               	eor	v27.16b, v27.16b, v28.16b
-               	eor	v26.16b, v26.16b, v29.16b
-               	eor	v25.16b, v25.16b, v30.16b
-               	eor	v24.16b, v24.16b, v31.16b
-               	eor	v23.16b, v23.16b, v8.16b
-               	eor	v22.16b, v22.16b, v9.16b
-               	eor	v21.16b, v21.16b, v10.16b
-               	eor	v20.16b, v20.16b, v11.16b
-               	sshr	v12.16b, v19.16b, #0x7
-               	sshr	v13.16b, v7.16b, #0x7
-               	sshr	v14.16b, v6.16b, #0x7
-               	sshr	v15.16b, v5.16b, #0x7
-               	sshr	v16.16b, v4.16b, #0x7
-               	str	q16, [sp, #0x70]
-               	sshr	v16.16b, v3.16b, #0x7
-               	str	q16, [sp, #0x60]
-               	sshr	v16.16b, v2.16b, #0x7
-               	str	q16, [sp, #0x50]
-               	sshr	v16.16b, v1.16b, #0x7
-               	str	q16, [sp, #0x40]
-               	shl	v19.16b, v19.16b, #0x1
-               	shl	v7.16b, v7.16b, #0x1
-               	shl	v6.16b, v6.16b, #0x1
-               	shl	v5.16b, v5.16b, #0x1
-               	shl	v4.16b, v4.16b, #0x1
-               	shl	v3.16b, v3.16b, #0x1
-               	shl	v2.16b, v2.16b, #0x1
-               	shl	v1.16b, v1.16b, #0x1
-               	and	v12.16b, v12.16b, v0.16b
-               	and	v13.16b, v13.16b, v0.16b
-               	and	v14.16b, v14.16b, v0.16b
-               	and	v15.16b, v15.16b, v0.16b
-               	ldr	q16, [sp, #0x70]
-               	and	v16.16b, v16.16b, v0.16b
-               	str	q16, [sp, #0x70]
-               	ldr	q16, [sp, #0x60]
-               	and	v16.16b, v16.16b, v0.16b
-               	str	q16, [sp, #0x60]
-               	ldr	q16, [sp, #0x50]
-               	and	v16.16b, v16.16b, v0.16b
-               	str	q16, [sp, #0x50]
-               	ldr	q16, [sp, #0x40]
-               	and	v16.16b, v16.16b, v0.16b
-               	str	q16, [sp, #0x40]
-               	eor	v19.16b, v19.16b, v12.16b
-               	eor	v7.16b, v7.16b, v13.16b
-               	eor	v6.16b, v6.16b, v14.16b
-               	eor	v5.16b, v5.16b, v15.16b
-               	ldr	q17, [sp, #0x70]
-               	eor	v4.16b, v4.16b, v17.16b
-               	ldr	q17, [sp, #0x60]
-               	eor	v3.16b, v3.16b, v17.16b
-               	ldr	q17, [sp, #0x50]
-               	eor	v2.16b, v2.16b, v17.16b
-               	ldr	q17, [sp, #0x40]
-               	eor	v1.16b, v1.16b, v17.16b
-               	eor	v19.16b, v19.16b, v28.16b
-               	eor	v7.16b, v7.16b, v29.16b
-               	eor	v6.16b, v6.16b, v30.16b
-               	eor	v5.16b, v5.16b, v31.16b
-               	eor	v4.16b, v4.16b, v8.16b
-               	eor	v3.16b, v3.16b, v9.16b
-               	eor	v2.16b, v2.16b, v10.16b
-               	eor	v1.16b, v1.16b, v11.16b
+               	ldr	q1, [x1]
+               	eor	v20.16b, v20.16b, v1.16b
+               	eor	v1.16b, v28.16b, v1.16b
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.ge	<addr>
@@ -185,11 +163,6 @@ Disassembly of section .text:
                	add	x3, x3, #0x80
                	cmp	w3, #0x200
                	b.lo	<addr>
-               	ldp	x29, x30, [sp, #0x80]
-               	ldp	d14, d15, [sp, #0x30]
-               	ldp	d12, d13, [sp, #0x20]
-               	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x90
                	ret
 
 <main>:

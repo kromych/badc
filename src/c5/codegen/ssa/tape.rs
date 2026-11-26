@@ -525,6 +525,46 @@ pub(crate) fn concat(func: &mut FunctionSsa, chains: &[Vec<BlockId>]) {
     renumber(&mut k, &remap);
 }
 
+/// Put old instruction `order[i]` at tape index `i`, every instruction
+/// staying inside its block's range, and move everything keyed by value id
+/// with it.
+pub(crate) fn reorder(func: &mut FunctionSsa, order: &[ValueId]) {
+    let mut k = keyed(func);
+    let n = k.insts.len();
+    debug_assert_eq!(order.len(), n);
+    let mut remap: Vec<ValueId> = vec![NO_VALUE; n];
+    for (new, &at) in order.iter().enumerate() {
+        remap[at as usize] = new as ValueId;
+    }
+    debug_assert!(
+        remap.iter().all(|&v| v != NO_VALUE),
+        "order is a permutation"
+    );
+    debug_assert!(k.blocks.iter().all(|b| {
+        let r = b.inst_range.start as usize..b.inst_range.end as usize;
+        r.clone().all(|at| r.contains(&(order[at] as usize)))
+    }));
+    let mut from = core::mem::take(k.insts);
+    *k.insts = order
+        .iter()
+        .map(|&at| core::mem::replace(&mut from[at as usize], Inst::Imm(0)))
+        .collect();
+    permute(k.inst_src, order);
+    permute(k.f32_values, order);
+    permute(k.cmp32, order);
+    permute(k.div32, order);
+    renumber(&mut k, &remap);
+    // A move within a block need not keep the relocation entries' order.
+    for table in [
+        &mut *k.extern_call_refs,
+        &mut *k.extern_imm_code_refs,
+        &mut *k.extern_imm_data_refs,
+        &mut *k.extern_tls_refs,
+    ] {
+        table.sort_unstable();
+    }
+}
+
 /// Reorder a table parallel to the tape; an empty one stays empty.
 fn permute<T: Copy + Default>(table: &mut Vec<T>, order: &[ValueId]) {
     if !table.is_empty() {

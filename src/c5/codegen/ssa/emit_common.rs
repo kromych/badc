@@ -3541,6 +3541,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                     }
                     super::mem2reg::zero_read_undefs(f);
                     if native.optimizes() && !f.has_seh() {
+                        let capacity = super::reg_alloc::bank_capacity(target, native.fixed_regs);
+                        super::pressure_order::lower_peaks(f, capacity);
                         super::remat::split_across_calls(f, target);
                         super::licm::allocate_hoisted(f, target, native.fixed_regs, data_len)
                     } else {

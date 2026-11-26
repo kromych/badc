@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=7
-  spill_count=9 gpr_used=[] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1416)                                 -> x2
@@ -12000,354 +12000,354 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v13641 BinopI { op=lt, lhs=v13639, rhs_imm=16 }         -> x6
     terminator Bz { cond=v13641, target=b661, fall=b658 }   (exit_acc=v13641)
   block 661  start_pc=0
-    v13651 Imm(1)                                           -> x0
-    v13652 LifetimeEnd(-1542)                               -> -
-    v13653 LifetimeEnd(-2)                                  -> -
-    v13654 LocalAddr(-1416)                                 -> x0
-    v13655 Imm(0)                                           -> x0
-    v13656 LoadLocal { off=-1416, kind=V128 }               -> d0
-    v13657 Imm(0)                                           -> x0
-    v13658 Imm(0)                                           -> x0
-    v13659 Imm(1)                                           -> x0
-    v13660 Imm(0)                                           -> x0
-    v13661 Imm(0)                                           -> x0
-    v13662 VecExtract { vec=v13656, off=0, kind=U8, bytes=16 } -> x0
-    v13663 BinopI { op=shl, lhs=v13662, rhs_imm=1 }         -> x0
-    v13664 Undef                                            -> x1
-    v13665 VecInsert { vec=v13664, value=v13663, off=0, kind=I8, bytes=16 } -> d1
-    v13666 Imm(0)                                           -> x0
-    v13667 Imm(1)                                           -> x0
-    v13668 Imm(0)                                           -> x0
-    v13669 VecExtract { vec=v13656, off=1, kind=U8, bytes=16 } -> x0
-    v13670 BinopI { op=shl, lhs=v13669, rhs_imm=1 }         -> x0
-    v13671 Imm(1)                                           -> x1
-    v13672 Imm(0)                                           -> x1
-    v13673 VecInsert { vec=v13665, value=v13670, off=1, kind=I8, bytes=16 } -> d1
-    v13674 Imm(0)                                           -> x0
-    v13675 Imm(2)                                           -> x0
-    v13676 Imm(0)                                           -> x0
-    v13677 VecExtract { vec=v13656, off=2, kind=U8, bytes=16 } -> x0
-    v13678 BinopI { op=shl, lhs=v13677, rhs_imm=1 }         -> x0
-    v13679 Imm(2)                                           -> x1
-    v13680 Imm(0)                                           -> x1
-    v13681 VecInsert { vec=v13673, value=v13678, off=2, kind=I8, bytes=16 } -> d1
-    v13682 Imm(0)                                           -> x0
-    v13683 Imm(3)                                           -> x0
-    v13684 Imm(0)                                           -> x0
-    v13685 VecExtract { vec=v13656, off=3, kind=U8, bytes=16 } -> x0
-    v13686 BinopI { op=shl, lhs=v13685, rhs_imm=1 }         -> x0
-    v13687 Imm(3)                                           -> x1
-    v13688 Imm(0)                                           -> x1
-    v13689 VecInsert { vec=v13681, value=v13686, off=3, kind=I8, bytes=16 } -> d1
-    v13690 Imm(0)                                           -> x0
-    v13691 Imm(4)                                           -> x0
-    v13692 Imm(0)                                           -> x0
-    v13693 VecExtract { vec=v13656, off=4, kind=U8, bytes=16 } -> x0
-    v13694 BinopI { op=shl, lhs=v13693, rhs_imm=1 }         -> x0
-    v13695 Imm(4)                                           -> x1
-    v13696 Imm(0)                                           -> x1
-    v13697 VecInsert { vec=v13689, value=v13694, off=4, kind=I8, bytes=16 } -> d1
-    v13698 Imm(0)                                           -> x0
-    v13699 Imm(5)                                           -> x0
-    v13700 Imm(0)                                           -> x0
-    v13701 VecExtract { vec=v13656, off=5, kind=U8, bytes=16 } -> x0
-    v13702 BinopI { op=shl, lhs=v13701, rhs_imm=1 }         -> x0
-    v13703 Imm(5)                                           -> x1
-    v13704 Imm(0)                                           -> x1
-    v13705 VecInsert { vec=v13697, value=v13702, off=5, kind=I8, bytes=16 } -> d1
-    v13706 Imm(0)                                           -> x0
-    v13707 Imm(6)                                           -> x0
-    v13708 Imm(0)                                           -> x0
-    v13709 VecExtract { vec=v13656, off=6, kind=U8, bytes=16 } -> x0
-    v13710 BinopI { op=shl, lhs=v13709, rhs_imm=1 }         -> x0
-    v13711 Imm(6)                                           -> x1
-    v13712 Imm(0)                                           -> x1
-    v13713 VecInsert { vec=v13705, value=v13710, off=6, kind=I8, bytes=16 } -> d1
-    v13714 Imm(0)                                           -> x0
-    v13715 Imm(7)                                           -> x0
-    v13716 Imm(0)                                           -> x0
-    v13717 VecExtract { vec=v13656, off=7, kind=U8, bytes=16 } -> x0
-    v13718 BinopI { op=shl, lhs=v13717, rhs_imm=1 }         -> x0
-    v13719 Imm(7)                                           -> x1
-    v13720 Imm(0)                                           -> x1
-    v13721 VecInsert { vec=v13713, value=v13718, off=7, kind=I8, bytes=16 } -> d1
-    v13722 Imm(0)                                           -> x0
-    v13723 Imm(8)                                           -> x0
-    v13724 Imm(0)                                           -> x0
-    v13725 VecExtract { vec=v13656, off=8, kind=U8, bytes=16 } -> x0
-    v13726 BinopI { op=shl, lhs=v13725, rhs_imm=1 }         -> x0
-    v13727 Imm(8)                                           -> x1
-    v13728 Imm(0)                                           -> x1
-    v13729 VecInsert { vec=v13721, value=v13726, off=8, kind=I8, bytes=16 } -> d1
-    v13730 Imm(0)                                           -> x0
-    v13731 Imm(9)                                           -> x0
-    v13732 Imm(0)                                           -> x0
-    v13733 VecExtract { vec=v13656, off=9, kind=U8, bytes=16 } -> x0
-    v13734 BinopI { op=shl, lhs=v13733, rhs_imm=1 }         -> x0
-    v13735 Imm(9)                                           -> x1
-    v13736 Imm(0)                                           -> x1
-    v13737 VecInsert { vec=v13729, value=v13734, off=9, kind=I8, bytes=16 } -> d1
-    v13738 Imm(0)                                           -> x0
-    v13739 Imm(10)                                          -> x0
-    v13740 Imm(0)                                           -> x0
-    v13741 VecExtract { vec=v13656, off=10, kind=U8, bytes=16 } -> x0
-    v13742 BinopI { op=shl, lhs=v13741, rhs_imm=1 }         -> x0
-    v13743 Imm(10)                                          -> x1
-    v13744 Imm(0)                                           -> x1
-    v13745 VecInsert { vec=v13737, value=v13742, off=10, kind=I8, bytes=16 } -> d1
-    v13746 Imm(0)                                           -> x0
-    v13747 Imm(11)                                          -> x0
-    v13748 Imm(0)                                           -> x0
-    v13749 VecExtract { vec=v13656, off=11, kind=U8, bytes=16 } -> x0
-    v13750 BinopI { op=shl, lhs=v13749, rhs_imm=1 }         -> x0
-    v13751 Imm(11)                                          -> x1
-    v13752 Imm(0)                                           -> x1
-    v13753 VecInsert { vec=v13745, value=v13750, off=11, kind=I8, bytes=16 } -> d1
-    v13754 Imm(0)                                           -> x0
-    v13755 Imm(12)                                          -> x0
-    v13756 Imm(0)                                           -> x0
-    v13757 VecExtract { vec=v13656, off=12, kind=U8, bytes=16 } -> x0
-    v13758 BinopI { op=shl, lhs=v13757, rhs_imm=1 }         -> x0
-    v13759 Imm(12)                                          -> x1
-    v13760 Imm(0)                                           -> x1
-    v13761 VecInsert { vec=v13753, value=v13758, off=12, kind=I8, bytes=16 } -> d1
-    v13762 Imm(0)                                           -> x0
-    v13763 Imm(13)                                          -> x0
-    v13764 Imm(0)                                           -> x0
-    v13765 VecExtract { vec=v13656, off=13, kind=U8, bytes=16 } -> x0
-    v13766 BinopI { op=shl, lhs=v13765, rhs_imm=1 }         -> x0
-    v13767 Imm(13)                                          -> x1
-    v13768 Imm(0)                                           -> x1
-    v13769 VecInsert { vec=v13761, value=v13766, off=13, kind=I8, bytes=16 } -> d1
-    v13770 Imm(0)                                           -> x0
-    v13771 Imm(14)                                          -> x0
-    v13772 Imm(0)                                           -> x0
-    v13773 VecExtract { vec=v13656, off=14, kind=U8, bytes=16 } -> x0
-    v13774 BinopI { op=shl, lhs=v13773, rhs_imm=1 }         -> x0
-    v13775 Imm(14)                                          -> x1
-    v13776 Imm(0)                                           -> x1
-    v13777 VecInsert { vec=v13769, value=v13774, off=14, kind=I8, bytes=16 } -> d1
-    v13778 Imm(0)                                           -> x0
-    v13779 Imm(15)                                          -> x0
-    v13780 Imm(0)                                           -> x0
-    v13781 VecExtract { vec=v13656, off=15, kind=U8, bytes=16 } -> x0
-    v13782 BinopI { op=shl, lhs=v13781, rhs_imm=1 }         -> x0
-    v13783 Imm(15)                                          -> x1
-    v13784 Imm(0)                                           -> x1
-    v13785 VecInsert { vec=v13777, value=v13782, off=15, kind=I8, bytes=16 } -> d1
+    v13651 LoadLocal { off=-1416, kind=V128 }               -> d0
+    v13652 VecExtract { vec=v13651, off=0, kind=I8, bytes=16 } -> x0
+    v13653 BinopI { op=shr, lhs=v13652, rhs_imm=7 }         -> x0
+    v13654 Extend { value=v13653, kind=I8 }                 -> x1
+    v13655 Imm(27)                                          -> x0
+    v13656 Binop { op=and, lhs=v13654, rhs=v13655 }         -> x1
+    v13657 Undef                                            -> x2
+    v13658 VecInsert { vec=v13657, value=v13656, off=0, kind=I8, bytes=16 } -> d1
+    v13659 VecExtract { vec=v13651, off=0, kind=U8, bytes=16 } -> x1
+    v13660 BinopI { op=shl, lhs=v13659, rhs_imm=1 }         -> x1
+    v13661 Undef                                            -> x2
+    v13662 VecInsert { vec=v13661, value=v13660, off=0, kind=I8, bytes=16 } -> d2
+    v13663 VecExtract { vec=v13651, off=1, kind=U8, bytes=16 } -> x1
+    v13664 BinopI { op=shl, lhs=v13663, rhs_imm=1 }         -> x1
+    v13665 VecInsert { vec=v13662, value=v13664, off=1, kind=I8, bytes=16 } -> d2
+    v13666 VecExtract { vec=v13651, off=2, kind=U8, bytes=16 } -> x1
+    v13667 BinopI { op=shl, lhs=v13666, rhs_imm=1 }         -> x1
+    v13668 VecInsert { vec=v13665, value=v13667, off=2, kind=I8, bytes=16 } -> d2
+    v13669 VecExtract { vec=v13651, off=3, kind=U8, bytes=16 } -> x1
+    v13670 BinopI { op=shl, lhs=v13669, rhs_imm=1 }         -> x1
+    v13671 VecInsert { vec=v13668, value=v13670, off=3, kind=I8, bytes=16 } -> d2
+    v13672 VecExtract { vec=v13651, off=4, kind=U8, bytes=16 } -> x1
+    v13673 BinopI { op=shl, lhs=v13672, rhs_imm=1 }         -> x1
+    v13674 VecInsert { vec=v13671, value=v13673, off=4, kind=I8, bytes=16 } -> d2
+    v13675 VecExtract { vec=v13651, off=5, kind=U8, bytes=16 } -> x1
+    v13676 BinopI { op=shl, lhs=v13675, rhs_imm=1 }         -> x1
+    v13677 VecInsert { vec=v13674, value=v13676, off=5, kind=I8, bytes=16 } -> d2
+    v13678 VecExtract { vec=v13651, off=6, kind=U8, bytes=16 } -> x1
+    v13679 BinopI { op=shl, lhs=v13678, rhs_imm=1 }         -> x1
+    v13680 VecInsert { vec=v13677, value=v13679, off=6, kind=I8, bytes=16 } -> d2
+    v13681 VecExtract { vec=v13651, off=7, kind=U8, bytes=16 } -> x1
+    v13682 BinopI { op=shl, lhs=v13681, rhs_imm=1 }         -> x1
+    v13683 VecInsert { vec=v13680, value=v13682, off=7, kind=I8, bytes=16 } -> d2
+    v13684 VecExtract { vec=v13651, off=8, kind=U8, bytes=16 } -> x1
+    v13685 BinopI { op=shl, lhs=v13684, rhs_imm=1 }         -> x1
+    v13686 VecInsert { vec=v13683, value=v13685, off=8, kind=I8, bytes=16 } -> d2
+    v13687 VecExtract { vec=v13651, off=9, kind=U8, bytes=16 } -> x1
+    v13688 BinopI { op=shl, lhs=v13687, rhs_imm=1 }         -> x1
+    v13689 VecInsert { vec=v13686, value=v13688, off=9, kind=I8, bytes=16 } -> d2
+    v13690 VecExtract { vec=v13651, off=10, kind=U8, bytes=16 } -> x1
+    v13691 BinopI { op=shl, lhs=v13690, rhs_imm=1 }         -> x1
+    v13692 VecInsert { vec=v13689, value=v13691, off=10, kind=I8, bytes=16 } -> d2
+    v13693 VecExtract { vec=v13651, off=11, kind=U8, bytes=16 } -> x1
+    v13694 BinopI { op=shl, lhs=v13693, rhs_imm=1 }         -> x1
+    v13695 VecInsert { vec=v13692, value=v13694, off=11, kind=I8, bytes=16 } -> d2
+    v13696 VecExtract { vec=v13651, off=12, kind=U8, bytes=16 } -> x1
+    v13697 BinopI { op=shl, lhs=v13696, rhs_imm=1 }         -> x1
+    v13698 VecInsert { vec=v13695, value=v13697, off=12, kind=I8, bytes=16 } -> d2
+    v13699 VecExtract { vec=v13651, off=13, kind=U8, bytes=16 } -> x1
+    v13700 BinopI { op=shl, lhs=v13699, rhs_imm=1 }         -> x1
+    v13701 VecInsert { vec=v13698, value=v13700, off=13, kind=I8, bytes=16 } -> d2
+    v13702 VecExtract { vec=v13651, off=14, kind=U8, bytes=16 } -> x1
+    v13703 BinopI { op=shl, lhs=v13702, rhs_imm=1 }         -> x1
+    v13704 VecInsert { vec=v13701, value=v13703, off=14, kind=I8, bytes=16 } -> d2
+    v13705 VecExtract { vec=v13651, off=15, kind=U8, bytes=16 } -> x1
+    v13706 BinopI { op=shl, lhs=v13705, rhs_imm=1 }         -> x1
+    v13707 VecInsert { vec=v13704, value=v13706, off=15, kind=I8, bytes=16 } -> d2
+    v13708 VecExtract { vec=v13651, off=1, kind=I8, bytes=16 } -> x1
+    v13709 BinopI { op=shr, lhs=v13708, rhs_imm=7 }         -> x1
+    v13710 Extend { value=v13709, kind=I8 }                 -> x1
+    v13711 Binop { op=and, lhs=v13710, rhs=v13655 }         -> x1
+    v13712 VecInsert { vec=v13658, value=v13711, off=1, kind=I8, bytes=16 } -> d1
+    v13713 VecExtract { vec=v13651, off=2, kind=I8, bytes=16 } -> x1
+    v13714 BinopI { op=shr, lhs=v13713, rhs_imm=7 }         -> x1
+    v13715 Extend { value=v13714, kind=I8 }                 -> x1
+    v13716 Binop { op=and, lhs=v13715, rhs=v13655 }         -> x1
+    v13717 VecInsert { vec=v13712, value=v13716, off=2, kind=I8, bytes=16 } -> d1
+    v13718 VecExtract { vec=v13651, off=3, kind=I8, bytes=16 } -> x1
+    v13719 BinopI { op=shr, lhs=v13718, rhs_imm=7 }         -> x1
+    v13720 Extend { value=v13719, kind=I8 }                 -> x1
+    v13721 Binop { op=and, lhs=v13720, rhs=v13655 }         -> x1
+    v13722 VecInsert { vec=v13717, value=v13721, off=3, kind=I8, bytes=16 } -> d1
+    v13723 VecExtract { vec=v13651, off=4, kind=I8, bytes=16 } -> x1
+    v13724 BinopI { op=shr, lhs=v13723, rhs_imm=7 }         -> x1
+    v13725 Extend { value=v13724, kind=I8 }                 -> x1
+    v13726 Binop { op=and, lhs=v13725, rhs=v13655 }         -> x1
+    v13727 VecInsert { vec=v13722, value=v13726, off=4, kind=I8, bytes=16 } -> d1
+    v13728 VecExtract { vec=v13651, off=5, kind=I8, bytes=16 } -> x1
+    v13729 BinopI { op=shr, lhs=v13728, rhs_imm=7 }         -> x1
+    v13730 Extend { value=v13729, kind=I8 }                 -> x1
+    v13731 Binop { op=and, lhs=v13730, rhs=v13655 }         -> x1
+    v13732 VecInsert { vec=v13727, value=v13731, off=5, kind=I8, bytes=16 } -> d1
+    v13733 VecExtract { vec=v13651, off=6, kind=I8, bytes=16 } -> x1
+    v13734 BinopI { op=shr, lhs=v13733, rhs_imm=7 }         -> x1
+    v13735 Extend { value=v13734, kind=I8 }                 -> x1
+    v13736 Binop { op=and, lhs=v13735, rhs=v13655 }         -> x1
+    v13737 VecInsert { vec=v13732, value=v13736, off=6, kind=I8, bytes=16 } -> d1
+    v13738 VecExtract { vec=v13651, off=7, kind=I8, bytes=16 } -> x1
+    v13739 BinopI { op=shr, lhs=v13738, rhs_imm=7 }         -> x1
+    v13740 Extend { value=v13739, kind=I8 }                 -> x1
+    v13741 Binop { op=and, lhs=v13740, rhs=v13655 }         -> x1
+    v13742 VecInsert { vec=v13737, value=v13741, off=7, kind=I8, bytes=16 } -> d1
+    v13743 VecExtract { vec=v13651, off=8, kind=I8, bytes=16 } -> x1
+    v13744 BinopI { op=shr, lhs=v13743, rhs_imm=7 }         -> x1
+    v13745 Extend { value=v13744, kind=I8 }                 -> x1
+    v13746 Binop { op=and, lhs=v13745, rhs=v13655 }         -> x1
+    v13747 VecInsert { vec=v13742, value=v13746, off=8, kind=I8, bytes=16 } -> d1
+    v13748 VecExtract { vec=v13651, off=9, kind=I8, bytes=16 } -> x1
+    v13749 BinopI { op=shr, lhs=v13748, rhs_imm=7 }         -> x1
+    v13750 Extend { value=v13749, kind=I8 }                 -> x1
+    v13751 Binop { op=and, lhs=v13750, rhs=v13655 }         -> x1
+    v13752 VecInsert { vec=v13747, value=v13751, off=9, kind=I8, bytes=16 } -> d1
+    v13753 VecExtract { vec=v13651, off=10, kind=I8, bytes=16 } -> x1
+    v13754 BinopI { op=shr, lhs=v13753, rhs_imm=7 }         -> x1
+    v13755 Extend { value=v13754, kind=I8 }                 -> x1
+    v13756 Binop { op=and, lhs=v13755, rhs=v13655 }         -> x1
+    v13757 VecInsert { vec=v13752, value=v13756, off=10, kind=I8, bytes=16 } -> d1
+    v13758 VecExtract { vec=v13651, off=11, kind=I8, bytes=16 } -> x1
+    v13759 BinopI { op=shr, lhs=v13758, rhs_imm=7 }         -> x1
+    v13760 Extend { value=v13759, kind=I8 }                 -> x1
+    v13761 Binop { op=and, lhs=v13760, rhs=v13655 }         -> x1
+    v13762 VecInsert { vec=v13757, value=v13761, off=11, kind=I8, bytes=16 } -> d1
+    v13763 VecExtract { vec=v13651, off=12, kind=I8, bytes=16 } -> x1
+    v13764 BinopI { op=shr, lhs=v13763, rhs_imm=7 }         -> x1
+    v13765 Extend { value=v13764, kind=I8 }                 -> x1
+    v13766 Binop { op=and, lhs=v13765, rhs=v13655 }         -> x1
+    v13767 VecInsert { vec=v13762, value=v13766, off=12, kind=I8, bytes=16 } -> d1
+    v13768 VecExtract { vec=v13651, off=13, kind=I8, bytes=16 } -> x1
+    v13769 BinopI { op=shr, lhs=v13768, rhs_imm=7 }         -> x1
+    v13770 Extend { value=v13769, kind=I8 }                 -> x1
+    v13771 Binop { op=and, lhs=v13770, rhs=v13655 }         -> x1
+    v13772 VecInsert { vec=v13767, value=v13771, off=13, kind=I8, bytes=16 } -> d1
+    v13773 VecExtract { vec=v13651, off=14, kind=I8, bytes=16 } -> x1
+    v13774 BinopI { op=shr, lhs=v13773, rhs_imm=7 }         -> x1
+    v13775 Extend { value=v13774, kind=I8 }                 -> x1
+    v13776 Binop { op=and, lhs=v13775, rhs=v13655 }         -> x1
+    v13777 VecInsert { vec=v13772, value=v13776, off=14, kind=I8, bytes=16 } -> d1
+    v13778 VecExtract { vec=v13651, off=15, kind=I8, bytes=16 } -> x1
+    v13779 BinopI { op=shr, lhs=v13778, rhs_imm=7 }         -> x1
+    v13780 Extend { value=v13779, kind=I8 }                 -> x1
+    v13781 Binop { op=and, lhs=v13780, rhs=v13655 }         -> x1
+    v13782 VecInsert { vec=v13777, value=v13781, off=15, kind=I8, bytes=16 } -> d0
+    v13783 VecBinop { op=Xor, lane=I8, bytes=16, lhs=v13707, rhs=v13782 } -> d0
+    v13784 Imm(1)                                           -> x0
+    v13785 LocalAddr(-1416)                                 -> x0
     v13786 Imm(0)                                           -> x0
     v13787 Imm(0)                                           -> x0
-    v13788 Imm(7)                                           -> x0
-    v13789 Imm(0)                                           -> x0
+    v13788 Imm(0)                                           -> x0
+    v13789 Imm(1)                                           -> x0
     v13790 Imm(0)                                           -> x0
-    v13791 VecExtract { vec=v13656, off=0, kind=I8, bytes=16 } -> x1
-    v13792 BinopI { op=shr, lhs=v13791, rhs_imm=7 }         -> x1
-    v13793 Imm(0)                                           -> x0
-    v13794 Imm(1)                                           -> x0
-    v13795 Imm(0)                                           -> x0
-    v13796 VecExtract { vec=v13656, off=1, kind=I8, bytes=16 } -> x2
-    v13797 BinopI { op=shr, lhs=v13796, rhs_imm=7 }         -> x2
-    v13798 Imm(0)                                           -> x0
+    v13791 Imm(0)                                           -> x0
+    v13792 Imm(0)                                           -> x0
+    v13793 Imm(1)                                           -> x0
+    v13794 Imm(0)                                           -> x0
+    v13795 Imm(1)                                           -> x0
+    v13796 Imm(0)                                           -> x0
+    v13797 Imm(0)                                           -> x0
+    v13798 Imm(2)                                           -> x0
     v13799 Imm(0)                                           -> x0
     v13800 Imm(2)                                           -> x0
     v13801 Imm(0)                                           -> x0
-    v13802 VecExtract { vec=v13656, off=2, kind=I8, bytes=16 } -> x6
-    v13803 BinopI { op=shr, lhs=v13802, rhs_imm=7 }         -> x6
+    v13802 Imm(0)                                           -> x0
+    v13803 Imm(3)                                           -> x0
     v13804 Imm(0)                                           -> x0
-    v13805 Imm(0)                                           -> x0
-    v13806 Imm(3)                                           -> x0
+    v13805 Imm(3)                                           -> x0
+    v13806 Imm(0)                                           -> x0
     v13807 Imm(0)                                           -> x0
-    v13808 VecExtract { vec=v13656, off=3, kind=I8, bytes=16 } -> x7
-    v13809 BinopI { op=shr, lhs=v13808, rhs_imm=7 }         -> x7
-    v13810 Imm(0)                                           -> x0
+    v13808 Imm(4)                                           -> x0
+    v13809 Imm(0)                                           -> x0
+    v13810 Imm(4)                                           -> x0
     v13811 Imm(0)                                           -> x0
-    v13812 Imm(4)                                           -> x0
-    v13813 Imm(0)                                           -> x0
-    v13814 VecExtract { vec=v13656, off=4, kind=I8, bytes=16 } -> x8
-    v13815 BinopI { op=shr, lhs=v13814, rhs_imm=7 }         -> x8
+    v13812 Imm(0)                                           -> x0
+    v13813 Imm(5)                                           -> x0
+    v13814 Imm(0)                                           -> x0
+    v13815 Imm(5)                                           -> x0
     v13816 Imm(0)                                           -> x0
     v13817 Imm(0)                                           -> x0
-    v13818 Imm(5)                                           -> x0
+    v13818 Imm(6)                                           -> x0
     v13819 Imm(0)                                           -> x0
-    v13820 VecExtract { vec=v13656, off=5, kind=I8, bytes=16 } -> x9
-    v13821 BinopI { op=shr, lhs=v13820, rhs_imm=7 }         -> x9
+    v13820 Imm(6)                                           -> x0
+    v13821 Imm(0)                                           -> x0
     v13822 Imm(0)                                           -> x0
-    v13823 Imm(0)                                           -> x0
-    v13824 Imm(6)                                           -> x0
-    v13825 Imm(0)                                           -> x0
-    v13826 VecExtract { vec=v13656, off=6, kind=I8, bytes=16 } -> x10
-    v13827 BinopI { op=shr, lhs=v13826, rhs_imm=7 }         -> x10
-    v13828 Imm(0)                                           -> x0
+    v13823 Imm(7)                                           -> x0
+    v13824 Imm(0)                                           -> x0
+    v13825 Imm(7)                                           -> x0
+    v13826 Imm(0)                                           -> x0
+    v13827 Imm(0)                                           -> x0
+    v13828 Imm(8)                                           -> x0
     v13829 Imm(0)                                           -> x0
-    v13830 Imm(7)                                           -> x0
+    v13830 Imm(8)                                           -> x0
     v13831 Imm(0)                                           -> x0
-    v13832 VecExtract { vec=v13656, off=7, kind=I8, bytes=16 } -> x11
-    v13833 BinopI { op=shr, lhs=v13832, rhs_imm=7 }         -> x11
+    v13832 Imm(0)                                           -> x0
+    v13833 Imm(9)                                           -> x0
     v13834 Imm(0)                                           -> x0
-    v13835 Imm(0)                                           -> x0
-    v13836 Imm(8)                                           -> x0
+    v13835 Imm(9)                                           -> x0
+    v13836 Imm(0)                                           -> x0
     v13837 Imm(0)                                           -> x0
-    v13838 VecExtract { vec=v13656, off=8, kind=I8, bytes=16 } -> [spill 0]
-    v13839 BinopI { op=shr, lhs=v13838, rhs_imm=7 }         -> [spill 0]
-    v13840 Imm(0)                                           -> x0
+    v13838 Imm(10)                                          -> x0
+    v13839 Imm(0)                                           -> x0
+    v13840 Imm(10)                                          -> x0
     v13841 Imm(0)                                           -> x0
-    v13842 Imm(9)                                           -> x0
-    v13843 Imm(0)                                           -> x0
-    v13844 VecExtract { vec=v13656, off=9, kind=I8, bytes=16 } -> [spill 1]
-    v13845 BinopI { op=shr, lhs=v13844, rhs_imm=7 }         -> [spill 1]
+    v13842 Imm(0)                                           -> x0
+    v13843 Imm(11)                                          -> x0
+    v13844 Imm(0)                                           -> x0
+    v13845 Imm(11)                                          -> x0
     v13846 Imm(0)                                           -> x0
     v13847 Imm(0)                                           -> x0
-    v13848 Imm(10)                                          -> x0
+    v13848 Imm(12)                                          -> x0
     v13849 Imm(0)                                           -> x0
-    v13850 VecExtract { vec=v13656, off=10, kind=I8, bytes=16 } -> [spill 2]
-    v13851 BinopI { op=shr, lhs=v13850, rhs_imm=7 }         -> [spill 2]
+    v13850 Imm(12)                                          -> x0
+    v13851 Imm(0)                                           -> x0
     v13852 Imm(0)                                           -> x0
-    v13853 Imm(0)                                           -> x0
-    v13854 Imm(11)                                          -> x0
-    v13855 Imm(0)                                           -> x0
-    v13856 VecExtract { vec=v13656, off=11, kind=I8, bytes=16 } -> [spill 3]
-    v13857 BinopI { op=shr, lhs=v13856, rhs_imm=7 }         -> [spill 3]
-    v13858 Imm(0)                                           -> x0
+    v13853 Imm(13)                                          -> x0
+    v13854 Imm(0)                                           -> x0
+    v13855 Imm(13)                                          -> x0
+    v13856 Imm(0)                                           -> x0
+    v13857 Imm(0)                                           -> x0
+    v13858 Imm(14)                                          -> x0
     v13859 Imm(0)                                           -> x0
-    v13860 Imm(12)                                          -> x0
+    v13860 Imm(14)                                          -> x0
     v13861 Imm(0)                                           -> x0
-    v13862 VecExtract { vec=v13656, off=12, kind=I8, bytes=16 } -> [spill 4]
-    v13863 BinopI { op=shr, lhs=v13862, rhs_imm=7 }         -> [spill 4]
+    v13862 Imm(0)                                           -> x0
+    v13863 Imm(15)                                          -> x0
     v13864 Imm(0)                                           -> x0
-    v13865 Imm(0)                                           -> x0
-    v13866 Imm(13)                                          -> x0
+    v13865 Imm(15)                                          -> x0
+    v13866 Imm(0)                                           -> x0
     v13867 Imm(0)                                           -> x0
-    v13868 VecExtract { vec=v13656, off=13, kind=I8, bytes=16 } -> [spill 5]
-    v13869 BinopI { op=shr, lhs=v13868, rhs_imm=7 }         -> [spill 5]
+    v13868 Imm(0)                                           -> x0
+    v13869 Imm(7)                                           -> x0
     v13870 Imm(0)                                           -> x0
     v13871 Imm(0)                                           -> x0
-    v13872 Imm(14)                                          -> x0
-    v13873 Imm(0)                                           -> x0
-    v13874 VecExtract { vec=v13656, off=14, kind=I8, bytes=16 } -> [spill 6]
-    v13875 BinopI { op=shr, lhs=v13874, rhs_imm=7 }         -> [spill 6]
+    v13872 Imm(0)                                           -> x0
+    v13873 Imm(1)                                           -> x0
+    v13874 Imm(0)                                           -> x0
+    v13875 Imm(0)                                           -> x0
     v13876 Imm(0)                                           -> x0
-    v13877 Imm(0)                                           -> x0
-    v13878 Imm(15)                                          -> x0
+    v13877 Imm(2)                                           -> x0
+    v13878 Imm(0)                                           -> x0
     v13879 Imm(0)                                           -> x0
-    v13880 VecExtract { vec=v13656, off=15, kind=I8, bytes=16 } -> [spill 7]
-    v13881 BinopI { op=shr, lhs=v13880, rhs_imm=7 }         -> [spill 7]
+    v13880 Imm(0)                                           -> x0
+    v13881 Imm(3)                                           -> x0
     v13882 Imm(0)                                           -> x0
     v13883 Imm(0)                                           -> x0
-    v13884 Imm(27)                                          -> x0
-    v13885 Imm(0)                                           -> [spill 8]
-    v13886 Extend { value=v13792, kind=I8 }                 -> x1
-    v13887 Binop { op=and, lhs=v13886, rhs=v13884 }         -> x1
-    v13888 Undef                                            -> [spill 8]
-    v13889 VecInsert { vec=v13888, value=v13887, off=0, kind=I8, bytes=16 } -> d0
-    v13890 Imm(0)                                           -> x1
-    v13891 Extend { value=v13797, kind=I8 }                 -> x1
-    v13892 Binop { op=and, lhs=v13891, rhs=v13884 }         -> x1
-    v13893 Imm(1)                                           -> x2
-    v13894 Imm(0)                                           -> x2
-    v13895 VecInsert { vec=v13889, value=v13892, off=1, kind=I8, bytes=16 } -> d0
-    v13896 Imm(0)                                           -> x1
-    v13897 Extend { value=v13803, kind=I8 }                 -> x1
-    v13898 Binop { op=and, lhs=v13897, rhs=v13884 }         -> x1
-    v13899 Imm(2)                                           -> x2
-    v13900 Imm(0)                                           -> x2
-    v13901 VecInsert { vec=v13895, value=v13898, off=2, kind=I8, bytes=16 } -> d0
-    v13902 Imm(0)                                           -> x1
-    v13903 Extend { value=v13809, kind=I8 }                 -> x1
-    v13904 Binop { op=and, lhs=v13903, rhs=v13884 }         -> x1
-    v13905 Imm(3)                                           -> x2
-    v13906 Imm(0)                                           -> x2
-    v13907 VecInsert { vec=v13901, value=v13904, off=3, kind=I8, bytes=16 } -> d0
-    v13908 Imm(0)                                           -> x1
-    v13909 Extend { value=v13815, kind=I8 }                 -> x1
-    v13910 Binop { op=and, lhs=v13909, rhs=v13884 }         -> x1
-    v13911 Imm(4)                                           -> x2
-    v13912 Imm(0)                                           -> x2
-    v13913 VecInsert { vec=v13907, value=v13910, off=4, kind=I8, bytes=16 } -> d0
-    v13914 Imm(0)                                           -> x1
-    v13915 Extend { value=v13821, kind=I8 }                 -> x1
-    v13916 Binop { op=and, lhs=v13915, rhs=v13884 }         -> x1
-    v13917 Imm(5)                                           -> x2
-    v13918 Imm(0)                                           -> x2
-    v13919 VecInsert { vec=v13913, value=v13916, off=5, kind=I8, bytes=16 } -> d0
-    v13920 Imm(0)                                           -> x1
-    v13921 Extend { value=v13827, kind=I8 }                 -> x1
-    v13922 Binop { op=and, lhs=v13921, rhs=v13884 }         -> x1
-    v13923 Imm(6)                                           -> x2
-    v13924 Imm(0)                                           -> x2
-    v13925 VecInsert { vec=v13919, value=v13922, off=6, kind=I8, bytes=16 } -> d0
-    v13926 Imm(0)                                           -> x1
-    v13927 Extend { value=v13833, kind=I8 }                 -> x1
-    v13928 Binop { op=and, lhs=v13927, rhs=v13884 }         -> x1
-    v13929 Imm(7)                                           -> x2
-    v13930 Imm(0)                                           -> x2
-    v13931 VecInsert { vec=v13925, value=v13928, off=7, kind=I8, bytes=16 } -> d0
-    v13932 Imm(0)                                           -> x1
-    v13933 Extend { value=v13839, kind=I8 }                 -> x1
-    v13934 Binop { op=and, lhs=v13933, rhs=v13884 }         -> x1
-    v13935 Imm(8)                                           -> x2
-    v13936 Imm(0)                                           -> x2
-    v13937 VecInsert { vec=v13931, value=v13934, off=8, kind=I8, bytes=16 } -> d0
-    v13938 Imm(0)                                           -> x1
-    v13939 Extend { value=v13845, kind=I8 }                 -> x1
-    v13940 Binop { op=and, lhs=v13939, rhs=v13884 }         -> x1
-    v13941 Imm(9)                                           -> x2
-    v13942 Imm(0)                                           -> x2
-    v13943 VecInsert { vec=v13937, value=v13940, off=9, kind=I8, bytes=16 } -> d0
-    v13944 Imm(0)                                           -> x1
-    v13945 Extend { value=v13851, kind=I8 }                 -> x1
-    v13946 Binop { op=and, lhs=v13945, rhs=v13884 }         -> x1
-    v13947 Imm(10)                                          -> x2
-    v13948 Imm(0)                                           -> x2
-    v13949 VecInsert { vec=v13943, value=v13946, off=10, kind=I8, bytes=16 } -> d0
-    v13950 Imm(0)                                           -> x1
-    v13951 Extend { value=v13857, kind=I8 }                 -> x1
-    v13952 Binop { op=and, lhs=v13951, rhs=v13884 }         -> x1
-    v13953 Imm(11)                                          -> x2
-    v13954 Imm(0)                                           -> x2
-    v13955 VecInsert { vec=v13949, value=v13952, off=11, kind=I8, bytes=16 } -> d0
-    v13956 Imm(0)                                           -> x1
-    v13957 Extend { value=v13863, kind=I8 }                 -> x1
-    v13958 Binop { op=and, lhs=v13957, rhs=v13884 }         -> x1
-    v13959 Imm(12)                                          -> x2
-    v13960 Imm(0)                                           -> x2
-    v13961 VecInsert { vec=v13955, value=v13958, off=12, kind=I8, bytes=16 } -> d0
-    v13962 Imm(0)                                           -> x1
-    v13963 Extend { value=v13869, kind=I8 }                 -> x1
-    v13964 Binop { op=and, lhs=v13963, rhs=v13884 }         -> x1
-    v13965 Imm(13)                                          -> x2
-    v13966 Imm(0)                                           -> x2
-    v13967 VecInsert { vec=v13961, value=v13964, off=13, kind=I8, bytes=16 } -> d0
-    v13968 Imm(0)                                           -> x1
-    v13969 Extend { value=v13875, kind=I8 }                 -> x1
-    v13970 Binop { op=and, lhs=v13969, rhs=v13884 }         -> x1
-    v13971 Imm(14)                                          -> x2
-    v13972 Imm(0)                                           -> x2
-    v13973 VecInsert { vec=v13967, value=v13970, off=14, kind=I8, bytes=16 } -> d0
-    v13974 Imm(0)                                           -> x1
-    v13975 Extend { value=v13881, kind=I8 }                 -> x1
-    v13976 Binop { op=and, lhs=v13975, rhs=v13884 }         -> x1
+    v13884 Imm(0)                                           -> x0
+    v13885 Imm(4)                                           -> x0
+    v13886 Imm(0)                                           -> x0
+    v13887 Imm(0)                                           -> x0
+    v13888 Imm(0)                                           -> x0
+    v13889 Imm(5)                                           -> x0
+    v13890 Imm(0)                                           -> x0
+    v13891 Imm(0)                                           -> x0
+    v13892 Imm(0)                                           -> x0
+    v13893 Imm(6)                                           -> x0
+    v13894 Imm(0)                                           -> x0
+    v13895 Imm(0)                                           -> x0
+    v13896 Imm(0)                                           -> x0
+    v13897 Imm(7)                                           -> x0
+    v13898 Imm(0)                                           -> x0
+    v13899 Imm(0)                                           -> x0
+    v13900 Imm(0)                                           -> x0
+    v13901 Imm(8)                                           -> x0
+    v13902 Imm(0)                                           -> x0
+    v13903 Imm(0)                                           -> x0
+    v13904 Imm(0)                                           -> x0
+    v13905 Imm(9)                                           -> x0
+    v13906 Imm(0)                                           -> x0
+    v13907 Imm(0)                                           -> x0
+    v13908 Imm(0)                                           -> x0
+    v13909 Imm(10)                                          -> x0
+    v13910 Imm(0)                                           -> x0
+    v13911 Imm(0)                                           -> x0
+    v13912 Imm(0)                                           -> x0
+    v13913 Imm(11)                                          -> x0
+    v13914 Imm(0)                                           -> x0
+    v13915 Imm(0)                                           -> x0
+    v13916 Imm(0)                                           -> x0
+    v13917 Imm(12)                                          -> x0
+    v13918 Imm(0)                                           -> x0
+    v13919 Imm(0)                                           -> x0
+    v13920 Imm(0)                                           -> x0
+    v13921 Imm(13)                                          -> x0
+    v13922 Imm(0)                                           -> x0
+    v13923 Imm(0)                                           -> x0
+    v13924 Imm(0)                                           -> x0
+    v13925 Imm(14)                                          -> x0
+    v13926 Imm(0)                                           -> x0
+    v13927 Imm(0)                                           -> x0
+    v13928 Imm(0)                                           -> x0
+    v13929 Imm(15)                                          -> x0
+    v13930 Imm(0)                                           -> x0
+    v13931 Imm(0)                                           -> x0
+    v13932 Imm(0)                                           -> x0
+    v13933 Imm(0)                                           -> x0
+    v13934 Imm(0)                                           -> x0
+    v13935 Imm(1)                                           -> x0
+    v13936 Imm(0)                                           -> x0
+    v13937 Imm(0)                                           -> x0
+    v13938 Imm(2)                                           -> x0
+    v13939 Imm(0)                                           -> x0
+    v13940 Imm(0)                                           -> x0
+    v13941 Imm(3)                                           -> x0
+    v13942 Imm(0)                                           -> x0
+    v13943 Imm(0)                                           -> x0
+    v13944 Imm(4)                                           -> x0
+    v13945 Imm(0)                                           -> x0
+    v13946 Imm(0)                                           -> x0
+    v13947 Imm(5)                                           -> x0
+    v13948 Imm(0)                                           -> x0
+    v13949 Imm(0)                                           -> x0
+    v13950 Imm(6)                                           -> x0
+    v13951 Imm(0)                                           -> x0
+    v13952 Imm(0)                                           -> x0
+    v13953 Imm(7)                                           -> x0
+    v13954 Imm(0)                                           -> x0
+    v13955 Imm(0)                                           -> x0
+    v13956 Imm(8)                                           -> x0
+    v13957 Imm(0)                                           -> x0
+    v13958 Imm(0)                                           -> x0
+    v13959 Imm(9)                                           -> x0
+    v13960 Imm(0)                                           -> x0
+    v13961 Imm(0)                                           -> x0
+    v13962 Imm(10)                                          -> x0
+    v13963 Imm(0)                                           -> x0
+    v13964 Imm(0)                                           -> x0
+    v13965 Imm(11)                                          -> x0
+    v13966 Imm(0)                                           -> x0
+    v13967 Imm(0)                                           -> x0
+    v13968 Imm(12)                                          -> x0
+    v13969 Imm(0)                                           -> x0
+    v13970 Imm(0)                                           -> x0
+    v13971 Imm(13)                                          -> x0
+    v13972 Imm(0)                                           -> x0
+    v13973 Imm(0)                                           -> x0
+    v13974 Imm(14)                                          -> x0
+    v13975 Imm(0)                                           -> x0
+    v13976 Imm(0)                                           -> x0
     v13977 Imm(15)                                          -> x0
     v13978 Imm(0)                                           -> x0
-    v13979 VecInsert { vec=v13973, value=v13976, off=15, kind=I8, bytes=16 } -> d0
+    v13979 Imm(0)                                           -> x0
     v13980 Imm(0)                                           -> x0
     v13981 Imm(0)                                           -> x0
     v13982 Imm(0)                                           -> x0
-    v13983 VecBinop { op=Xor, lane=I8, bytes=16, lhs=v13785, rhs=v13979 } -> d0
-    v13984 Imm(0)                                           -> x0
+    v13983 Imm(0)                                           -> x0
+    v13984 LocalAddr(-1543)                                 -> x0
     v13985 Imm(0)                                           -> x0
-    v13986 LocalAddr(-1543)                                 -> x0
-    v13987 Imm(0)                                           -> x0
-    v13988 StoreLocal { off=-1543, value=v13983, kind=V128 } -> -
-    v13989 LocalAddr(-1416)                                 -> x7
+    v13986 LifetimeEnd(-1542)                               -> -
+    v13987 LifetimeEnd(-2)                                  -> -
+    v13988 StoreLocal { off=-1543, value=v13783, kind=V128 } -> -
+    v13989 Imm(0)                                           -> x0
     v13990 Imm(0)                                           -> x0
-    v13991 Imm(0)                                           -> x0
-    v13992 Imm(0)                                           -> x1
-    terminator Jmp(b663)   (exit_acc=v13991)
+    v13991 LocalAddr(-1416)                                 -> x7
+    v13992 Imm(0)                                           -> x0
+    terminator Jmp(b663)   (exit_acc=v13992)
   block 662  start_pc=0
     v2133 Imm(0)                                           -> x1
     v2134 Extend { value=v2130, kind=I32 }                 -> x1
-    v2135 Binop { op=add, lhs=v13989, rhs=v2130 }          -> x1
-    v2136 LoadIndexed { base=v13989, index=v2130, scale=1, kind=U8 } -> x1
+    v2135 Binop { op=add, lhs=v13991, rhs=v2130 }          -> x1
+    v2136 LoadIndexed { base=v13991, index=v2130, scale=1, kind=U8 } -> x1
     v2137 Extend { value=v2136, kind=I8 }                  -> x2
     v2138 BinopI { op=shr, lhs=v2137, rhs_imm=7 }          -> x2
     v2139 BinopI { op=and, lhs=v2138, rhs_imm=255 }        -> x6
@@ -12357,8 +12357,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v2143 Extend { value=v2130, kind=I32 }                 -> x8
     v2144 Binop { op=add, lhs=v2142, rhs=v2130 }           -> x8
     v2145 Imm(0)                                           -> x8
-    v2146 Binop { op=add, lhs=v13989, rhs=v2130 }          -> x8
-    v2147 LoadIndexed { base=v13989, index=v2130, scale=1, kind=U8 } -> x8
+    v2146 Binop { op=add, lhs=v13991, rhs=v2130 }          -> x8
+    v2147 LoadIndexed { base=v13991, index=v2130, scale=1, kind=U8 } -> x8
     v2148 BinopI { op=shl, lhs=v2136, rhs_imm=1 }          -> x1
     v2149 Extend { value=v2148, kind=I32 }                 -> x8
     v2150 BinopI { op=and, lhs=v2148, rhs_imm=255 }        -> x1
@@ -12371,7 +12371,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v2157 Extend { value=v2156, kind=I32, nsw }            -> x1
     terminator Jmp(b663)   (exit_acc=v2156)
   block 663  start_pc=0
-    v2130 Phi { incoming=[b661:v13991, b662:v2156], kind=I64 } -> x0
+    v2130 Phi { incoming=[b661:v13992, b662:v2156], kind=I64 } -> x0
     v2131 Extend { value=v2130, kind=I32 }                 -> x1
     v2132 BinopI { op=lt, lhs=v2130, rhs_imm=16 }          -> x1
     terminator Bz { cond=v2132, target=b664, fall=b662 }   (exit_acc=v2132)

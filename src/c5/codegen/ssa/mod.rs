@@ -18,6 +18,7 @@ pub(crate) mod loop_saves;
 pub(crate) mod mem2reg;
 pub(crate) mod native;
 pub(crate) mod phi_class;
+pub(crate) mod pressure_order;
 pub(crate) mod reg_alloc;
 pub(crate) mod remat;
 pub(crate) mod repair;

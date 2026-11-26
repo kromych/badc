@@ -2788,6 +2788,55 @@ fn aarch64_frames_spill_only_past_the_callee_saved_bank() {
     m.finish();
 }
 
+/// A loop body that issues every lane's loads, then every lane's operations
+/// keeps more vectors live than the register file holds; reordered to keep
+/// a lane's values together, it spills none and saves no callee-saved vector
+/// register: the eight-lane NEON syndrome on AArch64, and a four-lane one in
+/// GNU vectors on x86-64.
+#[test]
+fn a_body_issued_lane_by_stage_is_reordered_to_spill_nothing() {
+    const SRC: &str = "typedef unsigned v4u __attribute__((vector_size(16)));\n\
+void syndrome4(const v4u *src, v4u *out, int disks) {\n\
+    v4u p0 = src[0], p1 = src[1], p2 = src[2], p3 = src[3];\n\
+    v4u q0 = p0, q1 = p1, q2 = p2, q3 = p3;\n\
+    const v4u k = {0x1d, 0x1d, 0x1d, 0x1d};\n\
+    for (int z = 1; z < disks; z++) {\n\
+        const v4u *d = src + 4 * z;\n\
+        v4u d0 = d[0], d1 = d[1], d2 = d[2], d3 = d[3];\n\
+        p0 ^= d0; p1 ^= d1; p2 ^= d2; p3 ^= d3;\n\
+        v4u m0 = q0 >> 7, m1 = q1 >> 7, m2 = q2 >> 7, m3 = q3 >> 7;\n\
+        v4u s0 = q0 << 1, s1 = q1 << 1, s2 = q2 << 1, s3 = q3 << 1;\n\
+        m0 &= k; m1 &= k; m2 &= k; m3 &= k;\n\
+        q0 = s0 ^ m0 ^ d0; q1 = s1 ^ m1 ^ d1; q2 = s2 ^ m2 ^ d2; q3 = s3 ^ m3 ^ d3;\n\
+    }\n\
+    out[0] = p0; out[1] = p1; out[2] = p2; out[3] = p3;\n\
+    out[4] = q0; out[5] = q1; out[6] = q2; out[7] = q3;\n\
+}\n";
+    let header = |src: &str, name: &str, target: Target| {
+        let (body, _) = optimized_function_full_pool(src, name, target);
+        let field = |key: &str| {
+            let at = body
+                .find(key)
+                .unwrap_or_else(|| panic!("no `{key}`: {body}"));
+            let rest = &body[at + key.len()..];
+            rest[..rest.find([' ', '\n']).unwrap_or(rest.len())].to_string()
+        };
+        (field("spill_count="), field("fp_used="))
+    };
+    let raid6 = super::load_fixture("neon_raid6_checksum.c");
+    let mut m = Misses::default();
+    for (src, name, target) in [
+        (raid6.as_str(), "neon8_gen_syndrome", Target::LinuxAarch64),
+        (SRC, "syndrome4", Target::LinuxX64),
+    ] {
+        let (spills, saved) = header(src, name, target);
+        m.expect(spills == "0" && saved == "[]", || {
+            format!("{name} on {target:?}: spill_count={spills} fp_used={saved}")
+        });
+    }
+    m.finish();
+}
+
 /// The FMA form follows the operand that dies at the instruction: a
 /// multiplicand whose register holds the result becomes the
 /// overwritten operand of a 132/213 form (the addend then stays in

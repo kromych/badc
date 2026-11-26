@@ -82,11 +82,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	stxr	w1, x4, [x2]
                	cbnz	w1, <addr>
-               	mov	x2, x0
-               	cmp	x2, x5
+               	mov	x1, x0
+               	cmp	x1, x5
                	cset	x0, eq
                	cbnz	w0, <addr>
-               	str	x2, [x6]
+               	str	x1, [x6]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

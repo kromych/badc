@@ -187,7 +187,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x18               // =24
                	b	<addr>
-               	sub	x3, x29, #0x58
+               	sub	x1, x29, #0x58
                	sub	x0, x29, #0x78
                	stur	x0, [x29, #-0x58]
                	mov	x0, #0x1                // =1
@@ -196,7 +196,7 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x38]
                	stur	x2, [x29, #-0x30]
                	stur	x2, [x29, #-0x8]
-               	stur	x3, [x29, #-0x28]
+               	stur	x1, [x29, #-0x28]
                	stur	x0, [x29, #-0x20]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

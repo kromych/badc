@@ -244,9 +244,9 @@ Disassembly of section .text:
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	0x20(%rsp)
-               	movsd	<rip>, %xmm1 # <addr>
-               	vdivsd	<rip>, %xmm1, %xmm1
-               	movsd	%xmm1, -0x8(%rsp)
+               	movsd	<rip>, %xmm0 # <addr>
+               	vdivsd	<rip>, %xmm0, %xmm0
+               	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	0x30(%rsp)
                	fldt	0x10(%rsp)
@@ -264,8 +264,8 @@ Disassembly of section .text:
                	jne	<addr>
                	fldt	0x30(%rsp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
-               	ucomisd	<rip>, %xmm1
+               	movsd	-0x8(%rsp), %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x17, %eax
@@ -286,8 +286,8 @@ Disassembly of section .text:
                	fstpt	0x40(%rsp)
                	fldt	0x40(%rsp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm2
-               	ucomisd	<rip>, %xmm2
+               	movsd	-0x8(%rsp), %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	fldt	0x10(%rsp)
@@ -329,8 +329,8 @@ Disassembly of section .text:
                	fstpt	0x10(%rsp)
                	fldt	0x10(%rsp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
-               	vaddsd	<rip>, %xmm1, %xmm0
+               	movsd	-0x8(%rsp), %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	0x10(%rsp)
@@ -412,8 +412,8 @@ Disassembly of section .text:
                	jne	<addr>
                	fldt	0x10(%rsp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
-               	ucomisd	<rip>, %xmm1
+               	movsd	-0x8(%rsp), %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1e, %eax

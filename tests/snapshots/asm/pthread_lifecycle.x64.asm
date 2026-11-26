@@ -200,20 +200,20 @@ Disassembly of section .text:
                	movl	$0x4e, %eax
                	addq	$0x98, %rsp
                	retq
-               	xorl	%r8d, %r8d
-               	movq	%r8, 0x8(%rsp)
+               	xorl	%ecx, %ecx
+               	movq	%rcx, 0x8(%rsp)
                	leaq	0x28(%rsp), %rdi
                	leaq	0x58(%rsp), %rsi
                	leaq	-<rip>, %rdx # <addr>
                	xorl	%ecx, %ecx
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	0x8(%rsp), %r8
-               	nopl	(%rax,%rax)
+               	movq	0x8(%rsp), %rcx
+               	nopw	(%rax,%rax)
                	testq	%rax, %rax
                	jne	<addr>
-               	incq	%r8
-               	cmpl	$0x4, %r8d
+               	incq	%rcx
+               	cmpl	$0x4, %ecx
                	jl	<addr>
                	leaq	0x58(%rsp), %rdi
                	callq	<addr>

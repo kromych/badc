@@ -299,23 +299,24 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	addq	$0x58, %rsp
                	retq
-               	leaq	0x28(%rsp), %rdi
+               	leaq	0x28(%rsp), %rcx
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdi)
+               	movups	%xmm14, (%rcx)
                	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rdi)
+               	movups	%xmm14, 0x10(%rcx)
                	movl	0x20(%rax), %r10d
-               	movl	%r10d, 0x20(%rdi)
-               	movq	%rdi, (%rsp)
+               	movl	%r10d, 0x20(%rcx)
+               	movq	%rcx, (%rsp)
+               	movq	%rcx, %rdi
                	xorl	%esi, %esi
                	movl	$0x8, %edx
                	movl	$0x4, %ecx
                	callq	<addr>
-               	movq	(%rsp), %rdi
+               	movq	(%rsp), %rcx
                	xorl	%eax, %eax
-               	movl	0x28(%rsp,%rax,4), %ecx
-               	cmpl	$0x4, %ecx
+               	movl	0x28(%rsp,%rax,4), %edx
+               	cmpl	$0x4, %edx
                	jg	<addr>
                	incq	%rax
                	nopl	(%rax,%rax)
@@ -323,8 +324,8 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0x9, %eax
                	jge	<addr>
-               	movl	0x28(%rsp,%rax,4), %ecx
-               	cmpl	$0x4, %ecx
+               	movl	0x28(%rsp,%rax,4), %edx
+               	cmpl	$0x4, %edx
                	jl	<addr>
                	incq	%rax
                	nopw	(%rax,%rax)

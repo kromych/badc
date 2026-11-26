@@ -269,21 +269,23 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	xorl	%edx, %edx
                	callq	<addr>
-               	movq	%rax, %rdi
-               	testl	%edi, %edi
+               	movq	%rax, %rcx
+               	testl	%ecx, %ecx
                	jl	<addr>
-               	movq	%rdi, 0x8(%rsp)
+               	movq	%rcx, 0x8(%rsp)
+               	movq	%rcx, %rdi
                	movl	$0x29, %esi
                	movl	$0x31, %edx
                	leaq	0x50(%rsp), %rcx
                	movl	$0x4, %r8d
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	0x8(%rsp), %rdi
+               	movq	0x8(%rsp), %rcx
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1b, %eax
                	jmp	<addr>
+               	movq	%rcx, %rdi
                	callq	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>

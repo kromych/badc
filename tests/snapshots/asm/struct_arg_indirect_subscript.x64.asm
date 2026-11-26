@@ -66,12 +66,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
+               	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
-               	movsd	<rip>, %xmm2
-               	vmulsd	<rip>, %xmm2, %xmm0
-               	vfmadd132sd	<rip>, %xmm0, %xmm1 # xmm1 = (xmm1 * mem) + xmm0
-               	vaddsd	<rip>, %xmm1, %xmm1
-               	ucomisd	<rip>, %xmm1
+               	vmulsd	<rip>, %xmm1, %xmm1
+               	vfmadd132sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
+               	vaddsd	<rip>, %xmm0, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax

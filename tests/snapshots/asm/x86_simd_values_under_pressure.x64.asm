@@ -481,8 +481,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm0
                	sqrtss	%xmm0, %xmm0
-               	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
-               	ucomiss	<rip>, %xmm2
+               	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]

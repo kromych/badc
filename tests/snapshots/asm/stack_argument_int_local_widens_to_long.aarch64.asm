@@ -50,12 +50,12 @@ Disassembly of section .text:
                	sxtw	x7, w0
                	mov	x17, #-0x3              // =-3
                	mul	x0, x20, x17
-               	sxtw	x1, w0
+               	sxtw	x0, w0
                	mov	x17, #-0x4              // =-4
-               	mul	x0, x20, x17
-               	sxtw	x2, w0
-               	str	x1, [sp]
-               	str	x2, [sp, #0x8]
+               	mul	x1, x20, x17
+               	sxtw	x1, w1
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
                	mov	x0, #0x0                // =0
                	mov	x1, #0x0                // =0
                	mov	x2, #0x0                // =0
@@ -75,9 +75,9 @@ Disassembly of section .text:
                	mov	x0, #-0x7fffffff        // =-2147483647
                	cmp	w20, #0x0
                	cset	x1, gt
-               	sub	x1, x0, x1
+               	sub	x0, x0, x1
                	str	xzr, [sp]
-               	str	x1, [sp, #0x8]
+               	str	x0, [sp, #0x8]
                	mov	x0, #0x0                // =0
                	mov	x1, #0x0                // =0
                	mov	x2, #0x0                // =0

@@ -336,8 +336,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x3, x29, #0x60
-               	str	x0, [x3]
+               	sub	x2, x29, #0x60
+               	str	x0, [x2]
                	fmov	d0, #2.00000000
                	stur	d0, [x29, #-0x58]
                	sub	x1, x29, #0x48
@@ -347,7 +347,7 @@ Disassembly of section .text:
                	ldurb	w0, [x29, #-0x58]
                	add	x0, x0, #0x1
                	sturb	w0, [x29, #-0x48]
-               	mov	x0, x3
+               	mov	x0, x2
                	mov	x2, #0x8                // =8
                	bl	<addr>
                	sxtw	x0, w0

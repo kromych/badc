@@ -143,27 +143,27 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	mov	x2, x0
-               	cbz	x2, <addr>
-               	str	x2, [sp, #0x8]
-               	mov	x0, x2
+               	mov	x1, x0
+               	cbz	x1, <addr>
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	bl	<addr>
-               	ldr	x2, [sp, #0x8]
+               	ldr	x1, [sp, #0x8]
                	cmp	x0, #0x3
                	b.ne	<addr>
-               	str	x2, [sp, #0x8]
-               	mov	x0, x2
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x8]
+               	ldr	x1, [sp, #0x8]
                	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x2
+               	mov	x0, x1
                	bl	<addr>
                	sub	x0, x29, #0x20
                	mov	x1, #0x20               // =32

@@ -115,30 +115,30 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	mov	x0, #-0x1               // =-1
-               	str	x0, [x3]
-               	str	x0, [x3, #0x8]
-               	str	x0, [x3, #0x10]
-               	str	x0, [x3, #0x18]
-               	str	x0, [x3, #0x20]
-               	str	x0, [x3, #0x28]
-               	str	x0, [x3, #0x30]
-               	str	x0, [x3, #0x38]
-               	str	x3, [sp, #0x8]
-               	mov	x0, x3
+               	str	x0, [x1]
+               	str	x0, [x1, #0x8]
+               	str	x0, [x1, #0x10]
+               	str	x0, [x1, #0x18]
+               	str	x0, [x1, #0x20]
+               	str	x0, [x1, #0x28]
+               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x38]
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	mov	x1, #0x0                // =0
                	mov	x2, #0x28               // =40
                	bl	<addr>
-               	ldr	x3, [sp, #0x8]
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	ldrsw	x2, [x3, x0, lsl #2]
+               	ldr	x1, [sp, #0x8]
+               	mov	x2, #0x0                // =0
+               	mov	x0, x2
+               	ldrsw	x3, [x1, x0, lsl #2]
                	mov	x4, #-0x1               // =-1
                	cmp	w0, #0xa
-               	csel	x4, x1, x4, lt
-               	cmp	w2, w4
+               	csel	x4, x2, x4, lt
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

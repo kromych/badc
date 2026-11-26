@@ -81,8 +81,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x1, [x0]
-               	stur	w1, [x29, #-0x28]
+               	ldrsw	x0, [x0]
+               	stur	w0, [x29, #-0x28]
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x10]
                	stur	w0, [x29, #-0x24]

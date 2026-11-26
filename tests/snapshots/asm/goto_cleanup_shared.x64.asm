@@ -221,8 +221,8 @@ Disassembly of section .text:
                	subq	$0x1, %r10
                	jne	<addr>
                	movq	%r8, %rsp
-               	movq	-0x20(%rbp), %r10
                	movb	%al, (%r8)
+               	movq	-0x20(%rbp), %r10
                	nopw	(%rax,%rax)
                	testq	%rdi, %rdi
                	jne	<addr>

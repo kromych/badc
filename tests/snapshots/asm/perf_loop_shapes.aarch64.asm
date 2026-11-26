@@ -280,33 +280,33 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x4, x29, #0x28
+               	sub	x1, x29, #0x28
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x4]
+               	stp	x16, x17, [x1]
                	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x4, #0x10]
+               	stp	x16, x17, [x1, #0x10]
                	ldr	w16, [x0, #0x20]
-               	str	w16, [x4, #0x20]
-               	str	x4, [sp]
-               	mov	x0, x4
+               	str	w16, [x1, #0x20]
+               	str	x1, [sp]
+               	mov	x0, x1
                	mov	x1, #0x0                // =0
                	mov	x2, #0x8                // =8
                	mov	x3, #0x4                // =4
                	bl	<addr>
-               	ldr	x4, [sp]
+               	ldr	x1, [sp]
                	mov	x0, #0x0                // =0
-               	ldrsw	x1, [x4, x0, lsl #2]
-               	cmp	w1, #0x4
+               	ldrsw	x2, [x1, x0, lsl #2]
+               	cmp	w2, #0x4
                	b.gt	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x9
                	b.lt	<addr>
                	cmp	w0, #0x9
                	b.ge	<addr>
-               	ldrsw	x1, [x4, x0, lsl #2]
-               	cmp	w1, #0x4
+               	ldrsw	x2, [x1, x0, lsl #2]
+               	cmp	w2, #0x4
                	b.lt	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x9

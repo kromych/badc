@@ -28,8 +28,8 @@ Disassembly of section .text:
 <main>:
                	subq	$0x28, %rsp
                	movl	$0x3f800000, 0x18(%rsp) # imm = 0x3F800000
-               	movss	0x18(%rsp), %xmm1
-               	vcvtss2sd	%xmm1, %xmm1, %xmm0
+               	movss	0x18(%rsp), %xmm0
+               	cvtss2sd	%xmm0, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movss	%xmm0, 0x18(%rsp)
@@ -54,8 +54,8 @@ Disassembly of section .text:
                	vaddsd	<rip>, %xmm0, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movss	%xmm0, 0x10(%rsp)
-               	movsd	0x18(%rsp), %xmm1
-               	vaddsd	<rip>, %xmm1, %xmm0
+               	movsd	0x18(%rsp), %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	%xmm0, 0x18(%rsp)
                	movss	0x10(%rsp), %xmm1
                	ucomiss	<rip>, %xmm1

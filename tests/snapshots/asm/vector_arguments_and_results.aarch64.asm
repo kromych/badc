@@ -180,13 +180,13 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x7]
-               	sub	x1, x29, #0x40
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x1]
+               	sub	x0, x29, #0x40
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
                	ldr	q0, [x7]
-               	ldr	q1, [x1]
+               	ldr	q1, [x0]
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	smov	x0, v0.s[0]

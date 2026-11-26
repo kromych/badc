@@ -94,8 +94,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xf, %eax
                	retq
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	<rip>, %xmm1
+               	movsd	<rip>, %xmm0 # <addr>
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x10, %eax

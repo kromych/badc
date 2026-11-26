@@ -26,14 +26,14 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movss	<rip>, %xmm1 # <addr>
-               	ucomiss	<rip>, %xmm1
+               	movss	<rip>, %xmm0 # <addr>
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	<rip>, %xmm1
+               	movsd	<rip>, %xmm0 # <addr>
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
@@ -62,8 +62,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	<rip>, %xmm1
+               	movsd	<rip>, %xmm0 # <addr>
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax

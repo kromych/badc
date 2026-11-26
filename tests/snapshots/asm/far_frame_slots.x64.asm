@@ -333,8 +333,8 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %rcx
                	subq	%rcx, %rax
                	movq	%rax, -0x18(%rbp)
-               	movsd	-0x10(%rbp), %xmm1
-               	vaddsd	<rip>, %xmm1, %xmm0
+               	movsd	-0x10(%rbp), %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
                	movl	-0x20(%rbp), %edx
                	leaq	(%rbx,%rbx,2), %rsi
@@ -442,13 +442,13 @@ Disassembly of section .text:
                	movzbq	(%rcx), %rcx
                	subq	%rcx, %rax
                	movl	%eax, -0x10(%rbp)
-               	movss	-0x8(%rbp), %xmm1
-               	vmulss	<rip>, %xmm1, %xmm0
+               	movss	-0x8(%rbp), %xmm0
+               	vmulss	<rip>, %xmm0, %xmm0
                	movss	%xmm0, -0x8(%rbp)
                	fldt	-0x19d50(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
-               	vaddsd	<rip>, %xmm1, %xmm0
+               	movsd	-0x8(%rsp), %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x19d50(%rbp)

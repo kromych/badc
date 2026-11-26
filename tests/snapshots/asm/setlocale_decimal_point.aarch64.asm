@@ -56,19 +56,19 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x30
                	ret
                	bl	<addr>
-               	mov	x2, x0
-               	ldr	x0, [x2]
-               	str	x2, [sp, #0x18]
+               	mov	x1, x0
+               	ldr	x0, [x1]
+               	str	x1, [sp, #0x18]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x18]
+               	ldr	x1, [sp, #0x18]
                	cbz	x0, <addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
-               	ldr	x3, [x2]
+               	ldr	x3, [x1]
                	mov	x2, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

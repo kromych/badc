@@ -251,22 +251,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x1                // =1
-               	mov	x3, #0x2                // =2
-               	mov	x4, #0x3                // =3
-               	mov	x5, #0x4                // =4
-               	mov	x6, #0x5                // =5
-               	mov	x7, #0x6                // =6
-               	mov	x8, #0x7                // =7
-               	mov	x9, #0x8                // =8
-               	stur	x2, [x29, #-0x40]
-               	stur	x3, [x29, #-0x38]
-               	stur	x4, [x29, #-0x30]
-               	stur	x5, [x29, #-0x28]
-               	stur	x6, [x29, #-0x20]
-               	stur	x7, [x29, #-0x18]
-               	stur	x8, [x29, #-0x10]
-               	stur	x9, [x29, #-0x8]
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
+               	mov	x7, #0x8                // =8
+               	stur	x0, [x29, #-0x40]
+               	stur	x1, [x29, #-0x38]
+               	stur	x2, [x29, #-0x30]
+               	stur	x3, [x29, #-0x28]
+               	stur	x4, [x29, #-0x20]
+               	stur	x5, [x29, #-0x18]
+               	stur	x6, [x29, #-0x10]
+               	stur	x7, [x29, #-0x8]
                	sub	x0, x29, #0x40
                	mov	x1, #0x9                // =9
                	sub	x2, x29, #0x20

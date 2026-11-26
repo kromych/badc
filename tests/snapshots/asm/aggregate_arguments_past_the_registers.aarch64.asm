@@ -131,17 +131,17 @@ Disassembly of section .text:
                	stp	x16, x17, [x0, #0x10]
                	ldp	x16, x17, [x1, #0x20]
                	stp	x16, x17, [x0, #0x20]
-               	add	x8, x0, #0x10
+               	add	x0, x0, #0x10
                	mov	x2, #0x3                // =3
                	stur	x2, [x29, #-0x8]
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	sub	x7, x29, #0x50
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldp	x16, x17, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldp	x16, x17, [x1]
                	stp	x16, x17, [x7]
-               	add	x0, x8, #0x10
+               	add	x0, x0, #0x10
                	mov	x16, x7
                	ldr	x17, [x16]
                	str	x17, [sp]

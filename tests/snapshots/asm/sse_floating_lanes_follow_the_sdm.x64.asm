@@ -3519,8 +3519,7 @@ Disassembly of section .text:
                	vdivps	%xmm1, %xmm2, %xmm1
                	vpermilps	$0x0, %xmm3, %xmm2 # xmm2 = xmm3[0,0,0,0]
                	vcvtss2sd	%xmm0, %xmm0, %xmm3
-               	vcvtss2sd	%xmm2, %xmm2, %xmm4
-               	movapd	%xmm4, %xmm2
+               	cvtss2sd	%xmm2, %xmm2
                	vfmsub213sd	<rip>, %xmm3, %xmm2 # xmm2 = (xmm3 * xmm2) - mem
                                                 # <addr>
                	vpermilps	$0x0, %xmm1, %xmm3 # xmm3 = xmm1[0,0,0,0]
@@ -3529,6 +3528,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm1, %xmm1
                	vfmsub213sd	<rip>, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) - mem
                                                 # <addr>
+               	nop
                	comisd	<rip>, %xmm2 # <addr>
                	ja	<addr>
                	movsd	<rip>, %xmm1 # <addr>

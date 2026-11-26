@@ -30,9 +30,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	sub	sp, sp, #0x20
-               	mov	x1, #0x1                // =1
-               	strb	w1, [sp, #0x20]
-               	str	x1, [sp]
+               	mov	x0, #0x1                // =1
+               	strb	w0, [sp, #0x20]
+               	str	x0, [sp]
                	mov	x0, #0x2                // =2
                	str	x0, [sp, #0x8]
                	mov	x0, #0x3                // =3

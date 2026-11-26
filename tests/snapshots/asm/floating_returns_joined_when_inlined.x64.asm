@@ -82,31 +82,31 @@ Disassembly of section .text:
                	retq
 
 <fsum>:
-               	xorl	%ecx, %ecx
+               	xorl	%eax, %eax
                	xorps	%xmm0, %xmm0
                	jmp	<addr>
-               	incq	%rcx
-               	cmpl	%esi, %ecx
+               	incq	%rax
+               	cmpl	%esi, %eax
                	jge	<addr>
-               	movq	%rcx, %rax
-               	shlq	$0x5, %rax
-               	leaq	(%rdi,%rax), %rdx
-               	movl	(%rdx), %eax
+               	movq	%rax, %rcx
+               	shlq	$0x5, %rcx
+               	leaq	(%rdi,%rcx), %rdx
+               	movl	(%rdx), %ecx
                	nop
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %ecx
                	je	<addr>
-               	cmpl	$0x1, %eax
+               	cmpl	$0x1, %ecx
                	jne	<addr>
                	movss	0x18(%rdx), %xmm1
                	addss	%xmm1, %xmm0
                	jmp	<addr>
-               	cmpl	$0x2, %eax
+               	cmpl	$0x2, %ecx
                	jne	<addr>
-               	movq	0x8(%rdx), %rax
+               	movq	0x8(%rdx), %rcx
                	xorps	%xmm1, %xmm1
-               	cvtsi2ss	%rax, %xmm1
+               	cvtsi2ss	%rcx, %xmm1
                	jmp	<addr>
-               	cmpl	$0x5, %eax
+               	cmpl	$0x5, %ecx
                	jne	<addr>
                	movl	$0x7fc00000, %r11d      # imm = 0x7FC00000
                	movq	%r11, %xmm1

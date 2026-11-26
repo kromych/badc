@@ -289,16 +289,16 @@ Disassembly of section .text:
                	shlxq	%rcx, %rdx, %rcx
                	orq	%rcx, %rbx
                	jmp	<addr>
-               	movl	$0x9e3779b9, %r8d       # imm = 0x9E3779B9
-               	addq	%rbx, %r8
+               	movl	$0x9e3779b9, %edi       # imm = 0x9E3779B9
+               	addq	%rbx, %rdi
                	movl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
-               	xorq	%r8, %rax
+               	xorq	%rdi, %rax
                	movl	%eax, %edx
                	xorl	%eax, %eax
                	movq	%rax, %r12
                	jmp	<addr>
                	incq	%rax
-               	nopl	(%rax)
+               	nopl	(%rax,%rax)
                	cmpl	$0x20, %eax
                	jge	<addr>
                	shrxq	%rax, %rdx, %rcx
@@ -310,10 +310,10 @@ Disassembly of section .text:
                	shlxq	%rcx, %rsi, %rcx
                	orq	%rcx, %r12
                	jmp	<addr>
-               	movq	%r8, 0x18(%rsp)
+               	movq	%rdi, 0x18(%rsp)
                	leaq	0x20(%rsp), %rdi
                	callq	<addr>
-               	movq	0x18(%rsp), %r8
+               	movq	0x18(%rsp), %rdi
                	movl	0x20(%rsp), %eax
                	cmpl	$0x401e3754, %eax       # imm = 0x401E3754
                	jne	<addr>
@@ -321,7 +321,7 @@ Disassembly of section .text:
                	cmpl	%r12d, %eax
                	jne	<addr>
                	movl	0x28(%rsp), %eax
-               	cmpl	%r8d, %eax
+               	cmpl	%edi, %eax
                	jne	<addr>
                	movl	0x2c(%rsp), %eax
                	cmpl	%ebx, %eax

@@ -220,12 +220,12 @@ Disassembly of section .text:
                	add	x16, sp, #0x80
                	fmov	x17, d8
                	bl	<addr>
-               	sub	x1, x29, #0x30
+               	sub	x0, x29, #0x30
                	add	x16, sp, #0x70
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
-               	ldr	q1, [x1]
+               	ldr	q1, [x0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

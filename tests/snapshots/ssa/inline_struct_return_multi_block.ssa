@@ -5,30 +5,30 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
     v3   ParamRef(1, kind=I64)                            -> x6
-    v4   Imm(0)                                           -> x0
-    v5   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
-    v6   BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> x0
+    v4   Imm(0)                                           -> -
+    v5   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> -
+    v6   BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> -
     terminator Bnz { cond=v3, target=b3, fall=b1 }   (low word)   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(-1)                                          -> x0
-    v8   Imm(0)                                           -> x1
+    v8   Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v7)
   block 2  start_pc=0
     v17  Phi { incoming=[b1:v7, b3:v15], kind=I64 }       -> x0
-    v18  Imm(0)                                           -> x1
-    v19  Extend { value=v17, kind=I32 }                   -> x1
+    v18  Imm(0)                                           -> -
+    v19  Extend { value=v17, kind=I32 }                   -> -
     terminator Return(v17)   (exit_acc=v17)
   block 3  start_pc=0
-    v9   Imm(0)                                           -> x0
-    v10  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
-    v11  Imm(4)                                           -> x0
+    v9   Imm(0)                                           -> -
+    v10  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> -
+    v11  Imm(4)                                           -> -
     v12  BinopI { op=and, lhs=v3, rhs_imm=3 }             -> x6
-    v13  BinopI { op=shl, lhs=v12, rhs_imm=2 }            -> x0
-    v14  Binop { op=add, lhs=v1, rhs=v13 }                -> x0
+    v13  BinopI { op=shl, lhs=v12, rhs_imm=2 }            -> -
+    v14  Binop { op=add, lhs=v1, rhs=v13 }                -> -
     v15  LoadIndexed { base=v1, index=v12, scale=4, kind=I32 } -> x0
-    v16  Imm(0)                                           -> x1
+    v16  Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
@@ -36,619 +36,619 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
-    v2   Imm(0)                                           -> x0
-    v3   ImmData(112)                                     -> x0
-    v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x0
-    v6   ImmData(16)                                      -> x0
-    v7   Imm(0)                                           -> x0
-    v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x0
-    v10  Imm(0)                                           -> x0
-    v11  Imm(0)                                           -> x0
-    v12  Imm(0)                                           -> x0
-    v13  Imm(0)                                           -> x0
-    v14  Imm(0)                                           -> x0
-    v15  Imm(0)                                           -> x0
-    v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x0
-    v18  Imm(0)                                           -> x0
-    v19  BinopI { op=add, lhs=v16, rhs_imm=0 }            -> x0
-    v20  Imm(1)                                           -> x0
-    v21  Imm(0)                                           -> x0
-    v22  Imm(0)                                           -> x0
-    v23  Imm(0)                                           -> x0
-    v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x0
-    v26  BinopI { op=add, lhs=v6, rhs_imm=0 }             -> x0
-    v27  Imm(1)                                           -> x0
-    v28  Imm(0)                                           -> x0
-    v29  Imm(3)                                           -> x0
-    v30  Imm(0)                                           -> x0
-    v31  Imm(0)                                           -> x0
-    v32  Imm(0)                                           -> x0
-    v33  Imm(254)                                         -> x0
-    v34  Imm(0)                                           -> x0
-    v35  Imm(200)                                         -> x0
-    v36  Imm(0)                                           -> x0
-    v37  Imm(1234605616436508552)                         -> x0
-    v38  Imm(0)                                           -> x0
-    v39  Imm(0)                                           -> x0
-    v40  Imm(0)                                           -> x0
-    v41  Imm(1)                                           -> x0
-    v42  Imm(0)                                           -> x0
-    v43  Imm(3)                                           -> x0
-    v44  Imm(0)                                           -> x0
-    v45  Imm(0)                                           -> x0
-    v46  Imm(0)                                           -> x0
-    v47  Imm(254)                                         -> x0
-    v48  Imm(0)                                           -> x0
-    v49  Imm(200)                                         -> x0
-    v50  Imm(0)                                           -> x0
-    v51  Imm(0)                                           -> x0
-    v52  Imm(0)                                           -> x0
+    v1   Imm(0)                                           -> -
+    v2   Imm(0)                                           -> -
+    v3   ImmData(112)                                     -> -
+    v4   Imm(0)                                           -> -
+    v5   Imm(0)                                           -> -
+    v6   ImmData(16)                                      -> -
+    v7   Imm(0)                                           -> -
+    v8   Imm(0)                                           -> -
+    v9   Imm(0)                                           -> -
+    v10  Imm(0)                                           -> -
+    v11  Imm(0)                                           -> -
+    v12  Imm(0)                                           -> -
+    v13  Imm(0)                                           -> -
+    v14  Imm(0)                                           -> -
+    v15  Imm(0)                                           -> -
+    v16  ImmData(16)                                      -> -
+    v17  Imm(0)                                           -> -
+    v18  Imm(0)                                           -> -
+    v19  BinopI { op=add, lhs=v16, rhs_imm=0 }            -> -
+    v20  Imm(1)                                           -> -
+    v21  Imm(0)                                           -> -
+    v22  Imm(0)                                           -> -
+    v23  Imm(0)                                           -> -
+    v24  Imm(0)                                           -> -
+    v25  Imm(0)                                           -> -
+    v26  BinopI { op=add, lhs=v6, rhs_imm=0 }             -> -
+    v27  Imm(1)                                           -> -
+    v28  Imm(0)                                           -> -
+    v29  Imm(3)                                           -> -
+    v30  Imm(0)                                           -> -
+    v31  Imm(0)                                           -> -
+    v32  Imm(0)                                           -> -
+    v33  Imm(254)                                         -> -
+    v34  Imm(0)                                           -> -
+    v35  Imm(200)                                         -> -
+    v36  Imm(0)                                           -> -
+    v37  Imm(1234605616436508552)                         -> -
+    v38  Imm(0)                                           -> -
+    v39  Imm(0)                                           -> -
+    v40  Imm(0)                                           -> -
+    v41  Imm(1)                                           -> -
+    v42  Imm(0)                                           -> -
+    v43  Imm(3)                                           -> -
+    v44  Imm(0)                                           -> -
+    v45  Imm(0)                                           -> -
+    v46  Imm(0)                                           -> -
+    v47  Imm(254)                                         -> -
+    v48  Imm(0)                                           -> -
+    v49  Imm(200)                                         -> -
+    v50  Imm(0)                                           -> -
+    v51  Imm(0)                                           -> -
+    v52  Imm(0)                                           -> -
     v53  LifetimeEnd(0)                                   -> -
-    v54  Imm(0)                                           -> x0
-    v55  Imm(1)                                           -> x0
-    v56  Imm(1)                                           -> x0
-    v57  Imm(0)                                           -> x0
-    v58  Imm(1)                                           -> x0
-    v59  Imm(1)                                           -> x0
-    v60  Imm(4)                                           -> x0
-    v61  BinopI { op=add, lhs=v3, rhs_imm=4 }             -> x0
-    v62  Imm(20)                                          -> x0
-    v63  Imm(0)                                           -> x0
-    v64  Imm(20)                                          -> x0
-    v65  Imm(20)                                          -> x0
-    v66  Imm(0)                                           -> x0
-    v67  Imm(0)                                           -> x0
-    v68  Imm(0)                                           -> x0
-    v69  Imm(3)                                           -> x0
-    v70  Imm(23)                                          -> x0
-    v71  Imm(0)                                           -> x0
-    v72  Imm(0)                                           -> x0
-    v73  Imm(0)                                           -> x0
-    v74  Imm(23)                                          -> x0
-    v75  Imm(0)                                           -> x0
-    v76  Imm(0)                                           -> x0
-    v77  Imm(-2)                                          -> x0
-    v78  Imm(21)                                          -> x0
-    v79  Imm(0)                                           -> x0
-    v80  Imm(0)                                           -> x0
-    v81  Imm(200)                                         -> x0
-    v82  Imm(221)                                         -> x0
-    v83  Imm(0)                                           -> x0
-    v84  Imm(0)                                           -> x0
-    v85  Imm(0)                                           -> x0
-    v86  Imm(30600)                                       -> x0
-    v87  Imm(30821)                                       -> x0
+    v54  Imm(0)                                           -> -
+    v55  Imm(1)                                           -> -
+    v56  Imm(1)                                           -> -
+    v57  Imm(0)                                           -> -
+    v58  Imm(1)                                           -> -
+    v59  Imm(1)                                           -> -
+    v60  Imm(4)                                           -> -
+    v61  BinopI { op=add, lhs=v3, rhs_imm=4 }             -> -
+    v62  Imm(20)                                          -> -
+    v63  Imm(0)                                           -> -
+    v64  Imm(20)                                          -> -
+    v65  Imm(20)                                          -> -
+    v66  Imm(0)                                           -> -
+    v67  Imm(0)                                           -> -
+    v68  Imm(0)                                           -> -
+    v69  Imm(3)                                           -> -
+    v70  Imm(23)                                          -> -
+    v71  Imm(0)                                           -> -
+    v72  Imm(0)                                           -> -
+    v73  Imm(0)                                           -> -
+    v74  Imm(23)                                          -> -
+    v75  Imm(0)                                           -> -
+    v76  Imm(0)                                           -> -
+    v77  Imm(-2)                                          -> -
+    v78  Imm(21)                                          -> -
+    v79  Imm(0)                                           -> -
+    v80  Imm(0)                                           -> -
+    v81  Imm(200)                                         -> -
+    v82  Imm(221)                                         -> -
+    v83  Imm(0)                                           -> -
+    v84  Imm(0)                                           -> -
+    v85  Imm(0)                                           -> -
+    v86  Imm(30600)                                       -> -
+    v87  Imm(30821)                                       -> -
     v88  LifetimeEnd(0)                                   -> -
-    v89  Imm(0)                                           -> x0
-    v90  Imm(23)                                          -> x0
-    v91  Imm(21)                                          -> x0
-    v92  Imm(221)                                         -> x0
-    v93  Imm(30821)                                       -> x0
-    v94  Imm(0)                                           -> x0
-    v95  ImmData(112)                                     -> x0
-    v96  Imm(32)                                          -> x0
-    v97  Imm(0)                                           -> x0
-    v98  Imm(32)                                          -> x0
-    v99  ImmData(16)                                      -> x0
-    v100 Imm(32)                                          -> x0
-    v101 Imm(32)                                          -> x0
-    v102 Imm(1)                                           -> x0
-    v103 Imm(1)                                           -> x0
-    v104 Imm(0)                                           -> x0
-    v105 Imm(0)                                           -> x0
-    v106 Imm(1)                                           -> x0
-    v107 Imm(0)                                           -> x0
-    v108 Imm(0)                                           -> x0
-    v109 ImmData(16)                                      -> x0
-    v110 Imm(1)                                           -> x0
-    v111 Imm(24)                                          -> x0
-    v112 BinopI { op=add, lhs=v109, rhs_imm=24 }          -> x0
-    v113 Imm(7)                                           -> x0
-    v114 Imm(0)                                           -> x0
-    v115 Imm(0)                                           -> x0
-    v116 Imm(1)                                           -> x0
-    v117 Imm(1)                                           -> x0
-    v118 Imm(24)                                          -> x0
-    v119 BinopI { op=add, lhs=v99, rhs_imm=24 }           -> x0
-    v120 Imm(7)                                           -> x0
-    v121 Imm(0)                                           -> x0
-    v122 Imm(1)                                           -> x0
-    v123 Imm(0)                                           -> x0
-    v124 Imm(1)                                           -> x0
-    v125 Imm(0)                                           -> x0
-    v126 Imm(255)                                         -> x0
-    v127 Imm(0)                                           -> x0
-    v128 Imm(201)                                         -> x0
-    v129 Imm(0)                                           -> x0
-    v130 Imm(4294967295)                                  -> x0
-    v131 Imm(0)                                           -> x0
-    v132 Imm(0)                                           -> x0
-    v133 Imm(0)                                           -> x0
-    v134 Imm(7)                                           -> x0
-    v135 Imm(0)                                           -> x0
-    v136 Imm(1)                                           -> x0
-    v137 Imm(0)                                           -> x0
-    v138 Imm(1)                                           -> x0
-    v139 Imm(0)                                           -> x0
-    v140 Imm(255)                                         -> x0
-    v141 Imm(0)                                           -> x0
-    v142 Imm(201)                                         -> x0
-    v143 Imm(0)                                           -> x0
-    v144 Imm(0)                                           -> x0
-    v145 Imm(0)                                           -> x0
+    v89  Imm(0)                                           -> -
+    v90  Imm(23)                                          -> -
+    v91  Imm(21)                                          -> -
+    v92  Imm(221)                                         -> -
+    v93  Imm(30821)                                       -> -
+    v94  Imm(0)                                           -> -
+    v95  ImmData(112)                                     -> -
+    v96  Imm(32)                                          -> -
+    v97  Imm(0)                                           -> -
+    v98  Imm(32)                                          -> -
+    v99  ImmData(16)                                      -> -
+    v100 Imm(32)                                          -> -
+    v101 Imm(32)                                          -> -
+    v102 Imm(1)                                           -> -
+    v103 Imm(1)                                           -> -
+    v104 Imm(0)                                           -> -
+    v105 Imm(0)                                           -> -
+    v106 Imm(1)                                           -> -
+    v107 Imm(0)                                           -> -
+    v108 Imm(0)                                           -> -
+    v109 ImmData(16)                                      -> -
+    v110 Imm(1)                                           -> -
+    v111 Imm(24)                                          -> -
+    v112 BinopI { op=add, lhs=v109, rhs_imm=24 }          -> -
+    v113 Imm(7)                                           -> -
+    v114 Imm(0)                                           -> -
+    v115 Imm(0)                                           -> -
+    v116 Imm(1)                                           -> -
+    v117 Imm(1)                                           -> -
+    v118 Imm(24)                                          -> -
+    v119 BinopI { op=add, lhs=v99, rhs_imm=24 }           -> -
+    v120 Imm(7)                                           -> -
+    v121 Imm(0)                                           -> -
+    v122 Imm(1)                                           -> -
+    v123 Imm(0)                                           -> -
+    v124 Imm(1)                                           -> -
+    v125 Imm(0)                                           -> -
+    v126 Imm(255)                                         -> -
+    v127 Imm(0)                                           -> -
+    v128 Imm(201)                                         -> -
+    v129 Imm(0)                                           -> -
+    v130 Imm(4294967295)                                  -> -
+    v131 Imm(0)                                           -> -
+    v132 Imm(0)                                           -> -
+    v133 Imm(0)                                           -> -
+    v134 Imm(7)                                           -> -
+    v135 Imm(0)                                           -> -
+    v136 Imm(1)                                           -> -
+    v137 Imm(0)                                           -> -
+    v138 Imm(1)                                           -> -
+    v139 Imm(0)                                           -> -
+    v140 Imm(255)                                         -> -
+    v141 Imm(0)                                           -> -
+    v142 Imm(201)                                         -> -
+    v143 Imm(0)                                           -> -
+    v144 Imm(0)                                           -> -
+    v145 Imm(0)                                           -> -
     v146 LifetimeEnd(0)                                   -> -
-    v147 Imm(0)                                           -> x0
-    v148 Imm(7)                                           -> x0
-    v149 Imm(7)                                           -> x0
-    v150 Imm(0)                                           -> x0
-    v151 Imm(7)                                           -> x0
-    v152 Imm(3)                                           -> x0
-    v153 Imm(12)                                          -> x0
-    v154 BinopI { op=add, lhs=v95, rhs_imm=12 }           -> x0
-    v155 Imm(40)                                          -> x0
-    v156 Imm(0)                                           -> x0
-    v157 Imm(40)                                          -> x0
-    v158 Imm(40)                                          -> x0
-    v159 Imm(0)                                           -> x0
-    v160 Imm(0)                                           -> x0
-    v161 Imm(0)                                           -> x0
-    v162 Imm(1)                                           -> x0
-    v163 Imm(41)                                          -> x0
-    v164 Imm(0)                                           -> x0
-    v165 Imm(0)                                           -> x0
-    v166 Imm(1)                                           -> x0
-    v167 Imm(42)                                          -> x0
-    v168 Imm(0)                                           -> x0
-    v169 Imm(0)                                           -> x0
-    v170 Imm(-1)                                          -> x0
-    v171 Imm(41)                                          -> x0
-    v172 Imm(0)                                           -> x0
-    v173 Imm(0)                                           -> x0
-    v174 Imm(201)                                         -> x0
-    v175 Imm(242)                                         -> x0
-    v176 Imm(0)                                           -> x0
-    v177 Imm(0)                                           -> x0
-    v178 Imm(0)                                           -> x0
-    v179 Imm(65535)                                       -> x0
-    v180 Imm(65777)                                       -> x0
+    v147 Imm(0)                                           -> -
+    v148 Imm(7)                                           -> -
+    v149 Imm(7)                                           -> -
+    v150 Imm(0)                                           -> -
+    v151 Imm(7)                                           -> -
+    v152 Imm(3)                                           -> -
+    v153 Imm(12)                                          -> -
+    v154 BinopI { op=add, lhs=v95, rhs_imm=12 }           -> -
+    v155 Imm(40)                                          -> -
+    v156 Imm(0)                                           -> -
+    v157 Imm(40)                                          -> -
+    v158 Imm(40)                                          -> -
+    v159 Imm(0)                                           -> -
+    v160 Imm(0)                                           -> -
+    v161 Imm(0)                                           -> -
+    v162 Imm(1)                                           -> -
+    v163 Imm(41)                                          -> -
+    v164 Imm(0)                                           -> -
+    v165 Imm(0)                                           -> -
+    v166 Imm(1)                                           -> -
+    v167 Imm(42)                                          -> -
+    v168 Imm(0)                                           -> -
+    v169 Imm(0)                                           -> -
+    v170 Imm(-1)                                          -> -
+    v171 Imm(41)                                          -> -
+    v172 Imm(0)                                           -> -
+    v173 Imm(0)                                           -> -
+    v174 Imm(201)                                         -> -
+    v175 Imm(242)                                         -> -
+    v176 Imm(0)                                           -> -
+    v177 Imm(0)                                           -> -
+    v178 Imm(0)                                           -> -
+    v179 Imm(65535)                                       -> -
+    v180 Imm(65777)                                       -> -
     v181 LifetimeEnd(0)                                   -> -
-    v182 Imm(0)                                           -> x0
-    v183 Imm(41)                                          -> x0
-    v184 Imm(42)                                          -> x0
-    v185 Imm(242)                                         -> x0
-    v186 Imm(65777)                                       -> x0
-    v187 Imm(0)                                           -> x0
-    v188 ImmData(112)                                     -> x0
-    v189 Imm(96)                                          -> x0
-    v190 Imm(0)                                           -> x0
-    v191 Imm(96)                                          -> x0
-    v192 ImmData(16)                                      -> x0
-    v193 Imm(96)                                          -> x0
-    v194 Imm(96)                                          -> x0
-    v195 Imm(3)                                           -> x0
-    v196 Imm(3)                                           -> x0
-    v197 Imm(0)                                           -> x0
-    v198 Imm(0)                                           -> x0
-    v199 Imm(3)                                           -> x0
-    v200 Imm(0)                                           -> x0
-    v201 Imm(0)                                           -> x0
-    v202 ImmData(16)                                      -> x0
-    v203 Imm(3)                                           -> x0
-    v204 Imm(72)                                          -> x0
-    v205 BinopI { op=add, lhs=v202, rhs_imm=72 }          -> x0
-    v206 Imm(13)                                          -> x0
-    v207 Imm(0)                                           -> x0
-    v208 Imm(0)                                           -> x0
-    v209 Imm(3)                                           -> x0
-    v210 Imm(3)                                           -> x0
-    v211 Imm(72)                                          -> x0
-    v212 BinopI { op=add, lhs=v192, rhs_imm=72 }          -> x0
-    v213 Imm(13)                                          -> x0
-    v214 Imm(0)                                           -> x0
-    v215 Imm(2)                                           -> x0
-    v216 Imm(0)                                           -> x0
-    v217 Imm(3)                                           -> x0
-    v218 Imm(0)                                           -> x0
-    v219 Imm(1)                                           -> x0
-    v220 Imm(0)                                           -> x0
-    v221 Imm(203)                                         -> x0
-    v222 Imm(0)                                           -> x0
-    v223 Imm(0)                                           -> x0
-    v224 Imm(0)                                           -> x0
-    v225 Imm(0)                                           -> x0
-    v226 Imm(0)                                           -> x0
-    v227 Imm(13)                                          -> x0
-    v228 Imm(0)                                           -> x0
-    v229 Imm(2)                                           -> x0
-    v230 Imm(0)                                           -> x0
-    v231 Imm(3)                                           -> x0
-    v232 Imm(0)                                           -> x0
-    v233 Imm(1)                                           -> x0
-    v234 Imm(0)                                           -> x0
-    v235 Imm(203)                                         -> x0
-    v236 Imm(0)                                           -> x0
-    v237 Imm(0)                                           -> x0
-    v238 Imm(0)                                           -> x0
+    v182 Imm(0)                                           -> -
+    v183 Imm(41)                                          -> -
+    v184 Imm(42)                                          -> -
+    v185 Imm(242)                                         -> -
+    v186 Imm(65777)                                       -> -
+    v187 Imm(0)                                           -> -
+    v188 ImmData(112)                                     -> -
+    v189 Imm(96)                                          -> -
+    v190 Imm(0)                                           -> -
+    v191 Imm(96)                                          -> -
+    v192 ImmData(16)                                      -> -
+    v193 Imm(96)                                          -> -
+    v194 Imm(96)                                          -> -
+    v195 Imm(3)                                           -> -
+    v196 Imm(3)                                           -> -
+    v197 Imm(0)                                           -> -
+    v198 Imm(0)                                           -> -
+    v199 Imm(3)                                           -> -
+    v200 Imm(0)                                           -> -
+    v201 Imm(0)                                           -> -
+    v202 ImmData(16)                                      -> -
+    v203 Imm(3)                                           -> -
+    v204 Imm(72)                                          -> -
+    v205 BinopI { op=add, lhs=v202, rhs_imm=72 }          -> -
+    v206 Imm(13)                                          -> -
+    v207 Imm(0)                                           -> -
+    v208 Imm(0)                                           -> -
+    v209 Imm(3)                                           -> -
+    v210 Imm(3)                                           -> -
+    v211 Imm(72)                                          -> -
+    v212 BinopI { op=add, lhs=v192, rhs_imm=72 }          -> -
+    v213 Imm(13)                                          -> -
+    v214 Imm(0)                                           -> -
+    v215 Imm(2)                                           -> -
+    v216 Imm(0)                                           -> -
+    v217 Imm(3)                                           -> -
+    v218 Imm(0)                                           -> -
+    v219 Imm(1)                                           -> -
+    v220 Imm(0)                                           -> -
+    v221 Imm(203)                                         -> -
+    v222 Imm(0)                                           -> -
+    v223 Imm(0)                                           -> -
+    v224 Imm(0)                                           -> -
+    v225 Imm(0)                                           -> -
+    v226 Imm(0)                                           -> -
+    v227 Imm(13)                                          -> -
+    v228 Imm(0)                                           -> -
+    v229 Imm(2)                                           -> -
+    v230 Imm(0)                                           -> -
+    v231 Imm(3)                                           -> -
+    v232 Imm(0)                                           -> -
+    v233 Imm(1)                                           -> -
+    v234 Imm(0)                                           -> -
+    v235 Imm(203)                                         -> -
+    v236 Imm(0)                                           -> -
+    v237 Imm(0)                                           -> -
+    v238 Imm(0)                                           -> -
     v239 LifetimeEnd(0)                                   -> -
-    v240 Imm(0)                                           -> x0
-    v241 Imm(13)                                          -> x0
-    v242 Imm(13)                                          -> x0
-    v243 Imm(0)                                           -> x0
-    v244 Imm(13)                                          -> x0
-    v245 Imm(1)                                           -> x0
-    v246 Imm(4)                                           -> x0
-    v247 BinopI { op=add, lhs=v188, rhs_imm=4 }           -> x0
-    v248 Imm(20)                                          -> x0
-    v249 Imm(0)                                           -> x0
-    v250 Imm(20)                                          -> x0
-    v251 Imm(20)                                          -> x0
-    v252 Imm(0)                                           -> x0
-    v253 Imm(0)                                           -> x0
-    v254 Imm(0)                                           -> x0
-    v255 Imm(2)                                           -> x0
-    v256 Imm(22)                                          -> x0
-    v257 Imm(0)                                           -> x0
-    v258 Imm(0)                                           -> x0
-    v259 Imm(3)                                           -> x0
-    v260 Imm(25)                                          -> x0
-    v261 Imm(0)                                           -> x0
-    v262 Imm(0)                                           -> x0
-    v263 Imm(1)                                           -> x0
-    v264 Imm(26)                                          -> x0
-    v265 Imm(0)                                           -> x0
-    v266 Imm(0)                                           -> x0
-    v267 Imm(203)                                         -> x0
-    v268 Imm(229)                                         -> x0
-    v269 Imm(0)                                           -> x0
-    v270 Imm(0)                                           -> x0
-    v271 Imm(0)                                           -> x0
-    v272 Imm(0)                                           -> x0
-    v273 Imm(229)                                         -> x0
+    v240 Imm(0)                                           -> -
+    v241 Imm(13)                                          -> -
+    v242 Imm(13)                                          -> -
+    v243 Imm(0)                                           -> -
+    v244 Imm(13)                                          -> -
+    v245 Imm(1)                                           -> -
+    v246 Imm(4)                                           -> -
+    v247 BinopI { op=add, lhs=v188, rhs_imm=4 }           -> -
+    v248 Imm(20)                                          -> -
+    v249 Imm(0)                                           -> -
+    v250 Imm(20)                                          -> -
+    v251 Imm(20)                                          -> -
+    v252 Imm(0)                                           -> -
+    v253 Imm(0)                                           -> -
+    v254 Imm(0)                                           -> -
+    v255 Imm(2)                                           -> -
+    v256 Imm(22)                                          -> -
+    v257 Imm(0)                                           -> -
+    v258 Imm(0)                                           -> -
+    v259 Imm(3)                                           -> -
+    v260 Imm(25)                                          -> -
+    v261 Imm(0)                                           -> -
+    v262 Imm(0)                                           -> -
+    v263 Imm(1)                                           -> -
+    v264 Imm(26)                                          -> -
+    v265 Imm(0)                                           -> -
+    v266 Imm(0)                                           -> -
+    v267 Imm(203)                                         -> -
+    v268 Imm(229)                                         -> -
+    v269 Imm(0)                                           -> -
+    v270 Imm(0)                                           -> -
+    v271 Imm(0)                                           -> -
+    v272 Imm(0)                                           -> -
+    v273 Imm(229)                                         -> -
     v274 LifetimeEnd(0)                                   -> -
-    v275 Imm(0)                                           -> x0
-    v276 Imm(22)                                          -> x0
-    v277 Imm(25)                                          -> x0
-    v278 Imm(26)                                          -> x0
-    v279 Imm(229)                                         -> x0
-    v280 Imm(0)                                           -> x0
-    v281 Imm(0)                                           -> x0
-    v282 Imm(0)                                           -> x0
-    v283 Imm(0)                                           -> x0
-    v284 ImmData(16)                                      -> x0
-    v285 Imm(0)                                           -> x0
-    v286 Imm(0)                                           -> x0
-    v287 Imm(0)                                           -> x0
-    v288 Imm(0)                                           -> x0
-    v289 Imm(0)                                           -> x0
-    v290 Imm(0)                                           -> x0
-    v291 Imm(0)                                           -> x0
-    v292 Imm(0)                                           -> x0
-    v293 Imm(0)                                           -> x0
-    v294 ImmData(16)                                      -> x0
-    v295 Imm(0)                                           -> x0
-    v296 Imm(0)                                           -> x0
-    v297 BinopI { op=add, lhs=v294, rhs_imm=0 }           -> x0
-    v298 Imm(1)                                           -> x0
-    v299 Imm(0)                                           -> x0
-    v300 Imm(0)                                           -> x0
-    v301 Imm(0)                                           -> x0
-    v302 Imm(0)                                           -> x0
-    v303 Imm(0)                                           -> x0
-    v304 BinopI { op=add, lhs=v284, rhs_imm=0 }           -> x0
-    v305 Imm(1)                                           -> x0
-    v306 Imm(0)                                           -> x0
-    v307 Imm(3)                                           -> x0
-    v308 Imm(0)                                           -> x0
-    v309 Imm(0)                                           -> x0
-    v310 Imm(0)                                           -> x0
-    v311 Imm(254)                                         -> x0
-    v312 Imm(0)                                           -> x0
-    v313 Imm(200)                                         -> x0
-    v314 Imm(0)                                           -> x0
-    v315 Imm(1234605616436508552)                         -> x0
-    v316 Imm(0)                                           -> x0
-    v317 Imm(0)                                           -> x0
-    v318 Imm(0)                                           -> x0
-    v319 Imm(1)                                           -> x0
-    v320 Imm(0)                                           -> x0
-    v321 Imm(3)                                           -> x0
-    v322 Imm(0)                                           -> x0
-    v323 Imm(0)                                           -> x0
-    v324 Imm(0)                                           -> x0
-    v325 Imm(254)                                         -> x0
-    v326 Imm(0)                                           -> x0
-    v327 Imm(200)                                         -> x0
-    v328 Imm(0)                                           -> x0
-    v329 Imm(0)                                           -> x0
-    v330 Imm(0)                                           -> x0
+    v275 Imm(0)                                           -> -
+    v276 Imm(22)                                          -> -
+    v277 Imm(25)                                          -> -
+    v278 Imm(26)                                          -> -
+    v279 Imm(229)                                         -> -
+    v280 Imm(0)                                           -> -
+    v281 Imm(0)                                           -> -
+    v282 Imm(0)                                           -> -
+    v283 Imm(0)                                           -> -
+    v284 ImmData(16)                                      -> -
+    v285 Imm(0)                                           -> -
+    v286 Imm(0)                                           -> -
+    v287 Imm(0)                                           -> -
+    v288 Imm(0)                                           -> -
+    v289 Imm(0)                                           -> -
+    v290 Imm(0)                                           -> -
+    v291 Imm(0)                                           -> -
+    v292 Imm(0)                                           -> -
+    v293 Imm(0)                                           -> -
+    v294 ImmData(16)                                      -> -
+    v295 Imm(0)                                           -> -
+    v296 Imm(0)                                           -> -
+    v297 BinopI { op=add, lhs=v294, rhs_imm=0 }           -> -
+    v298 Imm(1)                                           -> -
+    v299 Imm(0)                                           -> -
+    v300 Imm(0)                                           -> -
+    v301 Imm(0)                                           -> -
+    v302 Imm(0)                                           -> -
+    v303 Imm(0)                                           -> -
+    v304 BinopI { op=add, lhs=v284, rhs_imm=0 }           -> -
+    v305 Imm(1)                                           -> -
+    v306 Imm(0)                                           -> -
+    v307 Imm(3)                                           -> -
+    v308 Imm(0)                                           -> -
+    v309 Imm(0)                                           -> -
+    v310 Imm(0)                                           -> -
+    v311 Imm(254)                                         -> -
+    v312 Imm(0)                                           -> -
+    v313 Imm(200)                                         -> -
+    v314 Imm(0)                                           -> -
+    v315 Imm(1234605616436508552)                         -> -
+    v316 Imm(0)                                           -> -
+    v317 Imm(0)                                           -> -
+    v318 Imm(0)                                           -> -
+    v319 Imm(1)                                           -> -
+    v320 Imm(0)                                           -> -
+    v321 Imm(3)                                           -> -
+    v322 Imm(0)                                           -> -
+    v323 Imm(0)                                           -> -
+    v324 Imm(0)                                           -> -
+    v325 Imm(254)                                         -> -
+    v326 Imm(0)                                           -> -
+    v327 Imm(200)                                         -> -
+    v328 Imm(0)                                           -> -
+    v329 Imm(0)                                           -> -
+    v330 Imm(0)                                           -> -
     v331 LifetimeEnd(0)                                   -> -
-    v332 Imm(0)                                           -> x0
-    v333 Imm(0)                                           -> x0
-    v334 Imm(3)                                           -> x0
-    v335 Imm(0)                                           -> x0
-    v336 Imm(0)                                           -> x0
-    v337 Imm(0)                                           -> x0
-    v338 Imm(254)                                         -> x0
-    v339 Imm(0)                                           -> x0
-    v340 Imm(200)                                         -> x0
-    v341 Imm(0)                                           -> x0
-    v342 Imm(0)                                           -> x0
-    v343 Imm(0)                                           -> x0
-    v344 Imm(0)                                           -> x0
-    v345 Imm(1)                                           -> x0
-    v346 Imm(0)                                           -> x0
-    v347 Imm(0)                                           -> x0
-    v348 Imm(3)                                           -> x0
-    v349 Imm(4)                                           -> x0
-    v350 Imm(0)                                           -> x0
-    v351 Imm(0)                                           -> x0
-    v352 Imm(0)                                           -> x0
-    v353 Imm(4)                                           -> x0
-    v354 Imm(0)                                           -> x0
-    v355 Imm(0)                                           -> x0
-    v356 Imm(-2)                                          -> x0
-    v357 Imm(2)                                           -> x0
-    v358 Imm(0)                                           -> x0
-    v359 Imm(0)                                           -> x0
-    v360 Imm(200)                                         -> x0
-    v361 Imm(202)                                         -> x0
-    v362 Imm(0)                                           -> x0
-    v363 Imm(0)                                           -> x0
-    v364 Imm(0)                                           -> x0
-    v365 Imm(4386)                                        -> x0
-    v366 Imm(4588)                                        -> x0
+    v332 Imm(0)                                           -> -
+    v333 Imm(0)                                           -> -
+    v334 Imm(3)                                           -> -
+    v335 Imm(0)                                           -> -
+    v336 Imm(0)                                           -> -
+    v337 Imm(0)                                           -> -
+    v338 Imm(254)                                         -> -
+    v339 Imm(0)                                           -> -
+    v340 Imm(200)                                         -> -
+    v341 Imm(0)                                           -> -
+    v342 Imm(0)                                           -> -
+    v343 Imm(0)                                           -> -
+    v344 Imm(0)                                           -> -
+    v345 Imm(1)                                           -> -
+    v346 Imm(0)                                           -> -
+    v347 Imm(0)                                           -> -
+    v348 Imm(3)                                           -> -
+    v349 Imm(4)                                           -> -
+    v350 Imm(0)                                           -> -
+    v351 Imm(0)                                           -> -
+    v352 Imm(0)                                           -> -
+    v353 Imm(4)                                           -> -
+    v354 Imm(0)                                           -> -
+    v355 Imm(0)                                           -> -
+    v356 Imm(-2)                                          -> -
+    v357 Imm(2)                                           -> -
+    v358 Imm(0)                                           -> -
+    v359 Imm(0)                                           -> -
+    v360 Imm(200)                                         -> -
+    v361 Imm(202)                                         -> -
+    v362 Imm(0)                                           -> -
+    v363 Imm(0)                                           -> -
+    v364 Imm(0)                                           -> -
+    v365 Imm(4386)                                        -> -
+    v366 Imm(4588)                                        -> -
     v367 LifetimeEnd(0)                                   -> -
     v368 LifetimeEnd(0)                                   -> -
-    v369 Imm(0)                                           -> x0
-    v370 Imm(0)                                           -> x0
-    v371 Imm(4)                                           -> x0
-    v372 Imm(2)                                           -> x0
-    v373 Imm(202)                                         -> x0
-    v374 Imm(4588)                                        -> x0
-    v375 Imm(0)                                           -> x0
-    v376 Imm(64)                                          -> x0
-    v377 Imm(0)                                           -> x0
-    v378 Imm(64)                                          -> x0
-    v379 ImmData(16)                                      -> x0
-    v380 Imm(64)                                          -> x0
-    v381 Imm(64)                                          -> x0
-    v382 Imm(2)                                           -> x0
-    v383 Imm(2)                                           -> x0
-    v384 Imm(0)                                           -> x0
-    v385 Imm(0)                                           -> x0
-    v386 Imm(2)                                           -> x0
-    v387 Imm(0)                                           -> x0
-    v388 Imm(0)                                           -> x0
-    v389 ImmData(16)                                      -> x0
-    v390 Imm(2)                                           -> x0
-    v391 Imm(48)                                          -> x0
-    v392 BinopI { op=add, lhs=v389, rhs_imm=48 }          -> x0
-    v393 Imm(2147483649)                                  -> x0
-    v394 Imm(0)                                           -> x0
-    v395 Imm(0)                                           -> x0
-    v396 Imm(2)                                           -> x0
-    v397 Imm(2)                                           -> x0
-    v398 Imm(48)                                          -> x0
-    v399 BinopI { op=add, lhs=v379, rhs_imm=48 }          -> x0
-    v400 Imm(2147483649)                                  -> x0
-    v401 Imm(0)                                           -> x0
-    v402 Imm(0)                                           -> x0
-    v403 Imm(0)                                           -> x0
-    v404 Imm(2)                                           -> x0
-    v405 Imm(0)                                           -> x0
-    v406 Imm(0)                                           -> x0
-    v407 Imm(0)                                           -> x0
-    v408 Imm(202)                                         -> x0
-    v409 Imm(0)                                           -> x0
-    v410 Imm(-1)                                          -> x0
-    v411 Imm(0)                                           -> x0
-    v412 Imm(0)                                           -> x0
-    v413 Imm(0)                                           -> x0
-    v414 Imm(2147483649)                                  -> x0
-    v415 Imm(0)                                           -> x0
-    v416 Imm(0)                                           -> x0
-    v417 Imm(0)                                           -> x0
-    v418 Imm(2)                                           -> x0
-    v419 Imm(0)                                           -> x0
-    v420 Imm(0)                                           -> x0
-    v421 Imm(0)                                           -> x0
-    v422 Imm(202)                                         -> x0
-    v423 Imm(0)                                           -> x0
-    v424 Imm(0)                                           -> x0
-    v425 Imm(0)                                           -> x0
+    v369 Imm(0)                                           -> -
+    v370 Imm(0)                                           -> -
+    v371 Imm(4)                                           -> -
+    v372 Imm(2)                                           -> -
+    v373 Imm(202)                                         -> -
+    v374 Imm(4588)                                        -> -
+    v375 Imm(0)                                           -> -
+    v376 Imm(64)                                          -> -
+    v377 Imm(0)                                           -> -
+    v378 Imm(64)                                          -> -
+    v379 ImmData(16)                                      -> -
+    v380 Imm(64)                                          -> -
+    v381 Imm(64)                                          -> -
+    v382 Imm(2)                                           -> -
+    v383 Imm(2)                                           -> -
+    v384 Imm(0)                                           -> -
+    v385 Imm(0)                                           -> -
+    v386 Imm(2)                                           -> -
+    v387 Imm(0)                                           -> -
+    v388 Imm(0)                                           -> -
+    v389 ImmData(16)                                      -> -
+    v390 Imm(2)                                           -> -
+    v391 Imm(48)                                          -> -
+    v392 BinopI { op=add, lhs=v389, rhs_imm=48 }          -> -
+    v393 Imm(2147483649)                                  -> -
+    v394 Imm(0)                                           -> -
+    v395 Imm(0)                                           -> -
+    v396 Imm(2)                                           -> -
+    v397 Imm(2)                                           -> -
+    v398 Imm(48)                                          -> -
+    v399 BinopI { op=add, lhs=v379, rhs_imm=48 }          -> -
+    v400 Imm(2147483649)                                  -> -
+    v401 Imm(0)                                           -> -
+    v402 Imm(0)                                           -> -
+    v403 Imm(0)                                           -> -
+    v404 Imm(2)                                           -> -
+    v405 Imm(0)                                           -> -
+    v406 Imm(0)                                           -> -
+    v407 Imm(0)                                           -> -
+    v408 Imm(202)                                         -> -
+    v409 Imm(0)                                           -> -
+    v410 Imm(-1)                                          -> -
+    v411 Imm(0)                                           -> -
+    v412 Imm(0)                                           -> -
+    v413 Imm(0)                                           -> -
+    v414 Imm(2147483649)                                  -> -
+    v415 Imm(0)                                           -> -
+    v416 Imm(0)                                           -> -
+    v417 Imm(0)                                           -> -
+    v418 Imm(2)                                           -> -
+    v419 Imm(0)                                           -> -
+    v420 Imm(0)                                           -> -
+    v421 Imm(0)                                           -> -
+    v422 Imm(202)                                         -> -
+    v423 Imm(0)                                           -> -
+    v424 Imm(0)                                           -> -
+    v425 Imm(0)                                           -> -
     v426 LifetimeEnd(0)                                   -> -
-    v427 Imm(0)                                           -> x0
-    v428 Imm(0)                                           -> x0
-    v429 Imm(0)                                           -> x0
-    v430 Imm(0)                                           -> x0
-    v431 Imm(2)                                           -> x0
-    v432 Imm(0)                                           -> x0
-    v433 Imm(0)                                           -> x0
-    v434 Imm(0)                                           -> x0
-    v435 Imm(202)                                         -> x0
-    v436 Imm(0)                                           -> x0
-    v437 Imm(0)                                           -> x0
-    v438 Imm(0)                                           -> x0
-    v439 Imm(0)                                           -> x0
-    v440 Imm(2147483649)                                  -> x0
-    v441 Imm(0)                                           -> x0
-    v442 Imm(0)                                           -> x0
-    v443 Imm(0)                                           -> x0
-    v444 Imm(2147483649)                                  -> x0
-    v445 Imm(0)                                           -> x0
-    v446 Imm(0)                                           -> x0
-    v447 Imm(2)                                           -> x0
-    v448 Imm(2147483651)                                  -> x0
-    v449 Imm(0)                                           -> x0
-    v450 Imm(0)                                           -> x0
-    v451 Imm(0)                                           -> x0
-    v452 Imm(2147483651)                                  -> x0
-    v453 Imm(0)                                           -> x0
-    v454 Imm(0)                                           -> x0
-    v455 Imm(202)                                         -> x0
-    v456 Imm(2147483853)                                  -> x0
-    v457 Imm(0)                                           -> x0
-    v458 Imm(0)                                           -> x0
-    v459 Imm(0)                                           -> x0
-    v460 Imm(-1)                                          -> x0
-    v461 Imm(2147483852)                                  -> x0
+    v427 Imm(0)                                           -> -
+    v428 Imm(0)                                           -> -
+    v429 Imm(0)                                           -> -
+    v430 Imm(0)                                           -> -
+    v431 Imm(2)                                           -> -
+    v432 Imm(0)                                           -> -
+    v433 Imm(0)                                           -> -
+    v434 Imm(0)                                           -> -
+    v435 Imm(202)                                         -> -
+    v436 Imm(0)                                           -> -
+    v437 Imm(0)                                           -> -
+    v438 Imm(0)                                           -> -
+    v439 Imm(0)                                           -> -
+    v440 Imm(2147483649)                                  -> -
+    v441 Imm(0)                                           -> -
+    v442 Imm(0)                                           -> -
+    v443 Imm(0)                                           -> -
+    v444 Imm(2147483649)                                  -> -
+    v445 Imm(0)                                           -> -
+    v446 Imm(0)                                           -> -
+    v447 Imm(2)                                           -> -
+    v448 Imm(2147483651)                                  -> -
+    v449 Imm(0)                                           -> -
+    v450 Imm(0)                                           -> -
+    v451 Imm(0)                                           -> -
+    v452 Imm(2147483651)                                  -> -
+    v453 Imm(0)                                           -> -
+    v454 Imm(0)                                           -> -
+    v455 Imm(202)                                         -> -
+    v456 Imm(2147483853)                                  -> -
+    v457 Imm(0)                                           -> -
+    v458 Imm(0)                                           -> -
+    v459 Imm(0)                                           -> -
+    v460 Imm(-1)                                          -> -
+    v461 Imm(2147483852)                                  -> -
     v462 LifetimeEnd(0)                                   -> -
     v463 LifetimeEnd(0)                                   -> -
-    v464 Imm(0)                                           -> x0
-    v465 Imm(0)                                           -> x0
-    v466 Imm(2147483649)                                  -> x0
-    v467 Imm(2147483651)                                  -> x0
-    v468 Imm(2147483853)                                  -> x0
-    v469 Imm(2147483852)                                  -> x0
-    v470 Imm(0)                                           -> x0
+    v464 Imm(0)                                           -> -
+    v465 Imm(0)                                           -> -
+    v466 Imm(2147483649)                                  -> -
+    v467 Imm(2147483651)                                  -> -
+    v468 Imm(2147483853)                                  -> -
+    v469 Imm(2147483852)                                  -> -
+    v470 Imm(0)                                           -> -
     v471 Imm(32)                                          -> x0
     v472 StoreLocal { off=-1, value=v471, kind=I32, volatile } -> -
     v473 ImmData(112)                                     -> x6
     v474 LoadLocal { off=-1, kind=U32, volatile }         -> x0
-    v475 Imm(0)                                           -> x1
-    v476 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x1
+    v475 Imm(0)                                           -> -
+    v476 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> -
     v477 ImmData(16)                                      -> x1
-    v478 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x2
-    v479 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x2
+    v478 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> -
+    v479 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> -
     v480 BinopI { op=shru, lhs=v474, rhs_imm=5 }          -> x0
-    v481 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x2
+    v481 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> -
     v482 BinopI { op=eq, lhs=v480, rhs_imm=9 }            -> x2
     terminator Bz { cond=v482, target=b2, fall=b1 }   (exit_acc=v482)
   block 1  start_pc=0
-    v598 ImmData(128)                                     -> x2
+    v598 ImmData(128)                                     -> -
     v599 Imm(1)                                           -> x2
     v600 Store { addr=v598, disp=0, value=v599, kind=I32 pc_rel } -> -
     terminator Jmp(b2)
   block 2  start_pc=0
-    v595 Imm(0)                                           -> x2
-    v596 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x2
+    v595 Imm(0)                                           -> -
+    v596 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> -
     v597 BinopI { op=uge, lhs=v480, rhs_imm=4 }           -> x2
     terminator Bz { cond=v597, target=b4, fall=b3 }   (exit_acc=v597)
   block 3  start_pc=0
-    v608 ImmData(128)                                     -> x2
+    v608 ImmData(128)                                     -> -
     v609 Imm(1)                                           -> x2
     v610 Store { addr=v608, disp=0, value=v609, kind=I32 pc_rel } -> -
     terminator Jmp(b4)
   block 4  start_pc=0
-    v601 Imm(0)                                           -> x2
-    v602 ImmData(16)                                      -> x2
-    v603 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x2
+    v601 Imm(0)                                           -> -
+    v602 ImmData(16)                                      -> -
+    v603 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> -
     v604 BinopI { op=mul, lhs=v480, rhs_imm=24 }          -> x0
     v605 Binop { op=add, lhs=v477, rhs=v604 }             -> x0
     v606 Load { addr=v605, disp=0, kind=U32 }             -> x1
-    v607 BinopI { op=eq, lhs=v606, rhs_imm=0 }            -> x2
+    v607 BinopI { op=eq, lhs=v606, rhs_imm=0 }            -> -
     terminator Bnz { cond=v606, target=b6, fall=b5 }   (low word)   (exit_acc=v607)
   block 5  start_pc=0
-    v647 ImmData(128)                                     -> x1
+    v647 ImmData(128)                                     -> -
     v648 Imm(1)                                           -> x1
     v649 Store { addr=v647, disp=0, value=v648, kind=I32 pc_rel } -> -
     terminator Jmp(b6)
   block 6  start_pc=0
-    v611 Imm(0)                                           -> x1
-    v612 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x1
-    v613 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> x1
-    v614 BinopI { op=mul, lhs=v480, rhs_imm=24 }          -> x1
-    v615 Binop { op=add, lhs=v477, rhs=v604 }             -> x1
+    v611 Imm(0)                                           -> -
+    v612 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> -
+    v613 BinopI { op=and, lhs=v480, rhs_imm=4294967295 }  -> -
+    v614 BinopI { op=mul, lhs=v480, rhs_imm=24 }          -> -
+    v615 Binop { op=add, lhs=v477, rhs=v604 }             -> -
     v616 Load { addr=v605, disp=0, kind=U32 }             -> x1
-    v617 Imm(0)                                           -> x2
+    v617 Imm(0)                                           -> -
     v618 Load { addr=v605, disp=4, kind=U32 }             -> x2
-    v619 Imm(0)                                           -> x7
+    v619 Imm(0)                                           -> -
     v620 Load { addr=v605, disp=8, kind=U16 }             -> x7
-    v621 Imm(0)                                           -> x8
+    v621 Imm(0)                                           -> -
     v622 Load { addr=v605, disp=10, kind=U8 }             -> x8
-    v623 Imm(0)                                           -> x9
+    v623 Imm(0)                                           -> -
     v624 Load { addr=v605, disp=11, kind=U8 }             -> x9
-    v625 Imm(0)                                           -> x10
+    v625 Imm(0)                                           -> -
     v626 Load { addr=v605, disp=16, kind=I64 }            -> x10
-    v627 Imm(0)                                           -> x0
-    v628 Imm(0)                                           -> x0
-    v629 Imm(0)                                           -> x0
-    v630 BinopI { op=and, lhs=v616, rhs_imm=4294967295 }  -> x0
-    v631 Imm(0)                                           -> x0
-    v632 BinopI { op=and, lhs=v618, rhs_imm=4294967295 }  -> x0
-    v633 Imm(0)                                           -> x0
-    v634 BinopI { op=and, lhs=v620, rhs_imm=65535 }       -> x0
-    v635 Imm(0)                                           -> x0
-    v636 BinopI { op=and, lhs=v622, rhs_imm=255 }         -> x0
-    v637 Imm(0)                                           -> x0
-    v638 BinopI { op=and, lhs=v624, rhs_imm=255 }         -> x0
-    v639 Imm(0)                                           -> x0
-    v640 Imm(0)                                           -> x0
-    v641 Imm(0)                                           -> x0
+    v627 Imm(0)                                           -> -
+    v628 Imm(0)                                           -> -
+    v629 Imm(0)                                           -> -
+    v630 BinopI { op=and, lhs=v616, rhs_imm=4294967295 }  -> -
+    v631 Imm(0)                                           -> -
+    v632 BinopI { op=and, lhs=v618, rhs_imm=4294967295 }  -> -
+    v633 Imm(0)                                           -> -
+    v634 BinopI { op=and, lhs=v620, rhs_imm=65535 }       -> -
+    v635 Imm(0)                                           -> -
+    v636 BinopI { op=and, lhs=v622, rhs_imm=255 }         -> -
+    v637 Imm(0)                                           -> -
+    v638 BinopI { op=and, lhs=v624, rhs_imm=255 }         -> -
+    v639 Imm(0)                                           -> -
+    v640 Imm(0)                                           -> -
+    v641 Imm(0)                                           -> -
     v642 LifetimeEnd(0)                                   -> -
-    v643 Imm(0)                                           -> x0
-    v644 BinopI { op=and, lhs=v616, rhs_imm=4294967295 }  -> x0
-    v645 BinopI { op=and, lhs=v616, rhs_imm=4294967295 }  -> x0
-    v646 BinopI { op=eq, lhs=v616, rhs_imm=0 }            -> x0
+    v643 Imm(0)                                           -> -
+    v644 BinopI { op=and, lhs=v616, rhs_imm=4294967295 }  -> -
+    v645 BinopI { op=and, lhs=v616, rhs_imm=4294967295 }  -> -
+    v646 BinopI { op=eq, lhs=v616, rhs_imm=0 }            -> -
     terminator Bnz { cond=v616, target=b14, fall=b7 }   (low word)   (exit_acc=v646)
   block 7  start_pc=0
     v540 Imm(-1)                                          -> x0
     terminator Jmp(b8)   (exit_acc=v540)
   block 8  start_pc=0
     v546 Phi { incoming=[b7:v540, b14:v545], kind=I64 }   -> x0
-    v547 Extend { value=v546, kind=I32 }                  -> x1
-    v548 Extend { value=v546, kind=I32 }                  -> x1
+    v547 Extend { value=v546, kind=I32 }                  -> -
+    v548 Extend { value=v546, kind=I32 }                  -> -
     v549 BinopI { op=lt, lhs=v546, rhs_imm=0 }            -> x1
     terminator Bz { cond=v549, target=b11, fall=b9 }   (exit_acc=v549)
   block 9  start_pc=0
-    v507 Imm(-1)                                          -> x0
+    v507 Imm(-1)                                          -> -
     v508 LifetimeEnd(0)                                   -> -
     terminator Jmp(b10)   (exit_acc=v507)
   block 10  start_pc=0
     v488 Imm(6)                                           -> x0
     terminator Return(v488)   (exit_acc=v488)
   block 11  start_pc=0
-    v509 Imm(0)                                           -> x1
-    v510 Imm(0)                                           -> x1
+    v509 Imm(0)                                           -> -
+    v510 Imm(0)                                           -> -
     v511 Extend { value=v618, kind=I32 }                  -> x1
     v512 Binop { op=add, lhs=v546, rhs=v511 }             -> x0
-    v513 Imm(0)                                           -> x1
-    v514 Imm(0)                                           -> x1
-    v515 BinopI { op=and, lhs=v620, rhs_imm=65535 }       -> x1
+    v513 Imm(0)                                           -> -
+    v514 Imm(0)                                           -> -
+    v515 BinopI { op=and, lhs=v620, rhs_imm=65535 }       -> -
     v516 Binop { op=add, lhs=v512, rhs=v620 }             -> x0
-    v517 Imm(0)                                           -> x1
-    v518 Imm(0)                                           -> x1
+    v517 Imm(0)                                           -> -
+    v518 Imm(0)                                           -> -
     v519 Extend { value=v622, kind=I8 }                   -> x1
     v520 Binop { op=add, lhs=v516, rhs=v519 }             -> x0
-    v521 Imm(0)                                           -> x1
-    v522 Imm(0)                                           -> x1
-    v523 BinopI { op=and, lhs=v624, rhs_imm=255 }         -> x1
+    v521 Imm(0)                                           -> -
+    v522 Imm(0)                                           -> -
+    v523 BinopI { op=and, lhs=v624, rhs_imm=255 }         -> -
     v524 Binop { op=add, lhs=v520, rhs=v624 }             -> x0
-    v525 Imm(0)                                           -> x1
-    v526 Imm(0)                                           -> x1
-    v527 Imm(0)                                           -> x1
+    v525 Imm(0)                                           -> -
+    v526 Imm(0)                                           -> -
+    v527 Imm(0)                                           -> -
     v528 BinopI { op=and, lhs=v626, rhs_imm=65535 }       -> x1
     v529 Binop { op=add, lhs=v524, rhs=v528 }             -> x0
     v530 LifetimeEnd(0)                                   -> -
-    v531 Imm(0)                                           -> x1
-    v532 Imm(41)                                          -> x1
-    v533 Imm(42)                                          -> x1
-    v534 Imm(242)                                         -> x1
-    v535 Imm(65777)                                       -> x1
+    v531 Imm(0)                                           -> -
+    v532 Imm(41)                                          -> -
+    v533 Imm(42)                                          -> -
+    v534 Imm(242)                                         -> -
+    v535 Imm(65777)                                       -> -
     v536 BinopI { op=ne, lhs=v529, rhs_imm=65777 }        -> x0
     terminator Bz { cond=v536, target=b12, fall=b10 }   (exit_acc=v536)
   block 12  start_pc=0
-    v489 ImmData(128)                                     -> x0
+    v489 ImmData(128)                                     -> -
     v490 Load { addr=v489, disp=0, kind=I32 pc_rel }      -> x0
     v491 Imm(7)                                           -> x1
     v492 Imm(0)                                           -> x2
     v493 Select { cond=v490, a=v491, b=v492, kind=I64 }   -> x0
     terminator Jmp(b13)
   block 13  start_pc=0
-    v498 Copy { value=v493, fp=false }                    -> x1
-    v499 Imm(0)                                           -> x1
-    v500 Extend { value=v493, kind=I32 }                  -> x1
+    v498 Copy { value=v493, fp=false }                    -> -
+    v499 Imm(0)                                           -> -
+    v500 Extend { value=v493, kind=I32 }                  -> -
     terminator Return(v493)   (exit_acc=v493)
   block 14  start_pc=0
-    v541 BinopI { op=and, lhs=v616, rhs_imm=4294967295 }  -> x0
+    v541 BinopI { op=and, lhs=v616, rhs_imm=4294967295 }  -> -
     v542 BinopI { op=and, lhs=v616, rhs_imm=3 }           -> x0
-    v543 BinopI { op=shl, lhs=v542, rhs_imm=2 }           -> x1
-    v544 Binop { op=add, lhs=v473, rhs=v543 }             -> x1
+    v543 BinopI { op=shl, lhs=v542, rhs_imm=2 }           -> -
+    v544 Binop { op=add, lhs=v473, rhs=v543 }             -> -
     v545 LoadIndexed { base=v473, index=v542, scale=4, kind=I32 } -> x0
     terminator Jmp(b8)   (exit_acc=v545)
 ; --- SSA dump (ok=true) ent_pc=0 ---
@@ -658,8 +658,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
+    v3   Imm(0)                                           -> -
     v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
@@ -669,8 +669,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
+    v3   Imm(0)                                           -> -
     v4   ImmData(0)                                       -> x3
     terminator Jmp(b2)   (exit_acc=v4)
   block 1  start_pc=0
@@ -701,22 +701,22 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
-    v7   Undef                                            -> x0
-    v8   Imm(0)                                           -> x0
+    v7   Undef                                            -> -
+    v8   Imm(0)                                           -> -
     v9   ImmData(0)                                       -> x3
-    v10  Imm(0)                                           -> x0
+    v10  Imm(0)                                           -> -
     terminator Jmp(b4)   (exit_acc=v9)
   block 3  start_pc=0
-    v15  Imm(0)                                           -> x0
+    v15  Imm(0)                                           -> -
     v16  Load { addr=v11, disp=0, kind=I64 }              -> x0
     v17  CallIndirect { target=v16, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v18  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> -
     v19  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x3
-    v20  Imm(0)                                           -> x0
+    v20  Imm(0)                                           -> -
     terminator Jmp(b4)   (exit_acc=v19)
   block 4  start_pc=0
     v11  Phi { incoming=[b2:v9, b3:v19], kind=I64 }       -> x3
-    v12  Imm(0)                                           -> x0
+    v12  Imm(0)                                           -> -
     v13  ImmData(0)                                       -> x0
     v14  Binop { op=ne, lhs=v11, rhs=v13 }                -> x0
     terminator Bz { cond=v14, target=b5, fall=b3 }   (exit_acc=v14)
@@ -729,23 +729,23 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
     v3   ParamRef(1, kind=I64)                            -> x6
-    v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x0
-    v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x0
-    v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> -
+    v5   Imm(0)                                           -> -
+    v6   Imm(0)                                           -> -
+    v7   Imm(0)                                           -> -
+    v8   Imm(0)                                           -> -
+    v9   Imm(0)                                           -> -
     v10  Load { addr=v1, disp=0, kind=I64 }               -> x0
     v11  Extend { value=v10, kind=I32 }                   -> x12
-    v12  Imm(0)                                           -> x0
-    v13  Imm(8)                                           -> x0
+    v12  Imm(0)                                           -> -
+    v13  Imm(8)                                           -> -
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
-    v15  Imm(0)                                           -> x0
-    v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x0
-    v18  Imm(0)                                           -> x0
+    v15  Imm(0)                                           -> -
+    v16  ImmData(16)                                      -> -
+    v17  Imm(0)                                           -> -
+    v18  Imm(0)                                           -> -
     v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
     v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
     v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
@@ -773,10 +773,10 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v38  Binop { op=ne, lhs=v36, rhs=v37 }                -> x0
     terminator Bz { cond=v38, target=b5, fall=b3 }   (exit_acc=v38)
   block 5  start_pc=0
-    v26  Imm(0)                                           -> x0
-    v27  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> -
+    v27  Imm(0)                                           -> -
     v28  Call { target_pc=7, args=[v11, v14], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
-    v29  Extend { value=v28, kind=I32 }                   -> x0
-    v30  Extend { value=v28, kind=I32 }                   -> x0
+    v29  Extend { value=v28, kind=I32 }                   -> -
+    v30  Extend { value=v28, kind=I32 }                   -> -
     v31  CallExt { binding_idx=0, args=[v28], fp_arg_mask=0x0 } -> x0
     terminator Return

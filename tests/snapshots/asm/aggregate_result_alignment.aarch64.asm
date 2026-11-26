@@ -123,16 +123,15 @@ Disassembly of section .text:
                	ldur	x2, [x29, #-0x8]
                	sub	x1, x1, x2
                	add	x0, x0, x1
-               	add	x2, sp, #0xc0
-               	mov	x1, #0x303030303030303  // =217020518514230019
-               	str	x1, [sp, #0xc0]
-               	str	x1, [sp, #0xc8]
-               	str	x1, [sp, #0xd0]
-               	str	x1, [sp, #0xd8]
-               	and	x1, x2, #0xf
+               	add	x1, sp, #0xc0
+               	mov	x2, #0x303030303030303  // =217020518514230019
+               	str	x2, [sp, #0xc0]
+               	str	x2, [sp, #0xc8]
+               	str	x2, [sp, #0xd0]
+               	str	x2, [sp, #0xd8]
+               	and	x1, x1, #0xf
                	add	x0, x0, x1
                	add	x1, sp, #0xe0
-               	mov	x2, #0x303030303030303  // =217020518514230019
                	str	x2, [sp, #0xe0]
                	str	x2, [sp, #0xe8]
                	and	x1, x1, #0xf

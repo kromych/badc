@@ -268,8 +268,8 @@ Disassembly of section .text:
                	fldt	(%rsp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm1
-               	vaddsd	%xmm1, %xmm0, %xmm1
-               	vaddsd	<rip>, %xmm1, %xmm0
+               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0

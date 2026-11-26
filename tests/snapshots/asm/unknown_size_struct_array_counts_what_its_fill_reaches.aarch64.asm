@@ -334,32 +334,32 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	b	<addr>
                	adrp	x0, <page>
-               	ldr	x3, [x0, #0x108]
-               	str	x3, [sp, #0x8]
-               	mov	x0, x3
+               	ldr	x1, [x0, #0x108]
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x3, [sp, #0x8]
+               	ldr	x1, [sp, #0x8]
                	cbnz	x0, <addr>
-               	ldrsw	x0, [x3, #0x4]
+               	ldrsw	x0, [x1, #0x4]
                	cmp	w0, #0x1
                	b.ne	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	add	x3, x0, #0x8
-               	str	x3, [sp, #0x8]
-               	mov	x0, x3
+               	add	x1, x0, #0x8
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x3, [sp, #0x8]
+               	ldr	x1, [sp, #0x8]
                	cbnz	x0, <addr>
-               	ldrsw	x0, [x3, #0x4]
+               	ldrsw	x0, [x1, #0x4]
                	cmp	w0, #0x2
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

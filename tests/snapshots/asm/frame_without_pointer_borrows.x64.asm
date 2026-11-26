@@ -125,6 +125,8 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	xorl	%edx, %edx
                	divq	%rcx
+               	movq	%rdx, %rax
+               	movq	%rax, %rdx
                	movq	%r8, %rax
                	divq	%rcx
                	movq	%rax, %rsi
@@ -149,7 +151,7 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	divq	%rcx
                	jmp	<addr>
-               	movq	%rdi, %rdx
+               	movq	%rdi, %rax
                	jmp	<addr>
                	movq	%r8, %rax
                	xorl	%edx, %edx
@@ -326,17 +328,17 @@ Disassembly of section .text:
                	retq
 
 <x87>:
+               	xorps	%xmm0, %xmm0
                	xorps	%xmm1, %xmm1
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rdx, %xmm2
-               	vdivsd	<rip>, %xmm2, %xmm2
-               	movsd	%xmm2, -0x8(%rsp)
+               	cvtsi2sd	%rdx, %xmm1
+               	vdivsd	<rip>, %xmm1, %xmm1
+               	movsd	%xmm1, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	(%rdi)
                	fldt	0x30(%rdi)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm0
-               	vaddsd	%xmm0, %xmm1, %xmm0
+               	movsd	-0x8(%rsp), %xmm1
+               	addsd	%xmm1, %xmm0
                	leaq	(%rsi,%rdx), %rax
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1

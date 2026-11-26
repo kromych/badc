@@ -388,17 +388,17 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	vpermilpd	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0]
-               	vdivsd	<rip>, %xmm1, %xmm2
-               	vpermilpd	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0]
-               	vdivsd	<rip>, %xmm1, %xmm3
-               	movsd	%xmm2, (%rsp)
-               	movsd	%xmm3, 0x8(%rsp)
+               	vdivsd	<rip>, %xmm1, %xmm1
+               	vpermilpd	$0x1, %xmm0, %xmm2 # xmm2 = xmm0[1,0]
+               	vdivsd	<rip>, %xmm2, %xmm2
+               	movsd	%xmm1, (%rsp)
+               	movsd	%xmm2, 0x8(%rsp)
                	vpermilpd	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0]
-               	vdivsd	<rip>, %xmm1, %xmm2
-               	movsd	%xmm2, -0x10(%rbp)
+               	vdivsd	<rip>, %xmm1, %xmm1
+               	movsd	%xmm1, -0x10(%rbp)
                	vpermilpd	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0]
-               	vdivsd	<rip>, %xmm1, %xmm2
-               	movsd	%xmm2, -0x8(%rbp)
+               	vdivsd	<rip>, %xmm1, %xmm1
+               	movsd	%xmm1, -0x8(%rbp)
                	xorl	%eax, %eax
                	movzbq	(%rsp,%rax), %rsi
                	movzbq	-0x10(%rbp,%rax), %rdi

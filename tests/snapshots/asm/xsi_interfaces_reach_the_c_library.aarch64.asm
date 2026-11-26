@@ -146,17 +146,17 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x2, x0
-               	cmp	x2, #0x0
+               	mov	x1, x0
+               	cmp	x1, #0x0
                	b.lt	<addr>
-               	str	x2, [sp, #0x8]
-               	mov	x0, x2
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	sub	x1, x29, #0x1a0
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x8]
+               	ldr	x1, [sp, #0x8]
                	cbnz	x0, <addr>
-               	mov	x0, x2
+               	mov	x0, x1
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

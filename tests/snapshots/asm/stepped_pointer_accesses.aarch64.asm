@@ -525,25 +525,25 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x20, x29, #0xf0
-               	sub	x4, x29, #0xa0
-               	str	x4, [sp, #0x10]
+               	sub	x2, x29, #0xa0
+               	str	x2, [sp, #0x10]
                	mov	x0, x20
-               	mov	x1, x4
+               	mov	x1, x2
                	mov	x2, #0x28               // =40
                	mov	x3, #0x5                // =5
                	bl	<addr>
-               	ldr	x4, [sp, #0x10]
+               	ldr	x2, [sp, #0x10]
                	mov	x1, #0x5                // =5
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x7                // =7
-               	ldrh	w3, [x20, x0, lsl #1]
+               	mov	x3, #0x7                // =7
+               	ldrh	w4, [x20, x0, lsl #1]
                	and	x5, x1, #0xffff
-               	cmp	w3, w5
+               	cmp	w4, w5
                	b.ne	<addr>
-               	ldr	w3, [x4, x0, lsl #2]
-               	cmp	w3, w1
+               	ldr	w4, [x2, x0, lsl #2]
+               	cmp	w4, w1
                	b.ne	<addr>
-               	mul	x1, x1, x2
+               	mul	x1, x1, x3
                	add	x1, x1, #0x1
                	add	x0, x0, #0x1
                	cmp	w0, #0x28

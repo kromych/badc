@@ -334,18 +334,18 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
-               	sub	x3, x29, #0x200
-               	str	x3, [sp, #0x10]
-               	mov	x0, x3
+               	sub	x1, x29, #0x200
+               	str	x1, [sp, #0x10]
+               	mov	x0, x1
                	mov	x1, #0x0                // =0
                	mov	x2, #0x3f               // =63
                	bl	<addr>
-               	ldr	x3, [sp, #0x10]
+               	ldr	x1, [sp, #0x10]
                	mov	x0, #0x1                // =1
-               	sub	x1, x0, #0x1
-               	ldr	x1, [x3, x1, lsl #3]
-               	ldr	x2, [x3, x0, lsl #3]
-               	cmp	x1, x2
+               	sub	x2, x0, #0x1
+               	ldr	x2, [x1, x2, lsl #3]
+               	ldr	x3, [x1, x0, lsl #3]
+               	cmp	x2, x3
                	b.gt	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x40

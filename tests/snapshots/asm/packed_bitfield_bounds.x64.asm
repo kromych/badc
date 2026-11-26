@@ -29,35 +29,35 @@ Disassembly of section .text:
                	subq	$0x18, %rsp
                	movl	$0x1e, %edi
                	callq	<addr>
-               	movq	%rax, %r9
-               	movq	%r9, %rsi
+               	movq	%rax, %rcx
+               	movq	%rcx, %rsi
                	shlq	%rsi
-               	movq	%r9, 0x8(%rsp)
+               	movq	%rcx, 0x8(%rsp)
                	xorl	%edi, %edi
                	movl	$0x3, %edx
                	movl	$0x22, %ecx
                	movq	$-0x1, %r8
                	xorl	%r9d, %r9d
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movq	0x8(%rsp), %r9
-               	cmpq	$-0x1, %rcx
+               	movq	%rax, %rdx
+               	movq	0x8(%rsp), %rcx
+               	cmpq	$-0x1, %rdx
                	je	<addr>
-               	leaq	(%rcx,%r9), %rdi
-               	movq	%r9, 0x8(%rsp)
-               	movq	%rcx, (%rsp)
-               	movq	%r9, %rsi
+               	leaq	(%rdx,%rcx), %rdi
+               	movq	%rcx, 0x8(%rsp)
+               	movq	%rdx, (%rsp)
+               	movq	%rcx, %rsi
                	xorl	%edx, %edx
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	0x8(%rsp), %r9
-               	movq	(%rsp), %rcx
+               	movq	0x8(%rsp), %rcx
+               	movq	(%rsp), %rdx
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x18, %rsp
                	retq
-               	leaq	(%rcx,%r9), %rax
+               	leaq	(%rdx,%rcx), %rax
                	testq	%rax, %rax
                	je	<addr>
                	movq	$-0x1, -0x10(%rax)

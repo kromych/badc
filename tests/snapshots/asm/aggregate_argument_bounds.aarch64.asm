@@ -187,83 +187,83 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	add	x4, x21, x20
-               	cbz	x4, <addr>
-               	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	add	x0, x21, x20
+               	cbz	x0, <addr>
+               	sub	x1, x29, #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x16, [x2]
+               	str	x16, [x1]
+               	ldr	w16, [x2, #0x8]
+               	str	w16, [x1, #0x8]
+               	sub	x5, x0, #0xb
+               	sub	x20, x0, #0xc
                	ldr	x16, [x1]
-               	str	x16, [x0]
-               	ldr	w16, [x1, #0x8]
-               	str	w16, [x0, #0x8]
-               	sub	x5, x4, #0xb
-               	sub	x20, x4, #0xc
-               	ldr	x16, [x0]
                	str	x16, [x20]
-               	ldr	w16, [x0, #0x8]
+               	ldr	w16, [x1, #0x8]
                	str	w16, [x20, #0x8]
-               	ldurb	w1, [x4, #-0x3]
-               	ldurb	w0, [x4, #-0x1]
-               	add	x1, x1, x0
-               	cmp	w1, #0x16
+               	ldurb	w2, [x0, #-0x3]
+               	ldurb	w1, [x0, #-0x1]
+               	add	x2, x2, x1
+               	cmp	w2, #0x16
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldurb	w1, [x4, #-0x5]
-               	add	x1, x1, x0
-               	cmp	w1, #0x14
+               	ldurb	w2, [x0, #-0x5]
+               	add	x2, x2, x1
+               	cmp	w2, #0x14
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldursh	x1, [x4, #-0x6]
-               	ldursh	x2, [x4, #-0x2]
-               	add	x1, x1, x2
+               	ldursh	x2, [x0, #-0x6]
+               	ldursh	x3, [x0, #-0x2]
+               	add	x2, x2, x3
                	mov	x17, #0x1412            // =5138
-               	cmp	w1, w17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldurb	w1, [x4, #-0x7]
-               	add	x0, x1, x0
-               	cmp	w0, #0x12
+               	ldurb	w2, [x0, #-0x7]
+               	add	x1, x2, x1
+               	cmp	w1, #0x12
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldrb	w0, [x5]
-               	ldrb	w1, [x5, #0xa]
-               	add	x0, x0, x1
-               	cmp	w0, #0xe
+               	ldrb	w1, [x5]
+               	ldrb	w2, [x5, #0xa]
+               	add	x1, x1, x2
+               	cmp	w1, #0xe
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldurb	w2, [x4, #-0x1]
+               	ldurb	w2, [x0, #-0x1]
                	cmp	w2, #0xc
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldurh	w0, [x4, #-0x3]
-               	orr	x1, x0, x2, lsl #16
-               	ldur	w3, [x4, #-0x5]
+               	ldurh	w4, [x0, #-0x3]
+               	orr	x1, x4, x2, lsl #16
+               	ldur	w3, [x0, #-0x5]
                	orr	x2, x3, x2, lsl #32
-               	ldur	w3, [x4, #-0x6]
-               	ldurh	w6, [x4, #-0x2]
+               	ldur	w3, [x0, #-0x6]
+               	ldurh	w6, [x0, #-0x2]
                	orr	x3, x3, x6, lsl #32
-               	ldur	w6, [x4, #-0x7]
-               	orr	x0, x6, x0, lsl #32
-               	ldurb	w4, [x4, #-0x1]
-               	orr	x4, x0, x4, lsl #48
+               	ldur	w6, [x0, #-0x7]
+               	orr	x4, x6, x4, lsl #32
+               	ldurb	w0, [x0, #-0x1]
+               	orr	x4, x4, x0, lsl #48
                	mov	x0, #0x1                // =1
                	ldrh	w6, [x5, #0x8]
                	ldrb	w16, [x5, #0xa]

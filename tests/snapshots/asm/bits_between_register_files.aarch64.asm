@@ -361,28 +361,28 @@ Disassembly of section .text:
                	fmov	x0, d0
                	eor	x0, x0, #0x40000000000
                	stur	x0, [x29, #-0x40]
-               	sub	x1, x29, #0x138
-               	sub	x0, x29, #0x40
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	sub	x0, x29, #0x138
+               	sub	x1, x29, #0x40
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	ldr	d0, [sp, #0x68]
                	stur	d0, [x29, #-0x38]
-               	sub	x0, x29, #0x38
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	ldr	x0, [sp, #0x68]
-               	fmov	d0, x0
+               	sub	x1, x29, #0x38
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	ldr	x1, [sp, #0x68]
+               	fmov	d0, x1
                	ldur	d1, [x29, #-0x100]
                	fadd	d0, d0, d1
                	stur	d0, [x29, #-0x30]
-               	sub	x0, x29, #0x30
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	ldr	x0, [sp, #0x68]
-               	stur	x0, [x29, #-0x28]
-               	sub	x0, x29, #0x28
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	sub	x1, x29, #0x30
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	ldr	x1, [sp, #0x68]
+               	stur	x1, [x29, #-0x28]
+               	sub	x1, x29, #0x28
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	ldr	d16, [sp, #0x68]
                	str	d16, [sp, #0x38]
                	sub	x0, x29, #0x120

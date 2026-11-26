@@ -246,18 +246,18 @@ Disassembly of section .text:
                	mov	x24, x22
                	b	<addr>
                	add	x24, x24, #0x1
-               	add	x2, x23, #0x13
-               	str	x2, [sp, #0x38]
-               	mov	x0, x2
+               	add	x1, x23, #0x13
+               	str	x1, [sp, #0x38]
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x38]
-               	orr	x1, x22, #0x1
+               	ldr	x1, [sp, #0x38]
+               	orr	x2, x22, #0x1
                	cmp	x0, #0x0
-               	csel	x22, x22, x1, ne
-               	mov	x0, x2
+               	csel	x22, x22, x2, ne
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>

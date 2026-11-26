@@ -102,9 +102,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w1
                	b.lt	<addr>
-               	ldur	x8, [x29, #-0xa0]
-               	mov	x0, #0x3e8              // =1000
-               	stur	x0, [x29, #-0xa0]
+               	ldur	x0, [x29, #-0xa0]
+               	mov	x1, #0x3e8              // =1000
+               	stur	x1, [x29, #-0xa0]
                	ldur	x1, [x29, #-0x98]
                	ldur	x2, [x29, #-0x90]
                	ldur	x3, [x29, #-0x88]
@@ -136,7 +136,7 @@ Disassembly of section .text:
                	str	x16, [sp, #0x50]
                	ldur	x16, [x29, #-0x8]
                	str	x16, [sp, #0x58]
-               	str	x8, [sp, #0x60]
+               	str	x0, [sp, #0x60]
                	ldur	x16, [x29, #-0xa0]
                	str	x16, [sp, #0x68]
                	mov	x0, #0x15               // =21

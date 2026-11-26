@@ -1508,20 +1508,19 @@ Disassembly of section .text:
                	movss	<rip>, %xmm1 # <addr>
                	movss	<rip>, %xmm2 # <addr>
                	vpermilps	$0x2, %xmm0, %xmm3 # xmm3 = xmm0[2,0,0,0]
-               	vpermilps	$0x3, %xmm0, %xmm4 # xmm4 = xmm0[3,0,0,0]
-               	movapd	%xmm1, %xmm0
-               	ucomiss	%xmm1, %xmm0
+               	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
+               	movapd	%xmm1, %xmm4
+               	ucomiss	%xmm1, %xmm4
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm2, %xmm0
-               	ucomiss	%xmm2, %xmm0
+               	movapd	%xmm2, %xmm1
+               	ucomiss	%xmm2, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movapd	%xmm3, %xmm1
                	ucomiss	<rip>, %xmm1 # <addr>
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm4, %xmm0
                	ucomiss	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
@@ -1688,8 +1687,8 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm3, %xmm1
-               	ucomiss	<rip>, %xmm1 # <addr>
+               	movapd	%xmm3, %xmm0
+               	ucomiss	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0xd2, %eax
@@ -1712,8 +1711,7 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm1 # <addr>
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm0, %xmm1
-               	ucomiss	<rip>, %xmm1 # <addr>
+               	ucomiss	<rip>, %xmm0 # <addr>
                	jp	<addr>
                	je	<addr>
                	movl	$0xd4, %eax

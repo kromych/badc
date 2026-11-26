@@ -2084,6 +2084,7 @@ fn allocate_keeping(
     // collapses to today's per-value behavior. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
+    let emitted = reads.clone();
     let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
         super::liveness::Liveness::compute_reading(func, reads)
     });
@@ -2197,7 +2198,8 @@ fn allocate_keeping(
     widen_vector_zeros(func, &mut wide);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
-        if !produces_value(inst) || produces_pred_result(inst) {
+        // An instruction the emitters skip writes no register and no slot.
+        if !produces_value(inst) || produces_pred_result(inst) || !emitted[v] {
             continue;
         }
         let root = node_of[v] as usize;
@@ -7821,16 +7823,13 @@ int main(void) { return 0; }
         assert!(!alloc_of("looped").gpr_used.is_empty());
     }
 
+    /// An unread value is no node of the coloring: under two registers it
+    /// takes no slot, and the spill region ends after the live values'.
     #[test]
-    fn a_slot_only_a_dead_value_holds_is_outside_the_spill_region() {
+    fn a_dead_value_takes_no_slot() {
         let (f, dead) = dead_shift_chain();
         let alloc = with_pool_size_override(2, 2, || allocate(&f, Target::LinuxX64));
-        let Place::Spill(s) = alloc.places[dead as usize] else {
-            panic!(
-                "the unread shift must spill, got {:?}",
-                alloc.places[dead as usize]
-            );
-        };
+        assert_eq!(alloc.places[dead as usize], Place::None);
         let live_end = (f.insts.iter().enumerate())
             .filter(|&(v, inst)| {
                 !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc)
@@ -7841,37 +7840,21 @@ int main(void) { return 0; }
             })
             .max()
             .unwrap_or(0);
-        assert!(s >= live_end, "the dead value must take the top slot");
         assert_eq!(alloc.spill_count, live_end);
     }
 
+    /// An unread value takes no register, so none is saved for it; every
+    /// saved register has an emitted writer.
     #[test]
-    fn dead_pure_color_stays_out_of_used_sets() {
+    fn a_dead_value_takes_no_register() {
         let (f, dead) = dead_shift_chain();
-        // Pin uncapped banks so the pressure-matrix env cannot spill
-        // the dead value instead of coloring it.
         let alloc =
             with_pool_size_override(usize::MAX, usize::MAX, || allocate(&f, Target::LinuxX64));
         assert!(
             super::super::emit_common::is_dead_pure(&f.insts[dead as usize], dead, &alloc),
             "the unread shift must be dead-pure"
         );
-        let Place::IntReg(r) = alloc.places[dead as usize] else {
-            panic!(
-                "the dead value must be colored, got {:?}",
-                alloc.places[dead as usize]
-            );
-        };
-        assert!(
-            RegBanks::for_target(Target::LinuxX64)
-                .callee_gprs
-                .contains(&r),
-            "with the caller bank exhausted the dead value takes a callee-saved register, got {r}"
-        );
-        assert!(
-            !alloc.gpr_used.contains(&r),
-            "gpr {r} is written by nothing, so it must not be saved"
-        );
+        assert_eq!(alloc.places[dead as usize], Place::None);
         for &r in &alloc.gpr_used {
             assert!(
                 f.insts.iter().enumerate().any(|(v, inst)| {
@@ -7988,11 +7971,15 @@ int main(void) { return 0; }
                 // and a phi nothing reads, whose edge moves are
                 // dropped. A value its call sets, or a local a stack argument
                 // reads in place, takes none either: the call's marshaling does.
+                // Nor does a value the emitters skip.
                 let kind = result_kind(&f.insts[i]);
                 let read_by_call = alloc.call_set.contains_key(&(i as u32))
                     || alloc.stack_load.contains_key(&(i as u32));
                 if read_by_call {
                     assert_eq!(*p, Place::None, "inst {i} is read by its call");
+                    continue;
+                }
+                if super::super::emit_common::is_dead_pure(&f.insts[i], i as ValueId, &alloc) {
                     continue;
                 }
                 let dead_dst = alloc.use_counts.get(i).copied().unwrap_or(0) == 0
@@ -9209,8 +9196,8 @@ int main(void) { return 0; }
     }
 
     /// A value read after a call only by an instruction no emitter lowers
-    /// (a sum nothing reads) does not cross the call: it takes a
-    /// caller-saved register and the function saves nothing.
+    /// (a sum nothing reads) does not cross the call: unread itself, it
+    /// takes no place, and the function saves nothing.
     #[test]
     fn a_read_by_a_skipped_instruction_crosses_no_call() {
         let func = store_func(
@@ -9240,11 +9227,7 @@ int main(void) { return 0; }
         );
         for target in [Target::LinuxX64, Target::LinuxAarch64] {
             let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target));
-            let banks = RegBanks::for_target(target);
-            let Place::IntReg(r) = a.places[0] else {
-                panic!("{target:?}: {:?}", a.places[0])
-            };
-            assert!(banks.caller_gprs.contains(&r), "{target:?}: x{r}");
+            assert_eq!(a.places[0], Place::None, "{target:?}");
             assert!(a.gpr_used.is_empty(), "{target:?}: {:?}", a.gpr_used);
             assert_eq!(a.last_use[0], 0, "{target:?}: no emitted read");
         }

@@ -85,8 +85,7 @@ Disassembly of section .text:
                	mov	x3, #0xff               // =255
                	mov	x4, #0x1                // =1
                	bl	<addr>
-               	mov	x2, x0
-               	lsr	x16, x2, #32
+               	lsr	x16, x0, #32
                	str	x16, [sp, #0xe0]
                	and	x16, x1, #0xff
                	str	x16, [sp, #0xd8]
@@ -96,7 +95,7 @@ Disassembly of section .text:
                	str	x16, [sp, #0xc8]
                	ubfx	x16, x1, #24, #8
                	str	x16, [sp, #0xc0]
-               	str	x2, [sp, #0xb8]
+               	str	x0, [sp, #0xb8]
                	mov	x0, #0x0                // =0
                	mov	x1, #0x0                // =0
                	mov	x2, #0x0                // =0

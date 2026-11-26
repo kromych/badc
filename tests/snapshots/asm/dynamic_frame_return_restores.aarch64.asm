@@ -24,25 +24,25 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x2, sp
-               	sub	x2, x2, x17
+               	mov	x1, sp
+               	sub	x1, x1, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x2
+               	mov	sp, x1
                	cmp	x0, #0x9
                	b.le	<addr>
-               	mov	x0, x2
+               	mov	x0, x1
                	mov	x1, #0x1                // =1
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x2
+               	mov	x0, x1
                	mov	x1, #0x2                // =2
                	bl	<addr>
                	mov	x0, #0x2                // =2

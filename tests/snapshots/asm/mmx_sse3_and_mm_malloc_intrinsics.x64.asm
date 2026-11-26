@@ -222,9 +222,8 @@ Disassembly of section .text:
                	vaddss	%xmm4, %xmm3, %xmm7
                	vpermilps	$0x2, %xmm1, %xmm3 # xmm3 = xmm1[2,0,0,0]
                	vpermilps	$0x3, %xmm1, %xmm4 # xmm4 = xmm1[3,0,0,0]
-               	vaddss	%xmm4, %xmm3, %xmm4
-               	movapd	%xmm2, %xmm3
-               	ucomiss	<rip>, %xmm3
+               	addss	%xmm4, %xmm3
+               	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	jne	<addr>
                	movapd	%xmm6, %xmm2
@@ -235,7 +234,7 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm4, %xmm2
+               	movapd	%xmm3, %xmm2
                	ucomiss	<rip>, %xmm2
                	jp	<addr>
                	je	<addr>
@@ -254,7 +253,8 @@ Disassembly of section .text:
                	vpermilps	$0x2, %xmm1, %xmm3 # xmm3 = xmm1[2,0,0,0]
                	vpermilps	$0x3, %xmm1, %xmm1 # xmm1 = xmm1[3,0,0,0]
                	subss	%xmm1, %xmm3
-               	ucomiss	<rip>, %xmm2
+               	movapd	%xmm2, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movapd	%xmm6, %xmm1
@@ -287,7 +287,8 @@ Disassembly of section .text:
                	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	ucomiss	<rip>, %xmm2
+               	movapd	%xmm2, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movapd	%xmm3, %xmm1
@@ -361,20 +362,19 @@ Disassembly of section .text:
                	subsd	%xmm0, %xmm4
                	vpermilpd	$0x0, %xmm1, %xmm0 # xmm0 = xmm1[0,0]
                	vpermilpd	$0x1, %xmm1, %xmm1 # xmm1 = xmm1[1,0]
-               	vsubsd	%xmm1, %xmm0, %xmm5
-               	movapd	%xmm2, %xmm0
-               	ucomisd	<rip>, %xmm0
+               	subsd	%xmm1, %xmm0
+               	movapd	%xmm2, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movapd	%xmm3, %xmm1
                	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm4, %xmm0
-               	ucomisd	<rip>, %xmm0
+               	movapd	%xmm4, %xmm1
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movapd	%xmm5, %xmm0
                	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>

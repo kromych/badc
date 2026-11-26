@@ -250,28 +250,28 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x10]
                	bl	<addr>
-               	mov	x3, x0
-               	cbnz	x3, <addr>
+               	mov	x1, x0
+               	cbnz	x1, <addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	x2, [x29, #-0x10]
-               	str	x3, [sp, #0x50]
-               	mov	x0, x3
+               	str	x1, [sp, #0x50]
+               	mov	x0, x1
                	sub	x1, x29, #0x58
                	bl	<addr>
-               	ldr	x3, [sp, #0x50]
+               	ldr	x1, [sp, #0x50]
                	ldur	x2, [x29, #-0x10]
-               	str	x3, [sp, #0x50]
-               	mov	x0, x3
+               	str	x1, [sp, #0x50]
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	str	x0, [sp, #0x58]
-               	ldr	x3, [sp, #0x50]
-               	mov	x0, x3
+               	ldr	x1, [sp, #0x50]
+               	mov	x0, x1
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, #0xc                // =12

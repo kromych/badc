@@ -13129,6 +13129,32 @@ pub(super) fn optimized_function_full_pool(
     })
 }
 
+/// An address a load folds into its displacement is left unread and
+/// unemitted; it holds no register and no slot, also under two registers
+/// per bank, where a placed one takes a slot no emitted value shares.
+#[test]
+fn an_unemitted_value_takes_no_place() {
+    const SRC: &str = "struct node { long pad[7]; int *count; };\n\
+        long f(struct node **v, long a, long b, long c) {\n\
+            struct node *n = v[9];\n\
+            return a * b + c + *n->count + a + b + c;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, _) = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+            optimized_function(SRC, "f", target)
+        });
+        let folded: Vec<&str> = body
+            .lines()
+            .filter(|l| l.contains("BinopI { op=add,") && l.contains("rhs_imm=56 }"))
+            .collect();
+        assert!(!folded.is_empty(), "{target:?}: no folded address: {body}");
+        assert!(
+            body.contains("disp=56, kind=I64") && folded.iter().all(|l| l.ends_with("-> -")),
+            "{target:?}: {body}"
+        );
+    }
+}
+
 /// The id of the first instruction whose text starts with `head`.
 fn inst_id(insts: &[(u32, String)], head: &str, body: &str) -> u32 {
     insts

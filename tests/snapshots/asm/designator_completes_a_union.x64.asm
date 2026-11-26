@@ -31,8 +31,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	<rip>, %xmm1
+               	movsd	<rip>, %xmm0 # <addr>
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movq	<rip>, %rax # <addr>

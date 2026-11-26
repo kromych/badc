@@ -638,8 +638,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x3c00             // =15360
-               	stur	w1, [x29, #-0x8]
+               	mov	x0, #0x3c00             // =15360
+               	stur	w0, [x29, #-0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]

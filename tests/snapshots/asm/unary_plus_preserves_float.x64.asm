@@ -28,8 +28,8 @@ Disassembly of section .text:
 <main>:
                	movabsq	$0x3fe0000000000000, %r11 # imm = 0x3FE0000000000000
                	movq	%r11, %xmm0
-               	vaddsd	<rip>, %xmm0, %xmm1
-               	ucomisd	<rip>, %xmm1
+               	vaddsd	<rip>, %xmm0, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax

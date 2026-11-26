@@ -9613,111 +9613,111 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shrq	$0x1b, %rdx
                	xorq	%rdx, %rax
-               	movabsq	$0x2545f4914f6cdd1d, %r8 # imm = 0x2545F4914F6CDD1D
-               	imulq	%rax, %r8
-               	vpinsrd	$0x1, %r8d, %xmm2, %xmm2
-               	movq	%rax, %rdx
-               	shrq	$0xc, %rdx
-               	xorq	%rdx, %rax
-               	movq	%rax, %rdx
-               	shlq	$0x19, %rdx
-               	xorq	%rdx, %rax
-               	movq	%rax, %rdx
-               	shrq	$0x1b, %rdx
-               	xorq	%rdx, %rax
+               	movabsq	$0x2545f4914f6cdd1d, %rdx # imm = 0x2545F4914F6CDD1D
+               	imulq	%rax, %rdx
+               	vpinsrd	$0x1, %edx, %xmm2, %xmm2
+               	movq	%rax, %rsi
+               	shrq	$0xc, %rsi
+               	xorq	%rsi, %rax
+               	movq	%rax, %rsi
+               	shlq	$0x19, %rsi
+               	xorq	%rsi, %rax
+               	movq	%rax, %rsi
+               	shrq	$0x1b, %rsi
+               	xorq	%rsi, %rax
                	movq	%rax, <rip> # <addr>
                	movabsq	$0x2545f4914f6cdd1d, %r11 # imm = 0x2545F4914F6CDD1D
                	imulq	%r11, %rax
                	movl	%eax, -0x50(%rbp)
                	movq	<rip>, %rax # <addr>
-               	movq	%rax, %rdx
-               	shrq	$0xc, %rdx
-               	xorq	%rdx, %rax
-               	movq	%rax, %rdx
-               	shlq	$0x19, %rdx
-               	xorq	%rdx, %rax
-               	movq	%rax, %rdx
-               	shrq	$0x1b, %rdx
-               	xorq	%rdx, %rax
-               	movabsq	$0x2545f4914f6cdd1d, %r9 # imm = 0x2545F4914F6CDD1D
-               	imulq	%rax, %r9
+               	movq	%rax, %rsi
+               	shrq	$0xc, %rsi
+               	xorq	%rsi, %rax
+               	movq	%rax, %rsi
+               	shlq	$0x19, %rsi
+               	xorq	%rsi, %rax
+               	movq	%rax, %rsi
+               	shrq	$0x1b, %rsi
+               	xorq	%rsi, %rax
+               	movabsq	$0x2545f4914f6cdd1d, %rsi # imm = 0x2545F4914F6CDD1D
+               	imulq	%rax, %rsi
                	movapd	%xmm2, %xmm3
-               	vpinsrd	$0x2, %r9d, %xmm3, %xmm3
-               	movq	%rax, %rdx
-               	shrq	$0xc, %rdx
-               	xorq	%rdx, %rax
-               	movq	%rax, %rdx
-               	shlq	$0x19, %rdx
-               	xorq	%rdx, %rax
-               	movq	%rax, %rdx
-               	shrq	$0x1b, %rdx
-               	xorq	%rdx, %rax
+               	vpinsrd	$0x2, %esi, %xmm3, %xmm3
+               	movq	%rax, %rdi
+               	shrq	$0xc, %rdi
+               	xorq	%rdi, %rax
+               	movq	%rax, %rdi
+               	shlq	$0x19, %rdi
+               	xorq	%rdi, %rax
+               	movq	%rax, %rdi
+               	shrq	$0x1b, %rdi
+               	xorq	%rdi, %rax
                	movq	%rax, <rip> # <addr>
                	movabsq	$0x2545f4914f6cdd1d, %r11 # imm = 0x2545F4914F6CDD1D
                	imulq	%r11, %rax
                	movl	%eax, -0x4c(%rbp)
                	movq	<rip>, %rax # <addr>
-               	movq	%rax, %rdx
-               	shrq	$0xc, %rdx
-               	xorq	%rdx, %rax
-               	movq	%rax, %rdx
-               	shlq	$0x19, %rdx
-               	xorq	%rdx, %rax
-               	movq	%rax, %rdx
-               	shrq	$0x1b, %rdx
-               	xorq	%rdx, %rax
+               	movq	%rax, %rdi
+               	shrq	$0xc, %rdi
+               	xorq	%rdi, %rax
+               	movq	%rax, %rdi
+               	shlq	$0x19, %rdi
+               	xorq	%rdi, %rax
+               	movq	%rax, %rdi
+               	shrq	$0x1b, %rdi
+               	xorq	%rdi, %rax
                	movq	%rax, <rip> # <addr>
                	movabsq	$0x2545f4914f6cdd1d, %r11 # imm = 0x2545F4914F6CDD1D
                	imulq	%r11, %rax
                	vpinsrd	$0x3, %eax, %xmm3, %xmm3
                	vinserti128	$0x1, %xmm3, %ymm4, %ymm4
                	vmovups	-0x68(%rbp), %ymm5
-               	movq	%r12, %rsi
-               	andq	$0x3, %rsi
-               	movl	-0x68(%rbp,%rsi,4), %edx
-               	movl	%edx, -0x188(%rbp)
-               	movq	%r13, %rsi
-               	andq	$0x3, %rsi
-               	movl	-0x68(%rbp,%rsi,4), %edx
-               	movl	%edx, -0x184(%rbp)
-               	movq	%r14, %rsi
-               	andq	$0x3, %rsi
-               	movl	-0x68(%rbp,%rsi,4), %edx
-               	movl	%edx, -0x180(%rbp)
-               	movq	%r15, %rsi
-               	andq	$0x3, %rsi
-               	movl	-0x68(%rbp,%rsi,4), %edx
-               	movl	%edx, -0x17c(%rbp)
-               	movq	%rcx, %rdx
-               	andq	$0x3, %rdx
-               	orq	$0x4, %rdx
-               	movl	-0x68(%rbp,%rdx,4), %edx
-               	movl	%edx, -0x178(%rbp)
-               	movq	%r8, %rdx
-               	andq	$0x3, %rdx
-               	orq	$0x4, %rdx
-               	movl	-0x68(%rbp,%rdx,4), %edx
-               	movl	%edx, -0x174(%rbp)
-               	movq	%r9, %rdx
-               	andq	$0x3, %rdx
-               	orq	$0x4, %rdx
-               	movl	-0x68(%rbp,%rdx,4), %edx
-               	movl	%edx, -0x170(%rbp)
-               	movq	%rax, %rdx
-               	andq	$0x3, %rdx
-               	orq	$0x4, %rdx
-               	movl	-0x68(%rbp,%rdx,4), %edx
-               	movl	%edx, -0x16c(%rbp)
+               	movq	%r12, %r8
+               	andq	$0x3, %r8
+               	movl	-0x68(%rbp,%r8,4), %edi
+               	movl	%edi, -0x188(%rbp)
+               	movq	%r13, %r8
+               	andq	$0x3, %r8
+               	movl	-0x68(%rbp,%r8,4), %edi
+               	movl	%edi, -0x184(%rbp)
+               	movq	%r14, %r8
+               	andq	$0x3, %r8
+               	movl	-0x68(%rbp,%r8,4), %edi
+               	movl	%edi, -0x180(%rbp)
+               	movq	%r15, %r8
+               	andq	$0x3, %r8
+               	movl	-0x68(%rbp,%r8,4), %edi
+               	movl	%edi, -0x17c(%rbp)
+               	movq	%rcx, %rdi
+               	andq	$0x3, %rdi
+               	orq	$0x4, %rdi
+               	movl	-0x68(%rbp,%rdi,4), %edi
+               	movl	%edi, -0x178(%rbp)
+               	movq	%rdx, %rdi
+               	andq	$0x3, %rdi
+               	orq	$0x4, %rdi
+               	movl	-0x68(%rbp,%rdi,4), %edi
+               	movl	%edi, -0x174(%rbp)
+               	movq	%rsi, %rdi
+               	andq	$0x3, %rdi
+               	orq	$0x4, %rdi
+               	movl	-0x68(%rbp,%rdi,4), %edi
+               	movl	%edi, -0x170(%rbp)
+               	movq	%rax, %rdi
+               	andq	$0x3, %rdi
+               	orq	$0x4, %rdi
+               	movl	-0x68(%rbp,%rdi,4), %edi
+               	movl	%edi, -0x16c(%rbp)
                	vpermilps	%ymm4, %ymm5, %ymm6
                	vmovups	%ymm6, (%rsp)
-               	leaq	-0x168(%rbp), %rdx
-               	vmovups	%ymm6, (%rdx)
+               	leaq	-0x168(%rbp), %rdi
+               	vmovups	%ymm6, (%rdi)
                	movups	%xmm0, -0x1e0(%rbp)
                	movups	%xmm1, -0x1f0(%rbp)
                	movq	%rcx, -0x1f8(%rbp)
-               	movq	%r8, -0x200(%rbp)
+               	movq	%rdx, -0x200(%rbp)
                	movups	%xmm2, -0x210(%rbp)
-               	movq	%r9, -0x218(%rbp)
+               	movq	%rsi, -0x218(%rbp)
                	movq	%rax, -0x220(%rbp)
                	movups	%xmm3, -0x230(%rbp)
                	vmovaps	%ymm4, %ymm14

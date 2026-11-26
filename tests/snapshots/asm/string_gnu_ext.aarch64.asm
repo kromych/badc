@@ -253,41 +253,41 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x3                // =3
                	bl	<addr>
-               	mov	x2, x0
-               	cbz	x2, <addr>
-               	str	x2, [sp, #0x8]
-               	mov	x0, x2
+               	mov	x1, x0
+               	cbz	x1, <addr>
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x8]
+               	ldr	x1, [sp, #0x8]
                	cbz	x0, <addr>
                	mov	x0, #0x11               // =17
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x2
+               	mov	x0, x1
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x64               // =100
                	bl	<addr>
-               	mov	x2, x0
-               	cbz	x2, <addr>
-               	str	x2, [sp, #0x8]
-               	mov	x0, x2
+               	mov	x1, x0
+               	cbz	x1, <addr>
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x8]
+               	ldr	x1, [sp, #0x8]
                	cbz	x0, <addr>
                	mov	x0, #0x12               // =18
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x2
+               	mov	x0, x1
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

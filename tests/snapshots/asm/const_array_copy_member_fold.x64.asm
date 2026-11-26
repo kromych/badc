@@ -69,20 +69,20 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	movl	%eax, 0x8(%rsp)
-               	leaq	<rip>, %rsi # <addr>
-               	movslq	0x8(%rsp), %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rsi, %rcx
-               	movzbq	(%rcx), %rdx
-               	movzbq	0x2(%rcx), %rdi
-               	cmpl	$0x3c, %edx
+               	leaq	<rip>, %rcx # <addr>
+               	movslq	0x8(%rsp), %rdx
+               	shlq	$0x2, %rdx
+               	addq	%rcx, %rdx
+               	movzbq	(%rdx), %rsi
+               	movzbq	0x2(%rdx), %rdi
+               	cmpl	$0x3c, %esi
                	jne	<addr>
                	cmpl	$0x1, %edi
                	je	<addr>
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
-               	movq	%rsi, %rdi
+               	movl	<rip>, %edx # <addr>
+               	incq	%rdx
+               	movl	%edx, <rip> # <addr>
+               	movq	%rcx, %rdi
                	movq	%rax, %r8
                	movq	%rax, %rsi
                	movl	$0x3c, %edx

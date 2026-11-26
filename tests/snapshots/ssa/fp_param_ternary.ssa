@@ -5,24 +5,24 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
     v3   ParamRef(1, kind=F32)                            -> d0 [f32]
-    v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> -
+    v5   Imm(0)                                           -> -
     v6   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x7
     terminator Bz { cond=v6, target=b3, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   Imm(0)                                           -> x0 [f32]
-    v8   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> - [f32]
+    v8   Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v3)
   block 2  start_pc=0
     v12  Phi { incoming=[b1:v3, b3:v10], kind=F32 }       -> d0 [f32]
-    v13  Imm(0)                                           -> x0 [f32]
+    v13  Imm(0)                                           -> - [f32]
     terminator Return(v12)   (exit_acc=v12)
   block 3  start_pc=0
-    v9   Imm(0)                                           -> x0 [f32]
+    v9   Imm(0)                                           -> - [f32]
     v10  Fneg(v3)                                         -> d0 [f32]
-    v11  Imm(0)                                           -> x0
+    v11  Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=grad_dot
@@ -31,46 +31,46 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
     v3   ParamRef(1, kind=F32)                            -> d0 [f32]
-    v4   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> -
     v5   ParamRef(2, kind=F32)                            -> d1 [f32]
-    v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x0
+    v6   Imm(0)                                           -> -
+    v7   Imm(0)                                           -> -
     v8   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x0
     terminator Bz { cond=v8, target=b6, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
-    v9   Imm(0)                                           -> x0 [f32]
-    v10  Imm(0)                                           -> x0
+    v9   Imm(0)                                           -> - [f32]
+    v10  Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v3)
   block 2  start_pc=0
     v14  Phi { incoming=[b1:v3, b6:v12], kind=F32 }       -> d0 [f32]
-    v15  Imm(0)                                           -> x0 [f32]
-    v16  Imm(0)                                           -> x0
-    v17  Imm(0)                                           -> x0
+    v15  Imm(0)                                           -> - [f32]
+    v16  Imm(0)                                           -> -
+    v17  Imm(0)                                           -> -
     v18  BinopI { op=and, lhs=v1, rhs_imm=2 }             -> x7
     terminator Bz { cond=v18, target=b5, fall=b3 }   (exit_acc=v18)
   block 3  start_pc=0
-    v19  Imm(0)                                           -> x0 [f32]
-    v20  Imm(0)                                           -> x0
+    v19  Imm(0)                                           -> - [f32]
+    v20  Imm(0)                                           -> -
     terminator Jmp(b4)   (exit_acc=v5)
   block 4  start_pc=0
     v24  Phi { incoming=[b3:v5, b5:v22], kind=F32 }       -> d1 [f32]
-    v25  Imm(0)                                           -> x0 [f32]
-    v26  Imm(0)                                           -> x0
-    v27  Imm(0)                                           -> x0 [f32]
-    v28  Imm(0)                                           -> x0 [f32]
+    v25  Imm(0)                                           -> - [f32]
+    v26  Imm(0)                                           -> -
+    v27  Imm(0)                                           -> - [f32]
+    v28  Imm(0)                                           -> - [f32]
     v29  Binop { op=fadd, lhs=v14, rhs=v24 }              -> d0 [f32]
     terminator Return(v29)   (exit_acc=v29)
   block 5  start_pc=0
-    v21  Imm(0)                                           -> x0 [f32]
+    v21  Imm(0)                                           -> - [f32]
     v22  Fneg(v5)                                         -> d1 [f32]
-    v23  Imm(0)                                           -> x0
+    v23  Imm(0)                                           -> -
     terminator Jmp(b4)   (exit_acc=v22)
   block 6  start_pc=0
-    v11  Imm(0)                                           -> x0 [f32]
+    v11  Imm(0)                                           -> - [f32]
     v12  Fneg(v3)                                         -> d0 [f32]
-    v13  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
@@ -78,110 +78,110 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
-    v2   Imm(1084227584)                                  -> x0 [f32]
-    v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x0
-    v5   Imm(3231711232)                                  -> x0 [f32]
+    v1   Imm(0)                                           -> -
+    v2   Imm(1084227584)                                  -> - [f32]
+    v3   Imm(0)                                           -> -
+    v4   Imm(0)                                           -> -
+    v5   Imm(3231711232)                                  -> - [f32]
     terminator Jmp(b1)   (exit_acc=v5)
   block 1  start_pc=0
     v25  Phi { incoming=[b0:v5], kind=F32 }               -> - [f32]
-    v26  Imm(1084227584)                                  -> x0 [f32]
-    v27  Imm(3231711232)                                  -> x0 [f32]
-    v28  Imm(0)                                           -> x0
-    v29  Imm(1)                                           -> x0
-    v30  Imm(1084227584)                                  -> x0 [f32]
-    v31  Imm(1)                                           -> x0
-    v32  Imm(1)                                           -> x0
+    v26  Imm(1084227584)                                  -> - [f32]
+    v27  Imm(3231711232)                                  -> - [f32]
+    v28  Imm(0)                                           -> -
+    v29  Imm(1)                                           -> -
+    v30  Imm(1084227584)                                  -> - [f32]
+    v31  Imm(1)                                           -> -
+    v32  Imm(1)                                           -> -
     terminator Jmp(b2)   (exit_acc=v30)
   block 2  start_pc=0
     v34  Phi { incoming=[b1:v30], kind=F32 }              -> - [f32]
-    v35  Imm(1084227584)                                  -> x0 [f32]
-    v36  Imm(0)                                           -> x0
-    v37  Imm(2)                                           -> x0
-    v38  Imm(1084227584)                                  -> x0 [f32]
-    v39  Imm(2)                                           -> x0
-    v40  Imm(0)                                           -> x0
-    v41  Imm(3231711232)                                  -> x0 [f32]
+    v35  Imm(1084227584)                                  -> - [f32]
+    v36  Imm(0)                                           -> -
+    v37  Imm(2)                                           -> -
+    v38  Imm(1084227584)                                  -> - [f32]
+    v39  Imm(2)                                           -> -
+    v40  Imm(0)                                           -> -
+    v41  Imm(3231711232)                                  -> - [f32]
     terminator Jmp(b3)   (exit_acc=v5)
   block 3  start_pc=0
     v42  Phi { incoming=[b2:v5], kind=F32 }               -> - [f32]
-    v43  Imm(1084227584)                                  -> x0 [f32]
-    v44  Imm(3231711232)                                  -> x0 [f32]
-    v45  Imm(0)                                           -> x0
-    v46  Imm(3)                                           -> x0
-    v47  Imm(1084227584)                                  -> x0 [f32]
-    v48  Imm(3)                                           -> x0
-    v49  Imm(1)                                           -> x0
+    v43  Imm(1084227584)                                  -> - [f32]
+    v44  Imm(3231711232)                                  -> - [f32]
+    v45  Imm(0)                                           -> -
+    v46  Imm(3)                                           -> -
+    v47  Imm(1084227584)                                  -> - [f32]
+    v48  Imm(3)                                           -> -
+    v49  Imm(1)                                           -> -
     terminator Jmp(b4)   (exit_acc=v30)
   block 4  start_pc=0
     v51  Phi { incoming=[b3:v30], kind=F32 }              -> - [f32]
-    v52  Imm(1084227584)                                  -> x0 [f32]
-    v53  Imm(0)                                           -> x0
-    v54  Imm(1)                                           -> x0
-    v55  Imm(1069547520)                                  -> x0 [f32]
-    v56  Imm(1075838976)                                  -> x0 [f32]
-    v57  Imm(1)                                           -> x0
-    v58  Imm(1)                                           -> x0
+    v52  Imm(1084227584)                                  -> - [f32]
+    v53  Imm(0)                                           -> -
+    v54  Imm(1)                                           -> -
+    v55  Imm(1069547520)                                  -> - [f32]
+    v56  Imm(1075838976)                                  -> - [f32]
+    v57  Imm(1)                                           -> -
+    v58  Imm(1)                                           -> -
     terminator Jmp(b5)   (exit_acc=v55)
   block 5  start_pc=0
     v60  Phi { incoming=[b4:v55], kind=F32 }              -> d0 [f32]
-    v61  Imm(0)                                           -> x0
-    v62  Imm(3223322624)                                  -> x0 [f32]
+    v61  Imm(0)                                           -> -
+    v62  Imm(3223322624)                                  -> - [f32]
     terminator Jmp(b6)   (exit_acc=v62)
   block 6  start_pc=0
     v63  Phi { incoming=[b5:v62], kind=F32 }              -> d1 [f32]
     v64  Binop { op=fadd, lhs=v60, rhs=v63 }              -> d0 [f32]
-    v65  Imm(1069547520)                                  -> x0 [f32]
-    v66  Imm(1075838976)                                  -> x0 [f32]
-    v67  Imm(3223322624)                                  -> x0 [f32]
-    v68  Imm(3212836864)                                  -> d1 [f32]
+    v65  Imm(1069547520)                                  -> - [f32]
+    v66  Imm(1075838976)                                  -> - [f32]
+    v67  Imm(3223322624)                                  -> - [f32]
+    v68  Imm(3212836864)                                  -> - [f32]
     v69  Binop { op=fne, lhs=v64, rhs=v68 }               -> x0
     terminator Bz { cond=v69, target=b8, fall=b7 }   (exit_acc=v69)
   block 7  start_pc=0
     v10  Imm(5)                                           -> x0
     terminator Return(v10)   (exit_acc=v10)
   block 8  start_pc=0
-    v11  Imm(2)                                           -> x0
-    v12  Imm(1088946176)                                  -> x0 [f32]
-    v13  Imm(1040187392)                                  -> x0 [f32]
-    v14  Imm(2)                                           -> x0
-    v15  Imm(0)                                           -> x0
-    v16  Imm(3236429824)                                  -> x0 [f32]
+    v11  Imm(2)                                           -> -
+    v12  Imm(1088946176)                                  -> - [f32]
+    v13  Imm(1040187392)                                  -> - [f32]
+    v14  Imm(2)                                           -> -
+    v15  Imm(0)                                           -> -
+    v16  Imm(3236429824)                                  -> - [f32]
     terminator Jmp(b9)   (exit_acc=v16)
   block 9  start_pc=0
     v70  Phi { incoming=[b8:v16], kind=F32 }              -> d0 [f32]
-    v71  Imm(2)                                           -> x0
+    v71  Imm(2)                                           -> -
     terminator Jmp(b10)   (exit_acc=v13)
   block 10  start_pc=0
     v73  Phi { incoming=[b9:v13], kind=F32 }              -> d1 [f32]
     v74  Binop { op=fadd, lhs=v70, rhs=v73 }              -> d0 [f32]
-    v75  Imm(1088946176)                                  -> x0 [f32]
-    v76  Imm(3236429824)                                  -> x0 [f32]
-    v77  Imm(1040187392)                                  -> x0 [f32]
-    v78  Imm(3236167680)                                  -> d1 [f32]
+    v75  Imm(1088946176)                                  -> - [f32]
+    v76  Imm(3236429824)                                  -> - [f32]
+    v77  Imm(1040187392)                                  -> - [f32]
+    v78  Imm(3236167680)                                  -> - [f32]
     v79  Binop { op=fne, lhs=v74, rhs=v78 }               -> x0
     terminator Bz { cond=v79, target=b12, fall=b11 }   (exit_acc=v79)
   block 11  start_pc=0
     v17  Imm(6)                                           -> x0
     terminator Return(v17)   (exit_acc=v17)
   block 12  start_pc=0
-    v18  Imm(3)                                           -> x0
-    v19  Imm(1077936128)                                  -> x0 [f32]
-    v20  Imm(1082130432)                                  -> x0 [f32]
-    v21  Imm(3)                                           -> x0
-    v22  Imm(1)                                           -> x0
+    v18  Imm(3)                                           -> -
+    v19  Imm(1077936128)                                  -> - [f32]
+    v20  Imm(1082130432)                                  -> - [f32]
+    v21  Imm(3)                                           -> -
+    v22  Imm(1)                                           -> -
     terminator Jmp(b13)   (exit_acc=v19)
   block 13  start_pc=0
     v81  Phi { incoming=[b12:v19], kind=F32 }             -> d0 [f32]
-    v82  Imm(2)                                           -> x0
+    v82  Imm(2)                                           -> -
     terminator Jmp(b14)   (exit_acc=v20)
   block 14  start_pc=0
     v84  Phi { incoming=[b13:v20], kind=F32 }             -> d1 [f32]
     v85  Binop { op=fadd, lhs=v81, rhs=v84 }              -> d0 [f32]
-    v86  Imm(1077936128)                                  -> x0 [f32]
-    v87  Imm(1082130432)                                  -> x0 [f32]
-    v88  Imm(1088421888)                                  -> d1 [f32]
+    v86  Imm(1077936128)                                  -> - [f32]
+    v87  Imm(1082130432)                                  -> - [f32]
+    v88  Imm(1088421888)                                  -> - [f32]
     v89  Binop { op=fne, lhs=v85, rhs=v88 }               -> x0
     terminator Bz { cond=v89, target=b16, fall=b15 }   (exit_acc=v89)
   block 15  start_pc=0
@@ -197,8 +197,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
+    v3   Imm(0)                                           -> -
     v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
@@ -208,8 +208,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
+    v3   Imm(0)                                           -> -
     v4   ImmData(0)                                       -> x3
     terminator Jmp(b2)   (exit_acc=v4)
   block 1  start_pc=0
@@ -240,22 +240,22 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v6   CallExt { binding_idx=1, args=[v4, v5, v5], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
-    v7   Undef                                            -> x0
-    v8   Imm(0)                                           -> x0
+    v7   Undef                                            -> -
+    v8   Imm(0)                                           -> -
     v9   ImmData(0)                                       -> x3
-    v10  Imm(0)                                           -> x0
+    v10  Imm(0)                                           -> -
     terminator Jmp(b4)   (exit_acc=v9)
   block 3  start_pc=0
-    v15  Imm(0)                                           -> x0
+    v15  Imm(0)                                           -> -
     v16  Load { addr=v11, disp=0, kind=I64 }              -> x0
     v17  CallIndirect { target=v16, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v18  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> -
     v19  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x3
-    v20  Imm(0)                                           -> x0
+    v20  Imm(0)                                           -> -
     terminator Jmp(b4)   (exit_acc=v19)
   block 4  start_pc=0
     v11  Phi { incoming=[b2:v9, b3:v19], kind=I64 }       -> x3
-    v12  Imm(0)                                           -> x0
+    v12  Imm(0)                                           -> -
     v13  ImmData(0)                                       -> x0
     v14  Binop { op=ne, lhs=v11, rhs=v13 }                -> x0
     terminator Bz { cond=v14, target=b5, fall=b3 }   (exit_acc=v14)
@@ -268,23 +268,23 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> -
     v3   ParamRef(1, kind=I64)                            -> x6
-    v4   Imm(0)                                           -> x0
-    v5   Imm(0)                                           -> x0
-    v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x0
-    v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> -
+    v5   Imm(0)                                           -> -
+    v6   Imm(0)                                           -> -
+    v7   Imm(0)                                           -> -
+    v8   Imm(0)                                           -> -
+    v9   Imm(0)                                           -> -
     v10  Load { addr=v1, disp=0, kind=I64 }               -> x0
     v11  Extend { value=v10, kind=I32 }                   -> x12
-    v12  Imm(0)                                           -> x0
-    v13  Imm(8)                                           -> x0
+    v12  Imm(0)                                           -> -
+    v13  Imm(8)                                           -> -
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
-    v15  Imm(0)                                           -> x0
-    v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x0
-    v18  Imm(0)                                           -> x0
+    v15  Imm(0)                                           -> -
+    v16  ImmData(16)                                      -> -
+    v17  Imm(0)                                           -> -
+    v18  Imm(0)                                           -> -
     v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
     v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
     v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
@@ -312,10 +312,10 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v38  Binop { op=ne, lhs=v36, rhs=v37 }                -> x0
     terminator Bz { cond=v38, target=b5, fall=b3 }   (exit_acc=v38)
   block 5  start_pc=0
-    v26  Imm(0)                                           -> x0
-    v27  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> -
+    v27  Imm(0)                                           -> -
     v28  Call { target_pc=7, args=[v11, v14], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
-    v29  Extend { value=v28, kind=I32 }                   -> x0
-    v30  Extend { value=v28, kind=I32 }                   -> x0
+    v29  Extend { value=v28, kind=I32 }                   -> -
+    v30  Extend { value=v28, kind=I32 }                   -> -
     v31  CallExt { binding_idx=0, args=[v28], fp_arg_mask=0x0 } -> x0
     terminator Return

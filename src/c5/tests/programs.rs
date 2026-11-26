@@ -6409,6 +6409,14 @@ fn typedef_shadowed_by_parameter_name() {
 }
 
 #[test]
+fn block_scope_typedef_restores_the_outer_typedef() {
+    assert_eq!(
+        run_fixture("block_scope_typedef_restores_the_outer_typedef.c"),
+        0
+    );
+}
+
+#[test]
 fn nested_struct_array_initializer() {
     // C99 6.7.8: an array-of-struct field inside an enclosing
     // struct accepts a nested brace-enclosed initializer for

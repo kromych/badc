@@ -19,7 +19,7 @@ use super::super::ast::{Expr, ExprId, SrcPos, UnOp, expr_ty};
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
-use super::super::symbol::{BindingInfo, Symbol};
+use super::super::symbol::{ScopedBinding, Symbol};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
@@ -782,12 +782,6 @@ impl Compiler {
         }
     }
 
-    /// Save the current `class` / `type_` / `val` of
-    /// `self.symbols[idx]` into the matching shadow fields
-    /// `h_class` / `h_type` / `h_val`. Used at function-body
-    /// scope when a parameter or local declaration shadows an
-    /// outer name; the function-exit cleanup pass restores the
-    /// outer binding by reading the shadow fields back.
     /// The array shape `idx` held before its own declarator overwrote it,
     /// consumed so it applies to one save only.
     pub(super) fn take_prior_shape(&mut self, idx: usize) -> Option<(i64, alloc::vec::Vec<i64>)> {
@@ -801,219 +795,89 @@ impl Compiler {
         }
     }
 
+    /// Save the binding of `idx` in its `outer` record. Used at
+    /// function-body scope when a parameter or local declaration shadows an
+    /// outer name; the function-exit cleanup pass restores it.
     pub(super) fn shadow_symbol(&mut self, idx: usize) {
+        self.symbols[idx].outer = self.take_scope_binding(idx);
+    }
+
+    /// Save the binding `idx` holds for the innermost open scope's exit and
+    /// leave the slot to the declaration that rebinds the name. Lists `idx`
+    /// on `scope_bound`, so that the enclosing scope's unwind covers every
+    /// rebound name.
+    pub(super) fn take_scope_binding(&mut self, idx: usize) -> ScopedBinding {
         self.scope_bound.push(idx as u32);
         let prior = self.take_prior_shape(idx);
         let s = &mut self.symbols[idx];
-        s.h_class = s.class;
-        s.h_type = s.type_;
-        s.h_val = s.val;
-        s.h_fn_ptr_indirection = s.fn_ptr_indirection;
-        s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
-        s.h_fn_type = s.fn_type.clone();
-        // The inner binding's type records its own enum tag.
-        s.h_incomplete_enum_tag = s.incomplete_enum_tag.take();
-        s.h_enumeration = s.enumeration.take();
-        s.h_array_size = s.array_size;
-        s.h_type_align = s.type_align;
-        // Clone rather than `mem::take`: the inner-scope binding
-        // (parameter or block local) keeps using the live
-        // `array_dims` for the duration of its scope. Restore
-        // copies the shadow back on scope exit.
-        match prior {
-            Some((inner, dims)) => {
-                s.h_inner_array_size = inner;
-                s.h_array_dims = dims;
-            }
-            None => {
-                s.h_inner_array_size = s.inner_array_size;
-                s.h_array_dims = s.array_dims.clone();
-            }
+        let mut outer = ScopedBinding::take(s);
+        outer.binding.pending_stores.clear();
+        if let Some((inner, dims)) = prior {
+            (outer.inner_array_size, outer.array_dims) = (inner, dims);
         }
-        s.h_is_vla = s.is_vla;
-        s.h_vla_ptr_slot = s.vla_ptr_slot;
-        s.h_vla_size_slot = s.vla_size_slot;
-        s.h_is_zero_len_array = s.is_zero_len_array;
-        // Storage-shape and linkage-mark fields a block-scope static's
-        // declarator overwrites on the shared slot.
-        s.h_reserved_data_bytes = s.reserved_data_bytes;
-        s.h_fam_init_bytes = s.fam_init_bytes;
-        s.h_data_align = s.data_align;
-        s.h_is_thread_local = s.is_thread_local;
-        s.h_is_const_qualified = s.is_const_qualified;
-        s.h_storage_is_const = s.storage_is_const;
-        s.h_runtime_initialized = s.runtime_initialized;
-        s.h_is_extern_decl = s.is_extern_decl;
-        // The inner binding starts unpinned; a `register ... asm("reg")`
-        // declarator sets its own binding after this shadow.
-        s.h_asm_register = s.asm_register;
+        // The inner binding records its own enum tag, register, assembler
+        // name, folded value and entity record, if any.
+        s.incomplete_enum_tag = None;
+        s.enumeration = None;
         s.asm_register = None;
-        s.h_is_global_register = s.is_global_register;
         s.is_global_register = false;
-        // Cloned, not taken: a block-scope `extern` redeclaration names the
-        // same entity (C99 6.2.2p4) and keeps its rename. The save exists so
-        // scope exit cannot drop the outer binding's label.
-        s.h_asm_name = s.asm_name.clone();
-        // The inner binding records its own folded const value, if any.
-        s.h_const_object_value = s.const_object_value;
+        s.asm_name = None;
         s.const_object_value = None;
-        s.h_entity_record = s.entity_record;
         s.entity_record = None;
-        s.h_binding = Self::save_binding(&mut s.binding);
+        outer
     }
 
-    /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
-    /// binding from the `h_*` shadow fields. Static method
-    /// because the cleanup pass walks `self.symbols.iter_mut()`
-    /// and already holds a `&mut Symbol`; passing the symbol
-    /// reference avoids re-borrowing the symbol table.
+    /// Put the binding `outer` saved back on `sym`. A scoped function
+    /// declaration over an unbound name unbinds the name, but the entity --
+    /// prototype, linkage, asm rename -- stays on the slot for call lowering
+    /// and the extern-import scan (C99 6.2.2p4: one function, TU-wide).
+    pub(super) fn restore_scope_binding(sym: &mut Symbol, outer: ScopedBinding) {
+        sym.block_extern_active = false;
+        if sym.scoped_fn_decl && sym.class == Token::Fun as i64 && outer.class == 0 {
+            sym.class = 0;
+            sym.entity_record = outer.entity_record;
+            return;
+        }
+        // A function declaration names the function it shadows (C99
+        // 6.2.2p4-p5), which keeps the uses made through it.
+        let same_function = sym.class == Token::Fun as i64 && outer.class == Token::Fun as i64;
+        let inner = outer.install(sym);
+        if same_function {
+            sym.binding.absorb_uses(&inner);
+        }
+    }
+
+    /// Inverse of [`Self::shadow_symbol`]. Static method because the
+    /// cleanup pass walks `self.symbols.iter_mut()` and already holds a
+    /// `&mut Symbol`. The record stays: a file-scope register variable
+    /// saves itself and is restored at every function's exit.
     pub(super) fn restore_shadowed_symbol(sym: &mut Symbol) {
         if sym.parked_param {
             Self::swap_parked_param(sym);
         }
-        // A scoped function declaration over a previously unbound name:
-        // the name unbinds, but the entity -- prototype, linkage, asm
-        // rename -- stays on the slot for call lowering and the
-        // extern-import scan (C99 6.2.2p4: one function, TU-wide).
-        if sym.scoped_fn_decl && sym.class == Token::Fun as i64 && sym.h_class == 0 {
-            sym.class = 0;
-            sym.is_scope_bound = false;
-            sym.block_extern_active = false;
-            sym.entity_record = sym.h_entity_record;
-            return;
-        }
-        let same_function = sym.class == Token::Fun as i64 && sym.h_class == Token::Fun as i64;
-        Self::restore_binding(&mut sym.binding, sym.h_binding.clone(), same_function);
-        sym.class = sym.h_class;
-        sym.type_ = sym.h_type;
-        sym.val = sym.h_val;
-        sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
-        sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
-        sym.fn_type = core::mem::take(&mut sym.h_fn_type);
-        sym.incomplete_enum_tag = sym.h_incomplete_enum_tag.take();
-        sym.enumeration = sym.h_enumeration.take();
-        sym.array_size = sym.h_array_size;
-        sym.type_align = sym.h_type_align;
-        sym.inner_array_size = sym.h_inner_array_size;
-        sym.array_dims = core::mem::take(&mut sym.h_array_dims);
-        sym.is_vla = sym.h_is_vla;
-        sym.vla_ptr_slot = sym.h_vla_ptr_slot;
-        sym.vla_size_slot = sym.h_vla_size_slot;
-        sym.is_zero_len_array = sym.h_is_zero_len_array;
-        sym.reserved_data_bytes = sym.h_reserved_data_bytes;
-        sym.fam_init_bytes = sym.h_fam_init_bytes;
-        sym.data_align = sym.h_data_align;
-        sym.is_thread_local = sym.h_is_thread_local;
-        sym.is_const_qualified = sym.h_is_const_qualified;
-        sym.storage_is_const = sym.h_storage_is_const;
-        sym.runtime_initialized = sym.h_runtime_initialized;
-        sym.is_extern_decl = sym.h_is_extern_decl;
-        sym.asm_register = sym.h_asm_register;
-        sym.is_global_register = sym.h_is_global_register;
-        sym.asm_name = sym.h_asm_name.take();
-        sym.const_object_value = sym.h_const_object_value;
-        sym.entity_record = sym.h_entity_record;
+        Self::restore_scope_binding(sym, sym.outer.clone());
         sym.is_scope_bound = false;
-        sym.block_extern_active = false;
-        // The register-asm binding belongs to the block-scope local
-        // being unbound, never to the restored outer symbol.
     }
 
-    /// Exchange the binding [`Self::shadow_symbol`] saved with the live one,
-    /// every field it saves: a parameter named like the function its
-    /// declarator declares parks in the `h_*` fields, leaving the function
-    /// live for the declarator, and comes back for the body
-    /// ([`Symbol::parked_param`]).
+    /// Exchange the binding [`Self::shadow_symbol`] saved with the live one:
+    /// a parameter named like the function its declarator declares parks in
+    /// `outer`, leaving the function live for the declarator, and comes back
+    /// for the body ([`Symbol::parked_param`]).
     pub(super) fn swap_parked_param(s: &mut Symbol) {
-        use core::mem::swap;
-        swap(&mut s.binding, &mut s.h_binding);
-        swap(&mut s.class, &mut s.h_class);
-        swap(&mut s.type_, &mut s.h_type);
-        swap(&mut s.val, &mut s.h_val);
-        swap(&mut s.fn_ptr_indirection, &mut s.h_fn_ptr_indirection);
-        let ret_indirection = &mut s.h_fn_ptr_ret_indirection;
-        swap(&mut s.fn_ptr_ret_indirection, ret_indirection);
-        swap(&mut s.fn_type, &mut s.h_fn_type);
-        swap(&mut s.incomplete_enum_tag, &mut s.h_incomplete_enum_tag);
-        swap(&mut s.enumeration, &mut s.h_enumeration);
-        swap(&mut s.array_size, &mut s.h_array_size);
-        swap(&mut s.type_align, &mut s.h_type_align);
-        swap(&mut s.inner_array_size, &mut s.h_inner_array_size);
-        swap(&mut s.array_dims, &mut s.h_array_dims);
-        swap(&mut s.is_vla, &mut s.h_is_vla);
-        swap(&mut s.vla_ptr_slot, &mut s.h_vla_ptr_slot);
-        swap(&mut s.vla_size_slot, &mut s.h_vla_size_slot);
-        swap(&mut s.is_zero_len_array, &mut s.h_is_zero_len_array);
-        swap(&mut s.reserved_data_bytes, &mut s.h_reserved_data_bytes);
-        swap(&mut s.fam_init_bytes, &mut s.h_fam_init_bytes);
-        swap(&mut s.data_align, &mut s.h_data_align);
-        swap(&mut s.is_thread_local, &mut s.h_is_thread_local);
-        swap(&mut s.is_const_qualified, &mut s.h_is_const_qualified);
-        swap(&mut s.storage_is_const, &mut s.h_storage_is_const);
-        swap(&mut s.runtime_initialized, &mut s.h_runtime_initialized);
-        swap(&mut s.is_extern_decl, &mut s.h_is_extern_decl);
-        swap(&mut s.asm_register, &mut s.h_asm_register);
-        swap(&mut s.is_global_register, &mut s.h_is_global_register);
-        swap(&mut s.asm_name, &mut s.h_asm_name);
-        swap(&mut s.const_object_value, &mut s.h_const_object_value);
-        swap(&mut s.entity_record, &mut s.h_entity_record);
+        let mut outer = core::mem::take(&mut s.outer);
+        outer.exchange(s);
+        s.outer = outer;
         s.parked_param = !s.parked_param;
     }
 
-    /// Take the outer binding's info, dropping its pending stores as a branch does.
-    pub(super) fn save_binding(live: &mut BindingInfo) -> BindingInfo {
-        let mut outer = core::mem::take(live);
-        outer.pending_stores.clear();
-        outer
-    }
-
-    /// Restore the outer binding's info. A function declaration names the
-    /// function it shadows (C99 6.2.2p4-p5), which keeps the uses made through it.
-    pub(super) fn restore_binding(live: &mut BindingInfo, outer: BindingInfo, same_function: bool) {
-        let inner = core::mem::replace(live, outer);
-        if same_function {
-            live.absorb_uses(&inner);
-        }
-    }
-
     /// Whether [`Self::restore_shadowed_symbol`] would leave `sym`
-    /// unchanged, i.e. its shadow slots already mirror its live
-    /// binding. True for a symbol that binds itself (a compiler-made
-    /// unnamed temporary), which is why such a symbol needs no entry
-    /// in `scope_bound`.
+    /// unchanged, i.e. its saved binding already mirrors its live one.
+    /// True for a symbol that binds itself (a compiler-made unnamed
+    /// temporary), which is why such a symbol needs no entry in
+    /// `scope_bound`.
     #[cfg(debug_assertions)]
     fn shadow_mirrors_binding(sym: &Symbol) -> bool {
-        sym.class == sym.h_class
-            && sym.type_ == sym.h_type
-            && sym.val == sym.h_val
-            && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
-            && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
-            && sym.fn_type == sym.h_fn_type
-            && sym.incomplete_enum_tag == sym.h_incomplete_enum_tag
-            && sym.enumeration == sym.h_enumeration
-            && sym.array_size == sym.h_array_size
-            && sym.type_align == sym.h_type_align
-            && sym.inner_array_size == sym.h_inner_array_size
-            && sym.array_dims == sym.h_array_dims
-            && sym.is_vla == sym.h_is_vla
-            && sym.vla_ptr_slot == sym.h_vla_ptr_slot
-            && sym.vla_size_slot == sym.h_vla_size_slot
-            && sym.is_zero_len_array == sym.h_is_zero_len_array
-            && sym.reserved_data_bytes == sym.h_reserved_data_bytes
-            && sym.fam_init_bytes == sym.h_fam_init_bytes
-            && sym.data_align == sym.h_data_align
-            && sym.is_thread_local == sym.h_is_thread_local
-            && sym.is_const_qualified == sym.h_is_const_qualified
-            && sym.storage_is_const == sym.h_storage_is_const
-            && sym.runtime_initialized == sym.h_runtime_initialized
-            && sym.is_extern_decl == sym.h_is_extern_decl
-            && sym.asm_register == sym.h_asm_register
-            && sym.is_global_register == sym.h_is_global_register
-            && sym.asm_name == sym.h_asm_name
-            && sym.const_object_value == sym.h_const_object_value
-            && sym.entity_record == sym.h_entity_record
-            && !sym.is_scope_bound
-            && !sym.block_extern_active
+        sym.outer.held_by(sym) && !sym.is_scope_bound && !sym.block_extern_active
     }
 
     /// The scope's rebound symbol indices, ascending and deduplicated.
@@ -1075,8 +939,8 @@ impl Compiler {
     /// enclosing block's shadow list inside a block, the live binding at
     /// function-body scope (which C99 6.2.1p4 shares with the
     /// parameters). Drives the C99 6.7p3 one-declaration-per-scope
-    /// diagnostic; the per-scope single shadow slot also depends on it
-    /// -- a second same-scope save would overwrite the outer binding.
+    /// diagnostic; the one save per scope also depends on it -- a second
+    /// same-scope save would overwrite the outer binding.
     pub(super) fn binds_in_current_scope(&self, idx: usize) -> bool {
         match self.block_scopes.last() {
             Some(level) => level.iter().any(|b| b.idx == idx),
@@ -1091,7 +955,7 @@ impl Compiler {
 
     /// Save the current binding of `idx` for restore when the innermost
     /// open scope exits: onto the enclosing block's shadow list inside a
-    /// block, into the per-symbol `h_*` slot at function-body scope.
+    /// block, into the symbol's `outer` record at function-body scope.
     pub(super) fn save_scope_binding(&mut self, idx: usize) {
         if self.block_scopes.is_empty() {
             self.shadow_symbol(idx);

@@ -2586,6 +2586,61 @@ fn declarator_asm_label_renames_the_emitted_symbol() {
     );
 }
 
+/// An asm label belongs to the binding that states it: a declaration in an
+/// inner scope takes its own and the enclosing binding's comes back at the
+/// scope's exit (C99 6.2.1p4). A block-scope declaration with linkage names
+/// the entity outside the function and shares its assembler name, which a
+/// label it states gives that entity for the rest of the unit (6.2.2p4).
+#[test]
+fn an_asm_label_belongs_to_the_binding_that_states_it() {
+    let p = super::compile_str_bare_for(
+        "int y = 1;\n\
+         int y2 asm(\"lbl_y2\") = 1;\n\
+         int f(void) { { static int y asm(\"a_y\") = 2; return y++; } }\n\
+         int g(void) { static int y asm(\"b_y\") = 3; return y++; }\n\
+         int h(void) { { static int y2 asm(\"inner\") = 2; return y2++; } }\n\
+         int k(void) { { static int y2 = 2; return y2++; } }\n\
+         int e asm(\"E\");\n\
+         int m(void) { int e = 1; { extern int e; return e; } }\n\
+         int q(void);\n\
+         int r(void) { int q(void) asm(\"Q\"); return q(); }\n\
+         int q(void) { return 0; }\n\
+         int main(void) { return f() + g() + h() + k() + y + y2 + m() + r(); }",
+        crate::Target::LinuxX64,
+    );
+    let format = p.target.binary_format();
+    let links = |name: &str| {
+        let named = p.symbols.iter().filter(|s| s.name == name);
+        named
+            .map(|s| asm_symbol_spelling(format, s.link_name()).into_owned())
+            .collect::<alloc::vec::Vec<_>>()
+    };
+    for (name, link) in [("y", "y"), ("y2", "lbl_y2"), ("e", "E"), ("q", "Q")] {
+        assert_eq!(links(name), [link], "{name}");
+    }
+    for name in ["a_y", "b_y", "inner"] {
+        assert_eq!(links(name), [name], "{name}");
+    }
+    assert!(p.symbols.iter().any(|s| s.name.starts_with("y2.")));
+}
+
+/// A block-scope object that hides a file-scope register variable is an
+/// ordinary object: only the outer binding names the register.
+#[test]
+fn a_local_hiding_a_global_register_variable_is_not_bound_to_it() {
+    use crate::Target;
+    for (t, reg) in [(Target::LinuxX64, "rsp"), (Target::LinuxAarch64, "sp")] {
+        let src = alloc::format!(
+            "register unsigned long sp asm(\"{reg}\");\n\
+             long g(long a) {{ long r = 0; {{ long sp = a; r += sp; }}\n\
+               {{ {{ long sp = a * 2; r += sp * 100; }} }} return r; }}\n\
+             int main(void) {{ return g(4) == 804 ? 0 : 1; }}\n"
+        );
+        let program = Compiler::with_target(src, t).compile().unwrap();
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 #[test]
 fn register_asm_binding_constraints() {
     // `register T name asm("reg")` requires the `register` storage

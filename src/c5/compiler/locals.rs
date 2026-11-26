@@ -60,7 +60,7 @@ pub(super) struct BlockFunction {
 /// Where a name's binding from outside the current function is kept.
 #[derive(Clone, Copy)]
 enum SavedAt {
-    /// The function-top save, `h_*` on the slot.
+    /// The function-top save, the slot's `outer` record.
     Top,
     /// The outermost block's save: level, position.
     Block(usize, usize),
@@ -549,7 +549,8 @@ impl Compiler {
             {
                 continue;
             }
-            let asm_reg = self.parse_register_asm_binding(loc_idx, is_static, is_extern)?;
+            let (asm_reg, asm_label) =
+                self.parse_register_asm_binding(loc_idx, is_static, is_extern)?;
             let cleanup_fn = self.pending.attrs.cleanup.take();
             let uninitialized = core::mem::take(&mut self.pending.attrs.uninitialized);
             // Take the fn-pointer carriers before any initializer is parsed:
@@ -597,6 +598,17 @@ impl Compiler {
             if rebinds_slot {
                 self.save_scope_binding(loc_idx);
                 self.symbols[loc_idx].binding.register_storage = self.pending.saw_register_storage;
+            }
+            // A block-scope `extern` that hides a binding without linkage
+            // names the entity outside, with its assembler name.
+            if convert_extern {
+                self.symbols[loc_idx].asm_name = self.linked_asm_name(loc_idx);
+            }
+            if let Some(label) = asm_label {
+                self.set_asm_label(loc_idx, label)?;
+                if convert_extern {
+                    self.keep_linked_asm_name(loc_idx);
+                }
             }
             if self.pending.attrs.maybe_unused {
                 self.symbols[loc_idx].binding.maybe_unused = true;
@@ -999,6 +1011,10 @@ impl Compiler {
             },
             lineage: f.lineage,
             is_extern_decl: true,
+            // The assembler name of the function the slot already holds.
+            asm_name: (self.symbols[ent].is_fun_entity())
+                .then(|| self.symbols[ent].asm_name.clone())
+                .flatten(),
         };
         let mut keep_at = None;
         if apart {
@@ -1012,9 +1028,11 @@ impl Compiler {
             self.symbols[idx].entity_record = Some(ent as u32);
         } else if c == Token::Fun as i64 {
             if !self.binds_in_current_scope(idx) {
-                let outer_record = self.symbols[idx].entity_record;
+                let s = &self.symbols[idx];
+                let (outer_record, label) = (s.entity_record, s.asm_name.clone());
                 self.rebind_scoped(idx)?;
-                self.symbols[idx].entity_record = outer_record;
+                (self.symbols[idx].entity_record, self.symbols[idx].asm_name) =
+                    (outer_record, label);
             }
         } else if c == 0 {
             self.rebind_scoped(idx)?;
@@ -1057,6 +1075,9 @@ impl Compiler {
         self.apply_dllimport(ent, Default::default())?;
         if let Some(label) = label {
             self.set_asm_label(ent, label)?;
+            if ent == idx {
+                self.keep_linked_asm_name(idx);
+            }
         }
         if let Some(at) = keep_at {
             self.keep_fn_entity(idx, at, &fresh);
@@ -1069,11 +1090,8 @@ impl Compiler {
     /// linkage (C99 6.2.2p4, p6).
     fn names_fn_apart(&self, idx: usize, class: i64) -> bool {
         let not_fn = class != 0 && class != Token::Fun as i64 && class != Token::Sys as i64;
-        let outer = match self.file_scope_state(idx) {
-            SavedAt::Top => self.symbols[idx].h_class,
-            SavedAt::Block(level, at) => self.block_scopes[level][at].class().0,
-            SavedAt::Current => class,
-        };
+        let at = self.file_scope_state(idx);
+        let outer = self.saved_binding(idx, at).map_or(class, |b| b.class);
         not_fn && (outer == Token::Typedef as i64 || outer == Token::Num as i64)
     }
 
@@ -1133,6 +1151,7 @@ impl Compiler {
             fn_type: s.fn_type.clone(),
             lineage: (s.fn_ptr_indirection, s.fn_ptr_ret_indirection),
             is_extern_decl: s.is_extern_decl,
+            asm_name: s.asm_name.clone(),
         }
     }
 
@@ -1161,6 +1180,7 @@ impl Compiler {
         sym.fn_type = e.fn_type;
         (sym.fn_ptr_indirection, sym.fn_ptr_ret_indirection) = e.lineage;
         sym.is_extern_decl = e.is_extern_decl;
+        sym.asm_name = e.asm_name;
     }
 
     /// Where the binding `idx` had outside the current function is kept.
@@ -1177,7 +1197,10 @@ impl Compiler {
                     .map(|at| (level, at))
             });
         let (class, global_register) = match outer {
-            Some((level, at)) => self.block_scopes[level][at].class(),
+            Some((level, at)) => {
+                let b = self.block_scopes[level][at].outer();
+                (b.class, b.is_global_register)
+            }
             None => (s.class, s.is_global_register),
         };
         let top = (class == Token::Loc as i64 && !global_register) || s.is_scope_bound;
@@ -1188,23 +1211,56 @@ impl Compiler {
         }
     }
 
+    /// The assembler name of the entity with linkage a block-scope
+    /// declaration of `idx` denotes: its binding outside the current
+    /// function's (C99 6.2.2p4).
+    fn linked_asm_name(&self, idx: usize) -> Option<alloc::string::String> {
+        let at = self.file_scope_state(idx);
+        match self.saved_binding(idx, at) {
+            Some(b) => b.asm_name.clone(),
+            None => self.symbols[idx].asm_name.clone(),
+        }
+    }
+
+    /// Give the binding of `idx` outside the current function the assembler
+    /// name its block-scope declaration with linkage set, so that it
+    /// outlives the scope: one entity has one name throughout the unit.
+    fn keep_linked_asm_name(&mut self, idx: usize) {
+        let label = self.symbols[idx].asm_name.clone();
+        let at = self.file_scope_state(idx);
+        if let Some(b) = self.saved_binding_mut(idx, at)
+            && (b.class == 0 || b.class == Token::Glo as i64 || b.class == Token::Fun as i64)
+        {
+            b.asm_name = label;
+        }
+    }
+
+    /// The binding of `idx` saved at `at`; `None` for the live slot.
+    fn saved_binding(&self, idx: usize, at: SavedAt) -> Option<&crate::c5::symbol::ScopedBinding> {
+        match at {
+            SavedAt::Top => Some(&self.symbols[idx].outer),
+            SavedAt::Block(level, at) => Some(self.block_scopes[level][at].outer()),
+            SavedAt::Current => None,
+        }
+    }
+
+    fn saved_binding_mut(
+        &mut self,
+        idx: usize,
+        at: SavedAt,
+    ) -> Option<&mut crate::c5::symbol::ScopedBinding> {
+        match at {
+            SavedAt::Top => Some(&mut self.symbols[idx].outer),
+            SavedAt::Block(level, at) => Some(self.block_scopes[level][at].outer_mut()),
+            SavedAt::Current => None,
+        }
+    }
+
     /// The binding saved at `at`: `Some(Some(entity))` for a function or
     /// library binding, `Some(None)` for none, `None` for another kind.
     fn saved_fn_entity(&self, idx: usize, at: SavedAt) -> Option<Option<super::stmt::FnEntity>> {
+        let e = self.saved_binding(idx, at)?.fn_entity();
         let s = &self.symbols[idx];
-        let e = match at {
-            SavedAt::Top => super::stmt::FnEntity {
-                class: s.h_class,
-                type_: s.h_type,
-                incomplete_enum_tag: s.h_incomplete_enum_tag,
-                val: s.h_val,
-                fn_type: s.h_fn_type.clone(),
-                lineage: (s.h_fn_ptr_indirection, s.h_fn_ptr_ret_indirection),
-                is_extern_decl: s.h_is_extern_decl,
-            },
-            SavedAt::Block(level, at) => self.block_scopes[level][at].fn_entity(),
-            SavedAt::Current => return None,
-        };
         if e.class == Token::Fun as i64
             || e.class == Token::Sys as i64
             || (e.class == 0 && s.scoped_fn_decl)
@@ -1224,18 +1280,10 @@ impl Compiler {
             class: 0,
             ..e.clone()
         };
-        match at {
-            SavedAt::Top => {
-                let s = &mut self.symbols[idx];
-                s.h_type = unbound.type_;
-                s.h_incomplete_enum_tag = unbound.incomplete_enum_tag;
-                s.h_fn_type = unbound.fn_type;
-                (s.h_fn_ptr_indirection, s.h_fn_ptr_ret_indirection) = unbound.lineage;
-                s.h_is_extern_decl = unbound.is_extern_decl;
-                s.h_asm_name = s.asm_name.clone();
-            }
-            SavedAt::Block(level, at) => self.block_scopes[level][at].set_fn_entity(&unbound),
-            SavedAt::Current => {}
+        let label = self.symbols[idx].asm_name.clone();
+        if let Some(b) = self.saved_binding_mut(idx, at) {
+            b.set_fn_entity(&unbound);
+            b.asm_name = label;
         }
     }
 

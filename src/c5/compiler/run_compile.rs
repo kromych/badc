@@ -17,8 +17,7 @@ use super::decl_base;
 use super::initializer::DataStore;
 use super::redeclaration::{DeclaredType, Definition, LinkClaim, Params, Spelled};
 use super::types::{
-    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of,
-    struct_ptr_depth,
+    is_pointer_ty, is_struct_ty, is_struct_value_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 use super::{Compiler, Site};
 
@@ -659,9 +658,12 @@ impl Compiler {
         // assembler name and the object declaration continues
         // (initializer, attributes, `;` / `,`). A file-scope object
         // always has static storage duration (C99 6.2.4).
-        if let Some(reg) =
-            self.parse_declarator_asm_suffix(id_idx, static_seen || extern_seen, true)?
-        {
+        let (reg, label) =
+            self.parse_declarator_asm_suffix(id_idx, static_seen || extern_seen, true)?;
+        if let Some(label) = label {
+            self.set_asm_label(id_idx, label)?;
+        }
+        if let Some(reg) = reg {
             self.bind_file_scope_register(id_idx, ty, reg)?;
             return Ok(());
         }
@@ -764,18 +766,7 @@ impl Compiler {
         {
             self.symbols[id_idx].fn_type = f.clone();
         }
-        // Carry the bare-`void` side channel onto the
-        // declarator. `pending_base_was_void` was set if
-        // the base type spelled `void`; it stays valid
-        // for the FIRST declarator in a comma-separated
-        // group only. Gate on "no leading `*` added": any
-        // declarator that bumped `ty` by `Ty::Ptr` is no
-        // longer scalar `void` and falls out.
-        let declarator_is_bare_void = self.pending.base_was_void && is_void_ty(ty);
-        // Consume the flag so the next iteration of the
-        // declarator loop (`void *a, b;`) doesn't
-        // re-trigger on a different declarator's shape.
-        self.pending.base_was_void = false;
+        let declarator_is_bare_void = self.take_bare_void(ty);
         // Function-returning-FP shape: parse_declarator
         // already consumed the outer function's params.
         // Synthesize the function-definition path: bind the

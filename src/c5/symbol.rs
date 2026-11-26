@@ -39,8 +39,6 @@ pub(crate) struct Symbol {
     /// reserves one element, so a larger initializer must allocate
     /// fresh storage rather than overrun the following globals.
     pub reserved_data_bytes: i64,
-    /// Shadow slot for `reserved_data_bytes` (see `h_class`).
-    pub h_reserved_data_bytes: i64,
     /// `(previous offset, previous reserved bytes)` for each move of the
     /// object out of the storage a tentative definition had reserved: to
     /// a defining declaration that did not fit it, or to the completed
@@ -59,11 +57,6 @@ pub(crate) struct Symbol {
     /// recorded size covers the tail and the named-section carve moves
     /// all of it.
     pub fam_init_bytes: i64,
-    /// Shadow slot for `fam_init_bytes` (see `h_class`).
-    pub h_fam_init_bytes: i64,
-    pub h_class: i64,
-    pub h_type: i64,
-    pub h_val: i64,
 
     // ---- Function-only metadata ----
     /// The function type this symbol names, or the one a function-pointer
@@ -72,13 +65,6 @@ pub(crate) struct Symbol {
     /// convention and the function type a call's result points to. The
     /// `i64` tag holds only the return type.
     pub fn_type: FnType,
-    /// Shadow slot for `fn_type`. See `h_array_size`: a function-pointer
-    /// parameter, block-scope local, or block-scope typedef that reuses an
-    /// outer function name writes its own type onto the shared symbol slot;
-    /// without the save the outer one is permanently replaced (C99
-    /// 6.2.1p4), which breaks later call type-checks and can flip a
-    /// variadic call's ABI.
-    pub h_fn_type: FnType,
 
     /// The flat index of the `#pragma binding` that names this identifier.
     /// A binding declares nothing: a file-scope function declaration of the
@@ -100,8 +86,6 @@ pub(crate) struct Symbol {
     /// __thread_data + __thread_vars. The VM treats the slot
     /// like a regular global (single-threaded execution).
     pub is_thread_local: bool,
-    /// Shadow slot for `is_thread_local` (see `h_class`).
-    pub h_is_thread_local: bool,
 
     /// GNU explicit-register variable: `register T name asm("reg")`
     /// binds the local to a machine register. Stack- and frame-pointer
@@ -109,16 +93,12 @@ pub(crate) struct Symbol {
     /// general-purpose binding keeps normal slot storage and pins the
     /// variable's inline-asm operands to the named register.
     pub asm_register: Option<AsmRegister>,
-    /// Shadow slot for `asm_register` (see `h_class`).
-    pub h_asm_register: Option<AsmRegister>,
 
     /// File-scope `register T name asm("reg")` binding. Distinguishes
     /// the unit-wide `Loc` binding from a function's own local so a
     /// block-scope declaration of the same name shadows it instead of
     /// tripping the duplicate-local check.
     pub is_global_register: bool,
-    /// Shadow slot for `is_global_register` (see `h_class`).
-    pub h_is_global_register: bool,
 
     /// GNU asm-label rename (`T name asm("label")`): the assembler
     /// symbol name emitted for this entity. `name` stays the C
@@ -134,9 +114,6 @@ pub(crate) struct Symbol {
     /// renamed symbol is exported there as `_<label>`; nothing else on
     /// that path decorates.
     pub asm_name: Option<String>,
-    /// Shadow slot for `asm_name` (see `h_class`). An inner binding
-    /// that reuses the name starts with no rename of its own.
-    pub h_asm_name: Option<String>,
 
     /// `__attribute__((weak))`: the symbol binds STB_WEAK in the
     /// object's symbol table, for a definition (a strong definition
@@ -233,8 +210,6 @@ pub(crate) struct Symbol {
     /// allocation. The relocatable writer lays named sections out with
     /// it; the unified `.data` placement keeps its own 8-byte floor.
     pub data_align: i64,
-    /// Shadow slot for `data_align` (see `h_class`).
-    pub h_data_align: i64,
 
     /// `__attribute__((alias("target")))`: this symbol is an additional
     /// name for its target; `val` carries the target's entry / offset.
@@ -254,17 +229,6 @@ pub(crate) struct Symbol {
     /// case lands.
     pub array_size: i64,
 
-    /// Shadow slot for `array_size`. C99 6.2.1 paragraph 4: an
-    /// inner block-scope or function-parameter declaration that
-    /// reuses an outer name fully hides the outer binding for the
-    /// duration of the inner scope, and the outer binding becomes
-    /// visible again unchanged on scope exit. The parameter and
-    /// local-decl paths overwrite `array_size` on the same symbol
-    /// slot; without this save the outer typedef-array dimension
-    /// (e.g. `typedef long jmp_buf[64]`) is permanently lost when
-    /// a prototype reuses the name (`f(void *jmp_buf)`).
-    pub h_array_size: i64,
-
     /// Inner dimension of a 2D-or-greater array variable. For
     /// `T xs[N][M]` we record `array_size = N*M` and
     /// `inner_array_size = M` so subscripting `xs[i]` scales by
@@ -277,9 +241,6 @@ pub(crate) struct Symbol {
     /// for 1D arrays.
     pub inner_array_size: i64,
 
-    /// Shadow slot for `inner_array_size`. See `h_array_size`.
-    pub h_inner_array_size: i64,
-
     /// Full dimension list, outermost first. For `T xs[N][M][K]`
     /// this is `[N, M, K]`. Empty for non-array or 1D-array
     /// symbols (the 1D case is fully described by `array_size`).
@@ -289,9 +250,6 @@ pub(crate) struct Symbol {
     /// final innermost subscript falling through to the regular
     /// `sizeof(elem)` + decay path.
     pub array_dims: Vec<i64>,
-
-    /// Shadow slot for `array_dims`. See `h_array_size`.
-    pub h_array_dims: Vec<i64>,
 
     /// True for a C99 6.7.6.2 variable-length array local: the
     /// element count is a runtime expression, so the storage is
@@ -304,12 +262,6 @@ pub(crate) struct Symbol {
     pub is_vla: bool,
     pub vla_ptr_slot: i64,
     pub vla_size_slot: i64,
-    /// Shadow slots for the VLA fields, saved / restored alongside
-    /// `array_size` so an inner binding that reuses the name does not
-    /// corrupt an outer VLA (C99 6.2.1p4).
-    pub h_is_vla: bool,
-    pub h_vla_ptr_slot: i64,
-    pub h_vla_size_slot: i64,
 
     /// True for a deferred-size array whose initializer resolved to zero
     /// elements (`T x[] = {}`, e.g. an element list left empty after all
@@ -319,8 +271,6 @@ pub(crate) struct Symbol {
     /// to a pointer, `sizeof` reports 0, and `typeof(x)` stays distinct
     /// from `typeof(&x[0])` (C99 6.7.6.2 array vs pointer).
     pub is_zero_len_array: bool,
-    /// Shadow slot for `is_zero_len_array`. See `h_array_size`.
-    pub h_is_zero_len_array: bool,
 
     /// True for a `const`-qualified plain integer object with static
     /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
@@ -329,8 +279,6 @@ pub(crate) struct Symbol {
     /// back from the object's `.data` storage when this is set, so
     /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
     pub is_const_qualified: bool,
-    /// Shadow slot for `is_const_qualified` (see `h_class`).
-    pub h_is_const_qualified: bool,
 
     /// Folded initializer of a block-scope `const`-qualified scalar
     /// arithmetic object with automatic storage. A reference to it folds
@@ -341,8 +289,6 @@ pub(crate) struct Symbol {
     /// `None` for every other object shape (non-const, volatile,
     /// aggregate, pointer, missing or non-constant initializer).
     pub const_object_value: Option<ConstObjectValue>,
-    /// Shadow slot for `const_object_value`. See `h_array_size`.
-    pub h_const_object_value: Option<ConstObjectValue>,
 
     /// True for a file-scope array whose element type is `const`-qualified
     /// (`static const T x[]`). Its elements -- and their members -- cannot
@@ -351,8 +297,6 @@ pub(crate) struct Symbol {
     /// the object's lifetime. The const-global fold reads this to prove a
     /// null comparison of such a member false.
     pub storage_is_const: bool,
-    /// Shadow slot for `storage_is_const` (see `h_class`).
-    pub h_storage_is_const: bool,
 
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
@@ -373,8 +317,6 @@ pub(crate) struct Symbol {
     /// that is not a link-time constant). A pass reading the image for
     /// the object's value must skip it.
     pub runtime_initialized: bool,
-    /// Shadow slot for `runtime_initialized` (see `h_class`).
-    pub h_runtime_initialized: bool,
 
     /// Number of derefs from this variable's *loaded value* down
     /// to a function-pointer rvalue, plus 1, or 0 if the variable
@@ -394,14 +336,6 @@ pub(crate) struct Symbol {
     /// distinction in the type tag itself, so this side-channel
     /// is the only durable trace.
     pub fn_ptr_indirection: i64,
-    /// Shadow slot for `fn_ptr_indirection`, saved by
-    /// `shadow_symbol` and restored by `restore_shadowed_symbol`.
-    /// Without it, a parameter or local that re-uses an outer
-    /// fn-ptr name (or any name a previous binding tagged as
-    /// fn-ptr lineage) inherits the stale tag, and a plain
-    /// `*p = ...` against the rebound scalar pointer is treated
-    /// as a fn-ptr decay no-op.
-    pub h_fn_ptr_indirection: i64,
     /// Fn-pointer lineage of the value a call through this variable
     /// returns, in `fn_ptr_indirection`'s plus-1 convention: 0 when the
     /// call result has no fn-pointer lineage, 1 when it IS a function
@@ -412,8 +346,6 @@ pub(crate) struct Symbol {
     /// `fn_ptr_chain_depth` after an indirect call so a following
     /// unary `*` is the C99 6.3.2.1p4 decay no-op.
     pub fn_ptr_ret_indirection: i64,
-    /// Scope-restore shadow for `fn_ptr_ret_indirection`.
-    pub h_fn_ptr_ret_indirection: i64,
     /// True for a typedef of a function TYPE (`typedef RET F(args)`),
     /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
     /// type encoding pre-decays both to a function pointer (`RET` plus
@@ -445,11 +377,8 @@ pub(crate) struct Symbol {
     /// definition: `type_` holds the `int` placeholder, which the
     /// definition rewrites (C99 6.7.2.2p4).
     pub incomplete_enum_tag: Option<u32>,
-    /// Scope-restore shadow for `incomplete_enum_tag`.
-    pub h_incomplete_enum_tag: Option<u32>,
     /// An enumeration constant's complete enumeration, a tag-registry id.
     pub enumeration: Option<u32>,
-    pub h_enumeration: Option<u32>,
 
     /// Explicit alignment (bytes) a typedef's type carries from a GNU
     /// `__attribute__((aligned(N)))` type attribute, or 0 for the
@@ -461,9 +390,6 @@ pub(crate) struct Symbol {
     /// `pending.type_align` from here for struct-field layout,
     /// `__alignof__`, and object placement.
     pub type_align: i64,
-    /// Shadow slot for `type_align`. See `h_array_size`: a block-scope
-    /// typedef reusing an outer name saves the outer alignment here.
-    pub h_type_align: i64,
 
     /// C99 6.2.2 linkage class of a file-scope identifier.
     /// `Linkage::None` for block-scope names; `Linkage::Internal`
@@ -501,8 +427,6 @@ pub(crate) struct Symbol {
     /// from a tentative definition that the parser is still
     /// waiting to resolve.
     pub is_extern_decl: bool,
-    /// Shadow slot for `is_extern_decl` (see `h_class`).
-    pub h_is_extern_decl: bool,
 
     /// Per-name census of the file-scope declarations of a function in
     /// the translation unit, sticky across all of them. Each records
@@ -598,8 +522,6 @@ pub(crate) struct Symbol {
     /// sites resolve the name to it, whose state outlives the scope-exit
     /// restore of the slot. Set at the declaration, cleared at scope exit.
     pub entity_record: Option<u32>,
-    /// Shadow slot for `entity_record` at function-body scope.
-    pub h_entity_record: Option<u32>,
 
     /// True for the synthetic internal symbol of an anonymous compound
     /// literal staged in the data segment. Its initializer bytes are
@@ -615,14 +537,97 @@ pub(crate) struct Symbol {
 
     /// The current binding's declaration site and uses.
     pub binding: BindingInfo,
-    /// Shadow slot for `binding` (see `h_class`).
-    pub h_binding: BindingInfo,
+    /// The enclosing scope's binding of the name while a declaration in
+    /// the function body holds the slot; scope exit restores it.
+    pub outer: ScopedBinding,
     /// A parameter named like the function its declarator declares is
-    /// bound here and parked in the `h_*` fields, which hold the
-    /// parameter while the live ones hold the function, for the rest of
-    /// the declarator (C99 6.2.1p4: the parameter is in scope from its
-    /// own declarator on, the function is what the declarator describes).
+    /// bound here and parked in `outer`, which holds the parameter while
+    /// the live fields hold the function, for the rest of the declarator
+    /// (C99 6.2.1p4: the parameter is in scope from its own declarator
+    /// on, the function is what the declarator describes).
     pub parked_param: bool,
+}
+
+/// Declares [`ScopedBinding`] over the [`Symbol`] fields it lists, so that
+/// saving, restoring and exchanging a binding cover one list.
+macro_rules! scoped_binding {
+    ($($field:ident: $ty:ty,)*) => {
+        /// The fields one declaration of a name sets on the name's
+        /// [`Symbol`]: what the name denotes in the scope that declares it.
+        /// A declaration in an inner scope saves the enclosing binding here
+        /// and the scope's exit restores it (C99 6.2.1p4).
+        #[derive(Clone, Debug, Default)]
+        pub(crate) struct ScopedBinding {
+            $(pub $field: $ty,)*
+            pub binding: BindingInfo,
+        }
+
+        impl ScopedBinding {
+            /// The binding `s` holds, its [`BindingInfo`] moved out.
+            pub(crate) fn take(s: &mut Symbol) -> Self {
+                let binding = core::mem::take(&mut s.binding);
+                Self { $($field: s.$field.clone(),)* binding }
+            }
+
+            /// A copy of the binding `s` holds.
+            pub(crate) fn of(s: &Symbol) -> Self {
+                Self { $($field: s.$field.clone(),)* binding: s.binding.clone() }
+            }
+
+            /// Make `self` the binding `s` holds; returns the uses of the
+            /// one it replaces.
+            pub(crate) fn install(self, s: &mut Symbol) -> BindingInfo {
+                $(s.$field = self.$field;)*
+                core::mem::replace(&mut s.binding, self.binding)
+            }
+
+            /// Exchange `self` with the binding `s` holds.
+            pub(crate) fn exchange(&mut self, s: &mut Symbol) {
+                $(core::mem::swap(&mut self.$field, &mut s.$field);)*
+                core::mem::swap(&mut self.binding, &mut s.binding);
+            }
+
+            /// Whether `s` holds this binding, its uses aside.
+            #[cfg(debug_assertions)]
+            pub(crate) fn held_by(&self, s: &Symbol) -> bool {
+                true $(&& self.$field == s.$field)*
+            }
+        }
+    };
+}
+
+scoped_binding! {
+    class: i64,
+    type_: i64,
+    val: i64,
+    fn_ptr_indirection: i64,
+    fn_ptr_ret_indirection: i64,
+    fn_type: FnType,
+    incomplete_enum_tag: Option<u32>,
+    enumeration: Option<u32>,
+    array_size: i64,
+    type_align: i64,
+    inner_array_size: i64,
+    array_dims: Vec<i64>,
+    is_vla: bool,
+    vla_ptr_slot: i64,
+    vla_size_slot: i64,
+    is_zero_len_array: bool,
+    reserved_data_bytes: i64,
+    fam_init_bytes: i64,
+    data_align: i64,
+    is_thread_local: bool,
+    is_const_qualified: bool,
+    storage_is_const: bool,
+    runtime_initialized: bool,
+    is_extern_decl: bool,
+    asm_register: Option<AsmRegister>,
+    is_global_register: bool,
+    asm_name: Option<String>,
+    const_object_value: Option<ConstObjectValue>,
+    entity_record: Option<u32>,
+    is_function_type: bool,
+    is_void_typedef: bool,
 }
 
 /// One binding of a name: its declaration site and its uses. Each binding
@@ -789,7 +794,7 @@ impl FnType {
 
 /// Recorded initializer value of a block-scope `const` scalar arithmetic
 /// object (see `Symbol::const_object_value`). Floats carry the f64 bit
-/// pattern so the type stays `Copy + Eq` for the shadow-slot machinery.
+/// pattern so the type stays `Copy + Eq` for the scope save.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConstObjectValue {
     Int(i64),
@@ -986,27 +991,17 @@ impl crate::c5::layout::DataOffsets for Symbol {
             class,
             type_: _,
             val,
-            reserved_data_bytes: _,   // a byte count, not an offset
-            h_reserved_data_bytes: _, // scope-restore shadow
-            relocated_from: _,        // spans the finalize rebase consumed
-            data_byte_size: _,        // a byte count
-            fam_init_bytes: _,        // a byte count
-            h_fam_init_bytes: _,
-            h_class: _,
-            h_type: _,
-            h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
+            reserved_data_bytes: _, // a byte count, not an offset
+            relocated_from: _,      // spans the finalize rebase consumed
+            data_byte_size: _,      // a byte count
+            fam_init_bytes: _,      // a byte count
             fn_type: _,
-            h_fn_type: _,
             binding_slot: _,
             is_noreturn: _,
             is_thread_local,
-            h_is_thread_local: _,
             asm_register: _,
-            h_asm_register: _,
             is_global_register: _,
-            h_is_global_register: _,
-            asm_name: _,   // an assembler symbol name, not an offset
-            h_asm_name: _, // scope-restore shadow
+            asm_name: _, // an assembler symbol name, not an offset
             is_weak: _,
             pick_any: _,
             discardable: _,
@@ -1029,51 +1024,33 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_destructor: _,
             init_priority: _,
             data_align: _, // an alignment, not an offset
-            h_data_align: _,
             is_alias: _,
             array_size: _,
-            h_array_size: _,
             inner_array_size: _,
-            h_inner_array_size: _,
             array_dims: _,
-            h_array_dims: _,
             is_vla: _,
             vla_ptr_slot: _,  // frame slot
             vla_size_slot: _, // frame slot
-            h_is_vla: _,
-            h_vla_ptr_slot: _,
-            h_vla_size_slot: _,
             is_zero_len_array: _,
-            h_is_zero_len_array: _,
             is_const_qualified: _,
-            h_is_const_qualified: _,
             const_object_value: _,
-            h_const_object_value: _, // scope-restore shadow
             storage_is_const: _,
-            h_storage_is_const: _,
             has_initializer: _,
             implicit_zero: _,
             runtime_initialized: _,
-            h_runtime_initialized: _,
             fn_ptr_indirection: _,
-            h_fn_ptr_indirection: _,
             fn_ptr_ret_indirection: _,
-            h_fn_ptr_ret_indirection: _,
             is_function_type: _,
             returns_void: _,
             unprototyped_def: _,
             is_void_typedef: _,
             incomplete_enum_tag: _,
-            h_incomplete_enum_tag: _,
             enumeration: _,
-            h_enumeration: _,
             type_align: _,
-            h_type_align: _,
             linkage: _,
             defined_here,
             storage_dropped,
             is_extern_decl: _,
-            h_is_extern_decl: _,
             saw_noninline_decl: _,
             saw_noninline_def: _,
             saw_plain_inline_decl: _,  // linkage model input, not an offset
@@ -1091,11 +1068,10 @@ impl crate::c5::layout::DataOffsets for Symbol {
             scoped_obj_decl: _,
             owner_ent_pc: _, // code address space
             entity_record: _,
-            h_entity_record: _, // scope-restore shadow
             is_compound_literal: _,
             is_string_literal: _,
             binding: _, // declaration site and uses, not an offset
-            h_binding: _,
+            outer: _,   // scope-restore record; every scope is unwound before a `Program` exists
             parked_param: _,
         } = self;
         if *class != crate::c5::token::Token::Glo as i64

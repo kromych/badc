@@ -2176,7 +2176,7 @@ pub struct Compiler {
     /// while a level is open (declaration, enum body, block-scope or
     /// implicit function declaration) saves the outer binding into the
     /// innermost level. Empty at the function-body top level, whose
-    /// bindings use the per-symbol `h_*` slots instead.
+    /// bindings use the symbol's `outer` record instead.
     block_scopes: Vec<Vec<stmt::BlockShadow>>,
     /// Parameter lists being parsed: each holds a level of
     /// `block_scopes` for the enumeration constants it declares

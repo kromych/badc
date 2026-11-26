@@ -757,6 +757,13 @@ impl Compiler {
         self.set_asm_label(id_idx, label)
     }
 
+    /// Whether a declarator of type `ty` is the bare `void` its base type
+    /// spelled, which a typedef carries to the `(void)` parameter list (C99
+    /// 6.7.5.3p10). The mark holds for the first declarator of a group.
+    pub(super) fn take_bare_void(&mut self, ty: i64) -> bool {
+        core::mem::take(&mut self.pending.base_was_void) && super::types::is_void_ty(ty)
+    }
+
     /// Record an asm label on `id_idx`. Repeating the same label is
     /// accepted; a second, differing label for one identifier is
     /// rejected -- the entity has one assembler name and the two
@@ -787,20 +794,27 @@ impl Compiler {
     /// `static` or `extern` declaration may take. Without it the suffix is an
     /// asm-label rename: it applies to an object with static storage duration
     /// and is ignored on an automatic one, which has no assembler symbol to
-    /// rename.
+    /// rename. Returns the register and the label, which the caller sets
+    /// once the binding the declarator hides is saved.
     pub(super) fn parse_declarator_asm_suffix(
         &mut self,
         id_idx: usize,
         named_static_or_extern: bool,
         static_duration: bool,
-    ) -> Result<Option<crate::c5::symbol::AsmRegister>, C5Error> {
+    ) -> Result<
+        (
+            Option<crate::c5::symbol::AsmRegister>,
+            Option<alloc::string::String>,
+        ),
+        C5Error,
+    > {
         if self.lex.tk != Token::Asm {
-            return Ok(None);
+            return Ok((None, None));
         }
         let name = self.parse_asm_register_suffix()?;
         if !self.pending.saw_register_storage {
             if static_duration {
-                self.set_asm_label(id_idx, name)?;
+                return Ok((None, Some(name)));
             } else {
                 let ident = self.symbols[id_idx].name.clone();
                 self.warn_at(
@@ -809,7 +823,7 @@ impl Compiler {
                     format!("assembler name ignored for the automatic variable `{ident}`"),
                 );
             }
-            return Ok(None);
+            return Ok((None, None));
         }
         if named_static_or_extern {
             return Err(self.compile_err(
@@ -818,7 +832,10 @@ impl Compiler {
             ));
         }
         // Past the check above, static storage duration means file scope.
-        Ok(Some(self.resolve_asm_register(&name, static_duration)?))
+        Ok((
+            Some(self.resolve_asm_register(&name, static_duration)?),
+            None,
+        ))
     }
 
     /// The block-scope form of the suffix: C99 6.2.4 gives an object there
@@ -829,7 +846,13 @@ impl Compiler {
         id_idx: usize,
         is_static: bool,
         is_extern: bool,
-    ) -> Result<Option<crate::c5::symbol::AsmRegister>, C5Error> {
+    ) -> Result<
+        (
+            Option<crate::c5::symbol::AsmRegister>,
+            Option<alloc::string::String>,
+        ),
+        C5Error,
+    > {
         let static_duration = is_static || is_extern;
         self.parse_declarator_asm_suffix(id_idx, static_duration, static_duration)
     }
@@ -912,16 +935,10 @@ impl Compiler {
         sym.asm_register = Some(reg);
         sym.is_global_register = true;
         sym.binding.set_decl_site(at);
-        // The binding is the outermost scope: make the shadow slots hold
-        // the binding itself so the per-function `Loc` cleanup restore
-        // (and any block-scope shadowing) round-trips back to it.
-        sym.h_class = sym.class;
-        sym.h_type = sym.type_;
-        sym.h_val = sym.val;
-        sym.h_array_size = 0;
-        sym.h_asm_register = sym.asm_register;
-        sym.h_is_global_register = true;
-        sym.h_binding = sym.binding.clone();
+        // The binding is the outermost scope: make the saved binding the
+        // binding itself so the per-function `Loc` cleanup restore (and any
+        // block-scope shadowing) round-trips back to it.
+        sym.outer = crate::c5::symbol::ScopedBinding::of(sym);
         Ok(())
     }
 

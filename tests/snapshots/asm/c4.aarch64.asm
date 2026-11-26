@@ -575,6 +575,10 @@ Disassembly of section .text:
                	ldurb	w1, [x1, #-0x1]
                	add	x1, x3, x1
                	str	x1, [x2, #0x58]
+               	ldr	x1, [x0, #0x20]
+               	ldrb	w3, [x1]
+               	cmp	w3, #0x61
+               	b.lt	<addr>
                	b	<addr>
                	adrp	x21, <page>
                	ldr	x0, [x21, #0x58]

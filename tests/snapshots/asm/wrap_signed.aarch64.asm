@@ -98,6 +98,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	tbz	w0, #0x0, <addr>
                	add	x2, x2, #0x1
+               	cmp	w2, w1
+               	b.lt	<addr>
                	b	<addr>
                	sxtw	x2, w2
                	add	x4, x4, x2

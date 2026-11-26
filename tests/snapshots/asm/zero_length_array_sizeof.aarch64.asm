@@ -35,6 +35,9 @@ Disassembly of section .text:
                	cmp	w3, #0x4
                	b.ge	<addr>
                	mov	x2, x3
+               	cmp	w0, #0x4
+               	cset	x3, eq
+               	cbnz	w3, <addr>
                	b	<addr>
                	mov	x2, x3
                	adrp	x1, <page>

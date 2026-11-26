@@ -111,6 +111,9 @@ Disassembly of section .text:
                	testb	$0x1, %al
                	je	<addr>
                	incq	%rdi
+               	nopl	(%rax,%rax)
+               	cmpl	%esi, %edi
+               	jl	<addr>
                	jmp	<addr>
                	movslq	%edi, %rdi
                	addq	%rdi, %rdx

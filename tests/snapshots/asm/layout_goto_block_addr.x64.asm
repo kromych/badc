@@ -41,6 +41,9 @@ Disassembly of section .text:
                	jmpq	*%rsi
                	addq	$0x2, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
+               	cmpl	%edi, %eax
+               	jl	<addr>
                	jmp	<addr>
                	incq	%rcx
                	incq	%rax

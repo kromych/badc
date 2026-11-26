@@ -1394,7 +1394,7 @@ impl FunctionEmitter<'_, '_> {
         let (target, fall_through, negate) =
             match self
                 .plan
-                .cond_shape(block_idx, target, fall_through, negate)
+                .cond_shape(block_idx, owner, target, fall_through, negate)
             {
                 CondShape::Jump(t) => return self.branch_unless_next(block_idx, t),
                 CondShape::Branch {

@@ -32,6 +32,8 @@ Disassembly of section .text:
                	br	x4
                	add	x1, x1, #0x2
                	add	x0, x0, #0x1
+               	cmp	w0, w2
+               	b.lt	<addr>
                	b	<addr>
                	add	x1, x1, #0x1
                	add	x0, x0, #0x1

@@ -3,16 +3,17 @@
 //! The allocation decides whether a block emits a byte (coalesced edge
 //! moves, a join of phis, unread values), so the plan is built after it and
 //! read-only: a phi block cannot go without renumbering the value tables.
-//! At `-O` a small bottom test is repeated in place of the jump into a
-//! rotated loop, and a block that is only an indirect branch in place of
-//! every jump to it; each runs what the jump would have reached.
+//! At `-O` a small test is repeated in place of the jump into a rotated
+//! loop or back to a loop's test, and a block that is only an indirect
+//! branch in place of every jump to it; each runs what the jump would have
+//! reached.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use super::early_exit::EarlyExit;
 use super::emit_common::edge_moves;
-use super::mem2reg::successors;
+use super::mem2reg::{DomOrder, SuccGraph, dominators_of, successors};
 use super::reg_alloc::{Allocation, for_each_operand};
 use crate::c5::codegen::passes::layout::JumpChains;
 use crate::c5::codegen::passes::unroll::{bind_phis, eval_value};
@@ -33,6 +34,8 @@ pub(crate) struct BlockPlan {
     repeat: Vec<BlockId>,
     /// A conditional that runs into neither arm closes with its taken one.
     flip: Vec<bool>,
+    /// The same for the test a block repeats.
+    repeat_flip: Vec<bool>,
     /// The arm a repeat takes when its test is decided where it is repeated.
     decided: Vec<BlockId>,
     /// Instructions only a decided repeat's test reads.
@@ -72,6 +75,7 @@ impl BlockPlan {
             next: alloc::vec![NO_BLOCK; n],
             repeat: alloc::vec![NO_BLOCK; n],
             flip: alloc::vec![false; n],
+            repeat_flip: alloc::vec![false; n],
             decided: alloc::vec![NO_BLOCK; n],
             test_only: BTreeSet::new(),
             entry_arm: NO_BLOCK,
@@ -167,7 +171,7 @@ impl BlockPlan {
                 target,
                 fall_through,
                 ..
-            } => match self.cond_shape(b, target, fall_through, false) {
+            } => match self.cond_shape(b, b, target, fall_through, false) {
                 CondShape::Jump(t) | CondShape::Branch { other: t, .. } => t,
             },
             Terminator::AsmGoto { table } => func.jump_tables[table as usize][0],
@@ -181,6 +185,9 @@ impl BlockPlan {
         let indirect: Vec<bool> = (0..n as BlockId)
             .map(|b| repeatable_indirect(func, alloc, b))
             .collect();
+        let idom = dominators_of(&SuccGraph::new(func));
+        let dom = DomOrder::build(&idom);
+        let closes_loop = |p: usize, h: BlockId| dom.dominates(h, p as BlockId, &idom);
         for p in 0..n {
             let Some(t) = self.closing_jump(func, p).filter(|_| !self.skipped[p]) else {
                 continue;
@@ -190,9 +197,9 @@ impl BlockPlan {
                 self.repeat[p] = h;
                 continue;
             }
-            if !self.try_repeat(func, alloc, p, t)
+            if !self.try_repeat(func, alloc, p, t, &closes_loop)
                 && let Some(taken) = self.taken_arm(func, p)
-                && self.try_repeat(func, alloc, p, taken)
+                && self.try_repeat(func, alloc, p, taken, &closes_loop)
             {
                 self.flip[p] = true;
             }
@@ -214,14 +221,14 @@ impl BlockPlan {
             if h != NO_BLOCK && !reached[h as usize] {
                 self.repeat[p] = NO_BLOCK;
                 self.flip[p] = false;
+                self.repeat_flip[p] = false;
                 self.decided[p] = NO_BLOCK;
                 // This jump keeps an indirect branch reached for the others.
                 reached[h as usize] = indirect[h as usize];
             }
         }
         // A conditional that runs into neither arm branches to the one behind
-        // it, a loop's back edge -- the nearer of two, its innermost loop's --
-        // and jumps to the other.
+        // it and jumps to the other.
         for p in (0..n).filter(|&p| !self.skipped[p] && self.repeat[p] == NO_BLOCK) {
             let (Terminator::Bz {
                 target,
@@ -241,13 +248,7 @@ impl BlockPlan {
                 self.resolve(fall_through),
                 self.runs_into(p),
             );
-            let behind = |x: BlockId| (x as usize) <= p;
-            let prefer_f = match (behind(f), behind(t)) {
-                (true, false) => true,
-                (true, true) => f > t,
-                _ => false,
-            };
-            if t != f && into != t && into != f && prefer_f {
+            if t != f && into != t && into != f && back_arm(p, t, f) == Some(true) {
                 self.flip[p] = true;
             }
         }
@@ -260,15 +261,30 @@ impl BlockPlan {
         }
     }
 
-    /// Repeat the block `p`'s edge to `t` lands on, when `p` runs into an arm of it.
-    fn try_repeat(&mut self, func: &FunctionSsa, alloc: &Allocation, p: usize, t: BlockId) -> bool {
+    /// Repeat the block `p`'s edge to `t` lands on, when `p` runs into an arm
+    /// of it, or when the edge closes a loop and the repeat can branch back
+    /// in turn, to the arm behind `p`, and jump to the other.
+    fn try_repeat(
+        &mut self,
+        func: &FunctionSsa,
+        alloc: &Allocation,
+        p: usize,
+        t: BlockId,
+        closes_loop: &impl Fn(usize, BlockId) -> bool,
+    ) -> bool {
         let h = self.resolve(t);
         let into = self.runs_into(p);
         let Some((a, b)) = repeatable_arms(func, alloc, h).filter(|_| h as usize != p) else {
             return false;
         };
-        if into == NO_BLOCK || (into != self.resolve(a) && into != self.resolve(b)) {
-            return false;
+        let (a, b) = (self.resolve(a), self.resolve(b));
+        if into != a && into != b {
+            // A jump to `h` itself would take the repeat again.
+            let back = a != h && b != h && closes_loop(p, h);
+            let Some(flip) = back.then(|| back_arm(p, a, b)).flatten() else {
+                return false;
+            };
+            self.repeat_flip[p] = flip;
         }
         self.repeat[p] = h;
         if let Some(arm) = self.decide(func, alloc, p as BlockId, t, h) {
@@ -411,19 +427,26 @@ impl BlockPlan {
     }
 
     /// A taken arm the code runs into swaps the arms and inverts the test,
-    /// and so does a flipped block that runs into neither.
+    /// and so does a flipped test that runs into neither. The test is
+    /// `owner`'s: `block_idx`'s own, or the one it repeats.
     pub(crate) fn cond_shape(
         &self,
         block_idx: usize,
+        owner: usize,
         target: BlockId,
         fall_through: BlockId,
         negate: bool,
     ) -> CondShape {
         let (t, f) = (self.resolve(target), self.resolve(fall_through));
         let into = self.runs_into(block_idx);
+        let flip = if owner == block_idx {
+            self.flip[block_idx]
+        } else {
+            self.repeat_flip[block_idx]
+        };
         if t == f {
             CondShape::Jump(t)
-        } else if into == t || (into != f && self.flip[block_idx]) {
+        } else if into == t || (into != f && flip) {
             CondShape::Branch {
                 taken: f,
                 other: t,
@@ -473,6 +496,18 @@ fn test_only(func: &FunctionSsa, alloc: &Allocation, h: BlockId) -> Vec<ValueId>
         }
     }
     only
+}
+
+/// Whether a conditional ending `p` that runs into neither arm branches to
+/// `f` rather than `t`: to the arm behind it, a loop's back edge -- the
+/// nearer of two, its innermost loop's. None when neither arm is behind.
+fn back_arm(p: usize, t: BlockId, f: BlockId) -> Option<bool> {
+    let behind = |x: BlockId| (x as usize) <= p;
+    match (behind(t), behind(f)) {
+        (false, false) => None,
+        (true, true) => Some(f > t),
+        (_, f_behind) => Some(f_behind),
+    }
 }
 
 /// `b` emits nothing and its one unconditional edge moves nothing.
@@ -891,10 +926,13 @@ mod tests {
             let a = alloc_with(alloc::vec![Place::IntReg(0); 3]);
             BlockPlan::build(&f, &a, false, None)
         };
-        assert_eq!(build(4, 4).cond_shape(0, 1, 2, false), CondShape::Jump(4));
+        assert_eq!(
+            build(4, 4).cond_shape(0, 0, 1, 2, false),
+            CondShape::Jump(4)
+        );
         // The taken arm lands on the next emitted block: the test inverts.
         assert_eq!(
-            build(3, 4).cond_shape(0, 1, 2, false),
+            build(3, 4).cond_shape(0, 0, 1, 2, false),
             CondShape::Branch {
                 taken: 4,
                 other: 3,
@@ -902,7 +940,7 @@ mod tests {
             }
         );
         assert_eq!(
-            build(4, 3).cond_shape(0, 1, 2, true),
+            build(4, 3).cond_shape(0, 0, 1, 2, true),
             CondShape::Branch {
                 taken: 4,
                 other: 3,
@@ -1340,16 +1378,16 @@ mod tests {
         let (f, a) = build(2, 4);
         let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(repeats(&plan), [(0, 2)]);
-        assert_eq!(plan.cond_shape(0, 2, 4, false), branch(4, 2, true));
+        assert_eq!(plan.cond_shape(0, 0, 2, 4, false), branch(4, 2, true));
         // The repeat's own branch, which runs into b1, keeps its sense.
-        assert_eq!(plan.cond_shape(0, 3, 1, false), branch(3, 1, false));
+        assert_eq!(plan.cond_shape(0, 2, 3, 1, false), branch(3, 1, false));
         let plain = BlockPlan::build(&f, &a, false, None);
-        assert_eq!(plain.cond_shape(0, 2, 4, false), branch(2, 4, false));
+        assert_eq!(plain.cond_shape(0, 0, 2, 4, false), branch(2, 4, false));
         // The closing arm is the test already: nothing swaps.
         let (f, a) = build(4, 2);
         let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(repeats(&plan), [(0, 2)]);
-        assert_eq!(plan.cond_shape(0, 4, 2, false), branch(4, 2, false));
+        assert_eq!(plan.cond_shape(0, 0, 4, 2, false), branch(4, 2, false));
     }
 
     #[test]
@@ -1373,6 +1411,97 @@ mod tests {
                 t => t,
             };
         }
+        assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
+    }
+
+    #[test]
+    fn a_latch_followed_by_neither_arm_repeats_the_test_as_a_back_edge() {
+        // b0: Bnz v0 -> b1 | b2 / b1: Return / b2: v1 = v0 < 16; Bnz v1 ->
+        // b3 | b1 / b3: v2; Jmp b2 / b4: Return. The latch b3 runs into b4,
+        // and the exit b1 lies before the loop.
+        let f = func_with(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                op_imm(BinOp::Lt, 0, 16),
+                Inst::Imm(5),
+            ],
+            alloc::vec![
+                block(
+                    0..1,
+                    Terminator::Bnz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 2,
+                    }
+                ),
+                block(1..1, Terminator::Return(0)),
+                block(
+                    1..2,
+                    Terminator::Bnz {
+                        cond: 1,
+                        target: 3,
+                        fall_through: 1,
+                    }
+                ),
+                block(2..3, Terminator::Jmp(2)),
+                block(3..3, Terminator::Return(2)),
+            ],
+        );
+        let a = alloc_with(alloc::vec![Place::IntReg(0); 3]);
+        let plan = BlockPlan::build(&f, &a, true, None);
+        assert_eq!(repeats(&plan), [(3, 2)]);
+        // Both arms lie behind the latch: the branch takes the nearer, the
+        // loop's own body, and the jump the exit.
+        let back = CondShape::Branch {
+            taken: 3,
+            other: 1,
+            negate: false,
+        };
+        assert_eq!(plan.cond_shape(3, 2, 3, 1, false), back);
+        assert!(repeats(&BlockPlan::build(&f, &a, false, None)).is_empty());
+    }
+
+    #[test]
+    fn a_jump_back_to_a_test_that_does_not_dominate_it_stays() {
+        // b0: Bnz v0 -> b3 | b1 / b1: v1 = v0 < 16; Bnz v1 -> b2 | b5 /
+        // b2: Return / b3: v2; Jmp b1 / b4, b5: Return. b3 jumps back to b1,
+        // runs into neither arm, and closes no loop.
+        let f = func_with(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                op_imm(BinOp::Lt, 0, 16),
+                Inst::Imm(5),
+            ],
+            alloc::vec![
+                block(
+                    0..1,
+                    Terminator::Bnz {
+                        cond: 0,
+                        target: 3,
+                        fall_through: 1,
+                    }
+                ),
+                block(
+                    1..2,
+                    Terminator::Bnz {
+                        cond: 1,
+                        target: 2,
+                        fall_through: 5,
+                    }
+                ),
+                block(2..2, Terminator::Return(0)),
+                block(2..3, Terminator::Jmp(1)),
+                block(3..3, Terminator::Return(2)),
+                block(3..3, Terminator::Return(1)),
+            ],
+        );
+        let a = alloc_with(alloc::vec![Place::IntReg(0); 3]);
         assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
 }

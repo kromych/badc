@@ -32,8 +32,12 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
                	mov	x1, #0x2                // =2
+               	subs	x2, x2, #0x1
+               	b.hs	<addr>
                	b	<addr>
                	mov	x1, x3
+               	subs	x2, x2, #0x1
+               	b.hs	<addr>
                	b	<addr>
                	mov	x1, x3
                	subs	x2, x2, #0x1
@@ -72,8 +76,12 @@ Disassembly of section .text:
                	mov	x3, #0x2c               // =44
                	sturb	w3, [x1, #-0x1]
                	mov	x3, #0x2                // =2
+               	subs	x2, x2, #0x1
+               	b.hs	<addr>
                	b	<addr>
                	mov	x3, x4
+               	subs	x2, x2, #0x1
+               	b.hs	<addr>
                	b	<addr>
                	mov	x3, x4
                	subs	x2, x2, #0x1

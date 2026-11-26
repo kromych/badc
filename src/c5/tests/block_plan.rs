@@ -282,6 +282,50 @@ fn small_bottom_test_is_repeated_ahead_of_the_loop() {
     }
 }
 
+/// The `continue` closes the loop from a block that runs into neither arm
+/// of its test. The test is repeated there, a conditional branch back into
+/// the body and a jump out, so no jump lands on the test.
+#[test]
+fn a_continue_repeats_the_loop_test_as_a_branch_back() {
+    let src = "long two_back_edges(int start, int n, int limit, int *last) {\n\
+        long s = 0;\n\
+        int c = 0, i = start;\n\
+        while (i < n) {\n\
+            if (++c == limit) break;\n\
+            if (c & 1) { i += 1; continue; }\n\
+            s += i;\n\
+            i += 2;\n\
+        }\n\
+        *last = i;\n\
+        return s;\n}\n";
+    let name = "two_back_edges";
+    // A test: the instruction a jump reaches, or the next, branches on it.
+    let ws = a64_at(src, name, true);
+    let cond = |k: i64| {
+        usize::try_from(k)
+            .ok()
+            .and_then(|k| ws.get(k))
+            .is_some_and(|&w| matches!(a64_branch(w, 0), Some((_, false))))
+    };
+    let onto_test = ws
+        .iter()
+        .enumerate()
+        .any(|(i, &w)| matches!(a64_branch(w, i), Some((t, true)) if cond(t) || cond(t + 1)));
+    assert!(!onto_test, "aarch64: {ws:08x?}");
+    assert!(a64_branches_land_on_code(&ws), "aarch64: {ws:08x?}");
+    let insns = x64_at(src, name, true);
+    let code: Vec<&X64Insn> = insns
+        .iter()
+        .filter(|i| !matches!(i.op, 0x90 | 0x0F1F))
+        .collect();
+    let onto_test = code.iter().filter(|j| j.is_jmp()).any(|j| {
+        let at = code.iter().position(|i| i.at >= j.target());
+        at.is_some_and(|k| code[k..].iter().take(2).any(|i| i.is_jcc()))
+    });
+    assert!(!onto_test, "x86-64: {insns:x?}");
+    assert!(x64_branches_land_on_code(&insns), "x86-64: {insns:x?}");
+}
+
 /// What a second copy would change stays single: a volatile read (C99
 /// 6.7.3p6), a call, and a test longer than the bound. Each loop keeps the
 /// jump to its bottom test.

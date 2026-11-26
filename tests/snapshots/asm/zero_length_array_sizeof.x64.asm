@@ -49,6 +49,12 @@ Disassembly of section .text:
                	cmpl	$0x4, %esi
                	jge	<addr>
                	movq	%rsi, %rdx
+               	cmpl	$0x4, %eax
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	nopl	(%rax)
+               	testl	%esi, %esi
+               	jne	<addr>
                	jmp	<addr>
                	movq	%rsi, %rdx
                	cmpl	$0x0, <rip> # <addr>

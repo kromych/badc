@@ -50,23 +50,27 @@ Disassembly of section .text:
                	cmpl	%r8d, %ecx
                	jne	<addr>
                	incq	%rax
+               	cmpb	$0x0, (%rsi,%rax)
+               	jne	<addr>
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq
                	xorl	%eax, %eax
+               	nopl	(%rax,%rax)
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	movq	0x10(%rdi), %rcx
-               	nop
                	cmpb	$0x0, (%rcx,%rax)
                	je	<addr>
                	movq	0x10(%rdi), %rcx
                	movsbq	(%rcx,%rax), %rcx
                	movsbq	(%rdx,%rax), %rsi
+               	nop
                	cmpl	%esi, %ecx
                	jne	<addr>
                	incq	%rax
-               	nopl	(%rax,%rax)
+               	cmpb	$0x0, (%rdx,%rax)
+               	jne	<addr>
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq

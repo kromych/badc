@@ -1,5 +1,5 @@
 inline_arg_count_mismatch.c:15: warning: too few arguments to `add` (expected 2, got 1) [B3004] [-Wtoo-few-arguments]
-    int junk = add(7);
+    int junk = add(7);     // one argument short -- must compile cleanly
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=add
 fn ent_pc=0 n_params=2 variadic=false locals=0

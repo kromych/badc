@@ -7289,6 +7289,24 @@ fn diagnostic_echoes_the_source_line() {
 }
 
 #[test]
+fn a_diagnostic_quotes_its_line_as_written() {
+    use crate::c5::Compiler;
+    // The quoted line is the source text, not its expansion: a reader
+    // searching the file for it finds it.
+    let src = "#define ERR (*err_location())\nint *err_location(void);\n\
+               int main(void) { ERR = 0; return undeclared_name; }\n";
+    let err = Compiler::new(src.to_string())
+        .compile()
+        .expect_err("undeclared_name is an error");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("int main(void) { ERR = 0; return undeclared_name; }"),
+        "expected the line as written, got {msg:?}"
+    );
+    assert!(!msg.contains("err_location()) = 0"), "{msg:?}");
+}
+
+#[test]
 fn a_disabled_warning_locates_no_source_line() {
     // `unused-parameter` is off at the default level, yet its analysis
     // still runs over every function's bindings; each report must stop

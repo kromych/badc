@@ -3017,7 +3017,11 @@ pub struct Compiler {
     /// implicit declaration C90 6.3.2.2 allowed is gone); the retry
     /// supplies the one a library function's header carries. `None`
     /// after the first retry attempt, so the recursion stops at one level.
-    retry_state: Option<(String, CompileOptions)>,
+    retry_state: Option<(alloc::sync::Arc<String>, CompileOptions)>,
+    /// The unit's text as written, which diagnostics quote.
+    unit_text: Option<alloc::sync::Arc<String>>,
+    /// The files diagnostics quoted, by the name their lines carry.
+    written: core::cell::RefCell<alloc::collections::BTreeMap<String, Option<diag::Written>>>,
 
     /// The first pass's recorded preprocessor state, letting a retry
     /// reuse that pass instead of re-preprocessing when the appended
@@ -3332,7 +3336,9 @@ impl Compiler {
             || opts.freestanding
             || opts.no_builtin
             || opts.preprocessed);
+        let source = alloc::sync::Arc::new(source);
         let mut this = Self::build_recording(&source, target, opts, record);
+        this.unit_text = Some(source.clone());
         this.retry_state = Some((source, retry_opts));
         this
     }
@@ -3697,6 +3703,8 @@ impl Compiler {
             pending_block_static_syms: Vec::new(),
             next_block_static_id: 0,
             retry_state: None,
+            unit_text: None,
+            written: core::cell::RefCell::default(),
             pp_reuse: None,
         }
     }
@@ -4136,8 +4144,9 @@ impl Compiler {
                 header: header.to_string(),
                 bound: false,
             });
-            result = Self::build_retry(&source, target, opts.clone(), pp_reuse.as_ref())
-                .compile_one_pass();
+            let mut pass = Self::build_retry(&source, target, opts.clone(), pp_reuse.as_ref());
+            pass.unit_text = Some(source.clone());
+            result = pass.compile_one_pass();
         }
     }
 

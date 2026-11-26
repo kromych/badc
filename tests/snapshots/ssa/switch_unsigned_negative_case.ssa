@@ -1,7 +1,7 @@
 switch_unsigned_negative_case.c:24: warning: case value -1 is not within the range of `unsigned short`, the type of the controlling expression [B3008] [-Wswitch-outside-range]
-    case -1: return 100;
+    case -1: return 100; // promotes to int -1; never matches a uint16
 switch_unsigned_negative_case.c:32: warning: case value -1 is not within the range of `unsigned char`, the type of the controlling expression [B3008] [-Wswitch-outside-range]
-    case -1: return 100;
+    case -1: return 100; // promotes to int -1; never matches a uint8
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=u32
 fn ent_pc=0 n_params=1 variadic=false locals=0

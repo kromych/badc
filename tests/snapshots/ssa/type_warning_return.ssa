@@ -1,7 +1,7 @@
 type_warning_return.c:15: warning: pointer assigned to integer in return (declared=int, returned=int*) [B3001] [-Wint-conversion]
-    return g;
+    return g; // warn: pointer returned where int declared
 type_warning_return.c:19: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
-    return x;
+    return x; // warn: integer returned where pointer declared
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=ret_ptr_as_int
 fn ent_pc=0 n_params=0 variadic=false locals=0

@@ -1,5 +1,5 @@
 inline_asm_declared_sp_clobber.c:29: warning: the stack pointer is listed as clobbered or written through an output; GNU C requires it to hold the same value after an `asm` statement [B2012] [-Winline-asm]
-    __asm__ volatile("pushq $0x77\n\tpushq $0x77" : : : "rsp", "memory");
+    LEAVE_SP_MOVED();
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=mix
 fn ent_pc=0 n_params=1 variadic=false locals=0

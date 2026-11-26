@@ -709,6 +709,8 @@ impl Compiler {
             self.pending.fn_ptr_type.clone(),
             self.pending.base_is_function_type,
         );
+        // A declarator that derives nothing from a `void` base is bare `void`.
+        let base_was_void = self.pending.base_was_void;
         while self.lex.tk != ';' {
             self.pending.attrs = spec_attrs.clone();
             (
@@ -728,7 +730,7 @@ impl Compiler {
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }
-            let declarator_is_bare_void = self.take_bare_void(ty);
+            let declarator_is_bare_void = base_was_void && is_void_ty(ty);
             self.emit_vm_bound_stores(id_idx, false)?;
             // An array of a variable-length array type is one too, its byte
             // count the element's times the bound.

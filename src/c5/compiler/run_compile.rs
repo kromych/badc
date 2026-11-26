@@ -17,7 +17,8 @@ use super::decl_base;
 use super::initializer::DataStore;
 use super::redeclaration::{DeclaredType, Definition, LinkClaim, Params, Spelled};
 use super::types::{
-    is_pointer_ty, is_struct_ty, is_struct_value_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
+    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth,
 };
 use super::{Compiler, Site};
 
@@ -39,6 +40,9 @@ struct FileScopeDecl {
     base_fn_ptr_ret_indirection: i64,
     base_is_function_type: bool,
     base_fn_type: Option<crate::c5::symbol::FnType>,
+    /// The base type spelled `void`: a declarator that derives nothing from
+    /// it is bare `void` (C99 6.7.5.3p10).
+    base_was_void: bool,
     /// The attributes and function specifiers among the specifiers, which
     /// each declarator starts from.
     spec_attrs: super::DeclAttrs,
@@ -594,6 +598,7 @@ impl Compiler {
             base_fn_ptr_ret_indirection: self.pending.fn_ptr_ret_indirection,
             base_is_function_type: self.pending.base_is_function_type,
             base_fn_type: self.pending.fn_ptr_type.clone(),
+            base_was_void: self.pending.base_was_void,
             spec_attrs: self.pending.attrs.clone(),
         };
         let single_declarator = core::mem::take(&mut self.pending.auto_type_single_declarator);
@@ -766,7 +771,7 @@ impl Compiler {
         {
             self.symbols[id_idx].fn_type = f.clone();
         }
-        let declarator_is_bare_void = self.take_bare_void(ty);
+        let declarator_is_bare_void = decl.base_was_void && is_void_ty(ty);
         // Function-returning-FP shape: parse_declarator
         // already consumed the outer function's params.
         // Synthesize the function-definition path: bind the

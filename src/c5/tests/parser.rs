@@ -2624,6 +2624,29 @@ fn an_asm_label_belongs_to_the_binding_that_states_it() {
     assert!(p.symbols.iter().any(|s| s.name.starts_with("y2.")));
 }
 
+/// Every declarator of a declaration that derives nothing from its `void`
+/// base type is bare `void`, wherever it stands in the list: a typedef of
+/// it makes `(T)` the empty parameter list (C99 6.7.5.3p10) at file and
+/// block scope, past a pointer and a function declarator before it.
+#[test]
+fn every_bare_void_declarator_of_a_list_is_a_void_typedef() {
+    let p = super::compile_str_bare(
+        "typedef void *P, V;\n\
+         typedef void F(int), W;\n\
+         int f(V);\n\
+         int f(void) { return 3; }\n\
+         int g(W) { return 4; }\n\
+         int h(void);\n\
+         int main(void) {\n\
+           typedef void *Q, X;\n\
+           int h(X);\n\
+           return f() + g() + h();\n\
+         }\n\
+         int h(void) { return 5; }\n",
+    );
+    assert_eq!(super::Vm::new(p).run().unwrap(), 12);
+}
+
 /// A block-scope object that hides a file-scope register variable is an
 /// ordinary object: only the outer binding names the register.
 #[test]

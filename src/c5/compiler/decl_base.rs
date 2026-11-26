@@ -757,13 +757,6 @@ impl Compiler {
         self.set_asm_label(id_idx, label)
     }
 
-    /// Whether a declarator of type `ty` is the bare `void` its base type
-    /// spelled, which a typedef carries to the `(void)` parameter list (C99
-    /// 6.7.5.3p10). The mark holds for the first declarator of a group.
-    pub(super) fn take_bare_void(&mut self, ty: i64) -> bool {
-        core::mem::take(&mut self.pending.base_was_void) && super::types::is_void_ty(ty)
-    }
-
     /// Record an asm label on `id_idx`. Repeating the same label is
     /// accepted; a second, differing label for one identifier is
     /// rejected -- the entity has one assembler name and the two

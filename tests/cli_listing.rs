@@ -677,6 +677,26 @@ fn the_writer_s_got_load_reads_as_a_load() {
     assert!(l.contains(" movq\tcounter@GOTPCREL(%rip), %rax\n"), "{l}");
 }
 
+/// The addresses a call sets in its argument registers -- an object, a
+/// function, and another unit's object -- read as the symbols they reach.
+#[test]
+fn address_arguments_name_their_symbols() {
+    let dir = TempDir::new("badc-listing-args");
+    let src = "int table[4];\nextern int counter;\n\
+        static int helper(void) { return 1; }\n\
+        void sink(int *t, int (*f)(void), int *c, long k);\n\
+        long g(long a) { sink(table, helper, &counter, a); return a + 1; }\n";
+    let l = listing(&dir, "args", src, &["-O"]);
+    assert_tiled(&l);
+    for row in [
+        "leaq table(%rip), %rdi",
+        "leaq helper(%rip), %rsi",
+        "counter@GOTPCREL(%rip), %rdx",
+    ] {
+        assert!(l.contains(row), "no `{row}` in\n{l}");
+    }
+}
+
 /// `-S -o -` writes the listing to standard output, one per function with
 /// its symbol as the label.
 #[test]

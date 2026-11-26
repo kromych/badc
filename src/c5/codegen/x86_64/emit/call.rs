@@ -178,9 +178,15 @@ impl Marshal<'_> {
                     emit_lea_r_mem(code, scratch, base, disp);
                 }
                 // A RIP-relative `lea`, relocated as the walker records.
-                ArgSet::Data(_) | ArgSet::Code(_) => {
+                ArgSet::Data(off) => {
                     code.note_address(code.len(), self.args[i], set);
                     super::encode::emit_lea_r_rip32(code, scratch, 0);
+                    code.name_last(|| t::Operand::Data(off));
+                }
+                ArgSet::Code(pc) => {
+                    code.note_address(code.len(), self.args[i], set);
+                    super::encode::emit_lea_r_rip32(code, scratch, 0);
+                    code.name_last(|| t::Operand::Func(pc));
                 }
             }
             return Some(scratch);

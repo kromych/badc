@@ -36,7 +36,10 @@ impl EmitCtx<'_> {
                         symbol_name: name.clone(),
                         direct_pcrel: None,
                         import_slot: false,
-                    })
+                    });
+                    self.code.name_at(instr_offset, || {
+                        crate::c5::codegen::listing::Operand::Name(name.clone())
+                    });
                 }
                 ArgSet::Data(off) => self.data_fixups.push(super::DataFixup {
                     instr_offset,

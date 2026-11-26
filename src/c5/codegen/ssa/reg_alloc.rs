@@ -1434,15 +1434,22 @@ fn call_forbid_masks(
 /// would find fewer than two scratch registers ([`scratch_room`]): an
 /// instruction's operands and result, the phi moves of an edge that stage
 /// through scratch, the parameters an entry places. Kept off the pair,
-/// they leave it to the site, which then borrows it at worst.
+/// they leave it to the site, which then borrows it at worst. With `broad`,
+/// every integer value a starved instruction reads or writes, whatever its
+/// place, and so for the loops ([`x86_scratch_borrowed_in_loops`]).
 fn x86_scratch_starved(
     func: &FunctionSsa,
     target: Target,
     alloc: &Allocation,
     sites: &ScratchSites,
+    broad: bool,
 ) -> Vec<ValueId> {
     let in_pair = |v: ValueId| matches!(alloc.places.get(v as usize), Some(Place::IntReg(r)) if X86_SCRATCH_PAIR.contains(r));
     let starved = |order: &[u8], touched: u16| scratch_room(order, sites.writable, touched) < 2;
+    let int = |u: ValueId| {
+        (u as usize) < func.insts.len() && !alloc.is_fp_value(&func.insts[u as usize], u)
+    };
+    let kept = |u: ValueId| if broad { int(u) } else { in_pair(u) };
     let tls = tls_addr_is_call(target, func);
     let mut out = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1454,16 +1461,18 @@ fn x86_scratch_starved(
         {
             continue;
         }
-        if in_pair(v) {
+        if produces_value(inst) && kept(v) {
             out.push(v);
         }
         for_each_operand(inst, |op| {
-            if in_pair(op) {
+            if kept(op) {
                 out.push(op);
             }
         });
     }
-    out.extend(x86_scratch_borrowed_in_loops(func, alloc, sites, tls));
+    out.extend(x86_scratch_borrowed_in_loops(
+        func, alloc, sites, tls, broad,
+    ));
     let reg = |v: ValueId| match alloc.places.get(v as usize) {
         Some(&Place::IntReg(r)) => 1u16 << r,
         _ => 0,
@@ -1521,18 +1530,19 @@ fn x86_scratch_starved(
 /// would borrow the register of: one reading or writing a spill slot, which
 /// stages through scratch, where no two scratch registers are free. A
 /// borrow there stores and reloads on every iteration; kept off the pair,
-/// the value leaves the pair to the staging, as with 13 registers.
+/// the value leaves the pair to the staging, as with 13 registers. With
+/// `broad`, every integer value living through such a site.
 fn x86_scratch_borrowed_in_loops(
     func: &FunctionSsa,
     alloc: &Allocation,
     sites: &ScratchSites,
     tls: bool,
+    broad: bool,
 ) -> Vec<ValueId> {
     let depth = crate::c5::codegen::passes::layout::loop_depths(func);
     let block_of = crate::c5::codegen::passes::constfold_branch::block_index(func);
     let spilled = |v: ValueId| matches!(alloc.places.get(v as usize), Some(Place::Spill(_)));
-    let mut held = 0u16;
-    let mut sites_in = Vec::new();
+    let mut sites_in: Vec<(ValueId, u16)> = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
         let looped = (block_of.get(v))
             .and_then(|&b| depth.get(b as usize))
@@ -1554,24 +1564,30 @@ fn x86_scratch_borrowed_in_loops(
         for_each_operand(inst, |op| stages |= spilled(op));
         let pair = X86_SCRATCH_PAIR.iter().fold(0u16, |m, &r| m | 1 << r) & through;
         if stages && pair != 0 {
-            held |= pair;
             sites_in.push((v as ValueId, pair));
         }
     }
-    if held == 0 {
-        return Vec::new();
-    }
     // A value lives over `[v, last_use[v]]` (`Allocation::last_use`).
     let mut out = Vec::new();
-    for (u, &p) in alloc.places.iter().enumerate() {
-        let Place::IntReg(r) = p else { continue };
-        if held >> r & 1 == 0 {
+    for (u, inst) in func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|_| !sites_in.is_empty())
+    {
+        if !produces_value(inst) || alloc.is_fp_value(inst, u as ValueId) {
             continue;
         }
+        let held = match alloc.places[u] {
+            Place::IntReg(r) if X86_SCRATCH_PAIR.contains(&r) => 1u16 << r,
+            _ if broad => u16::MAX,
+            _ => continue,
+        };
         let end = alloc.last_use.get(u).copied().unwrap_or(0);
-        if sites_in
-            .iter()
-            .any(|&(v, pair)| pair >> r & 1 != 0 && (u as ValueId) < v && v <= end)
+        let next = sites_in.partition_point(|&(v, _)| v <= u as ValueId);
+        if (sites_in[next..].iter())
+            .take_while(|&&(v, _)| v <= end)
+            .any(|&(_, pair)| pair & held != 0)
         {
             out.push(u as ValueId);
         }
@@ -1971,20 +1987,41 @@ pub(crate) fn free_fp_register(
 /// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
     let mut pair_off: Vec<bool> = Vec::new();
+    let mut round = 1;
     loop {
         let alloc = allocate_keeping(func, target, fixed, &pair_off);
-        let starved = alloc.scratch_sites.as_ref().map_or_else(Vec::new, |sites| {
-            x86_scratch_starved(func, target, &alloc, sites)
-        });
-        if starved.is_empty() {
+        if round == SCRATCH_ROUNDS {
             return alloc;
         }
+        let broad = round > PRECISE_SCRATCH_ROUNDS;
+        let starved = alloc.scratch_sites.as_ref().map_or_else(Vec::new, |sites| {
+            x86_scratch_starved(func, target, &alloc, sites, broad)
+        });
         pair_off.resize(func.insts.len(), false);
+        let mut fresh = false;
         for v in starved {
-            pair_off[v as usize] = true;
+            fresh |= !core::mem::replace(&mut pair_off[v as usize], true);
         }
+        if !fresh {
+            return alloc;
+        }
+        round += 1;
     }
 }
+
+/// x86-64 allocations that keep off [`X86_SCRATCH_PAIR`] only the values
+/// holding it at a starved site ([`x86_scratch_starved`]). Each lets other
+/// values into the pair there, so a block whose values all live through
+/// such sites moved a few per allocation, up to 93 times; past these, an
+/// allocation keeps off the pair every integer value a starved site reads
+/// or writes or a looped one stages through. At eight the C fixtures', the
+/// perf corpus's and sqlite's Linux objects keep their bytes; at five,
+/// blake2b's compression grows by 10 instructions and 15 stack accesses.
+const PRECISE_SCRATCH_ROUNDS: usize = 8;
+
+/// Allocations in all, past which the last stands and its starved sites
+/// borrow their scratch: the broad rounds settle within two.
+const SCRATCH_ROUNDS: usize = PRECISE_SCRATCH_ROUNDS + 3;
 
 /// [`allocate`], keeping the values `pair_off` marks off
 /// [`X86_SCRATCH_PAIR`].
@@ -8432,6 +8469,57 @@ int main(void) { return 0; }
                 });
             }
         }
+    }
+
+    /// `n` values live across a loop whose body defines `n` more from them
+    /// and folds both into a sum, in an order that keeps them live together,
+    /// so the loop stages its spills through scratch on every iteration.
+    #[cfg(not(debug_assertions))]
+    fn values_live_across_a_loop(n: usize) -> String {
+        let mut s = String::from("unsigned long f(const unsigned long *p, int n) {\n");
+        for k in 0..n {
+            s += &format!("    unsigned long a{k} = p[{k}] * {} + {k};\n", 2 * k + 1);
+        }
+        s += "    unsigned long s = 0;\n    for (int i = 0; i < n; i++) {\n";
+        for k in 0..n {
+            s += &format!(
+                "        unsigned long b{k} = p[(i + {k}) % 256] ^ a{};\n",
+                (k * 7 + 1) % n
+            );
+        }
+        for k in 0..n {
+            s += &format!("        s = s * 31 + b{k};\n");
+        }
+        for k in (0..n).rev() {
+            s += &format!("        s = s * 37 + b{k} + a{k};\n");
+        }
+        s + "    }\n    return s;\n}\n"
+    }
+
+    /// Allocating values that live across a loop through sites starved of
+    /// scratch takes x86-64 under 24 times as long as AArch64 (11.3
+    /// measured, in at most [`SCRATCH_ROUNDS`] allocations), where each
+    /// allocation keeping only the scratch pair's holders off it let others
+    /// in, and the rounds took 69 times as long.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn x86_scratch_rounds_are_bounded() {
+        let src = values_live_across_a_loop(200);
+        let (x86, a64) = (
+            promoted(&src, Target::LinuxX64),
+            promoted(&src, Target::LinuxAarch64),
+        );
+        let (mut tx, mut ta) = (core::time::Duration::ZERO, core::time::Duration::ZERO);
+        for _ in 0..4 {
+            tx += cpu_cost(&x86, 1, &|f: &mut FunctionSsa| {
+                core::hint::black_box(super::allocate(f, Target::LinuxX64, FixedRegs::NONE));
+            });
+            ta += cpu_cost(&a64, 1, &|f: &mut FunctionSsa| {
+                core::hint::black_box(super::allocate(f, Target::LinuxAarch64, FixedRegs::NONE));
+            });
+        }
+        let ratio = tx.as_secs_f64() / ta.as_secs_f64();
+        assert!(ratio < 24.0, "x86-64 {tx:?}, AArch64 {ta:?} ({ratio:.1}x)");
     }
 
     /// Allocate every function in c4.c. Exercises the cross-block

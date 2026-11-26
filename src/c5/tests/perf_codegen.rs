@@ -5784,6 +5784,42 @@ fn many_retired_run_once_loops_take_one_threading_pass() {
     assert!(o < o0 * 15, "-O took {o:?} against -O0's {o0:?}");
 }
 
+/// Each threaded edge settles what stays reachable from the head's
+/// strongly connected component rather than by a walk of the function:
+/// over a thousand rethreaded merges and a thousand retired loops, the
+/// visits stay within a few per site (1 and 12 here), where a walk per
+/// edge visits every block of the function per site. Counted in blocks
+/// visited, which no host load moves.
+#[test]
+fn threaded_edges_settle_reachability_per_component() {
+    use crate::c5::codegen::passes::thread_phi_branches::REACH_VISITS;
+    use core::fmt::Write;
+    const N: u64 = 1000;
+    let mut merges = String::from("int f(int a, int b) {\n    int s = 0;\n");
+    let mut loops = String::from("int g(int a) {\n    int s = 0;\n");
+    for i in 0..N {
+        let _ = writeln!(
+            merges,
+            "    {{ int c = a > {i} ? 1 : 2; if (b) c = 3; \
+             if (c == 1) s += {i}; else s -= {i}; s ^= c; }}"
+        );
+        let _ = writeln!(
+            loops,
+            "    for (int done = 0; !done; done = 1) s += a + {i};"
+        );
+    }
+    for src in [&mut merges, &mut loops] {
+        src.push_str("    return s;\n}\n");
+        let before = REACH_VISITS.with(|n| n.get());
+        object_at(src, Target::LinuxX64, true);
+        let visits = REACH_VISITS.with(|n| n.get()) - before;
+        assert!(
+            visits < 32 * N,
+            "{N} sites took {visits} block visits: reachability is walked per edge"
+        );
+    }
+}
+
 /// A chain of a thousand loads from a constant table, each indexed by the
 /// one before, folds in one sweep: a load whose index a folded load gives
 /// folds in the same sweep, so `-O` stays within a small multiple of

@@ -537,14 +537,15 @@ _SHELL_CMD = b"\necho BADC_BOOT_OK\npoweroff -f\n"
 BOOT_CAP_FACTOR = 4
 
 
-def _drive_boot(cmd: list[str], stall: float) -> tuple[int | None, str]:
+def _drive_boot(cmd: list[str], stall: float) -> tuple[int | None, str, str]:
     """Run the emulator, wait for the guest to reach userspace, settle, then
     send a shell command that prints a token and powers off. Resends the whole
     command periodically as a fallback until the guest exits. The guest is
     given up on after `stall` seconds without serial output, or after
     BOOT_CAP_FACTOR times that in all: under TCG a loaded host slows the
-    guest without stopping it. Returns (exit code or None on timeout, merged
-    serial output)."""
+    guest without stopping it. An emulator given up on is captured
+    (`_stall_capture`) before it is killed. Returns (exit code or None on
+    timeout, merged serial output, the capture or "")."""
     import threading
     settle = float(os.environ.get("BADC_QEMU_BOOT_SETTLE") or 3.0)
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -606,13 +607,60 @@ def _drive_boot(cmd: list[str], stall: float) -> tuple[int | None, str]:
     while alive() and p.poll() is None:
         time.sleep(0.2)
     rc = p.poll()
+    capture = ""
     if rc is None:
+        capture = _stall_capture(p.pid)
         p.kill()
         try:
             p.wait(timeout=5)
         except subprocess.TimeoutExpired:
             pass
-    return rc, out()
+    return rc, out(), capture
+
+
+def _thread_ticks(pid: int) -> dict[int, tuple[str, int]]:
+    """Per thread of `pid`, its name and the user plus system clock ticks it
+    has run (proc(5), /proc/<pid>/task/<tid>/stat fields 14 and 15)."""
+    ticks = {}
+    for task in Path(f"/proc/{pid}/task").iterdir():
+        stat = (task / "stat").read_text()
+        name = stat[stat.index("(") + 1:stat.rindex(")")]
+        fields = stat[stat.rindex(")") + 2:].split()
+        ticks[int(task.name)] = (name, int(fields[11]) + int(fields[12]))
+    return ticks
+
+
+def _stall_capture(pid: int) -> str:
+    """What a stalled emulator is doing: each thread's CPU over 3 s, then
+    every thread's stack and the instructions at its pc, from gdb in batch
+    mode. A host without /proc, without gdb, or where gdb may not attach
+    says so in the capture."""
+    lines = [f"--- stall capture: pid {pid} ---"]
+    try:
+        before = _thread_ticks(pid)
+        time.sleep(3)
+        after = _thread_ticks(pid)
+        busy = sorted(((after[t][1] - before[t][1], t, after[t][0])
+                       for t in after if t in before), reverse=True)
+        lines += [f"tid {t} {name}: {d} ticks in 3 s" for d, t, name in busy]
+    except (OSError, ValueError, IndexError) as e:
+        lines.append(f"per-thread CPU unavailable: {e}")
+    gdb = shutil.which("gdb")
+    if gdb is None:
+        lines.append("gdb not found: no stacks")
+    else:
+        argv = [gdb, "-p", str(pid), "-batch", "-nx", "-ex", "set pagination off",
+                "-ex", "info threads", "-ex", "thread apply all bt",
+                "-ex", "thread apply all x/16i $pc"]
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+            lines.append((r.stdout + r.stderr).rstrip())
+            if "Thread" not in r.stdout:
+                lines.append(f"gdb attached to no thread (rc={r.returncode}): no stacks")
+        except (OSError, subprocess.TimeoutExpired) as e:
+            lines.append(f"gdb failed: {e}")
+    lines.append("--- end of stall capture ---")
+    return "\n".join(lines) + "\n"
 
 
 # System UEFI firmware for the x86_64 boot. The EFI-stub bzImage boots through
@@ -828,7 +876,7 @@ def maybe_boot(binp: Path, arch: str) -> None:
     log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 16{fw} (timeout {budget})")
     t0 = time.time()
     try:
-        rc, out = _drive_boot(cmd, timeout)
+        rc, out, capture = _drive_boot(cmd, timeout)
     except Exception as e:  # noqa: BLE001 -- report, then gate on best_effort
         _boot_result(False, f"launch failed: {e}", "", best_effort)
         return
@@ -836,12 +884,13 @@ def maybe_boot(binp: Path, arch: str) -> None:
 
     # Persist the full serial log so CI can publish it as an artifact, on
     # success and failure alike (see the qemu job's upload step). By default
-    # it sits beside the emulator, so each build keeps its own.
+    # it sits beside the emulator, so each build keeps its own. A stall's
+    # capture follows the serial output; the verdict reads the serial only.
     log_path = os.environ.get("BADC_QEMU_BOOT_LOG") or str(binp.parent / f"boot-{arch}.log")
     try:
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, "w") as fh:
-            fh.write(out)
+            fh.write(out + capture)
         log(f"boot: serial log ({len(out)} B) -> {log_path}")
     except OSError as e:
         log(f"boot: serial log not written: {e}")
@@ -893,5 +942,26 @@ def _boot_result(ok: bool, reason: str, out: str, best_effort: bool) -> None:
     fail(f"boot: {reason}\n--- serial tail ---\n{tail}")
 
 
+def self_test() -> int:
+    """A process that prints once and then nothing is given up on after the
+    silence budget, captured, and killed."""
+    stand_in = [sys.executable, "-c",
+                "import time; print('Linux version stand-in', flush=True); time.sleep(600)"]
+    t0 = time.time()
+    rc, out, capture = _drive_boot(stand_in, 2.0)
+    assert rc is None and "Linux version stand-in" in out, (rc, out)
+    assert time.time() - t0 < 2.0 * BOOT_CAP_FACTOR + 130, time.time() - t0
+    head, tail = capture.splitlines()[0], capture.splitlines()[-1]
+    assert head.startswith("--- stall capture: pid ") and tail == "--- end of stall capture ---", capture
+    pid = int(head.split()[4])
+    assert not Path(f"/proc/{pid}").is_dir() or "zombie" in Path(f"/proc/{pid}/status").read_text(), pid
+    stacks = "Thread" in capture and "#0" in capture
+    assert stacks or "no stacks" in capture, capture
+    log(f"self-test ok (stall capture {'with' if stacks else 'without'} stacks)")
+    return 0
+
+
 if __name__ == "__main__":
+    if "--self-test" in sys.argv[1:]:
+        raise SystemExit(self_test())
     raise SystemExit(main())

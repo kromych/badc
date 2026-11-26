@@ -27,6 +27,7 @@ CHECKS = [
     ["demos/linux/exercise.py", "--self-test"],
     ["demos/linux/hwprep.py", "--self-test"],
     ["demos/edk2/qemu_efi.py", "--self-test"],
+    ["demos/qemu/smoke.py", "--self-test"],
     ["demos/kernel/smoke.py", "--self-test"],
     ["scripts/snapshots.py", "--self-test"],
     ["scripts/validate_local_boxes.py", "--self-test"],

@@ -90,7 +90,11 @@ x86_64 `-M q35` boot the EFI-stub kernel through UEFI firmware -- AAVMF
 matching a real UEFI system. x86_64 fails without OVMF; without AAVMF aarch64
 falls back to `-M virt`'s legacy `-kernel` loader, unless
 `$BADC_QEMU_REQUIRE_FIRMWARE=1` makes that a failure. The serial log is written
-to `$BADC_QEMU_BOOT_LOG`, by default beside the emulator it booted.
+to `$BADC_QEMU_BOOT_LOG`, by default beside the emulator it booted. An emulator
+given up on is captured before it is killed, and the capture follows the serial
+output in the log: each thread's CPU over 3 s and, from `gdb -batch`, every
+thread's stack and the instructions at its pc, or the reason there are none (no
+`/proc`, no gdb, no permission to attach).
 
 `$BADC_QEMU_BOOT` drives it:
 

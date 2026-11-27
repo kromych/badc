@@ -2998,8 +2998,12 @@ fn allocate_keeping(
                 fp_used.insert(r);
             }
             Place::Spill(s) => {
-                let units = node_cons[node_of[v] as usize].map_or(1, |c| c.wide.units());
-                slots_end = slots_end.max(s + units);
+                // A crowded value makes no node: its own width sizes its slot.
+                let width = match crowded[v] {
+                    true => wide[v],
+                    false => node_cons[node_of[v] as usize].map_or(VecWidth::Scalar, |c| c.wide),
+                };
+                slots_end = slots_end.max(s + width.units());
             }
             Place::None => {}
         }

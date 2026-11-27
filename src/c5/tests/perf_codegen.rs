@@ -5932,6 +5932,17 @@ fn vector_slots_of_a_wide_block_are_not_quadratic() {
 /// block of 300 vectors live at once the search examines about 19000
 /// entries, where a scan per object examined 16 million. Counted in
 /// entries examined, which no host load moves.
+/// Either target's -O build sizes the frame for both 8-byte units of each
+/// crowded vector's slot, which a debug build checks as it computes the
+/// slot's offset.
+#[test]
+fn crowded_vectors_take_slots_the_frame_holds() {
+    let src = super::crowded_vectors_across_a_call_source();
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        object_at(&src, target, true);
+    }
+}
+
 #[test]
 fn splitting_a_wide_block_examines_each_value_once() {
     use crate::c5::codegen::passes::sroa::UNREAD_SCAN;

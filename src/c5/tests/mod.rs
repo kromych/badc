@@ -1503,6 +1503,46 @@ int main(void) {{
     )
 }
 
+/// More 128-bit vectors live at once than the register allocator builds its
+/// interference graph over, every one live across a call: `wide` loads `N`,
+/// multiplies them in pairs, calls through a pointer and stores the
+/// products. It exits 0 when every lane holds its product and the call ran.
+pub fn crowded_vectors_across_a_call_source() -> String {
+    use core::fmt::Write;
+    const N: usize = 150;
+    let mut s = String::from(
+        "typedef unsigned v4u __attribute__((vector_size(16)));\n\
+         static v4u in[150], out[150];\n\
+         static int calls;\n\
+         static void touch(void) { calls++; }\n\
+         void (*volatile hook)(void) = touch;\n\
+         __attribute__((noinline)) void wide(const v4u *p, v4u *q) {\n",
+    );
+    for k in 0..N {
+        writeln!(s, "    v4u a{k} = p[{k}];").unwrap();
+    }
+    for k in 0..N {
+        writeln!(s, "    v4u b{k} = a{k} * a{};", (k * 7 + 1) % N).unwrap();
+    }
+    s.push_str("    hook();\n");
+    for k in 0..N {
+        writeln!(s, "    q[{k}] = b{k};").unwrap();
+    }
+    s.push_str(
+        "}\n\
+         int main(void) {\n\
+             for (int k = 0; k < 150; k++)\n\
+                 for (int j = 0; j < 4; j++) in[k][j] = k * 4 + j + 1;\n\
+             wide(in, out);\n\
+             for (int k = 0; k < 150; k++)\n\
+                 for (int j = 0; j < 4; j++)\n\
+                     if (out[k][j] != in[k][j] * in[(k * 7 + 1) % 150][j]) return 1;\n\
+             return calls != 1;\n\
+         }\n",
+    );
+    s
+}
+
 /// Objects at 8 KiB and 16 KiB alignment in `.data`, `.bss`, a named
 /// read-only section and the relro region, as the defining unit and the
 /// checking one; the second holds a thread-local, whose template the

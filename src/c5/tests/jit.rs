@@ -455,6 +455,19 @@ fn crowded_values_keep_their_slots() {
     assert_eq!(jit_exit_native_optimized(&src, &["jit-crowded-O"]), 0);
 }
 
+/// The frame holds every slot of the vectors past the allocator's graph
+/// bound, the two 8-byte units of the topmost one included, so a call
+/// they live across leaves their lanes alone.
+#[test]
+fn crowded_vectors_live_across_a_call_keep_their_lanes() {
+    let src = super::crowded_vectors_across_a_call_source();
+    assert_eq!(jit_exit(&src, &["jit-crowded-vectors"]), 0);
+    assert_eq!(
+        jit_exit_native_optimized(&src, &["jit-crowded-vectors-O"]),
+        0
+    );
+}
+
 #[test]
 fn return_42() {
     assert_eq!(jit_exit("int main() { return 42; }", &["jit-ret42"]), 42);

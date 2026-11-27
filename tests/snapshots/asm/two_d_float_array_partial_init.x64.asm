@@ -66,76 +66,52 @@ Disassembly of section .text:
                	jl	<addr>
                	xorps	%xmm0, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	xorps	%xmm1, %xmm1
                	ucomiss	%xmm1, %xmm0

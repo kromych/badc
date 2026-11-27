@@ -50,10 +50,8 @@ Disassembly of section .text:
                	addss	%xmm1, %xmm0
                	movss	0x14(%rsp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	addss	%xmm1, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
                	vaddss	<rip>, %xmm0, %xmm0
                	vaddss	<rip>, %xmm0, %xmm0
                	ucomiss	<rip>, %xmm0

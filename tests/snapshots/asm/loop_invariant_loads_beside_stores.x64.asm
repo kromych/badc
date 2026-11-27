@@ -172,8 +172,7 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	cmpl	%esi, %eax
                	jge	<addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	addsd	%xmm1, %xmm0
+               	vaddsd	<rip>, %xmm0, %xmm0 # <addr>
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	movsd	%xmm1, (%rdi)

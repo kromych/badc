@@ -385,6 +385,8 @@ pub(super) fn emit_inst(
         Inst::LoadIndexed { abs_base: true, .. } | Inst::StoreIndexed { abs_base: true, .. } => {
             emit_abs_indexed(code, &mut *out.abs_addr_refs, inst, v, dst, fcx)
         }
+        // Read by the next instruction as its memory operand.
+        Inst::Load { pc_rel: true, .. } if alloc.fp_mem_operand.contains(&v) => Ok(()),
         Inst::Load { pc_rel: true, .. } | Inst::Store { pc_rel: true, .. } => {
             emit_pc_rel(code, data_fixups, inst, v, dst, fcx)
         }
@@ -434,7 +436,7 @@ pub(super) fn emit_inst(
             let held = place_of(alloc, held);
             let end =
                 super::arith::emit_fp_binop_mem(code, *op, alloc.is_f32(v), dst, held, mem, frame)?;
-            note_literal(&mut out.fp_literals, end, func, folded, alloc.is_f32(v));
+            note_folded(out, end, func, folded, alloc.is_f32(v));
             Ok(())
         }
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
@@ -612,7 +614,7 @@ pub(super) fn emit_inst(
             let negate = (*neg_product, *neg_addend);
             let end = emit_fma(code, dst, v, *a, *b, *c, negate, mem, alloc, frame)?;
             if let (Some(f), Some(end)) = (folded, end) {
-                note_literal(&mut out.fp_literals, end, func, f, alloc.is_f32(v));
+                note_folded(out, end, func, f, alloc.is_f32(v));
             }
             Ok(())
         }
@@ -846,7 +848,8 @@ pub(super) fn frame_object_base(
 
 /// The memory operand a reader takes in place of a register
 /// (`Allocation::fp_mem_operand`): a load's address, a spilled base or index
-/// loaded into a scratch register, or a constant's read-only literal.
+/// loaded into a scratch register, a `pc_rel` load's object, or a
+/// constant's read-only literal; the last two RIP-relative.
 fn folded_operand(
     code: &mut CodeBuf,
     load: super::super::ir::ValueId,
@@ -860,6 +863,13 @@ fn folded_operand(
         ..
     } = *fcx;
     match func.insts[load as usize] {
+        Inst::Load {
+            pc_rel: true, addr, ..
+        } => {
+            let data = super::mem::abs_base_data(func, addr)?;
+            matches!(func.insts[data as usize], Inst::ImmData(_))
+                .then_some(super::super::encode::Mem::Rip)
+        }
         Inst::Load { addr, disp, .. } => {
             let base = materialize_int(code, place_of(alloc, addr), S0, frame)?;
             Some(super::super::encode::Mem::at(base, disp))
@@ -895,6 +905,35 @@ fn note_literal(
 ) {
     if let Inst::Imm(bits) = func.insts[folded as usize] {
         literals.push((end - 4, bits as u64, if single { 4 } else { 8 }));
+    }
+}
+
+/// [`note_literal`], or for a folded `pc_rel` load the data fixup of its
+/// object in the disp32 of its reader, which ends at `end`.
+fn note_folded(
+    out: &mut Out,
+    end: usize,
+    func: &FunctionSsa,
+    folded: super::super::ir::ValueId,
+    single: bool,
+) {
+    let Inst::Load {
+        pc_rel: true,
+        addr,
+        disp,
+        ..
+    } = func.insts[folded as usize]
+    else {
+        return note_literal(&mut out.fp_literals, end, func, folded, single);
+    };
+    let data = super::mem::abs_base_data(func, addr).map(|d| &func.insts[d as usize]);
+    if let Some(Inst::ImmData(off)) = data {
+        out.cx.data_fixups.push(DataFixup {
+            instr_offset: end - 4,
+            data_offset: *off as u64,
+            addend: i64::from(disp),
+            part: AddrPart::Disp32,
+        });
     }
 }
 

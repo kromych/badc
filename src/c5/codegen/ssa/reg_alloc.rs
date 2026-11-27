@@ -5864,13 +5864,14 @@ pub(crate) fn folded_loads(
     out
 }
 
-/// x86-64: the floating loads, through a pointer or a scaled index, whose
-/// one reader is the next instruction that emits code, a floating add,
-/// subtract, multiply or divide of the load's precision that takes it as
-/// its second operand, or a fused multiply-add. The reader takes the load
-/// as its memory operand and the load emits nothing. The address holds at
-/// the reader: only floating values are defined at the load and at the
-/// reader, and a spilled result is stored after the read.
+/// x86-64: the floating loads, through a pointer, a scaled index or the
+/// unit's data addressed off rip (`pc_rel`), whose one reader is the next
+/// instruction that emits code, a floating add, subtract, multiply or
+/// divide of the load's precision that takes it as its second operand, or a
+/// fused multiply-add. The reader takes the load as its memory operand and
+/// the load emits nothing. The address holds at the reader: only floating
+/// values are defined at the load and at the reader, and a spilled result
+/// is stored after the read.
 fn fp_memory_operands(
     func: &FunctionSsa,
     use_counts: &[u32],
@@ -5886,7 +5887,6 @@ fn fp_memory_operands(
                     kind,
                     volatile: false,
                     align: 0,
-                    pc_rel: false,
                     ..
                 } => kind,
                 Inst::LoadIndexed {

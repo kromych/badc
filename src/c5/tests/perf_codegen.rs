@@ -8736,6 +8736,52 @@ void g(double v) { coef[1] = v; }\n";
     m.finish();
 }
 
+/// x86-64: a floating load of the unit's data, addressed off rip, whose one
+/// reader is the next floating add, subtract, multiply, divide or fused
+/// multiply-add is that op's `disp32(%rip)` operand, as a load through a
+/// pointer is. In `sum` the loop reads fifteen of the polynomial's sixteen
+/// coefficients in its multiply-adds and the frame holds none of them;
+/// `lin` and `sq` read every constant in the op that uses it.
+#[test]
+fn a_static_floating_load_is_its_readers_rip_operand() {
+    const SRC: &str = "static double c[16];\n\
+static float g[2];\n\
+void set(int k, double v) { c[k] = v; g[k & 1] = (float)v; }\n\
+static double h(double x) {\n\
+    return c[0] + x * (c[1] + x * (c[2] + x * (c[3] + x * (c[4] + x * (c[5] + x * (c[6]\n\
+        + x * (c[7] + x * (c[8] + x * (c[9] + x * (c[10] + x * (c[11] + x * (c[12]\n\
+        + x * (c[13] + x * (c[14] + x * c[15]))))))))))))));\n\
+}\n\
+double sum(const double *xs, int n) {\n\
+    double s = 0;\n\
+    for (int i = 0; i < n; i++) s += h(xs[i]);\n\
+    return s;\n\
+}\n\
+double lin(double x) { return ((x + c[1]) * x - c[2]) / c[3]; }\n\
+float sq(float x) { return x * g[0] / g[1]; }\n";
+    let mut m = Misses::default();
+    let rip = |i: &X64Insn| i.modrm.is_some_and(|m| m & 0xC7 == 0x05);
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5));
+    // The VEX scalar arithmetic (0F 58..5E) and FMA (0F 38 99..BF) rows.
+    let arith = |i: &X64Insn| i.vex && matches!(i.op, 0x0F58..=0x0F5E | 0x3899..=0x38BF);
+    let insns = x64(SRC, "sum");
+    let back = insns.iter().find(|b| b.is_jcc() && b.target() <= b.at);
+    let in_loop = |i: &&X64Insn| back.is_some_and(|b| i.at >= b.target() && i.at <= b.at);
+    let folded = insns.iter().filter(in_loop).filter(|i| rip(i) && arith(i));
+    m.expect(folded.count() == 15 && !insns.iter().any(frame), || {
+        format!("x86-64 sum: {insns:x?}")
+    });
+    for (name, ops) in [("lin", 3), ("sq", 2)] {
+        let insns = x64(SRC, name);
+        let folded = insns.iter().filter(|i| rip(i) && arith(i)).count();
+        m.expect(
+            folded == ops && insns.iter().filter(|i| rip(i)).count() == ops,
+            || format!("x86-64 {name}: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// A leaf whose constant indices and multiply-adds fold away is weighed at
 /// the size it emits: a degree-15 polynomial helper, 31 instructions once
 /// each `c[k]` is a displacement and each product fused, is spliced at its

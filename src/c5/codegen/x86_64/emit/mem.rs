@@ -1174,7 +1174,7 @@ pub(super) fn emit_store_of_imm(
 
 /// The `ImmData` an `abs_base` access names, through the copies a hoist or
 /// a live-range split may have placed in front of it.
-fn abs_base_data(func: &FunctionSsa, mut v: u32) -> Option<u32> {
+pub(super) fn abs_base_data(func: &FunctionSsa, mut v: u32) -> Option<u32> {
     for _ in 0..func.insts.len() {
         match func.insts.get(v as usize)? {
             Inst::ImmData(_) => return Some(v),

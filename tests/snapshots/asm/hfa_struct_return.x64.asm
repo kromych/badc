@@ -27,12 +27,9 @@ Disassembly of section .text:
 
 <main>:
                	movss	<rip>, %xmm0
-               	movss	<rip>, %xmm1
-               	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	addss	%xmm1, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
+               	vaddss	<rip>, %xmm0, %xmm0
                	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>

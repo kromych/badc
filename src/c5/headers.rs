@@ -776,6 +776,154 @@ pub(super) fn headers_declaring(name: &str) -> &'static [&'static str] {
 mod tests {
     use super::*;
 
+    /// The build-time index against the parse of the headers on every
+    /// target, with and without `_UNICODE`, `_MBCS` and the Annex K and GNU
+    /// extensions: each name the index lists for a header is a function or
+    /// object the parse of the header declares, and each function the parse
+    /// first declares in the header or a block it includes, through a
+    /// declarator its file-scope text spells, is listed. A header a target
+    /// withholds is parsed through the headers that include it. What a
+    /// macro's expansion declares has no declarator in the text.
+    /// Release-only: it parses each header up to fifteen times.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn the_header_index_lists_the_declarations_each_header_parses_to() {
+        use crate::c5::token::Token;
+        use alloc::collections::{BTreeMap, BTreeSet};
+        use alloc::vec::Vec;
+        let text = |h: &str| {
+            embedded_headers()
+                .iter()
+                .find(|e| e.0 == h)
+                .map_or("", |e| e.2)
+        };
+        let mut indexed: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for (name, hs) in BINDING_TO_HEADER {
+            for h in *hs {
+                indexed.entry(h).or_default().insert(name);
+            }
+        }
+        let configs = ["", "#define _UNICODE 1\n", "#define _MBCS 1\n"];
+        let mut wrong = Vec::new();
+        for (&h, names) in &indexed {
+            let mut files = alloc::vec![h];
+            let mut i = 0;
+            while i < files.len() {
+                for inc in included_blocks(text(files[i])) {
+                    if !files.contains(&inc) {
+                        files.push(inc);
+                    }
+                }
+                i += 1;
+            }
+            let spelled: BTreeSet<String> = files
+                .iter()
+                .flat_map(|f| declarator_words(text(f)))
+                .collect();
+            let (mut declared, mut listed) = (BTreeSet::new(), BTreeSet::new());
+            for target in Target::ALL {
+                let mut units = alloc::vec![h];
+                let mut j = 0;
+                while j < units.len() && withheld(units[j], target) {
+                    for &u in header_includers(units[j]) {
+                        if !units.contains(&u) {
+                            units.push(u);
+                        }
+                    }
+                    j += 1;
+                }
+                for unit in units.iter().filter(|u| !withheld(u, target)) {
+                    for config in configs {
+                        let src = alloc::format!(
+                            "#define _GNU_SOURCE 1\n#define __STDC_WANT_LIB_EXT1__ 1\n{config}#include <{unit}>\n"
+                        );
+                        let opts = crate::CompileOptions::default().with_no_entry_point(true);
+                        let program = crate::Compiler::with_options(src, target, opts).compile();
+                        let Ok(p) = program else { continue };
+                        for s in &p.symbols {
+                            let function = s.is_fun_entity() || s.class == Token::Sys as i64;
+                            if function || s.class == Token::Glo as i64 {
+                                declared.insert(s.name.clone());
+                            }
+                            let file = p.source_files.get(s.binding.decl_file as usize);
+                            let here = file.is_some_and(|f| files.contains(&f.as_str()));
+                            if function && here && spelled.contains(&s.name) {
+                                listed.insert(s.name.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            let phantom = names.iter().filter(|n| !declared.contains(**n));
+            let missing = listed.iter().filter(|n| !names.contains(n.as_str()));
+            wrong.extend(phantom.map(|n| alloc::format!("{h}: {n} is listed")));
+            wrong.extend(missing.map(|n| alloc::format!("{h}: {n} is not listed")));
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// The `__badc_*` blocks `body` includes.
+    #[cfg(not(debug_assertions))]
+    fn included_blocks(body: &str) -> impl Iterator<Item = &str> {
+        body.lines().filter_map(|line| {
+            let rest = line.trim_start().strip_prefix('#')?.trim_start();
+            let rest = rest
+                .strip_prefix("include")?
+                .trim_start()
+                .strip_prefix('<')?;
+            rest.split_once('>')
+                .map(|(name, _)| name)
+                .filter(|n| n.starts_with("__badc_"))
+        })
+    }
+
+    /// The identifiers a `(` follows in `body` at file scope, outside
+    /// comments and directives.
+    #[cfg(not(debug_assertions))]
+    fn declarator_words(body: &str) -> alloc::vec::Vec<String> {
+        let (mut code, mut in_comment, mut directive) = (String::new(), false, false);
+        for line in body.lines() {
+            // A directive runs on through its continuation lines.
+            let skip = directive || (!in_comment && line.trim_start().starts_with('#'));
+            directive = skip && line.ends_with('\\');
+            if skip {
+                continue;
+            }
+            let mut rest = line;
+            while !rest.is_empty() {
+                if in_comment {
+                    let Some(end) = rest.find("*/") else { break };
+                    (rest, in_comment) = (&rest[end + 2..], false);
+                } else if let Some(start) = rest.find("/*") {
+                    code.push_str(&rest[..start]);
+                    (rest, in_comment) = (&rest[start + 2..], true);
+                } else {
+                    code.push_str(rest.split("//").next().unwrap_or(""));
+                    break;
+                }
+            }
+            code.push('\n');
+        }
+        let (bytes, mut out, mut i, mut braces) = (code.as_bytes(), alloc::vec::Vec::new(), 0, 0);
+        while i < bytes.len() {
+            match bytes[i] {
+                b'{' => braces += 1,
+                b'}' => braces -= 1,
+                b'_' | b'a'..=b'z' | b'A'..=b'Z' => {
+                    let end = word_end(bytes, i);
+                    if braces == 0 && code[end..].trim_start().starts_with('(') {
+                        out.push(String::from(&code[i..end]));
+                    }
+                    i = end;
+                    continue;
+                }
+                _ => {}
+            }
+            i = word_end(bytes, i).max(i + 1);
+        }
+        out
+    }
+
     #[test]
     fn every_compiler_header_is_in_the_registry() {
         for name in INTRINSIC_HEADERS.iter().chain(COMPILER_HEADERS) {

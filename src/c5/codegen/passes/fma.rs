@@ -25,7 +25,7 @@
 
 use alloc::vec::Vec;
 
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, ValueId};
 
 /// f32 marker for a value, defaulting to f64 when unrecorded.
 fn is_f32(func: &FunctionSsa, idx: ValueId) -> bool {
@@ -50,42 +50,6 @@ fn as_fmul(
         }
         _ => None,
     }
-}
-
-/// Count uses of every value across the function so contraction only
-/// fires on a product that feeds nothing but the add/sub.
-fn use_counts(func: &FunctionSsa) -> Vec<u32> {
-    let mut counts = alloc::vec![0u32; func.insts.len()];
-    for inst in &func.insts {
-        crate::c5::codegen::ssa::reg_alloc::for_each_operand(inst, |v| {
-            if let Some(slot) = counts.get_mut(v as usize) {
-                *slot += 1;
-            }
-        });
-    }
-    let mut bump = |v: ValueId| {
-        if let Some(slot) = counts.get_mut(v as usize) {
-            *slot += 1;
-        }
-    };
-    for block in &func.blocks {
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump(target)
-            }
-            Terminator::Return(v) => bump(v),
-            Terminator::Jmp(_)
-            | Terminator::TailExt(_)
-            | Terminator::FallThrough(_)
-            | Terminator::AsmGoto { .. }
-            | Terminator::Unreachable => {}
-        }
-        if block.exit_acc != crate::c5::ir::NO_VALUE {
-            bump(block.exit_acc);
-        }
-    }
-    counts
 }
 
 /// Recognize a contractible add/sub at `idx`. Returns the replacement
@@ -188,7 +152,7 @@ fn match_fma(
 /// `fast` is `-ffp-contract=fast`.
 pub(crate) fn run(funcs: &mut [FunctionSsa], fast: bool) {
     for func in funcs.iter_mut() {
-        let counts = use_counts(func);
+        let counts = crate::c5::codegen::ssa::reg_alloc::value_reads(func);
         let n = func.insts.len();
         let mut rewrites: Vec<(usize, Inst, ValueId)> = Vec::new();
         for idx in 0..n {

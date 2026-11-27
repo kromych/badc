@@ -4883,25 +4883,12 @@ fn def_weights(
 /// agree on which materializations lower.
 pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
-    let mut counts: Vec<u32> = vec![0; n];
-    let bump_into = |counts: &mut Vec<u32>, v: ValueId| {
-        if v != NO_VALUE && (v as usize) < n {
-            counts[v as usize] += 1;
-        }
-    };
+    let mut counts = operand_reads(func);
     let decrement = |counts: &mut Vec<u32>, v: ValueId| {
         if v != NO_VALUE && (v as usize) < n && counts[v as usize] > 0 {
             counts[v as usize] -= 1;
         }
     };
-    for inst in &func.insts {
-        for_each_operand(inst, |op| bump_into(&mut counts, op));
-    }
-    for block in &func.blocks {
-        block
-            .terminator
-            .for_each_operand(|v| bump_into(&mut counts, v));
-    }
     // A pure inst with zero uses is dead, and so is a phi nothing reads.
     // The pure ones die through a worklist: a death decrements its
     // operands once, and an operand reaching zero joins the list. Phi
@@ -5055,6 +5042,36 @@ pub(crate) fn is_call_site(inst: &Inst, tls_addr_is_call: bool) -> bool {
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
     ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
         || is_setjmp_barrier(inst)
+}
+
+/// How many times each value is read by an instruction's operands and
+/// the blocks' terminators, over the walk [`for_each_operand`] defines.
+pub(crate) fn operand_reads(func: &FunctionSsa) -> Vec<u32> {
+    let mut counts: Vec<u32> = vec![0; func.insts.len()];
+    let mut bump = |v: ValueId| {
+        if let Some(c) = counts.get_mut(v as usize) {
+            *c += 1;
+        }
+    };
+    for inst in &func.insts {
+        for_each_operand(inst, &mut bump);
+    }
+    for block in &func.blocks {
+        block.terminator.for_each_operand(&mut bump);
+    }
+    counts
+}
+
+/// [`operand_reads`] with each block's exit accumulator read too: the
+/// counts a pass asks whether a value has a reader besides one.
+pub(crate) fn value_reads(func: &FunctionSsa) -> Vec<u32> {
+    let mut counts = operand_reads(func);
+    for block in &func.blocks {
+        if let Some(c) = counts.get_mut(block.exit_acc as usize) {
+            *c += 1;
+        }
+    }
+    counts
 }
 
 /// Invoke `f` for each operand `ValueId` referenced by `inst`, for the

@@ -39,10 +39,9 @@
 //! in-place, so `inst_src` / `f32_values` stay parallel. Operand
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
-use crate::c5::codegen::ssa::reg_alloc::{for_each_operand, produces_fp_result};
+use crate::c5::codegen::ssa::reg_alloc::{for_each_operand, produces_fp_result, value_reads};
 use crate::c5::ir::{
-    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
-    is_comparison_op,
+    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId, is_comparison_op,
 };
 use crate::c5::vm::eval;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -1516,38 +1515,6 @@ fn imm_through_phis_depth(
     }
 }
 
-/// Operand-reference counts, including terminator conditions and the
-/// per-block `exit_acc`. Counts taken at round start over-approximate
-/// after in-round rewrites drop references, which only defers a
-/// single-use rewrite to the next round.
-fn count_uses(func: &FunctionSsa) -> Vec<u32> {
-    let n = func.insts.len();
-    let mut counts = vec![0u32; n];
-    let bump = |counts: &mut Vec<u32>, v: ValueId| {
-        if v != NO_VALUE && (v as usize) < n {
-            counts[v as usize] += 1;
-        }
-    };
-    for inst in &func.insts {
-        for_each_operand(inst, |op| bump(&mut counts, op));
-        if let Inst::CallIndirect { target, .. } = inst {
-            bump(&mut counts, *target);
-        }
-    }
-    for block in &func.blocks {
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(&mut counts, cond),
-            Terminator::Return(v) => bump(&mut counts, v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump(&mut counts, target)
-            }
-            _ => {}
-        }
-        bump(&mut counts, block.exit_acc);
-    }
-    counts
-}
-
 /// Whether an `And` by `mask` leaves every bit a `width`-byte reversal or
 /// count reads (the low `width * 8`) unchanged.
 fn low_mask_transparent(mask: i64, width: u8) -> bool {
@@ -1653,7 +1620,7 @@ fn eval_fp_binop(op: BinOp, l: i64, r: i64, f32: bool) -> Option<i64> {
 }
 
 fn fold_round(func: &mut FunctionSsa) -> bool {
-    let uses = count_uses(func);
+    let uses = value_reads(func);
     // A shared immediate operand only moves into the instruction when
     // the encoding is materialization-free; a sole use may always
     // move (the per-use materialization replaces the def's).

@@ -37,9 +37,7 @@
 
 use alloc::vec::Vec;
 
-use crate::c5::ir::{
-    BinOp, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
-};
+use crate::c5::ir::{BinOp, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, ValueId};
 
 /// Access width in bytes for a load kind. Used by the displacement
 /// fold, which applies to integer and floating accesses alike (the
@@ -230,32 +228,7 @@ fn dead(func: &FunctionSsa, counts: &[u32], inst: &Inst, i: usize) -> bool {
 }
 
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
-    let mut counts = alloc::vec![0u32; func.insts.len()];
-    let bump = |v: ValueId, counts: &mut [u32]| {
-        if let Some(slot) = counts.get_mut(v as usize) {
-            *slot += 1;
-        }
-    };
-    for inst in &func.insts {
-        crate::c5::codegen::ssa::reg_alloc::for_each_operand(inst, |v| bump(v, &mut counts));
-    }
-    for block in &func.blocks {
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond, &mut counts),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump(target, &mut counts)
-            }
-            Terminator::Return(v) => bump(v, &mut counts),
-            Terminator::Jmp(_)
-            | Terminator::TailExt(_)
-            | Terminator::FallThrough(_)
-            | Terminator::AsmGoto { .. }
-            | Terminator::Unreachable => {}
-        }
-        if block.exit_acc != NO_VALUE {
-            bump(block.exit_acc, &mut counts);
-        }
-    }
+    let mut counts = crate::c5::codegen::ssa::reg_alloc::value_reads(func);
     // A pure value nothing reads goes with the emit's dead-pure skip, and
     // its operands lose that use.
     let mut dead: Vec<usize> = (0..counts.len())
@@ -877,6 +850,7 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::ir::{NO_VALUE, Terminator};
     use alloc::vec;
 
     // v0 = Imm (the pre-normalize w); v1 = Shl(v0, k); v2 = Shr(v1, k).

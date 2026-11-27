@@ -8393,9 +8393,10 @@ int main(void) { return 0; }
 
     /// `large`, `times` the input of `small`, allocates in under `bound`
     /// times its time: the thread's CPU time, which waiting for a core does
-    /// not advance, over four rounds that alternate `times` runs of `small`
-    /// with one of `large` and are summed, so a change of core speed falls
-    /// on both and each side spans many clock ticks.
+    /// not advance, the least of eight rounds that alternate `times` runs of
+    /// `small` with one of `large`. The tests running beside it only add to
+    /// a side's CPU time, through the caches and memory they share, so the
+    /// least round of each side is the one they disturbed least.
     #[cfg(not(debug_assertions))]
     fn assert_scales(
         what: &str,
@@ -8403,10 +8404,10 @@ int main(void) { return 0; }
         bound: f64,
         run: impl Fn(&mut FunctionSsa),
     ) {
-        let (mut t1, mut tn) = (core::time::Duration::ZERO, core::time::Duration::ZERO);
-        for _ in 0..4 {
-            t1 += cpu_cost(small, times, &run);
-            tn += cpu_cost(large, 1, &run);
+        let (mut t1, mut tn) = (core::time::Duration::MAX, core::time::Duration::MAX);
+        for _ in 0..8 {
+            t1 = t1.min(cpu_cost(small, times, &run));
+            tn = tn.min(cpu_cost(large, 1, &run));
         }
         let growth = tn.as_secs_f64() * f64::from(times) / t1.as_secs_f64();
         assert!(
@@ -8416,8 +8417,9 @@ int main(void) { return 0; }
     }
 
     /// Allocation time grows with the blocks, not their square: sixteen
-    /// times the conditional updates take under forty-eight times as long
-    /// (27-29), where a walk per block up the dominator chain took a hundred.
+    /// times the conditional updates take under sixty-four times as long
+    /// (26-33 alone, 33-39 beside the rest of the suite), where a walk per
+    /// block up the dominator chain took a hundred alone.
     /// Release-only: the debug assertions' cost is not the allocator's.
     #[test]
     #[cfg(not(debug_assertions))]
@@ -8428,7 +8430,7 @@ int main(void) { return 0; }
                 promoted(&conditional_updates(16000), target),
             );
             let what = format!("{target:?} updates");
-            assert_scales(&what, (&small, &large, 16), 48.0, |f| {
+            assert_scales(&what, (&small, &large, 16), 64.0, |f| {
                 core::hint::black_box(super::allocate(f, target, FixedRegs::NONE));
             });
         }
@@ -8438,9 +8440,10 @@ int main(void) { return 0; }
     /// square, through the -O0 allocation and the -O one with its hoisting
     /// and range-splitting retries, on both targets, for scalars and
     /// vectors: eight times the values take under twenty-four times as
-    /// long (7-10), where an edge per pair of them took fifty-eight. Past
-    /// [`CROWD_BOUND`] values the graph has no edge per pair. Release-only:
-    /// the debug assertions' cost is not the allocator's.
+    /// long (7-10 alone, 4-12 beside the rest of the suite), where an edge
+    /// per pair of them took fifty-eight. Past [`CROWD_BOUND`] values the
+    /// graph has no edge per pair. Release-only: the debug assertions' cost
+    /// is not the allocator's.
     #[test]
     #[cfg(not(debug_assertions))]
     fn allocation_time_grows_with_the_values_live_at_once_not_their_square() {

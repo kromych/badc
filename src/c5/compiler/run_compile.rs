@@ -1070,6 +1070,7 @@ impl Compiler {
             ..
         } = prior;
 
+        self.note_declaration_site(id_idx);
         if !was_sys {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
@@ -1239,6 +1240,20 @@ impl Compiler {
     /// Record one file-scope declaration of a function name: its class and
     /// source position, the census the inline linkage models read (C99
     /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
+    /// Record where the first file-scope declaration of `id_idx` is, an
+    /// object's or a function's, library-bound ones included: its line and
+    /// file feed DW_AT_decl_file / decl_line and the reports about it.
+    fn note_declaration_site(&mut self, id_idx: usize) {
+        if self.symbols[id_idx].binding.decl_line == 0 {
+            let at = self.site();
+            let file = self.intern_source_file() as u32;
+            let in_user = self.in_user_source();
+            let b = &mut self.symbols[id_idx].binding;
+            b.set_decl_site(at);
+            (b.decl_file, b.decl_in_user_source) = (file, in_user);
+        }
+    }
+
     fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
         // C99 5.1.2.2.1: a hosted program's startup calls an external
         // `main`. `-Wmain` flags each `static` declaration of one.
@@ -1252,11 +1267,6 @@ impl Compiler {
             self.warn_at(Code::MAIN, self.site(), text);
         }
         self.symbols[id_idx].class = Token::Fun as i64;
-        if self.symbols[id_idx].binding.decl_line == 0 {
-            let at = self.site();
-            self.symbols[id_idx].binding.set_decl_site(at);
-            self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
-        }
         // Census one file-scope declaration of this name for
         // the inline linkage models (C99 6.7.4p6-p7 and
         // GNU89); `resolve_inline_linkage` reads the totals
@@ -2575,14 +2585,7 @@ impl Compiler {
         was_tentative_glo: bool,
     ) -> Result<(), C5Error> {
         self.symbols[id_idx].class = Token::Glo as i64;
-        // First declaration wins the source position, as it does
-        // for functions; it feeds DW_AT_decl_file / decl_line.
-        if self.symbols[id_idx].binding.decl_line == 0 {
-            let at = self.site();
-            self.symbols[id_idx].binding.set_decl_site(at);
-            self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
-            self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
-        }
+        self.note_declaration_site(id_idx);
         if !was_tentative_glo {
             self.symbols[id_idx].is_thread_local = thread_local;
         }

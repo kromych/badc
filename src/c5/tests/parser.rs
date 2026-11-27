@@ -2624,6 +2624,25 @@ fn an_asm_label_belongs_to_the_binding_that_states_it() {
     assert!(p.symbols.iter().any(|s| s.name.starts_with("y2.")));
 }
 
+/// A file-scope function declaration records where it is, as an object's
+/// does: a prototype in a bundled header, bound to the C library or not,
+/// names that header and its line.
+#[test]
+fn a_function_declaration_records_its_file_and_line() {
+    let p = super::compile_str_bare_for(
+        "#include <aio.h>\nint local(void);\nint main(void) { return local(); }\n",
+        crate::Target::LinuxX64,
+    );
+    let site = |name: &str| {
+        let s = p.symbols.iter().find(|s| s.name == name).expect("declared");
+        let file = p.source_files[s.binding.decl_file as usize].clone();
+        (file, s.binding.decl_line)
+    };
+    let (file, line) = site("aio_read");
+    assert!(file == "aio.h" && line > 0, "{file}:{line}");
+    assert_eq!(site("local").1, 2);
+}
+
 /// Every declarator of a declaration that derives nothing from its `void`
 /// base type is bare `void`, wherever it stands in the list: a typedef of
 /// it makes `(T)` the empty parameter list (C99 6.7.5.3p10) at file and

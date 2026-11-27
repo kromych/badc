@@ -1316,7 +1316,6 @@ fn translate_relocs(
                 .extend(init_entries.into_iter().map(|(_, offset)| NativeInitFunc {
                     table: table.clone(),
                     target: InitTarget::Text(offset),
-                    group: None,
                 }));
         }
     }

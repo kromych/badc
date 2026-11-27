@@ -1020,9 +1020,6 @@ pub enum InitTable {
 pub struct NativeInitFunc {
     pub table: InitTable,
     pub target: InitTarget,
-    /// The COMDAT group in [`NativeObject::comdats`] holding the entry's
-    /// table, which a link displacing the group leaves out with it.
-    pub group: Option<u32>,
 }
 
 /// The function a constructor-table entry runs.
@@ -1526,21 +1523,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let (symbols, unique, shndx_map) =
         decode_symbols(bytes, &shdrs, symtab_sh_i, &blobs, &roles, &record_of)?;
     let relocs = decode_relocs(bytes, &shdrs, &roles.rela_sections, &shndx_map)?;
-    let (comdats, group_of) = elf_comdats(
-        bytes,
-        &shdrs,
-        &roles.groups,
-        &symbols,
-        &sections,
-        &record_of,
-    )?;
-    let init_funcs = decode_init_arrays(
-        bytes,
-        &shdrs,
-        &roles.init_array_sections,
-        &symbols,
-        &group_of,
-    )?;
+    let init_funcs = decode_init_arrays(bytes, &shdrs, &roles.init_array_sections, &symbols)?;
     let mut note = match roles.badc_note {
         Some(i) => BadcNote::parse(section_slice(bytes, &shdrs[i])?)?,
         None => BadcNote::default(),
@@ -1566,6 +1549,14 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         default_libs.extend(nul_separated(section_slice(bytes, &shdrs[i])?));
     }
     let debug = debug_sections(bytes, &shdrs, shstrtab_bytes, &roles)?;
+    let comdats = elf_comdats(
+        bytes,
+        &shdrs,
+        &roles.groups,
+        &symbols,
+        &sections,
+        &record_of,
+    )?;
     let mut directives = super::coff_object::Directives::default();
     for text in &note.linker_directives {
         super::coff_object::parse_directives(text, &mut directives)?;
@@ -2126,13 +2117,10 @@ fn elf_comdats(
     symbols: &[NativeSymbol],
     sections: &[InputSection],
     record_of: &[Option<u32>],
-) -> Result<(Vec<Comdat>, Vec<Option<u32>>), C5Error> {
+) -> Result<Vec<Comdat>, C5Error> {
     const GRP_COMDAT: u32 = 1;
     const STT_SECTION: u8 = 3;
     let mut out = Vec::new();
-    // Per section index, the group listing it: a constructor table has
-    // no input-section record, so its group is found by index.
-    let mut group_of = alloc::vec![None; shdrs.len()];
     for &g in groups {
         let words: Vec<u32> = (section_slice(bytes, &shdrs[g])?.as_chunks::<4>().0.iter())
             .map(|w| u32::from_le_bytes(*w))
@@ -2154,11 +2142,6 @@ fn elf_comdats(
         let members: Vec<u32> = (words[1..].iter())
             .filter_map(|&m| record_of.get(m as usize).copied().flatten())
             .collect();
-        for &m in &words[1..] {
-            if let Some(g) = group_of.get_mut(m as usize) {
-                *g = Some(out.len() as u32);
-            }
-        }
         out.push(Comdat {
             key,
             selection: super::comdat::IMAGE_COMDAT_SELECT_ANY,
@@ -2167,7 +2150,7 @@ fn elf_comdats(
             sections: members,
         });
     }
-    Ok((out, group_of))
+    Ok(out)
 }
 
 /// Input-section records in placement order, and each section index's.
@@ -2396,7 +2379,6 @@ fn decode_init_arrays(
     shdrs: &[Elf64Shdr],
     init_array_sections: &[(usize, InitTable)],
     symbols: &[NativeSymbol],
-    group_of: &[Option<u32>],
 ) -> Result<Vec<NativeInitFunc>, C5Error> {
     let mut init_funcs: Vec<NativeInitFunc> = Vec::new();
     for (shndx, table) in init_array_sections {
@@ -2453,7 +2435,6 @@ fn decode_init_arrays(
             init_funcs.push(NativeInitFunc {
                 table: table.clone(),
                 target,
-                group: group_of.get(shndx).copied().flatten(),
             });
         }
     }

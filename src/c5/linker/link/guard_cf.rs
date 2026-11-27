@@ -9,10 +9,7 @@ use alloc::collections::BTreeSet;
 use alloc::string::{String, ToString};
 
 use super::super::got_relax::{self, GotUse, is_x86_64_got_pcrel};
-use super::super::object::{
-    NativeMachine, NativeReloc, NativeSymSection, NativeSymbol, STT_FUNC, STT_SECTION,
-    SectionFamily,
-};
+use super::super::object::{NativeMachine, NativeSymSection, NativeSymbol, STT_FUNC, STT_SECTION};
 use super::{Link, MODULE, is_branch_reloc, link_err};
 use crate::c5::codegen::{GuardSlot, GuardTableSymbol};
 use crate::c5::diag::Code;
@@ -73,19 +70,15 @@ impl<'a> Link<'a> {
                 }
                 continue;
             }
-            let this = &*self;
-            let kept = |fam| move |r: &&NativeReloc| !this.dropped_site(i, fam, r.offset);
-            let relocs = (o.text_relocs.iter())
-                .filter(kept(SectionFamily::Text))
-                .map(|r| (r, None))
+            let relocs = (o.text_relocs.iter().map(|r| (r, None)))
                 .chain(
-                    (o.relro_relocs.iter())
-                        .filter(kept(SectionFamily::RelRo))
+                    o.relro_relocs
+                        .iter()
                         .map(|r| (r, Some(self.relro_map[i].at(r.offset)))),
                 )
                 .chain(
-                    (o.data_relocs.iter())
-                        .filter(kept(SectionFamily::Data))
+                    o.data_relocs
+                        .iter()
                         .map(|r| (r, Some(self.rw_map[i].at(r.offset)))),
                 );
             for (r, data_site) in relocs {

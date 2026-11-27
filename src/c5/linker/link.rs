@@ -721,7 +721,6 @@ struct BlobMap {
 }
 
 /// A section the merge moved out of its unit's blob to group it by name.
-#[derive(Debug, Clone)]
 struct MovedSection {
     offset: u64,
     size: u64,
@@ -769,82 +768,6 @@ impl BlobMap {
             Some(m) => m.merged,
             None => self.base + offset,
         }
-    }
-}
-
-/// Where the first section of a displaced COMDAT group in unit `unit`'s `fam`
-/// blob below `keep` starts, and the other sections past it in blob order,
-/// which move up behind that point. `None` when there is no such section.
-fn displaced_tail<'o>(
-    obj: &'o NativeObject,
-    unit: usize,
-    fam: SectionFamily,
-    keep: u64,
-    dropped: &hashbrown::HashSet<(usize, u32)>,
-) -> Option<(u64, Vec<(u32, &'o super::object::InputSection)>)> {
-    let mut inside: Vec<(u32, &super::object::InputSection)> = (obj.sections.iter().enumerate())
-        .filter(|(_, s)| s.family == fam && s.offset < keep)
-        .map(|(k, s)| (k as u32, s))
-        .collect();
-    inside.sort_by_key(|&(k, s)| (s.offset, k));
-    let cut = inside
-        .iter()
-        .find(|&&(k, _)| dropped.contains(&(unit, k)))?
-        .1
-        .offset;
-    let kept = (inside.into_iter())
-        .filter(|&(k, s)| s.offset >= cut && !dropped.contains(&(unit, k)))
-        .collect();
-    Some((cut, kept))
-}
-
-/// Append the blob below `map`'s prefix to `out`, moving `tail`'s sections
-/// up past a displaced group's ([`displaced_tail`]).
-fn place_prefix(
-    out: &mut Vec<u8>,
-    blob: &[u8],
-    map: &mut BlobMap,
-    tail: Option<(u64, Vec<(u32, &super::object::InputSection)>)>,
-) {
-    let Some((cut, kept)) = tail else {
-        out.extend_from_slice(&blob[..map.prefix_len as usize]);
-        return;
-    };
-    out.extend_from_slice(&blob[..cut as usize]);
-    map.prefix_len = cut;
-    for (k, s) in kept {
-        align_up(out, s.align.max(1) as usize);
-        map.moved.push(MovedSection {
-            offset: s.offset,
-            size: s.size,
-            merged: out.len() as u64,
-            section: k,
-        });
-        out.extend_from_slice(&blob[s.offset as usize..(s.offset + s.size) as usize]);
-    }
-}
-
-/// [`place_prefix`] for the zero-fill blob, which `size` measures.
-fn place_zero_prefix(
-    size: &mut usize,
-    map: &mut BlobMap,
-    tail: Option<(u64, Vec<(u32, &super::object::InputSection)>)>,
-) {
-    let Some((cut, kept)) = tail else {
-        *size += map.prefix_len as usize;
-        return;
-    };
-    *size += cut as usize;
-    map.prefix_len = cut;
-    for (k, s) in kept {
-        *size = align_usize(*size, s.align.max(1) as usize);
-        map.moved.push(MovedSection {
-            offset: s.offset,
-            size: s.size,
-            merged: *size as u64,
-            section: k,
-        });
-        *size += s.size as usize;
     }
 }
 
@@ -1510,9 +1433,6 @@ struct Link<'a> {
     init_fini: bool,
     /// COFF COMDAT groups' sections, and those selection displaced.
     comdats: super::comdat::CoffSelection,
-    /// Per unit, the `(family, start, end)` blob extents of the sections
-    /// a displaced COMDAT group owns.
-    dropped_spans: Vec<Vec<(SectionFamily, u64, u64)>>,
     preemptible: hashbrown::HashSet<&'a str>,
     shared_libs: &'a [SharedLibrary],
     /// Union of every shared library's exports: an undefined global
@@ -1682,13 +1602,6 @@ impl<'a> Link<'a> {
                 ));
             }
         }
-        let comdats = super::comdat::select_coff(objs)?;
-        let mut dropped_spans = alloc::vec![Vec::new(); objs.len()];
-        for &(unit, k) in &comdats.dropped {
-            if let Some(s) = objs[unit].sections.get(k as usize) {
-                dropped_spans[unit].push((s.family, s.offset, s.offset + s.size));
-            }
-        }
         Ok(Link {
             objs,
             machine,
@@ -1699,12 +1612,10 @@ impl<'a> Link<'a> {
             export_data: opts.export_data,
             no_copy_relocs: opts.format != BinaryFormat::Elf,
             pe_image: opts.format == BinaryFormat::Pe,
-            groups: SectionGroups::new(objs, opts.format == BinaryFormat::Pe)?
-                .leaving_out(&comdats.dropped),
+            groups: SectionGroups::new(objs, opts.format == BinaryFormat::Pe)?,
             mach_o: opts.format == BinaryFormat::MachO,
             init_fini: opts.format == BinaryFormat::Elf,
-            comdats,
-            dropped_spans,
+            comdats: super::comdat::select_coff(objs)?,
             preemptible: hashbrown::HashSet::new(),
             shared_libs,
             shlib_exports: shared_libs
@@ -1873,7 +1784,6 @@ impl<'a> Link<'a> {
                 if sym.kind == STT_FILE {
                     file = Some(row(&sym.name, SymbolPlace::Abs(0), 0, 0, STT_FILE, 0));
                 } else if sym.kind != STT_SECTION
-                    && !(sym.input_section).is_some_and(|k| self.comdats.dropped.contains(&(i, k)))
                     && let Some(place) = self.unit_place(i, sym)
                 {
                     locals.extend(file.take());
@@ -1883,11 +1793,11 @@ impl<'a> Link<'a> {
             }
             // A thread-local or absolute definition resolves outside
             // `defined`; the one its table kept is the unit's own.
-            for sym in (obj.symbols.iter()).filter(|s| {
-                s.binding != 0
-                    && !s.name.is_empty()
-                    && !(s.input_section).is_some_and(|k| self.comdats.dropped.contains(&(i, k)))
-            }) {
+            for sym in obj
+                .symbols
+                .iter()
+                .filter(|s| s.binding != 0 && !s.name.is_empty())
+            {
                 let kept = match sym.section {
                     NativeSymSection::Tls => {
                         self.tls_symbol_offsets.get(sym.name.as_str())
@@ -2030,21 +1940,11 @@ impl<'a> Link<'a> {
             }
             let base = place(self.tls_data.len(), 0, obj.tls_align.max(1));
             self.tls_data.resize(base, 0);
-            let init_len = obj.tls_data.len() as u64;
-            let mut map = BlobMap::new(base as u64, init_len);
-            let tail = displaced_tail(
-                obj,
-                i,
-                SectionFamily::Tdata,
-                init_len,
-                &self.comdats.dropped,
-            );
-            place_prefix(&mut self.tls_data, &obj.tls_data, &mut map, tail);
+            self.tls_data.extend_from_slice(&obj.tls_data);
             self.tls_places[i] = TlsPlace {
                 tdata: base,
                 init_len: obj.tls_data.len(),
                 tbss: base + obj.tls_data.len(),
-                moved: map.moved,
             };
         }
         self.tls_init_size = self.tls_data.len();
@@ -2052,28 +1952,10 @@ impl<'a> Link<'a> {
             if obj.tls_bss_size == 0 {
                 continue;
             }
-            let init_len = obj.tls_data.len();
-            let end = (init_len + obj.tls_bss_size) as u64;
-            let tail = displaced_tail(obj, i, SectionFamily::Tbss, end, &self.comdats.dropped);
             let p = &mut self.tls_places[i];
-            p.init_len = init_len;
-            p.tbss = place(self.tls_data.len(), init_len, obj.tls_align.max(1));
-            let Some((cut, kept)) = tail else {
-                self.tls_data.resize(p.tbss + obj.tls_bss_size, 0);
-                continue;
-            };
-            let mut size = p.tbss + (cut as usize - init_len);
-            for (k, s) in kept {
-                size = align_usize(size, s.align.max(1) as usize);
-                p.moved.push(MovedSection {
-                    offset: s.offset,
-                    size: s.size,
-                    merged: size as u64,
-                    section: k,
-                });
-                size += s.size as usize;
-            }
-            self.tls_data.resize(size, 0);
+            p.init_len = obj.tls_data.len();
+            p.tbss = place(self.tls_data.len(), p.init_len, obj.tls_align.max(1));
+            self.tls_data.resize(p.tbss + obj.tls_bss_size, 0);
         }
         // A global definition resolves by name. Every object states its
         // own in its symbol table, where a strong definition outranks a
@@ -2081,23 +1963,14 @@ impl<'a> Link<'a> {
         for strong in [true, false] {
             for (i, obj) in objs.iter().enumerate() {
                 let global = |s: &NativeSymbol| {
-                    s.section == NativeSymSection::Tls
-                        && !s.name.is_empty()
-                        && s.binding != 0
-                        && !(s.input_section)
-                            .is_some_and(|k| self.comdats.dropped.contains(&(i, k)))
+                    s.section == NativeSymSection::Tls && !s.name.is_empty() && s.binding != 0
                 };
                 let table = (obj.symbols.iter())
                     .filter(|s| global(s) && s.binding == if strong { 1 } else { 2 })
                     .map(|s| (s.name.as_str(), s.value, s.size, s.visibility));
                 let note_only = (obj.tls_symbols.iter())
-                    .filter(|(n, off, _)| {
-                        strong
-                            && !obj.symbols.iter().any(|s| global(s) && s.name == *n)
-                            && !(self.dropped_spans[i].iter()).any(|&(f, s, e)| {
-                                matches!(f, SectionFamily::Tdata | SectionFamily::Tbss)
-                                    && (s..e).contains(off)
-                            })
+                    .filter(|(n, _, _)| {
+                        strong && !obj.symbols.iter().any(|s| global(s) && s.name == *n)
                     })
                     .map(|(n, off, size)| (n.as_str(), *off, *size, super::object::STV_DEFAULT));
                 for (name, value, size, visibility) in table.chain(note_only) {
@@ -2134,10 +2007,7 @@ impl<'a> Link<'a> {
 
     /// The merged thread-local offset of unit `unit`'s offset `off`.
     fn unit_tls_offset(&self, unit: usize, off: u64) -> u64 {
-        let p = &self.tls_places[unit];
-        if let Some(m) = (p.moved.iter()).find(|m| off >= m.offset && off < m.offset + m.size) {
-            return m.merged + (off - m.offset);
-        }
+        let p = self.tls_places[unit];
         match off.checked_sub(p.init_len as u64) {
             None => p.tdata as u64 + off,
             Some(past) => p.tbss as u64 + past,
@@ -2360,7 +2230,7 @@ impl<'a> Link<'a> {
         if sym.section == NativeSymSection::Undef && sym.name == TLS_MODULE_BASE {
             return Ok(TlsGotTarget::Local(0));
         }
-        if self.reference_section(unit, sym) == NativeSymSection::Tls {
+        if sym.section == NativeSymSection::Tls && sym.binding != 2 {
             return Ok(TlsGotTarget::Local(self.unit_tls_offset(unit, sym.value)));
         }
         if let Some(&at) = self.tls_symbol_offsets.get(sym.name.as_str()) {
@@ -2404,10 +2274,9 @@ impl<'a> Link<'a> {
         if sym.section == NativeSymSection::Undef && sym.name == TLS_MODULE_BASE {
             return Ok(TlsBinding::Static(0));
         }
-        // A weak definition yields to a strong one elsewhere, and a COMDAT
-        // group's to the copy the link keeps, so only a local or strong
-        // definition in this unit resolves here.
-        let offset = if self.reference_section(unit, sym) == NativeSymSection::Tls {
+        // A weak definition yields to a strong one elsewhere, so only a
+        // local or strong definition in this unit resolves here.
+        let offset = if sym.section == NativeSymSection::Tls && sym.binding != 2 {
             self.unit_tls_offset(unit, sym.value)
         } else if let Some(&at) = self.tls_symbol_offsets.get(sym.name.as_str()) {
             at
@@ -2573,9 +2442,8 @@ impl<'a> Link<'a> {
             align_up(&mut self.text, obj.text_align.max(16));
             self.text_align = self.text_align.max(obj.text_align);
             self.text_map[i].base = self.text.len() as u64;
-            let keep = self.text_map[i].prefix_len;
-            let tail = displaced_tail(obj, i, SectionFamily::Text, keep, &self.comdats.dropped);
-            place_prefix(&mut self.text, &obj.text, &mut self.text_map[i], tail);
+            let keep = self.text_map[i].prefix_len as usize;
+            self.text.extend_from_slice(&obj.text[..keep]);
             align_up(
                 &mut self.data,
                 crate::c5::layout::data_image_align(obj.rodata_align),
@@ -2584,8 +2452,7 @@ impl<'a> Link<'a> {
             relro_align = relro_align.max(obj.relro_align);
             let keep = named_prefix_len(obj, SectionFamily::RoData, obj.rodata.len() as u64);
             self.ro_map.push(BlobMap::new(self.data.len() as u64, keep));
-            let tail = displaced_tail(obj, i, SectionFamily::RoData, keep, &self.comdats.dropped);
-            place_prefix(&mut self.data, &obj.rodata, &mut self.ro_map[i], tail);
+            self.data.extend_from_slice(&obj.rodata[..keep as usize]);
             self.data_align = self.data_align.max(obj.data_align);
         }
         if self.init_fini {
@@ -2635,7 +2502,7 @@ impl<'a> Link<'a> {
         );
         align_up(&mut self.data, self.data_align);
         self.data_ro_len = self.data.len();
-        for (i, obj) in objs.iter().enumerate() {
+        for obj in objs {
             align_up(
                 &mut self.data,
                 crate::c5::layout::data_image_align(obj.relro_align),
@@ -2643,8 +2510,7 @@ impl<'a> Link<'a> {
             let keep = named_prefix_len(obj, SectionFamily::RelRo, obj.relro.len() as u64);
             self.relro_map
                 .push(BlobMap::new(self.data.len() as u64, keep));
-            let tail = displaced_tail(obj, i, SectionFamily::RelRo, keep, &self.comdats.dropped);
-            place_prefix(&mut self.data, &obj.relro, &mut self.relro_map[i], tail);
+            self.data.extend_from_slice(&obj.relro[..keep as usize]);
         }
         self.keep_end_label_byte(SectionFamily::RelRo);
         group_named_bytes(
@@ -2666,15 +2532,14 @@ impl<'a> Link<'a> {
         );
         align_up(&mut self.data, self.data_align);
         self.data_relro_len = self.data.len();
-        for (i, obj) in objs.iter().enumerate() {
+        for obj in objs {
             align_up(
                 &mut self.data,
                 crate::c5::layout::data_image_align(obj.data_align),
             );
             let keep = named_prefix_len(obj, SectionFamily::Data, obj.data.len() as u64);
             self.rw_map.push(BlobMap::new(self.data.len() as u64, keep));
-            let tail = displaced_tail(obj, i, SectionFamily::Data, keep, &self.comdats.dropped);
-            place_prefix(&mut self.data, &obj.data, &mut self.rw_map[i], tail);
+            self.data.extend_from_slice(&obj.data[..keep as usize]);
             // Each unit's bss offsets carry an alignment residue modulo
             // the widest `.bss` sh_addralign the unit claims; a unit base
             // aligned to the same value preserves it.
@@ -2684,8 +2549,7 @@ impl<'a> Link<'a> {
             );
             let keep = named_prefix_len(obj, SectionFamily::Bss, obj.bss_size as u64);
             self.bss_map.push(BlobMap::new(self.bss_size as u64, keep));
-            let tail = displaced_tail(obj, i, SectionFamily::Bss, keep, &self.comdats.dropped);
-            place_zero_prefix(&mut self.bss_size, &mut self.bss_map[i], tail);
+            self.bss_size += keep as usize;
         }
         self.keep_end_label_byte(SectionFamily::Data);
         self.keep_end_label_byte(SectionFamily::Bss);
@@ -2751,11 +2615,7 @@ impl<'a> Link<'a> {
             for (name, size) in &obj.discarded {
                 self.section_map.discarded.push((i, name.clone(), *size));
             }
-            for (k, s) in obj.sections.iter().enumerate() {
-                if self.comdats.dropped.contains(&(i, k as u32)) {
-                    (self.section_map.discarded).push((i, s.name.clone(), s.size));
-                    continue;
-                }
+            for s in &obj.sections {
                 let tls_at = self.unit_tls_offset(i, s.offset);
                 let (list, offset) = match s.family {
                     SectionFamily::Text => {
@@ -2795,11 +2655,7 @@ impl<'a> Link<'a> {
         let objs = self.objs;
         let fragments: Vec<(usize, u32, &super::object::InputSection)> = (objs.iter().enumerate())
             .flat_map(|(i, o)| (o.sections.iter().enumerate()).map(move |(k, s)| (i, k as u32, s)))
-            .filter(|&(i, k, s)| {
-                s.family == SectionFamily::Text
-                    && s.name == name
-                    && !self.comdats.dropped.contains(&(i, k))
-            })
+            .filter(|(_, _, s)| s.family == SectionFamily::Text && s.name == name)
             .collect();
         if fragments.is_empty() {
             return None;
@@ -2865,11 +2721,6 @@ impl<'a> Link<'a> {
         let (mut init, mut fini, mut crt) = (Vec::new(), Vec::new(), Vec::new());
         for (i, obj) in objs.iter().enumerate() {
             for f in &obj.init_funcs {
-                if f.group
-                    .is_some_and(|g| self.comdats.lost.contains(&(i, g as usize)))
-                {
-                    continue;
-                }
                 let off = match &f.target {
                     InitTarget::Text(at) => Ok(self.text_map[i].at(*at)),
                     InitTarget::Named(name) => Err(name.as_str()),
@@ -3592,10 +3443,7 @@ impl<'a> Link<'a> {
             }
             let resolver = self.resolver_calls(obj);
             for reloc in &obj.text_relocs {
-                if !is_x86_64_got_slot_ref(reloc.rtype)
-                    || resolver.calls.contains(&reloc.offset)
-                    || self.dropped_site(i, SectionFamily::Text, reloc.offset)
-                {
+                if !is_x86_64_got_slot_ref(reloc.rtype) || resolver.calls.contains(&reloc.offset) {
                     continue;
                 }
                 let Some(sym) = obj.symbols.get(reloc.sym_idx) else {
@@ -3987,28 +3835,6 @@ impl<'a> Link<'a> {
         }
     }
 
-    /// Whether blob offset `off` of unit `unit`'s `fam` blob lies in a
-    /// section of a displaced COMDAT group.
-    fn dropped_site(&self, unit: usize, fam: SectionFamily, off: u64) -> bool {
-        (self.dropped_spans[unit].iter()).any(|&(f, s, e)| f == fam && off >= s && off < e)
-    }
-
-    /// A reference from unit `unit` to a local `sym` of a displaced COMDAT
-    /// group, which the kept group need not define: it has nowhere to go.
-    fn displaced_reference(&self, unit: usize, sym: &NativeSymbol) -> Option<C5Error> {
-        let k = sym.input_section?;
-        if sym.binding != 0 || !self.comdats.dropped.contains(&(unit, k)) {
-            return None;
-        }
-        let home = &self.objs[unit].sections[k as usize].name;
-        let what = match sym.name.is_empty() || sym.kind == super::object::STT_SECTION {
-            true => format!("reference to discarded section `{home}`"),
-            false => format!("`{}` is defined in discarded section `{home}`", sym.name),
-        };
-        let text = format!("{}: {what}", self.objs[unit].source);
-        Some(link_err(Code::LINK, MODULE, &text))
-    }
-
     /// Record a reference to the undefined `name`, left unpatched.
     fn note_undefined_at(&mut self, name: &str, site: &str) {
         let order = self.undefined.len();
@@ -4053,9 +3879,7 @@ impl<'a> Link<'a> {
                 .collect();
             let resolver = self.resolver_calls(obj);
             for reloc in &obj.text_relocs {
-                if resolver.calls.contains(&reloc.offset)
-                    || self.dropped_site(i, SectionFamily::Text, reloc.offset)
-                {
+                if resolver.calls.contains(&reloc.offset) {
                     continue;
                 }
                 let sym = obj.symbols.get(reloc.sym_idx).ok_or_else(|| {
@@ -4066,9 +3890,6 @@ impl<'a> Link<'a> {
                         obj.symbols.len(),
                     ))
                 })?;
-                if let Some(e) = self.displaced_reference(i, sym) {
-                    return Err(e);
-                }
                 let patch_offset = self.text_map[i].at(reloc.offset) as usize;
                 let tls = match self.machine {
                     NativeMachine::X86_64 => x86_64_is_tls(reloc.rtype),
@@ -4647,42 +4468,22 @@ impl<'a> Link<'a> {
         for (i, obj) in objs.iter().enumerate() {
             // A relocation site is a blob offset, so it moves with the
             // section that carries it.
-            let this = &*self;
-            let of = |fam: SectionFamily, list: &'a [NativeReloc]| {
-                (list.iter())
-                    .filter(move |r| !this.dropped_site(i, fam, r.offset))
-                    .map(move |r| (fam, r))
-            };
-            let sited: Vec<(SectionFamily, &NativeReloc, u64)> =
-                of(SectionFamily::Data, &obj.data_relocs)
-                    .chain(of(SectionFamily::RelRo, &obj.relro_relocs))
-                    .chain(of(SectionFamily::Tdata, &obj.tls_relocs))
-                    .map(|(fam, r)| {
-                        let slot = match fam {
-                            SectionFamily::Data => this.rw_map[i].at(r.offset),
-                            SectionFamily::RelRo => this.relro_map[i].at(r.offset),
-                            _ => this.unit_tls_offset(i, r.offset),
-                        };
-                        (fam, r, slot)
-                    })
-                    .collect();
-            for (fam, reloc, slot_offset) in sited {
-                // An unwind table's entry for a displaced group's code
-                // resolves to nothing (TODO(#2270): leave the entry out).
-                if let Some(sym) = obj.symbols.get(reloc.sym_idx)
-                    && let Some(e) = self.displaced_reference(i, sym)
-                {
-                    let unwind = (obj.sections.iter()).any(|s| {
-                        s.family == fam
-                            && s.name == EH_FRAME
-                            && (s.offset..s.offset + s.size).contains(&reloc.offset)
-                    });
-                    if unwind {
-                        continue;
-                    }
-                    return Err(e);
-                }
-                let in_tls = fam == SectionFamily::Tdata;
+            let sited: Vec<(&NativeReloc, u64, bool)> = obj
+                .data_relocs
+                .iter()
+                .map(|r| (r, self.rw_map[i].at(r.offset), false))
+                .chain(
+                    obj.relro_relocs
+                        .iter()
+                        .map(|r| (r, self.relro_map[i].at(r.offset), false)),
+                )
+                .chain(
+                    obj.tls_relocs
+                        .iter()
+                        .map(|r| (r, self.unit_tls_offset(i, r.offset), true)),
+                )
+                .collect();
+            for (reloc, slot_offset, in_tls) in sited {
                 self.resolve_data_reloc(i, obj, reloc, slot_offset, in_tls)?;
             }
         }
@@ -5670,10 +5471,7 @@ impl<'a> Link<'a> {
         );
         // A string-folded target consumes the addend in its lookup.
         let mut addend_applied = false;
-        let displaced = self.displaced_reference(unit_idx, sym).is_some();
         let (merged_value, in_text, resolvable) = match sym.section {
-            // Debug information about a displaced group describes nothing.
-            _ if displaced => (0, false, false),
             NativeSymSection::Text => (self.symbol_offset(unit_idx, sym).unwrap_or(0), true, true),
             NativeSymSection::RoData | NativeSymSection::RelRo | NativeSymSection::Data => {
                 (self.symbol_offset(unit_idx, sym).unwrap_or(0), false, true)
@@ -5962,13 +5760,12 @@ impl<'a> Link<'a> {
 
 /// Where a unit's thread-local block lies in the merged one: its first
 /// `init_len` offsets, the unit's `.tdata`, from `tdata`, the rest from
-/// `tbss`, but for the sections moved up past a displaced COMDAT group's.
-#[derive(Debug, Clone, Default)]
+/// `tbss`.
+#[derive(Debug, Clone, Copy, Default)]
 struct TlsPlace {
     tdata: usize,
     init_len: usize,
     tbss: usize,
-    moved: Vec<MovedSection>,
 }
 
 /// Mach-O TLV descriptors resolved to per-thread offsets, and the
@@ -8533,7 +8330,6 @@ mod tests {
                 .map(|&(t, at)| NativeInitFunc {
                     table: InitTable::Crt(t.into()),
                     target: InitTarget::Text(at),
-                    group: None,
                 })
                 .collect();
             o

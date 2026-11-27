@@ -59,8 +59,6 @@ pub struct CoffSelection {
     pub members: HashSet<(usize, u32)>,
     /// The sections of the groups another group of their key displaced.
     pub dropped: HashSet<(usize, u32)>,
-    /// Those groups, as `(object, index in its comdats)`.
-    pub lost: HashSet<(usize, usize)>,
 }
 
 /// Select one COFF COMDAT group per key over `objs` in link order (PE/COFF
@@ -120,7 +118,6 @@ pub fn select_coff(objs: &[NativeObject]) -> Result<CoffSelection, C5Error> {
             let (lose, lose_group) = if replaces { (pi, pg) } else { (oi, gi) };
             let lost = &objs[lose].comdats[lose_group];
             out.dropped.extend(lost.sections.iter().map(|&s| (lose, s)));
-            out.lost.insert((lose, lose_group));
             if replaces {
                 kept.insert(&g.key, (oi, gi));
             }
